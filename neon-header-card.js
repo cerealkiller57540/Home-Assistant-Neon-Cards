@@ -1,5 +1,5 @@
 /**
- * neon-header-card v1
+ * neon-header-card v1.1 (Performance Optimized)
  * Card de header customisable pour Home Assistant
  *
  * Installation :
@@ -11,7 +11,48 @@
  *   title: Mon titre
  */
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
+
+// ═══════════════════════════════════════════════════════
+//  PERFORMANCE HELPERS
+// ═══════════════════════════════════════════════════════
+
+// Debounce function to reduce excessive updates
+function debounce(func, wait = 150) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+// Throttle function for high-frequency events
+function throttle(func, limit = 100) {
+  let inThrottle;
+  return function(...args) {
+    if (!inThrottle) {
+      func.apply(this, args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  };
+}
+
+// RequestAnimationFrame wrapper for smooth updates
+function rafSchedule(callback) {
+  let rafId = null;
+  return function(...args) {
+    if (rafId) return;
+    rafId = requestAnimationFrame(() => {
+      callback(...args);
+      rafId = null;
+    });
+  };
+}
 
 // ═══════════════════════════════════════════════════════
 //  DEFAULTS
@@ -61,6 +102,7 @@ function buildConfig(raw) {
     effect_gradient_to:   raw.effect_gradient_to   ?? null,
     effect_typing:     raw.effect_typing     ?? false, // animation curseur
     effect_flicker:    raw.effect_flicker    ?? false, // scintillement néon
+    effect_hover_glitch: raw.effect_hover_glitch ?? false, // glitch hover effect
 
     // ── Layout ────────────────────────────────────────
     padding:        raw.padding        ?? null,   // ex: '12px 16px'
@@ -92,6 +134,27 @@ const MDI_COMMON = [
 //  ÉDITEUR VISUEL
 // ═══════════════════════════════════════════════════════
 class NeonHeaderCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this._eventListeners = [];
+    this._debouncedChanged = debounce(this._changed.bind(this), 150);
+  }
+
+  connectedCallback() {
+    if (!this._built && this._hass && this._config) {
+      this._built = true;
+      this._build();
+    }
+  }
+
+  disconnectedCallback() {
+    // Clean up event listeners to prevent memory leaks
+    this._eventListeners.forEach(({ element, event, handler }) => {
+      element.removeEventListener(event, handler);
+    });
+    this._eventListeners = [];
+  }
+
   setConfig(config) {
     this._config = config;
     if (!this._built && this._hass) { this._built = true; this._build(); }
@@ -100,6 +163,11 @@ class NeonHeaderCardEditor extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     if (!this._built && this._config) { this._built = true; this._build(); }
+  }
+
+  _addEventListener(element, event, handler, options = {}) {
+    element.addEventListener(event, handler, options);
+    this._eventListeners.push({ element, event, handler });
   }
 
   _input(label, key, type = 'text', hint = '', placeholder = '') {
@@ -204,7 +272,11 @@ class NeonHeaderCardEditor extends HTMLElement {
 
     this.innerHTML = `
       <style>
-        :host { display: block; padding: 4px 0; }
+        :host { 
+          display: block; 
+          padding: 4px 0;
+          contain: layout style paint;
+        }
         h3 {
           font-size: 12px; font-weight: 700; color: var(--primary-color);
           text-transform: uppercase; letter-spacing: 1.5px;
@@ -227,8 +299,11 @@ class NeonHeaderCardEditor extends HTMLElement {
         textarea.text-input {
           resize: none; overflow: hidden; min-height: 34px; line-height: 1.4;
         }
-        input[type=color] { height: 34px; width: 40px; padding: 2px; border-radius: 6px;
-          border: 1px solid var(--divider-color); cursor: pointer; flex-shrink: 0; }
+        input[type=color] { 
+          height: 34px; width: 40px; padding: 2px; border-radius: 6px;
+          border: 1px solid var(--divider-color); cursor: pointer; flex-shrink: 0;
+          will-change: auto;
+        }
         .color-row { display: flex; gap: 6px; align-items: center; }
         .color-text { flex: 1; }
         .px-row { display: flex; align-items: center; gap: 4px; }
@@ -243,10 +318,18 @@ class NeonHeaderCardEditor extends HTMLElement {
         /* Toggle switch */
         .switch { position: relative; display: inline-block; width: 36px; height: 20px; flex-shrink: 0; }
         .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; inset: 0; background: var(--divider-color);
-          border-radius: 20px; cursor: pointer; transition: .3s; }
-        .slider:before { content: ''; position: absolute; width: 14px; height: 14px;
-          left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: .3s; }
+        .slider { 
+          position: absolute; inset: 0; background: var(--divider-color);
+          border-radius: 20px; cursor: pointer; 
+          transition: background-color 0.3s ease;
+          will-change: background-color;
+        }
+        .slider:before { 
+          content: ''; position: absolute; width: 14px; height: 14px;
+          left: 3px; bottom: 3px; background: white; border-radius: 50%; 
+          transition: transform 0.3s ease;
+          will-change: transform;
+        }
         input:checked + .slider { background: var(--primary-color); }
         input:checked + .slider:before { transform: translateX(16px); }
         .effects-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -319,6 +402,7 @@ class NeonHeaderCardEditor extends HTMLElement {
         ${this._toggle('≡ Scanlines', 'effect_scanline')}
         ${this._toggle('◈ Dégradé texte', 'effect_gradient')}
         ${this._toggle('↺ Scintillement', 'effect_flicker')}
+        ${this._toggle('⚡ Glitch hover', 'effect_hover_glitch')}
       </div>
       <div class="separator"></div>
       <div id="glow-opts" style="display:${this._config.effect_glow ? 'block' : 'none'}">
@@ -346,15 +430,26 @@ class NeonHeaderCardEditor extends HTMLElement {
     `;
 
     // Affichage conditionnel des sous-options
-    this.querySelector('[data-key="effect_glow"]')?.addEventListener('change', e => {
-      this.querySelector('#glow-opts').style.display = e.target.checked ? 'block' : 'none';
-    });
-    this.querySelector('[data-key="effect_gradient"]')?.addEventListener('change', e => {
-      this.querySelector('#gradient-opts').style.display = e.target.checked ? 'block' : 'none';
-    });
-    this.querySelector('[data-key="tap_action"]')?.addEventListener('change', e => {
-      this.querySelector('#nav-opts').style.display = e.target.value === 'navigate' ? 'block' : 'none';
-    });
+    const glowToggle = this.querySelector('[data-key="effect_glow"]');
+    if (glowToggle) {
+      this._addEventListener(glowToggle, 'change', e => {
+        this.querySelector('#glow-opts').style.display = e.target.checked ? 'block' : 'none';
+      });
+    }
+
+    const gradientToggle = this.querySelector('[data-key="effect_gradient"]');
+    if (gradientToggle) {
+      this._addEventListener(gradientToggle, 'change', e => {
+        this.querySelector('#gradient-opts').style.display = e.target.checked ? 'block' : 'none';
+      });
+    }
+
+    const tapActionSelect = this.querySelector('[data-key="tap_action"]');
+    if (tapActionSelect) {
+      this._addEventListener(tapActionSelect, 'change', e => {
+        this.querySelector('#nav-opts').style.display = e.target.value === 'navigate' ? 'block' : 'none';
+      });
+    }
 
     // Padding dual input (vertical + horizontal)
     const updatePadding = () => {
@@ -363,30 +458,39 @@ class NeonHeaderCardEditor extends HTMLElement {
       this._changed('padding', `${v}px ${h}px`);
     };
     this.querySelectorAll('[data-padding]').forEach(el => {
-      el.addEventListener('change', e => { e.stopPropagation(); updatePadding(); });
+      this._addEventListener(el, 'change', e => { 
+        e.stopPropagation(); 
+        updatePadding(); 
+      });
     });
 
-    // Sync color picker ↔ text input
+    // Sync color picker ↔ text input (with debouncing)
     this.querySelectorAll('input[type=color]').forEach(picker => {
       const key  = picker.dataset.key;
       const text = this.querySelector(`.color-text[data-key="${key}"]`);
       if (!text) return;
-      picker.addEventListener('input', e => {
+      
+      const debouncedColorChange = debounce((value) => {
+        this._changed(key, value);
+      }, 100);
+
+      this._addEventListener(picker, 'input', e => {
         e.stopPropagation();
         text.value = picker.value;
-        this._changed(key, picker.value);
-      });
-      text.addEventListener('input', e => {
+        debouncedColorChange(picker.value);
+      }, { passive: true });
+
+      this._addEventListener(text, 'input', e => {
         e.stopPropagation();
         if (/^#[0-9a-fA-F]{6}$/.test(text.value)) picker.value = text.value;
-        this._changed(key, text.value || null);
-      });
+        debouncedColorChange(text.value || null);
+      }, { passive: true });
     });
 
     // Tous les autres champs
     this.querySelectorAll('[data-key]:not([type=color])').forEach(el => {
       if (el.type === 'checkbox' || el.tagName === 'SELECT') {
-        el.addEventListener('change', e => {
+        this._addEventListener(el, 'change', e => {
           e.stopPropagation();
           const val = el.type === 'checkbox' ? el.checked : el.value;
           this._changed(el.dataset.key, val === '' ? null : val);
@@ -394,7 +498,7 @@ class NeonHeaderCardEditor extends HTMLElement {
         return;
       }
       if (el.type === 'number') {
-        el.addEventListener('change', e => {
+        this._addEventListener(el, 'change', e => {
           e.stopPropagation();
           const raw = el.value === '' ? null : el.value;
           // Champs px : on ajoute 'px'
@@ -403,19 +507,19 @@ class NeonHeaderCardEditor extends HTMLElement {
         });
         return;
       }
-      // Texte et textarea → seulement sur blur
-      el.addEventListener('keydown', e => e.stopPropagation());
-      el.addEventListener('keyup',   e => e.stopPropagation());
-      el.addEventListener('input',   e => e.stopPropagation());
-      el.addEventListener('blur', e => {
+      // Texte et textarea → seulement sur blur (avec debounce)
+      this._addEventListener(el, 'keydown', e => e.stopPropagation(), { passive: true });
+      this._addEventListener(el, 'keyup',   e => e.stopPropagation(), { passive: true });
+      this._addEventListener(el, 'input',   e => e.stopPropagation(), { passive: true });
+      this._addEventListener(el, 'blur', e => {
         e.stopPropagation();
-        this._changed(el.dataset.key, el.value === '' ? null : el.value);
+        this._debouncedChanged(el.dataset.key, el.value === '' ? null : el.value);
       });
     });
 
     // Reset couleurs
     this.querySelectorAll('[data-reset]').forEach(el => {
-      el.addEventListener('click', () => {
+      this._addEventListener(el, 'click', () => {
         const key = el.dataset.reset;
         const picker = this.querySelector(`input[type=color][data-key="${key}"]`);
         const text   = this.querySelector(`.color-text[data-key="${key}"]`);
@@ -431,7 +535,8 @@ class NeonHeaderCardEditor extends HTMLElement {
     if (val === 'false') val = false;
     if (['effect_glow_size', 'bg_opacity'].includes(key) && val !== null && val !== '')
       val = parseFloat(val);
-    const config = { ...this._config };    if (val === null || val === '') delete config[key];
+    const config = { ...this._config };
+    if (val === null || val === '') delete config[key];
     else config[key] = val;
     this._config = config;
     this.dispatchEvent(new CustomEvent('config-changed', {
@@ -449,11 +554,28 @@ class NeonHeaderCard extends HTMLElement {
     super();
     this.attachShadow({ mode: 'open' });
     this._fontLoaded = new Set();
+    this._clickHandler = null;
   }
 
   static getConfigElement() { return document.createElement('neon-header-card-editor'); }
   static getStubConfig() {
     return { title: 'Mon Dashboard', icon: 'mdi:home', align_h: 'left' };
+  }
+
+  connectedCallback() {
+    if (this._config && !this._rendered) {
+      this._render();
+    }
+  }
+
+  disconnectedCallback() {
+    // Clean up click handler
+    if (this._clickHandler && this.shadowRoot) {
+      const card = this.shadowRoot.querySelector('ha-card');
+      if (card) {
+        card.removeEventListener('click', this._clickHandler);
+      }
+    }
   }
 
   setConfig(raw) {
@@ -464,6 +586,7 @@ class NeonHeaderCard extends HTMLElement {
       this._render();
     }
   }
+  
   getCardSize()  { return 1; }
 
   set hass(hass) {
@@ -473,11 +596,27 @@ class NeonHeaderCard extends HTMLElement {
     if (!this._rendered) this._render();
   }
 
-  // Charge Google Fonts si besoin
+  // Charge Google Fonts si besoin (avec préconnexion pour performance)
   _loadFont(family) {
     if (!family || this._fontLoaded.has(family)) return;
     const id = `nhc-font-${family.replace(/\s/g, '-')}`;
-    if (document.getElementById(id)) { this._fontLoaded.add(family); return; }
+    if (document.getElementById(id)) { 
+      this._fontLoaded.add(family); 
+      return; 
+    }
+
+    // Préconnexion pour meilleures performances
+    const preconnect = document.createElement('link');
+    preconnect.rel = 'preconnect';
+    preconnect.href = 'https://fonts.googleapis.com';
+    document.head.appendChild(preconnect);
+
+    const preconnectStatic = document.createElement('link');
+    preconnectStatic.rel = 'preconnect';
+    preconnectStatic.href = 'https://fonts.gstatic.com';
+    preconnectStatic.crossOrigin = 'anonymous';
+    document.head.appendChild(preconnectStatic);
+
     const link = document.createElement('link');
     link.id   = id;
     link.rel  = 'stylesheet';
@@ -600,39 +739,129 @@ class NeonHeaderCard extends HTMLElement {
 
     this.shadowRoot.innerHTML = `
       <style>
-        :host { display: block; }
+        :host { 
+          display: block;
+          contain: layout style paint;
+        }
+        
         .header, .header *, .icon-wrap, .text-wrap, .title, .subtitle, .scanlines, .dots {
           box-sizing: border-box; margin: 0; padding: 0;
         }
 
+        /* GPU-accelerated animations */
         @keyframes flicker {
           0%,19%,21%,23%,25%,54%,56%,100% { opacity: 1; }
           20%,24%,55% { opacity: .6; }
         }
+        
         @keyframes scanMove {
-          0%   { top: -4px; }
-          100% { top: 100%; }
+          0%   { transform: translateY(-4px); }
+          100% { transform: translateY(calc(100% + 4px)); }
         }
 
-        /* Scanline overlay */
+        /* Glitch hover animations */
+        @keyframes cardGlitch {
+          0%, 100% { 
+            transform: translateY(-10px) scale(1.03) translateZ(0);
+          }
+          15% { 
+            transform: translateY(-10px) scale(1.03) translate(-6px, 4px) translateZ(0);
+            filter: drop-shadow(6px 0 #00F0FF) drop-shadow(-6px 0 #FF1744);
+          }
+          30% { 
+            transform: translateY(-10px) scale(1.03) translate(6px, -4px) translateZ(0);
+            filter: drop-shadow(-6px 0 #00FFCC) drop-shadow(6px 0 #FF1744);
+          }
+          45% { 
+            transform: translateY(-10px) scale(1.03) translate(-4px, 3px) translateZ(0);
+            filter: drop-shadow(5px 5px #00F0FF) drop-shadow(-5px -5px #FF1744);
+          }
+          60% { 
+            transform: translateY(-10px) scale(1.03) translate(5px, -2px) translateZ(0);
+          }
+          75% { 
+            transform: translateY(-10px) scale(1.03) translate(-3px, 0) translateZ(0);
+          }
+        }
+
+        @keyframes iconGlitch {
+          0%, 100% { 
+            transform: scale(1) rotate(0deg) translateZ(0);
+          }
+          20% { 
+            transform: scale(1.15) rotate(-12deg) translateZ(0);
+          }
+          40% { 
+            transform: scale(1.2) rotate(12deg) translateZ(0);
+          }
+          60% { 
+            transform: scale(1.15) rotate(-8deg) translateZ(0);
+          }
+          80% { 
+            transform: scale(1.08) rotate(5deg) translateZ(0);
+          }
+        }
+
+        @keyframes textGlitch {
+          0%, 100% { 
+            transform: translate(0, 0) translateZ(0);
+          }
+          25% { 
+            transform: translate(-4px, 0) translateZ(0);
+            text-shadow: 4px 0 #00F0FF, -4px 0 #FF1744;
+          }
+          50% { 
+            transform: translate(4px, 0) translateZ(0);
+            text-shadow: -4px 0 #00FFCC, 4px 0 #FF1744;
+          }
+          75% { 
+            transform: translate(-3px, 0) translateZ(0);
+            text-shadow: 3px 0 #00FFCC, 0 0 15px #00FFCC;
+          }
+        }
+
+        /* Scanline overlay - optimized for GPU */
         .scanlines {
           display: ${c.effect_scanline ? 'block' : 'none'};
-          position: absolute; inset: 0; pointer-events: none; z-index: 1;
+          position: absolute; 
+          inset: 0; 
+          pointer-events: none; 
+          z-index: 1;
           background: repeating-linear-gradient(
             to bottom,
             transparent 0px, transparent 3px,
             rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 4px
           );
           border-radius: inherit;
+          will-change: auto;
         }
+        
         .scanlines::after {
           content: '';
-          position: absolute; left: 0; right: 0; height: 4px; top: -4px;
+          position: absolute; 
+          left: 0; 
+          right: 0; 
+          height: 4px; 
           background: linear-gradient(transparent, rgba(255,255,255,.12), transparent);
           animation: scanMove 5s linear infinite;
+          will-change: transform;
+          transform: translateZ(0);
         }
 
         /* Wrapper principal */
+        ha-card {
+          contain: layout style paint;
+          transform: translateZ(0);
+          ${c.effect_hover_glitch ? 'transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);' : ''}
+        }
+
+        ${c.effect_hover_glitch ? `
+        ha-card:hover {
+          transform: translateY(-8px) scale(1.02) translateZ(0);
+          animation: cardGlitch 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        ` : ''}
+
         .header {
           display: flex;
           flex-direction: ${wrapDirection};
@@ -642,20 +871,32 @@ class NeonHeaderCard extends HTMLElement {
           padding: ${padding};
           min-height: ${minHeight};
           position: relative;
+          contain: layout style paint;
         }
 
         /* Icône */
         .icon-wrap {
           display: ${hasIcon ? 'flex' : 'none'};
-          align-items: center; justify-content: center;
+          align-items: center; 
+          justify-content: center;
           flex-shrink: 0;
+          transform: translateZ(0);
         }
+        
         ha-icon {
           --mdc-icon-size: ${iconSize};
           color: ${iconColor};
-          ${c.effect_glow ? `filter: drop-shadow(0 0 ${Math.round(glowSize*0.7)}px ${glowColor});` : ''}
-          ${c.effect_flicker ? 'animation: flicker 4s ease-in-out infinite .3s;' : ''}
+          ${c.effect_glow && !c.effect_hover_glitch ? `filter: drop-shadow(0 0 ${Math.round(glowSize*0.7)}px ${glowColor});` : ''}
+          ${c.effect_flicker && !c.effect_hover_glitch ? 'animation: flicker 4s ease-in-out infinite .3s;' : ''}
+          transform: translateZ(0);
+          ${c.effect_hover_glitch ? 'transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);' : ''}
         }
+
+        ${c.effect_hover_glitch ? `
+        ha-card:hover ha-icon {
+          animation: iconGlitch 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        ` : ''}
 
         /* Textes */
         .text-wrap {
@@ -664,7 +905,9 @@ class NeonHeaderCard extends HTMLElement {
           gap: 2px;
           text-align: ${c.align_h};
           ${iconTop ? 'align-items: center; text-align: center;' : ''}
+          contain: layout style paint;
         }
+        
         .title {
           font-family: ${fontFamily};
           font-size: ${fontSize};
@@ -674,9 +917,18 @@ class NeonHeaderCard extends HTMLElement {
           letter-spacing: ${letterSpacing};
           line-height: 1.2;
           ${gradientCSS || `color: ${textColor};`}
-          ${glowShadow}
-          ${flickerAnim}
+          ${!c.effect_hover_glitch ? glowShadow : ''}
+          ${!c.effect_hover_glitch ? flickerAnim : ''}
+          transform: translateZ(0);
+          ${c.effect_hover_glitch ? 'transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), text-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);' : ''}
         }
+
+        ${c.effect_hover_glitch ? `
+        ha-card:hover .title {
+          animation: textGlitch 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        ` : ''}
+        
         .subtitle {
           display: ${hasSub ? 'block' : 'none'};
           font-family: ${fontFamily};
@@ -686,6 +938,7 @@ class NeonHeaderCard extends HTMLElement {
           line-height: 1.3;
           ${c.uppercase ? 'text-transform: uppercase; letter-spacing: calc(${letterSpacing} + 1px);' : ''}
           ${c.italic ? 'font-style: italic;' : ''}
+          transform: translateZ(0);
         }
       </style>
 
@@ -710,15 +963,16 @@ class NeonHeaderCard extends HTMLElement {
       </ha-card>
     `;
 
-    // Click
+    // Click handler with proper cleanup
     if (interactive) {
-      this.shadowRoot.querySelector('ha-card').addEventListener('click', () => {
+      this._clickHandler = () => {
         if (c.tap_action === 'navigate' && c.navigation_path) {
           this._navigate(c.navigation_path);
         } else if (c.tap_action === 'more-info' && c.entity) {
           this._moreInfo(c.entity);
         }
-      });
+      };
+      this.shadowRoot.querySelector('ha-card').addEventListener('click', this._clickHandler);
     }
 
     this._rendered = true;
@@ -729,7 +983,7 @@ customElements.define('neon-header-card', NeonHeaderCard);
 
 // ── Banner console ────────────────────────────────────────────
 console.info(
-  '%c NEON-HEADER-CARD %c v' + VERSION + ' ',
+  '%c NEON-HEADER-CARD %c v' + VERSION + ' (Optimized) ',
   'color:#00E8FF;font-weight:bold;background:#0A0A14;padding:2px 6px;border-radius:3px 0 0 3px',
   'color:#FF50A0;font-weight:bold;background:#0A0A14;padding:2px 6px;border-radius:0 3px 3px 0',
 );
@@ -738,7 +992,7 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type:             'neon-header-card',
   name:             'Neon Header Card',
-  description:      'Card de header customisable pour Home Assistant',
+  description:      'Card de header customisable pour Home Assistant (Performance Optimized)',
   preview:          true,
   documentationURL: 'https://github.com/',
 });
