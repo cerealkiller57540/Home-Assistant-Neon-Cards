@@ -1,0 +1,928 @@
+neon-night-joi-hdr:
+  modes:
+    dark:
+      # ============================================================
+      # COULEURS DE BASE (intensifiées pour HDR)
+      # ============================================================
+      primary-color: "#00E8FF"           # Bleu cyan intense
+      secondary-color: "#B041FF"         # Violet secondaire
+      accent-color: "#E946FF"            # Violet lumineux
+      dark-primary-color: "#FF0090"      # Hot Pink saturé
+      blacklight-color: "#5D0CED"        # Violet blacklight
+      dark-blue-color: "#0F1923"         # Cyan foncé
+      state-active-color: "#FF50A0"      # Rose néon ultra-saturé
+      electric-blue: "#0099CC"
+      
+      # ============================================================
+      # STATE COLORS
+      # ============================================================
+      state-on-color: "var(--state-active-color)"
+      state-off-color: "var(--state-inactive-color)"
+      state-home-color: "#50FFD0"
+      state-not-home-color: "#7B8B98"
+      error-color: "#FF0090"
+      error-state-color: "#FF0090"
+      warning-color: "#FFD050"
+      warning-state-color: "#FFD050"
+      success-color: "#50FFD0"
+      success-state-color: "#50FFD0"
+      info-color: "var(--primary-color)"
+      info-state-color: "var(--primary-color)"
+      
+      # ============================================================
+      # HACS INTEGRATION
+      # ============================================================
+      hacs-error-color: "#FF0090"
+      hacs-warning-color: "#FFD050"
+      hacs-update-color: "#00E8FF"
+      hacs-new-color: "#00E8FF"
+      hacs-default-icon-color: "var(--primary-color)"
+      
+      # ============================================================
+      # VARIABLES RGB (pour rgba())
+      # ============================================================
+      rgb-primary-color: "0, 232, 255"
+      rgb-secondary-color: "176, 65, 255"
+      rgb-accent-color: "233, 70, 255"
+      rgb-dark-primary-color: "255, 0, 144"
+      rgb-blacklight-color: "93, 12, 237"
+      rgb-state-active-color: "255, 80, 160"
+      rgb-text-primary-color: "232, 232, 232"
+      rgb-disabled-color: "123, 139, 152"
+      rgb-card-background-color: "30, 20, 45"
+
+      # ============================================================
+      # TEXTE
+      # ============================================================
+      primary-text-color: "#E8E8E8"
+      secondary-text-color: "#C0D0E0"
+      disabled-text-color: "#7B8B98"
+      text-primary-color: "#E8E8E8"
+      
+      # ============================================================
+      # LABEL BADGES
+      # ============================================================
+      label-badge-border-color: "var(--state-active-color)"
+      label-badge-red: "#FF0090"
+      label-badge-blue: "var(--primary-color)"
+      label-badge-green: "#50FFD0"
+      label-badge-yellow: "#FFD050"
+      label-badge-grey: "#7B8B98"
+      
+      # ============================================================
+      # TYPOGRAPHY
+      # ============================================================
+      primary-font-family: "'Rajdhani', 'Orbitron', 'Share Tech Mono', 'Roboto', system-ui, -apple-system, sans-serif"
+      paper-font-common-base_-_font-family: "var(--primary-font-family)"
+      paper-font-body1_-_font-family: "var(--primary-font-family)"
+      paper-font-headline_-_font-family: "var(--primary-font-family)"
+      paper-font-title_-_font-family: "var(--primary-font-family)"
+      ha-card-header-font-family: "var(--primary-font-family)"
+      mdc-typography-font-family: "var(--primary-font-family)"
+      
+      # ============================================================
+      # BACKGROUNDS
+      # ============================================================
+      primary-background-color: "#1A1525"
+      secondary-background-color: "rgba(26, 21, 37, 0.8)"
+      card-background-color: "rgba(30, 20, 45, 0.65)"
+      paper-card-background-color: "rgba(28, 18, 40, 0.7)"
+      paper-listbox-background-color: "rgba(28, 18, 40, 0.7)"
+      code-editor-background-color: "#151020"
+      divider-color: "rgba(var(--rgb-primary-color), 0.25)"
+      lovelace-background: "center / cover no-repeat fixed url('/local/1072052.jpg')"
+      
+      # ============================================================
+      # CARD STYLING
+      # ============================================================
+      ha-card-border-radius: "14px"
+      ha-card-border-width: "1px"
+      ha-card-border-color: "rgba(var(--rgb-primary-color), 0.25)"
+      ha-card-box-shadow: "0 4px 24px rgba(0, 0, 0, 0.5), 0 0 20px rgba(var(--rgb-state-active-color), 0.15)"
+      
+      # ============================================================
+      # SOFT GLOW TUNING (adjust these to control overall intensity)
+      # ============================================================
+      glow-opacity-idle: "0.15"
+      glow-opacity-hover: "0.3"
+      glow-opacity-active: "0.5"
+      border-opacity-idle: "0.2"
+      border-opacity-hover: "0.4"
+      blur-strength: "14px"
+      blur-strength-heavy: "20px"
+      
+      # ============================================================
+      # SIDEBAR
+      # ============================================================
+      sidebar-background-color: "rgba(20, 15, 35, 0.75)"
+      sidebar-text-color: "var(--primary-color)"
+      sidebar-icon-color: "var(--primary-color)"
+      sidebar-selected-background-color: "rgba(var(--rgb-accent-color), 0.2)"
+      sidebar-selected-text-color: "var(--primary-color)"
+      sidebar-selected-icon-color: "var(--accent-color)"
+      sidebar-color: "var(--primary-color)"
+      
+      # ============================================================
+      # STATES & ICONS
+      # ============================================================
+      state-icon-color: "var(--primary-color)"
+      state-icon-active-color: "var(--state-active-color)"
+      state-icon-unavailable-color: "#6B7B88"
+      state-inactive-color: "rgba(255, 255, 255, 0.2)"
+      icon-color: "var(--primary-color)"
+      active-icon-color: "var(--state-active-color)"
+      disabled-icon-color: "#7B8B98"
+      
+      # ============================================================
+      # CLIMATE STATES
+      # ============================================================
+      state-climate-auto-color: "#50FFD0"
+      state-climate-cool-color: "#00E8FF"
+      state-climate-heat-color: "#FF0090"
+      state-climate-dry-color: "#FFD050"
+      state-climate-fan_only-color: "#B041FF"
+      state-climate-eco-color: "#50FFD0"
+      state-climate-idle-color: "#7B8B98"
+      state-climate-manual-color: "#E946FF"
+      state-climate-off-color: "rgba(255, 255, 255, 0.2)"
+      
+      # ============================================================
+      # HEADER / TOOLBAR
+      # ============================================================
+      app-header-background-color: "rgba(20, 15, 40, 0.75)"
+      app-header-text-color: "#E8E8E8"
+      app-header-selection-bar-color: "var(--primary-color)"
+      app-header-edit-background-color: "rgba(40, 25, 65, 0.75)"
+      app-header-edit-text-color: "var(--primary-color)"
+      
+      # ============================================================
+      # SWITCHES
+      # ============================================================
+      switch-checked-button-color: "var(--state-active-color)"
+      switch-checked-track-color: "rgba(var(--rgb-state-active-color), 0.6)"
+      switch-checked-color: "var(--state-active-color)"
+      switch-unchecked-button-color: "#50D0E0"
+      switch-unchecked-track-color: "rgba(80, 208, 224, 0.4)"
+      switch-unchecked-color: "rgba(80, 208, 224, 0.4)"
+      
+      # ============================================================
+      # SLIDERS
+      # ============================================================
+      paper-slider-knob-color: "var(--accent-color)"
+      paper-slider-knob-start-color: "var(--accent-color)"
+      paper-slider-pin-color: "var(--accent-color)"
+      paper-slider-active-color: "var(--accent-color)"
+      paper-slider-container-color: "rgba(var(--rgb-accent-color), 0.4)"
+      paper-slider-secondary-color: "var(--primary-color)"
+
+      # ============================================================
+      # DIALOGS
+      # ============================================================
+      dialog-background-color: "rgba(25, 18, 40, 0.92)"
+      paper-dialog-background-color: "rgba(25, 18, 40, 0.92)"
+      mdc-dialog-scrim-color: "rgba(5, 5, 15, 0.85)"
+      mdc-dialog-content-ink-color: "#C0D0E0"
+      mdc-dialog-heading-ink-color: "#E8E8E8"
+      ha-dialog-border-radius: "12px"
+
+      # ============================================================
+      # MARKDOWN
+      # ============================================================
+      markdown-text-color: "#D0E8F0"
+      markdown-link-color: "var(--accent-color)"
+      markdown-code-background-color: "rgba(var(--rgb-primary-color), 0.5)"
+
+      # ============================================================
+      # BUTTONS
+      # ============================================================
+      ha-button-neutral-color: "var(--primary-color)"
+      mdc-button-outline-color: "var(--primary-color)"
+      mdc-button-disabled-ink-color: "var(--disabled-text-color)"
+      mdc-button-disabled-outline-color: "var(--disabled-text-color)"
+      mdc-text-button-ripple-color: "rgba(var(--rgb-primary-color), 0.3)"
+      mdc-outlined-button-ripple-color: "rgba(var(--rgb-primary-color), 0.3)"
+      mdc-contained-button-ripple-color: "rgba(var(--rgb-state-active-color), 0.5)"
+      mdc-button-raised-box-shadow-hover: "0 0 8px 2px rgba(var(--rgb-primary-color), 0.5)"
+      
+      # ============================================================
+      # CHIPS & TABLES
+      # ============================================================
+      chip-background-color: "rgba(var(--rgb-state-active-color), 0.3)"
+      table-row-alternative-background-color: "rgba(35, 25, 50, 0.5)"
+      table-row-background-color: "rgba(28, 20, 42, 0.5)"
+      
+      # ============================================================
+      # PAPER COMPONENTS
+      # ============================================================
+      paper-item-icon-color: "var(--primary-color)"
+      paper-item-icon-active-color: "var(--state-active-color)"
+      paper-item-selected: "var(--state-active-color)"
+      paper-tabs-selection-bar-color: "var(--accent-color)"
+      paper-tab-ink: "var(--state-active-color)"
+      paper-input-container-color: "var(--primary-color)"
+      paper-input-container-focus-color: "var(--state-active-color)"
+      paper-input-container-input-color: "var(--primary-text-color)"
+
+      # ============================================================
+      # MATERIAL DESIGN
+      # ============================================================
+      material-background-color: "var(--primary-background-color)"
+      material-primary-color: "var(--primary-color)"
+      material-secondary-color: "var(--accent-color)"
+      
+      # ============================================================
+      # MDC COMPONENTS
+      # ============================================================
+      mdc-tab-text-label-color-default: "var(--primary-color)"
+      mdc-tab-color-default: "var(--primary-color)"
+      mdc-icon-color: "var(--primary-color)"
+      mdc-icon-button-color: "var(--primary-color)"
+      mdc-checkbox-unchecked-color: "var(--primary-color)"
+      mdc-radio-unchecked-color: "var(--primary-color)"
+      mdc-ripple-color: "var(--primary-color)"
+      mdc-select-dropdown-icon-color: "var(--primary-color)"
+      mdc-select-fill-color: "var(--card-background-color)"
+      mdc-select-ink-color: "var(--primary-text-color)"
+      mdc-select-label-ink-color: "var(--primary-color)"
+      mdc-select-disabled-dropdown-icon-color: "var(--disabled-text-color)"
+      mdc-select-disabled-fill-color: "rgba(var(--rgb-disabled-color), 0.2)"
+      mdc-select-disabled-ink-color: "var(--disabled-text-color)"
+      mdc-text-field-fill-color: "var(--card-background-color)"
+      mdc-text-field-ink-color: "var(--primary-text-color)"
+      mdc-text-field-label-ink-color: "var(--primary-color)"
+      mdc-text-field-disabled-fill-color: "rgba(var(--rgb-disabled-color), 0.2)"
+      mdc-text-field-disabled-ink-color: "var(--disabled-text-color)"
+      mdc-theme-on-primary: "#0F0F18"
+      mdc-theme-on-secondary: "#0F0F18"
+      mdc-theme-on-surface: "#E8E8E8"
+      mdc-theme-text-primary-on-background: "#E8E8E8"
+      mdc-theme-primary: "var(--primary-color)"
+      mdc-theme-secondary: "var(--accent-color)"
+      mdc-theme-surface: "var(--card-background-color)"
+      mdc-theme-background: "var(--primary-background-color)"
+      mdc-theme-error: "#FF0090"
+      
+      # ============================================================
+      # HA COLOR SYSTEM
+      # ============================================================
+      ha-color-fill-neutral-quiet-resting: "rgba(28, 20, 42, 0.92)"
+      ha-color-surface-default: "rgba(28, 20, 42, 0.92)"
+      ha-color-fill-neutral-quiet: "rgba(32, 24, 48, 0.85)"
+      ha-color-on-neutral-quiet: "#E8E8E8"
+      ha-color-on-neutral-normal: "#E8E8E8"
+      ha-color-on-primary-normal: "#E8E8E8"
+      
+      # ============================================================
+      # FORM INPUTS
+      # ============================================================
+      ha-input-border-color: "rgba(var(--rgb-primary-color), 0.5)"
+      ha-input-hover-border-color: "var(--accent-color)"
+      ha-input-focus-border-color: "var(--state-active-color)"
+      input-idle-line-color: "rgba(var(--rgb-primary-color), 0.5)"
+      input-hover-line-color: "var(--accent-color)"
+      input-disabled-line-color: "rgba(var(--rgb-disabled-color), 0.4)"
+      
+      # ============================================================
+      # ENERGY DASHBOARD
+      # ============================================================
+      energy-grid-consumption-color: "var(--electric-blue)"
+      energy-grid-return-color: "#00E8FF"
+      energy-solar-color: "#FF6B35"
+      energy-non-fossil-color: "#50FFD0"
+      energy-battery-out-color: "#FFD050"
+      energy-battery-in-color: "#E946FF"
+      energy-gas-color: "#0F1923"
+      energy-water-color: "#4ECDC4"
+      
+      # ============================================================
+      # PERFORMANCE VARIABLES (Animation Tuning)
+      # ============================================================
+      animation-speed-card: "4s"
+      animation-speed-sidebar: "3s"
+      animation-speed-header: "5s"
+      animation-speed-badge: "2.5s"
+      animation-speed-rain: "2s"
+      
+      # ============================================================
+      # KIOSK MODE (iPad Wall Mount)
+      # ============================================================
+      kiosk-glow-intensity: "1.5"
+      kiosk-touch-scale: "0.97"
+      kiosk-card-spacing: "16px"
+      kiosk-min-touch-target: "44px"
+
+  # ============================================================
+  # CARD-MOD THEME CONFIGURATION
+  # ============================================================
+  card-mod-theme: neon-night-joi-hdr
+  
+  card-mod-card: |
+    /* ========== BASE CARD STYLES ========== */
+    ha-card {
+      --card-contrast: 1.04;
+      --card-saturate: 1.10;
+      --card-brightness: 1;
+      font-family: var(--primary-font-family) !important;
+      position: relative;
+      overflow: visible;
+      transform: translateZ(0);
+      backdrop-filter: blur(var(--blur-strength)) saturate(120%);
+      border: 1px solid rgba(var(--rgb-primary-color), var(--border-opacity-idle));
+      filter: contrast(var(--card-contrast)) saturate(var(--card-saturate)) brightness(var(--card-brightness));
+      transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                  box-shadow 0.5s ease,
+                  border-color 0.5s ease,
+                  filter 0.3s ease;
+      contain: layout style paint;
+      content-visibility: auto;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    
+    /* ========== PSEUDO-ELEMENTS ========== */
+    ha-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent 0%, var(--accent-color) 50%, transparent 100%);
+      opacity: 0.6;
+      box-shadow: 0 0 8px rgba(var(--rgb-accent-color), 0.4);
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+    }
+    
+    /* ========== HOVER EFFECTS (desktop only) ========== */
+    @media (hover: hover) {
+      ha-card {
+        animation: neonPulseHDR var(--animation-speed-card) ease-in-out infinite;
+        will-change: box-shadow;
+      }
+      
+      ha-card:hover {
+        --card-contrast: 1.12;
+        --card-saturate: 1.25;
+        --card-brightness: 1.08;
+        transform: translateY(-10px) scale(1.03) translateZ(0);
+        box-shadow: 0 0 50px rgba(var(--rgb-state-active-color), 0.7), 
+                    0 0 80px rgba(var(--rgb-accent-color), 0.5), 
+                    0 0 120px rgba(var(--rgb-primary-color), 0.4);
+        animation: containerGlitchHDR 0.8s ease forwards;
+        will-change: transform, box-shadow, filter;
+      }
+      
+      ha-card:hover ha-icon {
+        animation: iconGlitchSpinHDR 0.8s ease;
+        filter: drop-shadow(0 0 15px currentColor) saturate(1.4) brightness(1.15);
+        will-change: transform, filter;
+      }
+      
+      ha-card:hover .card-header {
+        animation: nameGlitchHDR 0.8s ease;
+        text-shadow: 0 0 8px currentColor, 0 0 15px currentColor;
+        will-change: transform, text-shadow;
+      }
+      
+      ha-card:not(:hover),
+      ha-card:not(:hover) ha-icon,
+      ha-card:not(:hover) .card-header {
+        will-change: auto;
+      }
+    }
+    
+    /* ========== iPAD KIOSK (touch effects + optimizations) ========== */
+    @media (min-width: 768px) and (min-height: 1000px) and (hover: none) and (pointer: coarse) {
+      ha-card {
+        --card-contrast: 1.06;
+        --card-saturate: 1.12;
+        --card-brightness: 1.03;
+        backdrop-filter: blur(var(--blur-strength-heavy)) saturate(130%);
+        border-width: 2px;
+        margin: var(--kiosk-card-spacing);
+        animation: neonPulseKiosk var(--animation-speed-card) ease-in-out infinite;
+        will-change: box-shadow;
+      }
+      
+      ha-card::before {
+        height: 3px;
+        box-shadow: 0 0 12px rgba(var(--rgb-accent-color), 0.5);
+      }
+      
+      ha-card:active {
+        --card-contrast: 1.08;
+        --card-saturate: 1.15;
+        --card-brightness: 1.06;
+        transform: scale(var(--kiosk-touch-scale));
+        box-shadow: 0 0 40px rgba(var(--rgb-state-active-color), var(--glow-opacity-active)), 
+                    0 0 60px rgba(var(--rgb-accent-color), var(--glow-opacity-hover)),
+                    inset 0 0 20px rgba(var(--rgb-state-active-color), 0.1);
+        animation: touchBurstHDR 0.5s ease forwards;
+        transition: transform 0.15s ease, filter 0.15s ease;
+      }
+      
+      ha-card:active ha-icon {
+        animation: iconTouchPulse 0.5s ease;
+        filter: drop-shadow(0 0 12px currentColor) saturate(1.3) brightness(1.15);
+      }
+      
+      ha-card:active .card-header {
+        animation: nameTouchGlow 0.5s ease;
+        text-shadow: 0 0 10px currentColor;
+      }
+    }
+    
+    /* ========== MOBILE OPTIMIZATIONS (phones) ========== */
+    @media (max-width: 767px), (max-height: 999px) and (hover: none) {
+      ha-card {
+        backdrop-filter: blur(10px) saturate(120%);
+        border-width: 1px;
+      }
+    }
+    
+    /* ========== ACCESSIBILITY ========== */
+    @media (prefers-reduced-motion: reduce) {
+      ha-card,
+      ha-card::before,
+      ha-card ha-icon,
+      ha-card .card-header {
+        animation: none !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+    
+    /* ========== ANIMATIONS ========== */
+    @keyframes neonPulseHDR {
+      0%, 100% {
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5),
+                    0 0 20px rgba(var(--rgb-state-active-color), var(--glow-opacity-idle));
+      }
+      50% {
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5),
+                    0 0 30px rgba(var(--rgb-state-active-color), 0.22),
+                    0 0 45px rgba(var(--rgb-primary-color), 0.1);
+      }
+    }
+    
+    @keyframes neonPulseKiosk {
+      0%, 100% {
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5),
+                    0 0 25px rgba(var(--rgb-state-active-color), 0.2),
+                    0 0 40px rgba(var(--rgb-primary-color), 0.1);
+      }
+      50% {
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5),
+                    0 0 35px rgba(var(--rgb-state-active-color), var(--glow-opacity-hover)),
+                    0 0 50px rgba(var(--rgb-primary-color), var(--glow-opacity-idle));
+      }
+    }
+    
+    @keyframes containerGlitchHDR {
+      0%, 100% { transform: translateY(-10px) scale(1.03) translateZ(0); }
+      12% { transform: translateY(-10px) scale(1.03) translate(-4px, 3px) translateZ(0); }
+      24% { transform: translateY(-10px) scale(1.03) translate(4px, -3px) translateZ(0); }
+      36% { transform: translateY(-10px) scale(1.03) translate(-3px, -2px) translateZ(0); }
+      48% { transform: translateY(-10px) scale(1.03) translate(3px, 2px) translateZ(0); }
+      60% { transform: translateY(-10px) scale(1.03) translate(-2px, 0) translateZ(0); }
+      72% { transform: translateY(-10px) scale(1.03) translate(2px, -1px) translateZ(0); }
+      84% { transform: translateY(-10px) scale(1.03) translate(-1px, 1px) translateZ(0); }
+    }
+    
+    @keyframes iconGlitchSpinHDR {
+      0%, 100% { 
+        transform: scale(1) rotate(0deg) translateZ(0); 
+        filter: drop-shadow(0 0 15px currentColor) saturate(1.5) brightness(1.2);
+      }
+      12% { 
+        transform: scale(1.15) rotate(-12deg) translateZ(0); 
+        filter: drop-shadow(8px 0 25px var(--state-active-color)) 
+                drop-shadow(-8px 0 25px var(--accent-color)) saturate(1.8) brightness(1.3);
+      }
+      24% { 
+        transform: scale(1.25) rotate(12deg) translateZ(0); 
+        filter: drop-shadow(-8px 0 25px var(--dark-primary-color)) 
+                drop-shadow(8px 0 25px var(--primary-color)) saturate(1.8) brightness(1.3);
+      }
+      36% { 
+        transform: scale(1.18) rotate(-8deg) translateZ(0); 
+        filter: drop-shadow(6px 6px 25px var(--accent-color)) 
+                drop-shadow(-6px -6px 25px var(--state-active-color)) saturate(1.7) brightness(1.25);
+      }
+      48% { 
+        transform: scale(1.15) rotate(8deg) translateZ(0); 
+        filter: drop-shadow(-5px 5px 25px var(--primary-color)) 
+                drop-shadow(5px -5px 25px var(--dark-primary-color)) saturate(1.7) brightness(1.25);
+      }
+      60% { 
+        transform: scale(1.12) rotate(-5deg) translateZ(0); 
+        filter: drop-shadow(0 0 30px currentColor) saturate(1.6) brightness(1.2);
+      }
+      72% { 
+        transform: scale(1.08) rotate(5deg) translateZ(0); 
+        filter: drop-shadow(0 0 25px currentColor) saturate(1.6) brightness(1.2);
+      }
+      84% { 
+        transform: scale(1.04) rotate(-3deg) translateZ(0); 
+        filter: drop-shadow(0 0 20px currentColor) saturate(1.5) brightness(1.15);
+      }
+    }
+    
+    @keyframes nameGlitchHDR {
+      0%, 100% { 
+        transform: translate(0) translateZ(0); 
+        text-shadow: 0 0 5px currentColor;
+      }
+      15% { 
+        transform: translate(-3px, 0) translateZ(0); 
+        text-shadow: 4px 0 15px var(--state-active-color), -4px 0 15px var(--accent-color);
+      }
+      30% { 
+        transform: translate(3px, 0) translateZ(0); 
+        text-shadow: -4px 0 15px var(--dark-primary-color), 4px 0 15px var(--primary-color);
+      }
+      45% { 
+        transform: translate(-2px, 0) translateZ(0); 
+        text-shadow: 3px 3px 15px var(--accent-color), -3px -3px 15px var(--state-active-color);
+      }
+      60% { 
+        transform: translate(2px, 0) translateZ(0); 
+        text-shadow: -2px 2px 15px var(--primary-color), 2px -2px 15px var(--dark-primary-color);
+      }
+      75% { 
+        transform: translate(-1px, 0) translateZ(0); 
+        text-shadow: 2px 0 15px var(--state-active-color), -2px 0 15px var(--accent-color);
+      }
+      90% { 
+        transform: translate(1px, 0) translateZ(0); 
+        text-shadow: 0 0 12px var(--accent-color);
+      }
+    }
+    
+    @keyframes touchBurstHDR {
+      0% { transform: scale(var(--kiosk-touch-scale)) translateZ(0); }
+      50% { 
+        transform: scale(0.97) translateZ(0);
+        box-shadow: 0 0 40px rgba(var(--rgb-state-active-color), var(--glow-opacity-active)),
+                    0 0 60px rgba(var(--rgb-accent-color), var(--glow-opacity-hover)),
+                    inset 0 0 20px rgba(var(--rgb-state-active-color), 0.15);
+      }
+      100% { transform: scale(var(--kiosk-touch-scale)) translateZ(0); }
+    }
+    
+    @keyframes iconTouchPulse {
+      0%, 100% { 
+        transform: scale(1) translateZ(0); 
+        filter: drop-shadow(0 0 12px currentColor) saturate(1.3) brightness(1.15);
+      }
+      50% { 
+        transform: scale(1.08) translateZ(0); 
+        filter: drop-shadow(0 0 18px var(--state-active-color)) saturate(1.4) brightness(1.2);
+      }
+    }
+    
+    @keyframes nameTouchGlow {
+      0%, 100% { text-shadow: 0 0 8px currentColor; }
+      50% { 
+        text-shadow: 0 0 12px var(--state-active-color), 
+                     0 0 20px rgba(var(--rgb-accent-color), 0.5);
+      }
+    }
+        
+  card-mod-root-yaml: |
+    .: |
+      /* ========== HEADER & TOOLBAR ========== */
+      app-header, 
+      ha-app-layout app-header,
+      app-toolbar, 
+      .header,
+      mwc-tab-bar {
+        background: var(--app-header-background-color);
+        background-color: var(--app-header-background-color);
+        backdrop-filter: blur(16px) saturate(140%);
+        border-bottom: 3px solid rgba(var(--rgb-accent-color), 0.4);
+        box-shadow: 0 0 15px rgba(var(--rgb-accent-color), 0.35), 
+                    0 0 25px rgba(var(--rgb-primary-color), 0.2),
+                    0 4px 12px rgba(0, 0, 0, 0.5);
+        animation: app-headerPulseHDR var(--animation-speed-header) ease-in-out infinite;
+        contain: layout style;
+        filter: saturate(2) brightness(1.2);
+      }
+      
+      * {
+      font-family: 'Rajdhani', system-ui, -apple-system, sans-serif !important;
+      }
+      
+      /* ========== ICON COLORS ========== */
+      app-header ha-icon,
+      app-header ha-svg-icon,
+      app-header ha-icon-button ha-icon,
+      app-header ha-icon-button ha-svg-icon,
+      app-toolbar ha-icon,
+      app-toolbar ha-svg-icon,
+      app-toolbar ha-icon-button ha-icon,
+      app-toolbar ha-icon-button ha-svg-icon,
+      mwc-tab-bar ha-icon,
+      mwc-tab-bar ha-svg-icon,
+      .header ha-icon,
+      .header ha-svg-icon,
+      ha-icon, 
+      ha-svg-icon, 
+      ha-icon-button {
+        color: var(--primary-color);
+        fill: var(--primary-color);
+        filter: drop-shadow(0 0 8px currentColor) saturate(1.3) brightness(1.1);
+        contain: layout style;
+      }
+      
+      /* ========== ANIMATIONS ========== */
+      @keyframes app-headerPulseHDR {
+        0%, 100% {
+          opacity: 0.7;
+          box-shadow: 0 0 10px var(--secondary-color), 
+                      0 0 25px var(--blacklight-color);
+        }
+        50% {
+          opacity: 1;
+          box-shadow: 0 0 20px var(--accent-color), 
+                      0 0 40px rgba(var(--rgb-blacklight-color), 0.8);
+        }
+      }
+      
+      /* ========== ACCESSIBILITY ========== */
+      @media (prefers-reduced-motion: reduce) {
+        app-header,
+        ha-app-layout app-header,
+        app-toolbar,
+        .header,
+        mwc-tab-bar {
+          animation: none !important;
+          backdrop-filter: blur(10px) saturate(120%);
+        }
+      }
+      
+      /* ========== MOBILE OPTIMIZATIONS ========== */
+      @media (max-width: 768px) {
+        app-header,
+        ha-app-layout app-header,
+        app-toolbar,
+        .header,
+        mwc-tab-bar {
+          backdrop-filter: blur(10px) saturate(120%);
+        }
+      }
+  
+  card-mod-sidebar: |
+    /* ========== BASE SIDEBAR STYLES ========== */
+    :host {
+      background: linear-gradient(135deg, 
+                    rgba(20, 15, 35, 0.85) 0%, 
+                    rgba(15, 10, 30, 0.9) 100%);
+      backdrop-filter: blur(12px) saturate(130%);
+      box-shadow: 0 0 50px rgba(var(--rgb-primary-color), 0.4),
+                  0 0 80px rgba(var(--rgb-primary-color), 0.25),
+                  inset 0 0 100px rgba(var(--rgb-accent-color), 0.03);
+      contain: layout style paint;
+      font-family: var(--primary-font-family) !important;
+    }
+
+    /* ========== SIDEBAR EDGE GLOW ========== */
+    :host::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 3px;
+      height: 100%;
+      background: linear-gradient(180deg, 
+                  transparent 0%, 
+                  var(--primary-color) 30%,
+                  var(--state-active-color) 50%,
+                  var(--primary-color) 70%, 
+                  transparent 100%);
+      box-shadow: 0 0 25px var(--primary-color), 
+                  0 0 50px var(--primary-color);
+      animation: sidebarPulseHDR var(--animation-speed-sidebar) ease-in-out infinite;
+      z-index: 10;
+      contain: strict;
+      filter: saturate(2) brightness(1.4);
+    }
+
+    /* ========== RAIN EFFECT ========== */
+    :host::after {
+      content: "";
+      position: absolute;
+      top: -200px;
+      left: 0;
+      right: 0;
+      height: calc(100% + 400px);
+      pointer-events: none;
+      z-index: 1;
+      overflow: hidden;
+      contain: strict;
+      background-image:
+        linear-gradient(to bottom, transparent, rgba(160,220,255,0.30) 50%, transparent),
+        linear-gradient(to bottom, transparent 20%, rgba(130,195,255,0.20) 70%, transparent),
+        linear-gradient(to bottom, transparent, rgba(170,225,255,0.25) 60%, transparent),
+        linear-gradient(to bottom, transparent 10%, rgba(140,200,255,0.22) 55%, transparent),
+        linear-gradient(to bottom, transparent, rgba(160,220,255,0.18) 45%, transparent),
+        linear-gradient(to bottom, transparent 30%, rgba(120,190,255,0.28) 75%, transparent),
+        linear-gradient(to bottom, transparent, rgba(155,215,255,0.22) 50%, transparent),
+        linear-gradient(to bottom, transparent 15%, rgba(145,205,255,0.20) 60%, transparent),
+        linear-gradient(to bottom, transparent, rgba(175,228,255,0.25) 55%, transparent),
+        linear-gradient(to bottom, transparent 25%, rgba(135,198,255,0.18) 70%, transparent),
+        linear-gradient(to bottom, transparent, rgba(165,222,255,0.22) 50%, transparent),
+        linear-gradient(to bottom, transparent 5%, rgba(125,192,255,0.26) 65%, transparent),
+        linear-gradient(to bottom, transparent, rgba(150,210,255,0.20) 45%, transparent),
+        linear-gradient(to bottom, transparent 20%, rgba(140,202,255,0.24) 60%, transparent),
+        linear-gradient(to bottom, transparent, rgba(180,230,255,0.18) 55%, transparent),
+        linear-gradient(to bottom, transparent 35%, rgba(155,218,255,0.22) 70%, transparent),
+        linear-gradient(to bottom, transparent, rgba(138,200,255,0.28) 50%, transparent),
+        linear-gradient(to bottom, transparent 12%, rgba(168,224,255,0.18) 62%, transparent);
+      background-size:
+        1px 200px, 1px 200px, 2px 200px, 1px 200px, 1px 200px, 2px 200px,
+        1px 200px, 1px 200px, 2px 200px, 1px 200px, 1px 200px, 2px 200px,
+        1px 200px, 1px 200px, 1px 200px, 2px 200px, 1px 200px, 1px 200px;
+      background-position:
+        8px 0, 22px 60px, 38px 120px, 54px 30px, 68px 90px, 82px 150px,
+        97px 20px, 112px 80px, 128px 140px, 143px 50px, 158px 110px, 172px 170px,
+        186px 40px, 200px 100px, 215px 160px, 228px 70px, 242px 130px, 258px 10px;
+      background-repeat: repeat-y;
+      animation: rainFall var(--animation-speed-rain) linear infinite;
+      will-change: transform;
+      transform: translateZ(0);
+    }
+
+    /* ========== TITLE STYLING ========== */
+    .menu .title {
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      text-shadow: 0 0 12px var(--primary-color),
+                   0 0 25px rgba(var(--rgb-state-active-color), 0.5);
+      background: linear-gradient(90deg, 
+                  var(--primary-color) 0%,
+                  var(--state-active-color) 30%,
+                  var(--accent-color) 50%,
+                  var(--state-active-color) 70%,
+                  var(--primary-color) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      background-size: 200% 100%;
+      filter: saturate(1.4) brightness(1.15);
+    }
+
+    /* ========== ICON EFFECTS ========== */
+    ha-md-list-item ha-icon,
+    ha-md-list-item ha-svg-icon {
+      filter: drop-shadow(0 0 4px currentColor);
+      transition: all 0.3s ease;
+      contain: layout style;
+    }
+
+    /* ========== ANIMATIONS ========== */
+    @keyframes sidebarPulseHDR {
+      0%, 100% {
+        opacity: 0.7;
+        box-shadow: 0 0 25px var(--primary-color), 
+                    0 0 50px var(--primary-color);
+      }
+      50% {
+        opacity: 1;
+        box-shadow: 0 0 40px var(--state-active-color), 
+                    0 0 80px rgba(var(--rgb-state-active-color), 0.6);
+      }
+    }
+
+    @keyframes rainFall {
+      0%   { transform: translateY(0); }
+      100% { transform: translateY(200px); }
+    }
+
+    @keyframes gradientShift {
+      0%, 100% { background-position: 0% 50%; }
+      50%      { background-position: 100% 50%; }
+    }
+
+    /* ========== DESKTOP HOVER EFFECTS ========== */
+    @media (hover: hover) {
+      .menu .title {
+        animation: gradientShift 8s ease-in-out infinite;
+        will-change: background-position;
+      }
+      
+      :host::before,
+      :host::after {
+        will-change: transform, box-shadow;
+      }
+    }
+    
+    /* ========== KIOSK FULLSCREEN MODE (iPad 8th+ only) ========== */
+    @media (min-width: 768px) and (min-height: 1000px) and (hover: none) and (pointer: coarse) {
+      ha-icon,
+      ha-svg-icon {
+        filter: drop-shadow(0 0 4px currentColor) saturate(1.2) brightness(1.06);
+        transition: filter 0.3s ease;
+      }
+      
+      ha-icon-button,
+      mwc-button,
+      button {
+        min-width: var(--kiosk-min-touch-target);
+        min-height: var(--kiosk-min-touch-target);
+      }
+      
+      .card-header,
+      h1, h2, h3 {
+        text-shadow: 0 0 6px rgba(0, 0, 0, 0.6),
+                     0 0 10px currentColor;
+        letter-spacing: 0.5px;
+      }
+    }
+
+    /* ========== MOBILE OPTIMIZATIONS ========== */
+    @media (max-width: 768px) {
+      :host {
+        backdrop-filter: blur(10px) saturate(120%);
+      }
+      
+      :host::after {
+        animation: none;
+        opacity: 0.3;
+      }
+    }
+    
+    /* ========== ACCESSIBILITY ========== */
+    @media (prefers-reduced-motion: reduce) {
+      :host::before,
+      :host::after,
+      .menu .title {
+        animation: none !important;
+      }
+    }
+
+  # ============================================================
+  # ROOT-LEVEL UI ELEMENTS
+  # ============================================================
+  card-mod-root: |
+    /* ========== PERSISTENT NOTIFICATIONS BADGE ========== */
+    ha-button-menu ha-icon-button[slot="trigger"]::after,
+    ha-icon-button.has-notifications::after {
+      background: linear-gradient(135deg, 
+                    var(--state-active-color) 0%, 
+                    var(--dark-primary-color) 100%) !important;
+      box-shadow: 0 0 6px rgba(var(--rgb-state-active-color), 0.4),
+                  0 0 12px rgba(var(--rgb-state-active-color), 0.2) !important;
+      animation: badgePulse var(--animation-speed-badge) ease-in-out infinite;
+    }
+    
+    @keyframes badgePulse {
+      0%, 100% {
+        box-shadow: 0 0 6px rgba(var(--rgb-state-active-color), 0.4),
+                    0 0 12px rgba(var(--rgb-state-active-color), 0.2);
+      }
+      50% {
+        box-shadow: 0 0 10px rgba(var(--rgb-state-active-color), 0.5),
+                    0 0 18px rgba(var(--rgb-state-active-color), 0.3);
+      }
+    }
+    
+    /* ========== KIOSK AMBIENT MODE (iPad tablets only) ========== */
+    @media (min-width: 768px) and (min-height: 1000px) and (hover: none) and (pointer: coarse) {
+      mwc-button,
+      ha-button {
+        animation: buttonAmbientGlow var(--animation-speed-card) ease-in-out infinite;
+      }
+      
+      @keyframes buttonAmbientGlow {
+        0%, 100% {
+          box-shadow: 0 0 6px rgba(var(--rgb-primary-color), var(--glow-opacity-idle));
+        }
+        50% {
+          box-shadow: 0 0 12px rgba(var(--rgb-accent-color), var(--glow-opacity-hover)),
+                      0 0 18px rgba(var(--rgb-primary-color), var(--glow-opacity-idle));
+        }
+      }
+      
+      mwc-button:active,
+      ha-button:active {
+        transform: scale(0.97);
+        box-shadow: 0 0 20px rgba(var(--rgb-state-active-color), var(--glow-opacity-active)),
+                    0 0 30px rgba(var(--rgb-accent-color), var(--glow-opacity-hover));
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+    }
+    
+    /* ========== ACCESSIBILITY ========== */
+    @media (prefers-reduced-motion: reduce) {
+      .badge,
+      ha-state-label-badge,
+      .label-badge,
+      mwc-button,
+      ha-button,
+      ha-button-menu ha-icon-button[slot="trigger"]::after,
+      ha-icon-button.has-notifications::after {
+        animation: none !important;
+      }
+    }
