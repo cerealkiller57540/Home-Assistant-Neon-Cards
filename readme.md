@@ -1,197 +1,182 @@
-# 🌙 Home Assistant Neon Cards
+# 🌟 Home Assistant Neon Cards
 
-> A collection of custom Lovelace cards with a dark neon aesthetic — designed for Home Assistant dashboards.
+A collection of custom cards for [Home Assistant](https://www.home-assistant.io/) with a sleek **neon aesthetic**. Perfect for futuristic dashboards with glowing effects and vibrant colors.
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://github.com/hacs/integration)
-[![GitHub release](https://img.shields.io/github/v/release/cerealkiller57540/Home-Assistant-Neon-Cards?style=for-the-badge)](https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+[![hacs][hacs-badge]][hacs-url]
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+> 📸 See [Screenshots.md](Screenshots.md) for previews of all cards.
 
 ---
 
-## 📦 Cards included
+## ✨ Cards included
+
+### 🔌 Core Cards
 
 | Card | File | Description |
 |------|------|-------------|
-| 🌞 **Neon Solar Card** | `neon-solar-production-card.js` | Solar production with animated panel, 24h sparkline & forecast ghost line |
-| 🔋 **Neon Battery Card** | `neon-battery-card.js` | Battery state with animated fill and glow |
-| 🌡️ **Neon Thermo Card** | `neon-thermo-card.js` | Single thermostat / temperature sensor |
-| 🌡️🌡️ **Neon Dual Thermo Card** | `neon-dual-thermo-card.js` | Two sensors side by side (indoor / outdoor) |
-| 🏷️ **Neon Header Card** | `neon-header-card.js` | Section header with neon accent |
+| 🔋 Neon Battery Card | `neon-battery-card.js` | Displays battery level with a neon-style gauge |
+| 🌡️ Neon Thermo Card | `neon-thermo-card.js` | Shows temperature & humidity with neon styling |
+| 🌡️🌡️ Neon Dual Thermo Card | `neon-dual-thermo-card.js` | Displays two temperature sensors side by side |
+| ☀️ Neon Solar Production Card | `neon-solar-production-card.js` | Monitors solar panel production in real time |
+| 🏷️ Neon Header Card | `neon-header-card.js` | Stylish neon section header for your dashboard |
+| 📊 Neon Dual Gauge Card | `Neon Dual Gauge Card/` | Dual circular gauge with neon glow effect |
 
-All cards share a consistent dark neon theme — **cyan · violet · pink** — and inherit your HA theme fonts automatically.
+### ☀️ Sunology Cards
+
+| Card | File | Description |
+|------|------|-------------|
+| 🔋 Storey Battery Card | `Sunology/storey-battery-card.js` | Battery card tailored for Sunology solar systems |
 
 ---
 
-## 🚀 Installation
+## 🎨 Themes
+
+This repo includes a ready-to-use neon theme for Home Assistant.
+
+| Theme | Description |
+|-------|-------------|
+| 🌙 Neon Night Joi HDR | Dark neon theme with HDR-style colors for immersive dashboards |
+
+### Installing the theme
+
+1. Copy the theme file from the `themes/` folder into your `config/themes/` directory.
+2. In `configuration.yaml`, make sure themes are enabled:
+   ```yaml
+   frontend:
+     themes: !include_dir_merge_named themes
+   ```
+3. Restart Home Assistant.
+4. Go to your **Profile** → select **Neon Night Joi HDR**.
+
+---
+
+## 📦 Installation
 
 ### Via HACS (recommended)
 
-1. Open HACS → **Frontend**
-2. Click the three dots menu → **Custom repositories**
-3. Add `https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards` as type **Lovelace**
-4. Install **Home Assistant Neon Cards**
-5. Reload your browser
+1. Open **HACS** in your Home Assistant instance.
+2. Go to **Frontend** → click the **⋮** menu → **Custom repositories**.
+3. Add the following URL as a **Lovelace** repository:
+   ```
+   https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards
+   ```
+4. Search for **Neon Cards** and click **Install**.
+5. Reload your browser.
 
-### Manual
+### Manual installation
 
-1. Download the `.js` file(s) from the latest [Release](https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards/releases)
-2. Copy to `/config/www/`
-3. In HA: **Settings → Dashboards → Resources** → Add `/local/neon-solar-production-card.js` (type: JavaScript module)
-4. Repeat for each card you want to use
-
----
-
-## 🌞 Neon Solar Card
-
-Animated 48-cell solar panel, live production value, 24h sparkline with optional forecast ghost line, night mode, weather badges.
-
-### Minimal config
-
-```yaml
-type: custom:neon-solar-card
-entity: sensor.solar_power
-max_power: 5000
-```
-
-### Full config
-
-```yaml
-type: custom:neon-solar-card
-
-# ── Entities ───────────────────────────────────────────
-entity: sensor.solar_power            # required — production power sensor
-input_unit: W                         # W (default) or kW — your sensor's unit
-daily_entity: sensor.solar_energy_today
-secondary_entity: sensor.solar_rendement
-secondary_label: RENDEMENT
-secondary_unit: "%"
-forecast_entity: sensor.solar_forecast
-forecast_unit: W                      # W (default) or kW — independent of input_unit
-luminosity_entity: sensor.lux_outdoor
-weather_entity: weather.home
-
-# ── Display ────────────────────────────────────────────
-name: Production Solaire
-max_power: 5000                       # W — used for efficiency calculation
-decimal_places: 0
-animation_speed: 1                    # 0.1–5
-night_threshold: 10                   # lux below = night mode
-show_history: true
-show_efficiency: true
-font_size: medium                     # small | medium | large
-header_font_size: medium
-
-# ── Glow ──────────────────────────────────────────────
-glow_effect: true
-
-# ── Neo Tokyo mode ─────────────────────────────────────
-cyberpunk_mode: false                 # enables #ff10f0 / #00fff9 preset
-neon_glow: false                      # stronger glow on value & panel
-
-# ── Actions ────────────────────────────────────────────
-tap_action:
-  action: more-info
-hold_action:
-  action: more-info
-double_tap_action:
-  action: none
-
-# ── Colors (omit = inherit from HA theme) ──────────────
-color_primary: "#FFD23F"
-color_cold: "#00E8FF"
-color_mid: "#FFD23F"
-color_hot: "#FF6B35"
-color_icon: "#FFD23F"
-color_badge: "#FFD23F"
-```
-
-### Sparkline forecast ghost line
-
-If `forecast_entity` is configured and has history, a white dashed ghost line is drawn on top of the 24h sparkline — same Y scale as production — so you can visually compare real vs forecast.
-
-```yaml
-forecast_entity: sensor.solcast_pv_forecast_power_now
-forecast_unit: W    # set to kW if your forecast sensor returns kilowatts
-```
+1. Download the `.js` files from this repository.
+2. Copy them into your `config/www/` folder (e.g. `config/www/neon-cards/`).
+3. In Home Assistant, go to **Settings → Dashboards → Resources** and add each file:
+   ```
+   /local/neon-cards/neon-battery-card.js
+   /local/neon-cards/neon-thermo-card.js
+   /local/neon-cards/neon-dual-thermo-card.js
+   /local/neon-cards/neon-solar-production-card.js
+   /local/neon-cards/neon-header-card.js
+   ```
+   For the Dual Gauge Card and Sunology cards, refer to the respective subfolder `README` or JS file for the resource path.
+4. Reload your browser.
 
 ---
 
-## 🔋 Neon Battery Card
+## 🔧 Usage
+
+### 🔋 Neon Battery Card
 
 ```yaml
 type: custom:neon-battery-card
-entity: sensor.battery_soc            # 0–100 %
-voltage_entity: sensor.battery_voltage
-power_entity: sensor.battery_power
-name: Batterie
-max_power: 5000
+entity: sensor.my_battery
+name: Battery Level
 ```
 
----
-
-## 🌡️ Neon Thermo Card
+### 🌡️ Neon Thermo Card
 
 ```yaml
 type: custom:neon-thermo-card
-entity: sensor.temperature_living
-name: Salon
-unit: "°C"
-min_value: 15
-max_value: 30
+entity: sensor.living_room_temperature
+name: Living Room
 ```
 
----
-
-## 🌡️🌡️ Neon Dual Thermo Card
+### 🌡️🌡️ Neon Dual Thermo Card
 
 ```yaml
 type: custom:neon-dual-thermo-card
-entity_left: sensor.temperature_indoor
-label_left: Intérieur
-entity_right: sensor.temperature_outdoor
-label_right: Extérieur
-unit: "°C"
+entity_1: sensor.indoor_temperature
+entity_2: sensor.outdoor_temperature
+name_1: Indoor
+name_2: Outdoor
 ```
 
----
+### ☀️ Neon Solar Production Card
 
-## 🏷️ Neon Header Card
+```yaml
+type: custom:neon-solar-production-card
+entity: sensor.solar_production
+name: Solar Production
+```
+
+### 📊 Neon Dual Gauge Card
+
+```yaml
+type: custom:neon-dual-gauge-card
+entity_1: sensor.power_consumption
+entity_2: sensor.solar_production
+name_1: Consumption
+name_2: Production
+```
+
+### 🏷️ Neon Header Card
 
 ```yaml
 type: custom:neon-header-card
-title: Énergie
-icon: mdi:solar-power
-color: "#00E8FF"
+title: My Dashboard Section
 ```
 
----
-
-## 🎨 Recommended theme
-
-All cards are designed to look best with the **neon-night-joi-hdr** theme included in this repo (coming soon). Add it to your `configuration.yaml`:
+### 🔋 Storey Battery Card (Sunology)
 
 ```yaml
-frontend:
-  themes: !include_dir_merge_named themes/
+type: custom:storey-battery-card
+entity: sensor.sunology_battery
+name: Sunology Battery
 ```
 
 ---
 
-## 🗺️ Roadmap
+## 📸 Screenshots
 
-- [ ] Screenshots in README
-- [ ] Theme file `neon-night-joi-hdr.yaml`
-- [ ] HACS default repo submission
-- [ ] Neon Energy Flow card (production → battery → grid)
+See [Screenshots.md](Screenshots.md) for a full visual preview of all the cards.
+
+---
+
+## 🐾 Support this project
+
+If you like this project and want to give back, please consider making a donation to **Quatre Pattes**, an animal rescue organization. Every little bit helps save lives! 🐶🐱
+
+[![Donner pour les animaux](https://img.shields.io/badge/🐾%20Sauver%20des%20animaux-Faire%20un%20don-ff69b4?style=for-the-badge)](https://don.quatre-pattes.org/s/?_jtsuid=70083177244599792679303)
+
+> 💛 No need to support me — just help the animals instead. Thank you!
 
 ---
 
 ## 🤝 Contributing
 
-Issues and PRs welcome. Please open an issue before submitting a large PR.
+Contributions, issues and feature requests are welcome!
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/my-new-card`)
+3. Commit your changes (`git commit -m 'Add my new card'`)
+4. Push to the branch (`git push origin feature/my-new-card`)
+5. Open a Pull Request
 
 ---
 
 ## 📄 License
 
-[MIT](LICENSE) — © 2026 cerealkiller57540
+This project is licensed under the [MIT License](LICENSE).
+
+---
+
+[hacs-badge]: https://img.shields.io/badge/HACS-Custom-orange.svg
+[hacs-url]: https://hacs.xyz
