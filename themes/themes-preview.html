@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Home Assistant Theme Previews</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0a0a0f;
+    font-family: 'Rajdhani', monospace;
+    color: #eee;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ──────────────────────────────────────────────
+     PAGE HEADER
+  ────────────────────────────────────────────── */
+  .page-title {
+    text-align: center;
+    padding: 40px 20px 30px;
+  }
+  .page-title h1 {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(1.2rem, 3vw, 2rem);
+    font-weight: 700;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    background: linear-gradient(90deg, #00E8FF 0%, #E946FF 50%, #FF50A0 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 20px rgba(0,232,255,0.4));
+  }
+  .page-title p {
+    margin-top: 8px;
+    color: rgba(255,255,255,0.4);
+    font-size: 0.85rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  /* ──────────────────────────────────────────────
+     LAYOUT: two columns
+  ────────────────────────────────────────────── */
+  .themes-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    padding: 0 30px 60px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+  @media (max-width: 900px) {
+    .themes-grid { grid-template-columns: 1fr; padding: 0 16px 40px; }
+  }
+
+  /* ──────────────────────────────────────────────
+     THEME WRAPPER
+  ────────────────────────────────────────────── */
+  .theme-wrapper {
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .theme-label {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 10px 16px;
+    font-weight: 600;
+  }
+
+  /* ──────────────────────────────────────────────
+     HA SHELL (sidebar + main)
+  ────────────────────────────────────────────── */
+  .ha-shell {
+    display: flex;
+    height: 540px;
+    font-family: 'Rajdhani', monospace;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ─── SIDEBAR ─── */
+  .ha-sidebar {
+    width: 230px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 2;
+    padding: 16px 0;
+    overflow: hidden;
+  }
+  .ha-sidebar::after {
+    content: "";
+    position: absolute;
+    top: 0; right: 0;
+    width: 3px; height: 100%;
+    animation: sidebarEdge 3s ease-in-out infinite;
+    z-index: 5;
+  }
+  .sidebar-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-weight: 700;
+    padding: 0 20px 20px;
+    text-align: center;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 20px;
+    font-size: 0.88rem;
+    letter-spacing: 1px;
+    font-weight: 500;
+    text-transform: uppercase;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.3s ease;
+    margin: 2px 8px;
+    border-radius: 8px;
+  }
+  .nav-item .nav-icon {
+    font-size: 1.1rem;
+    width: 24px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .nav-item.active {
+    border-left: 3px solid;
+    border-radius: 0 8px 8px 0;
+    margin-left: 0;
+    padding-left: 17px;
+  }
+
+  /* ─── MAIN AREA ─── */
+  .ha-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ─── HEADER ─── */
+  .ha-header {
+    height: 48px;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    position: relative;
+    z-index: 3;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .ha-header::before {
+    content: "";
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    animation: headerLine 3s ease-in-out infinite;
+    z-index: 10;
+  }
+  .ha-header::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,0.015) 2px,rgba(255,255,255,0.015) 4px);
+    pointer-events: none;
+  }
+  .header-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.78rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .header-icon {
+    font-size: 1.1rem;
+    opacity: 0.8;
+  }
+  .header-spacer { flex: 1; }
+  .header-badge {
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    letter-spacing: 1px;
+    font-weight: 600;
+  }
+
+  /* ─── CONTENT AREA ─── */
+  .ha-content {
+    flex: 1;
+    padding: 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 10px;
+    overflow: hidden;
+  }
+
+  /* ─── CARDS ─── */
+  .ha-card {
+    border-radius: 12px;
+    padding: 14px;
+    position: relative;
+    overflow: hidden;
+    backdrop-filter: blur(14px);
+    border: 1px solid;
+    transition: all 0.5s ease;
+    cursor: pointer;
+  }
+  .ha-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    opacity: 0.6;
+  }
+  .ha-card:hover {
+    transform: translateY(-4px);
+  }
+  .card-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .card-title {
+    font-size: 0.68rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 600;
+    opacity: 0.7;
+  }
+  .card-icon {
+    font-size: 1.2rem;
+    filter: drop-shadow(0 0 6px currentColor);
+  }
+  .card-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .card-sub {
+    font-size: 0.72rem;
+    opacity: 0.5;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* Switch card */
+  .switch-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 8px;
+  }
+  .toggle {
+    width: 38px;
+    height: 20px;
+    border-radius: 10px;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+  }
+  .toggle::after {
+    content: "";
+    position: absolute;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    top: 2px;
+    background: white;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  }
+  .toggle.on::after { left: 20px; }
+  .toggle.off::after { left: 2px; }
+
+  /* Slider bar */
+  .slider-bar {
+    height: 4px;
+    border-radius: 2px;
+    margin-top: 10px;
+    position: relative;
+    overflow: visible;
+  }
+  .slider-bar::after {
+    content: "";
+    position: absolute;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    top: -4px;
+    right: 25%;
+    box-shadow: 0 0 8px currentColor;
+  }
+  .slider-fill {
+    height: 100%;
+    border-radius: 2px;
+    width: 75%;
+  }
+
+  /* Wide card (spanning 2 cols) */
+  .ha-card.wide {
+    grid-column: 1 / -1;
+    padding: 12px 14px;
+  }
+  .progress-bar {
+    height: 6px;
+    border-radius: 3px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    width: 60%;
+    position: relative;
+    overflow: hidden;
+  }
+  .progress-fill::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    animation: shimmer 2s infinite;
+  }
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  /* State dots */
+  .state-dots {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    animation: dotPulse 2s ease-in-out infinite;
+  }
+  .dot:nth-child(2) { animation-delay: 0.3s; }
+  .dot:nth-child(3) { animation-delay: 0.6s; }
+  @keyframes dotPulse {
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.3); }
+  }
+
+  /* Palette swatches */
+  .palette-strip {
+    display: flex;
+    height: 6px;
+    border-radius: 0 0 0 0;
+    overflow: hidden;
+  }
+  .swatch { flex: 1; }
+
+  /* ══════════════════════════════════════════════
+     THEME 1 — NEON NIGHT JOI HDR
+  ══════════════════════════════════════════════ */
+  .joi .theme-label {
+    background: linear-gradient(135deg, #0f0a20, #1a1525);
+    color: #00E8FF;
+    border-bottom: 1px solid rgba(0,232,255,0.2);
+    text-shadow: 0 0 12px rgba(0,232,255,0.6);
+  }
+
+  .joi .ha-shell {
+    background: #1A1525;
+  }
+
+  /* Sidebar JOI */
+  .joi .ha-sidebar {
+    background: linear-gradient(135deg, rgba(20,15,35,0.9), rgba(15,10,30,0.95));
+    box-shadow: 0 0 50px rgba(0,232,255,0.15), inset 0 0 60px rgba(233,70,255,0.03);
+  }
+  .joi .ha-sidebar::after {
+    background: linear-gradient(180deg, transparent 0%, #00E8FF 30%, #FF50A0 50%, #00E8FF 70%, transparent 100%);
+    box-shadow: 0 0 20px #00E8FF, 0 0 40px #00E8FF;
+  }
+  .joi .sidebar-title {
+    background: linear-gradient(90deg, #00E8FF, #FF50A0, #E946FF, #FF50A0, #00E8FF);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    background-size: 200%;
+    animation: titleShift 6s ease-in-out infinite;
+    text-shadow: none;
+    filter: none;
+  }
+  .joi .nav-item { color: rgba(0,232,255,0.65); }
+  .joi .nav-item:hover { background: rgba(233,70,255,0.1); color: #00E8FF; }
+  .joi .nav-item.active {
+    background: linear-gradient(90deg, rgba(233,70,255,0.2), rgba(0,232,255,0.05));
+    border-left-color: #E946FF;
+    color: #E946FF;
+    box-shadow: 0 0 20px rgba(233,70,255,0.25), inset 0 0 15px rgba(233,70,255,0.07);
+    animation: activeItemPulse 3s ease-in-out infinite;
+  }
+  @keyframes activeItemPulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(233,70,255,0.25), inset 0 0 15px rgba(233,70,255,0.07); }
+    50% { box-shadow: 0 0 30px rgba(233,70,255,0.4), inset 0 0 20px rgba(233,70,255,0.12); }
+  }
+
+  /* Header JOI */
+  .joi .ha-header {
+    background: rgba(20,15,40,0.8);
+    backdrop-filter: blur(16px) saturate(140%);
+    border-bottom: 1px solid rgba(0,232,255,0.15);
+    box-shadow: 0 0 15px rgba(233,70,255,0.2), 0 4px 12px rgba(0,0,0,0.4);
+    animation: joiHeaderPulse 5s ease-in-out infinite;
+  }
+  @keyframes joiHeaderPulse {
+    0%, 100% { box-shadow: 0 0 10px rgba(176,65,255,0.3), 0 0 20px rgba(93,12,237,0.4); }
+    50% { box-shadow: 0 0 20px rgba(233,70,255,0.4), 0 0 35px rgba(93,12,237,0.5); }
+  }
+  .joi .ha-header::before {
+    background: linear-gradient(90deg, transparent, #E946FF 50%, transparent);
+    box-shadow: 0 0 15px rgba(233,70,255,0.6);
+    animation: headerLinePulse 3s ease-in-out infinite;
+  }
+  @keyframes headerLinePulse {
+    0%, 100% { opacity: 0.5; box-shadow: 0 0 10px rgba(233,70,255,0.4); }
+    50% { opacity: 1; box-shadow: 0 0 20px rgba(233,70,255,0.8); }
+  }
+  .joi .header-title { color: #E8E8E8; }
+  .joi .header-icon { color: #00E8FF; filter: drop-shadow(0 0 6px #00E8FF); }
+  .joi .header-badge { background: rgba(255,80,160,0.2); color: #FF50A0; border: 1px solid rgba(255,80,160,0.4); }
+
+  /* Cards JOI */
+  .joi .ha-card {
+    background: rgba(30,20,45,0.65);
+    border-color: rgba(0,232,255,0.2);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 20px rgba(255,80,160,0.1);
+    animation: joiCardPulse 4s ease-in-out infinite;
+  }
+  @keyframes joiCardPulse {
+    0%, 100% { box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 20px rgba(255,80,160,0.1); }
+    50% { box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 30px rgba(255,80,160,0.18), 0 0 45px rgba(0,232,255,0.07); }
+  }
+  .joi .ha-card:hover {
+    box-shadow: 0 0 50px rgba(255,80,160,0.6), 0 0 80px rgba(233,70,255,0.4), 0 0 120px rgba(0,232,255,0.3);
+    border-color: rgba(233,70,255,0.5);
+  }
+  .joi .ha-card::before {
+    background: linear-gradient(90deg, transparent, #E946FF, transparent);
+    box-shadow: 0 0 8px rgba(233,70,255,0.4);
+  }
+  .joi .card-title { color: rgba(192,208,224,0.7); }
+  .joi .card-value { color: #00E8FF; text-shadow: 0 0 10px rgba(0,232,255,0.5); }
+  .joi .card-sub { color: rgba(192,208,224,0.4); }
+  .joi .card-icon { color: #00E8FF; }
+
+  .joi .toggle.on { background: rgba(255,80,160,0.5); box-shadow: 0 0 10px rgba(255,80,160,0.4); }
+  .joi .toggle.off { background: rgba(80,208,224,0.3); }
+
+  .joi .slider-bar { background: rgba(233,70,255,0.2); }
+  .joi .slider-fill { background: linear-gradient(90deg, #E946FF, #FF50A0); box-shadow: 0 0 8px rgba(233,70,255,0.5); }
+  .joi .slider-bar::after { background: #E946FF; color: #E946FF; }
+
+  .joi .progress-bar { background: rgba(0,232,255,0.1); }
+  .joi .progress-fill { background: linear-gradient(90deg, #00E8FF, #B041FF, #E946FF); box-shadow: 0 0 10px rgba(0,232,255,0.4); }
+
+  .joi .dot { background: #FF50A0; box-shadow: 0 0 6px #FF50A0; }
+  .joi .dot:nth-child(2) { background: #E946FF; box-shadow: 0 0 6px #E946FF; }
+  .joi .dot:nth-child(3) { background: #00E8FF; box-shadow: 0 0 6px #00E8FF; }
+
+  /* Palette JOI */
+  .joi .palette-strip { border-bottom: 2px solid rgba(0,0,0,0.3); }
+
+  /* ══════════════════════════════════════════════
+     THEME 2 — CYBERPUNK NETRUNNER 2077
+  ══════════════════════════════════════════════ */
+  .netrunner .theme-label {
+    background: linear-gradient(135deg, #050810, #0A0E1A);
+    color: #00F0FF;
+    border-bottom: 1px solid rgba(0,240,255,0.25);
+    text-shadow: 0 0 12px rgba(0,240,255,0.7);
+  }
+
+  .netrunner .ha-shell {
+    background: #050810;
+    position: relative;
+  }
+  /* scanlines on netrunner */
+  .netrunner .ha-shell::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, rgba(0,240,255,0.018) 0px, transparent 1px, transparent 2px, rgba(0,240,255,0.018) 3px);
+    pointer-events: none;
+    z-index: 10;
+  }
+  /* vignette */
+  .netrunner .ha-shell::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.5) 100%);
+    pointer-events: none;
+    z-index: 9;
+  }
+
+  /* Sidebar Netrunner */
+  .netrunner .ha-sidebar {
+    background: rgba(10,14,26,0.85);
+    backdrop-filter: blur(8px) saturate(140%);
+    box-shadow: inset -3px 0 0 rgba(0,240,255,0.5), 5px 0 40px rgba(0,240,255,0.1);
+    z-index: 11;
+  }
+  .netrunner .ha-sidebar::after {
+    background: linear-gradient(180deg, transparent 0%, #00F0FF 50%, transparent 100%);
+    box-shadow: 0 0 20px #00F0FF;
+    animation: netSidebarPulse 3s ease-in-out infinite;
+  }
+  @keyframes netSidebarPulse {
+    0%, 100% { opacity: 0.6; box-shadow: 0 0 20px #00F0FF; }
+    50% { opacity: 1; box-shadow: 0 0 40px #00F0FF, 0 0 60px rgba(0,255,204,0.5); }
+  }
+  .netrunner .sidebar-title {
+    color: #00F0FF;
+    text-shadow: 0 0 10px #00F0FF, 0 0 20px #00F0FF;
+  }
+  .netrunner .nav-item { color: rgba(0,240,255,0.55); }
+  .netrunner .nav-item:hover { background: rgba(0,240,255,0.08); color: #00F0FF; transform: translateX(5px); }
+  .netrunner .nav-item.active {
+    background: linear-gradient(90deg, rgba(0,255,204,0.2), rgba(0,240,255,0.05));
+    border-left-color: #00FFCC;
+    color: #00FFCC;
+    box-shadow: 0 0 25px rgba(0,240,255,0.35), inset 0 0 20px rgba(0,255,204,0.08);
+    animation: netActiveGlow 3s ease-in-out infinite;
+  }
+  @keyframes netActiveGlow {
+    0%, 100% { box-shadow: 0 0 25px rgba(0,240,255,0.35), inset 0 0 20px rgba(0,255,204,0.08); }
+    50% { box-shadow: 0 0 40px rgba(0,240,255,0.55), inset 0 0 30px rgba(0,255,204,0.15); }
+  }
+
+  /* Header Netrunner */
+  .netrunner .ha-header {
+    background: rgba(10,14,26,0.75);
+    backdrop-filter: blur(8px) saturate(140%);
+    box-shadow: inset 0 -3px 0 rgba(0,240,255,0.55), 0 5px 40px rgba(0,240,255,0.12);
+    z-index: 12;
+  }
+  .netrunner .ha-header::before {
+    background: linear-gradient(90deg, transparent 0%, #00F0FF 50%, transparent 100%);
+    box-shadow: 0 0 20px #00F0FF;
+    animation: netHeaderPulse 3s ease-in-out infinite;
+  }
+  @keyframes netHeaderPulse {
+    0%, 100% { opacity: 0.6; box-shadow: 0 0 20px #00F0FF; }
+    50% { opacity: 1; box-shadow: 0 0 40px #00F0FF, 0 0 60px rgba(0,255,204,0.4); }
+  }
+  .netrunner .header-title { color: #00F0FF; text-shadow: 0 0 10px #00F0FF, 0 0 20px #00F0FF; letter-spacing: 3px; }
+  .netrunner .header-icon { color: #00F0FF; filter: drop-shadow(0 0 6px #00F0FF); }
+  .netrunner .header-badge { background: rgba(255,23,68,0.15); color: #FF1744; border: 1px solid rgba(255,23,68,0.4); }
+
+  /* Cards Netrunner */
+  .netrunner .ha-card {
+    background: rgba(10,14,26,0.85);
+    border-color: rgba(0,240,255,0.2);
+    box-shadow: 0 0 20px rgba(0,240,255,0.08);
+    position: relative;
+  }
+  .netrunner .ha-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,240,255,0.025) 2px, rgba(0,240,255,0.025) 4px);
+    pointer-events: none;
+    border-radius: 12px;
+    z-index: 0;
+  }
+  .netrunner .ha-card > * { position: relative; z-index: 1; }
+  .netrunner .ha-card:hover {
+    box-shadow: 0 0 40px rgba(0,240,255,0.55), 0 0 60px rgba(255,23,68,0.25);
+    border-color: rgba(0,240,255,0.5);
+    animation: netGlitchBorder 0.8s ease;
+  }
+  @keyframes netGlitchBorder {
+    0%, 100% { box-shadow: 0 0 40px rgba(0,240,255,0.55), 0 0 60px rgba(255,23,68,0.25); }
+    25% { box-shadow: 6px 0 45px #00F0FF, -6px 0 45px #FF1744; }
+    50% { box-shadow: -6px 0 45px #00FFCC, 6px 0 45px #FF1744; }
+    75% { box-shadow: 4px 4px 45px #00F0FF, -4px -4px 45px #FF1744; }
+  }
+  .netrunner .ha-card::before {
+    background: linear-gradient(90deg, transparent, #00F0FF, transparent);
+    box-shadow: 0 0 8px rgba(0,240,255,0.4);
+  }
+  .netrunner .card-title { color: rgba(0,240,255,0.55); }
+  .netrunner .card-value { color: #00F0FF; text-shadow: 0 0 10px rgba(0,240,255,0.6); }
+  .netrunner .card-sub { color: rgba(0,240,255,0.35); }
+  .netrunner .card-icon { color: #00F0FF; }
+
+  .netrunner .toggle.on { background: rgba(0,255,204,0.4); box-shadow: 0 0 10px rgba(0,255,204,0.5); }
+  .netrunner .toggle.off { background: rgba(0,240,255,0.12); }
+
+  .netrunner .slider-bar { background: rgba(0,240,255,0.15); }
+  .netrunner .slider-fill { background: linear-gradient(90deg, #00FFCC, #00F0FF); box-shadow: 0 0 10px rgba(0,240,255,0.5); }
+  .netrunner .slider-bar::after { background: #00F0FF; color: #00F0FF; }
+
+  .netrunner .progress-bar { background: rgba(0,240,255,0.1); }
+  .netrunner .progress-fill { background: linear-gradient(90deg, #00FFCC, #00F0FF, #8CFFFF); box-shadow: 0 0 10px rgba(0,240,255,0.5); }
+
+  .netrunner .dot { background: #00F0FF; box-shadow: 0 0 6px #00F0FF; }
+  .netrunner .dot:nth-child(2) { background: #00FFCC; box-shadow: 0 0 6px #00FFCC; }
+  .netrunner .dot:nth-child(3) { background: #8CFFFF; box-shadow: 0 0 6px #8CFFFF; }
+
+  /* ──────────────────────────────────────────────
+     SHARED KEYFRAMES
+  ────────────────────────────────────────────── */
+  @keyframes sidebarEdge {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+  }
+  @keyframes titleShift {
+    0%, 100% { background-position: 0%; }
+    50% { background-position: 100%; }
+  }
+
+  /* ──────────────────────────────────────────────
+     COLOR SWATCHES SECTION
+  ────────────────────────────────────────────── */
+  .color-section {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .color-section-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    opacity: 0.5;
+    padding: 0 2px;
+  }
+  .swatches-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .color-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .chip-dot {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    position: relative;
+    overflow: hidden;
+  }
+  .chip-dot::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
+  }
+  .chip-label {
+    font-size: 0.52rem;
+    letter-spacing: 0.5px;
+    opacity: 0.5;
+    text-transform: uppercase;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  /* ──────────────────────────────────────────────
+     INFO FOOTER
+  ────────────────────────────────────────────── */
+  .info-bar {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    padding: 20px;
+    flex-wrap: wrap;
+  }
+  .info-item {
+    text-align: center;
+  }
+  .info-item .label {
+    font-size: 0.6rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    opacity: 0.3;
+    margin-bottom: 4px;
+  }
+  .info-item .value {
+    font-family: 'Orbitron', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+  }
+  .joi-text { color: #E946FF; text-shadow: 0 0 8px rgba(233,70,255,0.5); }
+  .net-text { color: #00F0FF; text-shadow: 0 0 8px rgba(0,240,255,0.5); }
+
+  /* ──────────────────────────────────────────────
+     DIVIDER
+  ────────────────────────────────────────────── */
+  .divider {
+    width: 80%;
+    height: 1px;
+    margin: 10px auto 30px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  }
+</style>
+</head>
+<body>
+
+<div class="page-title">
+  <h1>Home Assistant Themes</h1>
+  <p>Interactive Preview — Dark Mode</p>
+</div>
+
+<div class="themes-grid">
+
+  <!-- ══════════════════════════════════════════
+       THEME 1: NEON NIGHT JOI HDR
+  ══════════════════════════════════════════ -->
+  <div class="theme-wrapper joi">
+    <div class="theme-label">✦ Neon Night JOI — HDR</div>
+
+    <div class="ha-shell">
+      <!-- Sidebar -->
+      <div class="ha-sidebar">
+        <div class="sidebar-title">HOME</div>
+        <div class="nav-item active">
+          <span class="nav-icon">⌂</span> Tableau de bord
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">☀</span> Énergie
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">◉</span> Carte
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">⚙</span> Paramètres
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">◈</span> Automatisations
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">◆</span> HACS
+        </div>
+      </div>
+
+      <!-- Main -->
+      <div class="ha-main">
+        <div class="ha-header">
+          <span class="header-icon">⌂</span>
+          <span class="header-title">Tableau de bord</span>
+          <div class="header-spacer"></div>
+          <span class="header-badge">3 alertes</span>
+          <span class="header-icon">☾</span>
+          <span class="header-icon">⚙</span>
+        </div>
+
+        <div class="ha-content">
+          <!-- Sensor: Température -->
+          <div class="ha-card">
+            <div class="card-header-row">
+              <span class="card-title">Température</span>
+              <span class="card-icon">🌡</span>
+            </div>
+            <div class="card-value">21.4°</div>
+            <div class="card-sub">Salon · confortable</div>
+            <div class="state-dots">
+              <div class="dot"></div>
+              <div class="dot"></div>
+              <div class="dot"></div>
+            </div>
+          </div>
+
+          <!-- Switch: Lumière -->
+          <div class="ha-card">
+            <div class="card-header-row">
+              <span class="card-title">Bureau</span>
+              <span class="card-icon">💡</span>
+            </div>
+            <div class="card-value" style="font-size:1rem;margin-bottom:6px;color:var(--c-active,#FF50A0);text-shadow:0 0 10px rgba(255,80,160,0.5);">ALLUMÉ</div>
+            <div class="switch-row">
+              <span class="card-sub">Luminosité 75%</span>
+              <div class="toggle on joi-toggle"></div>
+            </div>
+            <div class="slider-bar">
+              <div class="slider-fill"></div>
+            </div>
+          </div>
+
+          <!-- Media Player (wide) -->
+          <div class="ha-card wide">
+            <div class="card-header-row">
+              <span class="card-title">Lecteur — Salon</span>
+              <span class="card-icon">♫</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <div style="width:36px;height:36px;border-radius:6px;background:linear-gradient(135deg,#B041FF,#E946FF);flex-shrink:0;box-shadow:0 0 12px rgba(233,70,255,0.5);"></div>
+              <div>
+                <div style="font-size:0.82rem;color:#E8E8E8;font-weight:600;">Blade Runner Blues</div>
+                <div class="card-sub">Vangelis · Soundtrack</div>
+              </div>
+              <div style="margin-left:auto;display:flex;gap:10px;font-size:1.2rem;color:#E946FF;filter:drop-shadow(0 0 6px #E946FF);">⏮ ▶ ⏭</div>
+            </div>
+            <div class="progress-bar" style="margin-top:10px;">
+              <div class="progress-fill"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Color Palette -->
+    <div class="color-section" style="background:rgba(15,10,25,0.9);border-top:1px solid rgba(0,232,255,0.1);">
+      <div class="color-section-title">Palette de couleurs</div>
+      <div class="swatches-row">
+        <div class="color-chip"><div class="chip-dot" style="background:#00E8FF;box-shadow:0 0 10px rgba(0,232,255,0.6);"></div><span class="chip-label">Primary</span></div>
+        <div class="color-chip"><div class="chip-dot" style="background:#B041FF;box-shadow:0 0 8px rgba(176,65,255,0.5);"></div><span class="chip-label">Secondary</span></div>
+        <div class="color-chip"><div class="chip-dot" style="background:#E946FF;box-shadow:0 0 8px rgba(233,70,255,0.5);"></div><span class="chip-label">Accent</span></div>
+        <div class="color-chip"><div class="chip-dot" style="background:#FF50A0;box-shadow:0 0 8px rgba(255,80,160,0.5);"></div><span class="chip-label">Active</span></div>
+        <div class="color-chip"><div class="chip-dot" style="background:#FF0090;box-shadow:0 0 8px rgba(255,0,144,0.5);"></div><span class="chip-label">Hot Pink</span></div>
+        <div class="color-chip"><div class="chip-dot" style="background:#50FFD0;box-shadow:0 0 8px rgba(80,255,208,0.4);"></div><span class="chip-label">Success</span></div>
+        <div class="color-chip"><div class="chip-dot" style="background:#FFD050;box-shadow:0 0 6px rgba(255,208,80,0.4);"></div><span class="chip-label">Warning</span></div>
+        <div class="color-chip"><div class="chip-dot" style="background:#5D0CED;"></div><span class="chip-label">Blacklight</span></div>
+        <div class="color-chip"><div class="chip-dot" style="background:#1A1525;border-color:rgba(255,255,255,0.15);"></div><span class="chip-label">BG</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       THEME 2: CYBERPUNK 2077 NETRUNNER
+  ══════════════════════════════════════════ -->
+  <div class="theme-wrapper netrunner">
+    <div class="theme-label">⬡ Cyberpunk 2077 — Netrunner 2</div>
+
+    <div class="ha-shell">
+      <!-- Sidebar -->
+      <div class="ha-sidebar">
+        <div class="sidebar-title">Night City</div>
+        <div class="nav-item active">
+          <span class="nav-icon">⌂</span> Dashboard
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">⚡</span> Energy
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">◉</span> Map
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">⚙</span> Settings
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">◈</span> Automations
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">◆</span> HACS
+        </div>
+      </div>
+
+      <!-- Main -->
+      <div class="ha-main" style="z-index:11;position:relative;">
+        <div class="ha-header">
+          <span class="header-icon">⌂</span>
+          <span class="header-title">Dashboard</span>
+          <div class="header-spacer"></div>
+          <span class="header-badge">ALERT</span>
+          <span class="header-icon">☾</span>
+          <span class="header-icon">⚙</span>
+        </div>
+
+        <div class="ha-content">
+          <!-- Sensor -->
+          <div class="ha-card">
+            <div class="card-header-row">
+              <span class="card-title">Température</span>
+              <span class="card-icon">🌡</span>
+            </div>
+            <div class="card-value">21.4°</div>
+            <div class="card-sub">Salon · online</div>
+            <div class="state-dots">
+              <div class="dot"></div>
+              <div class="dot"></div>
+              <div class="dot"></div>
+            </div>
+          </div>
+
+          <!-- Switch -->
+          <div class="ha-card">
+            <div class="card-header-row">
+              <span class="card-title">Bureau</span>
+              <span class="card-icon">💡</span>
+            </div>
+            <div class="card-value" style="font-size:1rem;margin-bottom:6px;color:#00FFCC;text-shadow:0 0 10px rgba(0,255,204,0.6);">ON-LINE</div>
+            <div class="switch-row">
+              <span class="card-sub">Luminosité 75%</span>
+              <div class="toggle on"></div>
+            </div>
+            <div class="slider-bar">
+              <div class="slider-fill"></div>
+            </div>
+          </div>
+
+          <!-- Media Player wide -->
+          <div class="ha-card wide">
+            <div class="card-header-row">
+              <span class="card-title">Media Player — Jack</span>
+              <span class="card-icon">♫</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <div style="width:36px;height:36px;border-radius:6px;background:linear-gradient(135deg,#00F0FF,#00FFCC);flex-shrink:0;box-shadow:0 0 14px rgba(0,240,255,0.6);"></div>
+              <div>
+                <div style="font-size:0.82rem;color:#00F0FF;font-weight:600;text-shadow:0 0 8px rgba(0,240,255,0.5);">A Cool Place</div>
+                <div class="card-sub">Cyberpunk 2077 OST</div>
+              </div>
+              <div style="margin-left:auto;display:flex;gap:10px;font-size:1.2rem;color:#00FFCC;filter:drop-shadow(0 0 6px #00FFCC);">⏮ ▶ ⏭</div>
+            </div>
+            <div class="progress-bar" style="margin-top:10px;">
+              <div class="progress-fill"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Color Palette -->
+    <div class="color-section" style="background:rgba(5,8,16,0.95);border-top:1px solid rgba(0,240,255,0.12);">
+      <div class="color-section-title" style="color:rgba(0,240,255,0.4);">Palette de couleurs</div>
+      <div class="swatches-row">
+        <div class="color-chip"><div class="chip-dot" style="background:#00F0FF;box-shadow:0 0 10px rgba(0,240,255,0.7);"></div><span class="chip-label" style="color:rgba(0,240,255,0.5);">Cyan</span></div>
+        <div class="color-chip"><div class="chip-dot" style="background:#8CFFFF;box-shadow:0 0 8px rgba(140,255,255,0.5);"></div><span class="chip-label" style="color:rgba(0,240,255,0.5);">Ice Blue</span></div>
+        <div class="color-chip"><div class="chip-dot" style="background:#00FFCC;box-shadow:0 0 8px rgba(0,255,204,0.6);"></div><span class="chip-label" style="color:rgba(0,240,255,0.5);">Accent</span></div>
+        <div class="color-chip"><div class="chip-dot" style="background:#FF1744;box-shadow:0 0 8px rgba(255,23,68,0.5);"></div><span class="chip-label" style="color:rgba(0,240,255,0.5);">Error</span></div>
+        <div class="color-chip"><div class="chip-dot" style="background:#FFB300;box-shadow:0 0 6px rgba(255,179,0,0.4);"></div><span class="chip-label" style="color:rgba(0,240,255,0.5);">Warning</span></div>
+        <div class="color-chip"><div class="chip-dot" style="background:#0A0E1A;border-color:rgba(0,240,255,0.25);"></div><span class="chip-label" style="color:rgba(0,240,255,0.5);">Dark Purple</span></div>
+        <div class="color-chip"><div class="chip-dot" style="background:#0F1923;border-color:rgba(0,240,255,0.2);"></div><span class="chip-label" style="color:rgba(0,240,255,0.5);">Dark Blue</span></div>
+        <div class="color-chip"><div class="chip-dot" style="background:#050810;border-color:rgba(0,240,255,0.15);"></div><span class="chip-label" style="color:rgba(0,240,255,0.5);">BG</span></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /themes-grid -->
+
+<div class="divider"></div>
+
+<div class="info-bar">
+  <div class="info-item">
+    <div class="label">Thème 1</div>
+    <div class="value joi-text">Neon Night JOI HDR</div>
+  </div>
+  <div class="info-item">
+    <div class="label">Mode</div>
+    <div class="value" style="color:rgba(255,255,255,0.5);">Dark only</div>
+  </div>
+  <div class="info-item">
+    <div class="label">Thème 2</div>
+    <div class="value net-text">Cyberpunk 2077 · Netrunner 2</div>
+  </div>
+  <div class="info-item">
+    <div class="label">Font</div>
+    <div class="value" style="color:rgba(255,255,255,0.4);font-family:'Share Tech Mono',monospace;font-size:0.65rem;">Rajdhani · Orbitron</div>
+  </div>
+  <div class="info-item">
+    <div class="label">Intégration</div>
+    <div class="value" style="color:rgba(255,255,255,0.4);font-size:0.68rem;font-family:'Share Tech Mono',monospace;">card-mod + HACS</div>
+  </div>
+</div>
+
+</body>
+</html>
