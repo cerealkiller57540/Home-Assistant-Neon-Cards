@@ -17,19 +17,6 @@ const VERSION = '1.1.0';
 //  PERFORMANCE HELPERS
 // ═══════════════════════════════════════════════════════
 
-// Debounce function to reduce excessive updates
-function debounce(func, wait = 150) {
-  let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-  };
-}
-
 // Throttle function for high-frequency events
 function throttle(func, limit = 100) {
   let inThrottle;
@@ -137,7 +124,6 @@ class NeonHeaderCardEditor extends HTMLElement {
   constructor() {
     super();
     this._eventListeners = [];
-    this._debouncedChanged = debounce(this._changed.bind(this), 150);
   }
 
   connectedCallback() {
@@ -464,27 +450,25 @@ class NeonHeaderCardEditor extends HTMLElement {
       });
     });
 
-    // Sync color picker ↔ text input (with debouncing)
+    // Sync color picker ↔ text input (fire on blur for text, direct for picker)
     this.querySelectorAll('input[type=color]').forEach(picker => {
       const key  = picker.dataset.key;
       const text = this.querySelector(`.color-text[data-key="${key}"]`);
       if (!text) return;
-      
-      const debouncedColorChange = debounce((value) => {
-        this._changed(key, value);
-      }, 100);
 
       this._addEventListener(picker, 'input', e => {
         e.stopPropagation();
         text.value = picker.value;
-        debouncedColorChange(picker.value);
+        this._changed(key, picker.value);
       }, { passive: true });
 
-      this._addEventListener(text, 'input', e => {
+      this._addEventListener(text, 'blur', e => {
         e.stopPropagation();
         if (/^#[0-9a-fA-F]{6}$/.test(text.value)) picker.value = text.value;
-        debouncedColorChange(text.value || null);
-      }, { passive: true });
+        this._changed(key, text.value || null);
+      });
+      this._addEventListener(text, 'keydown', e => e.stopPropagation(), { passive: true });
+      this._addEventListener(text, 'input',   e => e.stopPropagation(), { passive: true });
     });
 
     // Tous les autres champs
@@ -500,20 +484,20 @@ class NeonHeaderCardEditor extends HTMLElement {
       if (el.type === 'number') {
         this._addEventListener(el, 'change', e => {
           e.stopPropagation();
-          const raw = el.value === '' ? null : el.value;
+          const raw = el.value === '' ? null : parseFloat(el.value);
           // Champs px : on ajoute 'px'
           const val = (raw !== null && el.dataset.px) ? `${raw}px` : raw;
           this._changed(el.dataset.key, val);
         });
         return;
       }
-      // Texte et textarea → seulement sur blur (avec debounce)
+      // Texte et textarea → seulement sur blur
       this._addEventListener(el, 'keydown', e => e.stopPropagation(), { passive: true });
       this._addEventListener(el, 'keyup',   e => e.stopPropagation(), { passive: true });
       this._addEventListener(el, 'input',   e => e.stopPropagation(), { passive: true });
       this._addEventListener(el, 'blur', e => {
         e.stopPropagation();
-        this._debouncedChanged(el.dataset.key, el.value === '' ? null : el.value);
+        this._changed(el.dataset.key, el.value === '' ? null : el.value);
       });
     });
 
@@ -531,12 +515,8 @@ class NeonHeaderCardEditor extends HTMLElement {
   }
 
   _changed(key, val) {
-    if (val === 'true')  val = true;
-    if (val === 'false') val = false;
-    if (['effect_glow_size', 'bg_opacity'].includes(key) && val !== null && val !== '')
-      val = parseFloat(val);
     const config = { ...this._config };
-    if (val === null || val === '') delete config[key];
+    if (val === null || val === '' || val === undefined) delete config[key];
     else config[key] = val;
     this._config = config;
     this.dispatchEvent(new CustomEvent('config-changed', {
