@@ -5,12 +5,12 @@
 ![Neon Battery Settings](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon-battery-card-settings.png)
 
 ### Neon Dual Thermo Card
-![Neon Dual Thermo](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon%20dual%20thermo%20card.png)
-![Neon Dual Thermo Settings](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon%20dual%20thermo%20card%20settings.png)
+![Neon Dual Thermo](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon-dual-thermo-card.png)
+![Neon Dual Thermo Settings](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon-dual-thermo-card-settings.png)
 
 ### Neon Solar Card
-![Neon Solar](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon%20solar%20card.png)
-![Neon Solar Settings](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon%20solar%20card%20settings.png)
+![Neon Solar](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon-solar-ard.png)
+![Neon Solar Settings](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon-solar-card-settings.png)
 
 ### Neon Header Card
-![Neon Header](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon%20header%20card.png)
+![Neon Header](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon-header-card.png)
