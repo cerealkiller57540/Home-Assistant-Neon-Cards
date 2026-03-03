@@ -429,7 +429,9 @@ class StoreyBatteryCard extends HTMLElement {
     const soc = this._entVal(this._config.soc_entity);
     const pw = this._entVal(this._config.power_entity);
     const mods = [0, 1, 2, 3].map(i => this._entVal(this._config['module_' + i + '_entity'])).join(',');
-    return `${m}|${soc !== null ? Math.round(soc) : null}|${pw !== null ? Math.round(pw / 10) * 10 : null}|${mods}|${this._config.color_accent || ''}|${this._config.color_bg || ''}|${this._config.glow_enabled || ''}`;
+    const ms = this._ent(this._config.master_status_entity);
+    const msv = ms ? ms.v : '';
+    return `${m}|${soc !== null ? Math.round(soc) : null}|${pw !== null ? Math.round(pw / 10) * 10 : null}|${msv}|${mods}|${this._config.color_accent || ''}|${this._config.color_bg || ''}|${this._config.glow_enabled || ''}`;
   }
 
   /* ── Entity helpers ────────────────────────────────────────────────────── */
@@ -474,10 +476,27 @@ class StoreyBatteryCard extends HTMLElement {
     // Resolve entities once, cache numeric values
     const soc = this._ent(this._config.soc_entity);
     const power = this._ent(this._config.power_entity);
+    const master = this._ent(this._config.master_status_entity);
     const socVal = soc ? Math.min(100, Math.max(0, +soc.v)) : null;
     const pwVal = power ? +power.v : null;
+    const masterState = master ? master.v.toUpperCase().trim() : null;
 
-    const hasDots = socVal !== null || pwVal !== null;
+    // Direction: master_status is primary, power is fallback
+    // Master: CHARGING → charging, DISCHARGING → discharging, OFF → idle
+    // Power fallback: positive = charging, negative = discharging
+    let isCharging, isIdle;
+    if (masterState) {
+      isCharging = masterState === 'CHARGING';
+      isIdle = masterState === 'OFF';
+    } else if (pwVal !== null) {
+      isCharging = pwVal > 0;
+      isIdle = false;
+    } else {
+      isCharging = false;
+      isIdle = true;
+    }
+
+    const hasDots = socVal !== null || pwVal !== null || masterState !== null;
     const DOTS_X = SVG_W + 10;
     const VBW = hasDots ? DOTS_X + PANEL_MAX_W + 2 : SVG_W;
 
@@ -504,16 +523,13 @@ class StoreyBatteryCard extends HTMLElement {
     /* ── Glow layer (cached by modules + direction) ────────────────────── */
 
     let glowSVG = '';
-    if (this._config.glow_enabled && pwVal !== null) {
-      if (Math.abs(pwVal) > 10) {
-        const pos = pwVal >= 0;
-        const glowKey = 'glow_' + modules + '_' + (pos ? 1 : 0);
-        if (_batCache.has(glowKey)) {
-          glowSVG = _batCache.get(glowKey);
-        } else {
-          glowSVG = _glowContent(modules, pos ? '#ffd000' : '#4D7CFF', pos ? '#ffe84d' : '#82b4ff');
-          _batCache.set(glowKey, glowSVG);
-        }
+    if (this._config.glow_enabled && !isIdle) {
+      const glowKey = 'glow_' + modules + '_' + (isCharging ? 1 : 0);
+      if (_batCache.has(glowKey)) {
+        glowSVG = _batCache.get(glowKey);
+      } else {
+        glowSVG = _glowContent(modules, isCharging ? '#ffd000' : '#4D7CFF', isCharging ? '#ffe84d' : '#82b4ff');
+        _batCache.set(glowKey, glowSVG);
       }
     }
 
@@ -535,28 +551,30 @@ class StoreyBatteryCard extends HTMLElement {
       dy += +bH + 12;
     }
 
-    // Power panel + arrow
+    // Power panel (wattage display)
     if (pwVal !== null) {
-      const isCharging = pwVal < 0;
-      const col = isCharging ? BLUE_EL : accent;
+      const pwCol = isCharging ? BLUE_EL : accent;
       const lbl = (isCharging ? '\u2193' : '\u2191') + ' W';
-      const { circles, bW, bH } = _panelDots(Math.round(Math.abs(pwVal)).toString(), col);
+      const { circles, bW, bH } = _panelDots(Math.round(Math.abs(pwVal)).toString(), pwCol);
       panelsSVG +=
-        `<g class="dp" data-entity="${power.id}" transform="translate(0,${dy})" style="cursor:pointer;filter:drop-shadow(0 0 5px ${col}44);">
-          <text x="2" y="-2" font-size="5.5" letter-spacing="1.1" fill="${col}" style="font-family:-apple-system,sans-serif;font-weight:500;">${lbl}</text>
+        `<g class="dp" data-entity="${power.id}" transform="translate(0,${dy})" style="cursor:pointer;filter:drop-shadow(0 0 5px ${pwCol}44);">
+          <text x="2" y="-2" font-size="5.5" letter-spacing="1.1" fill="${pwCol}" style="font-family:-apple-system,sans-serif;font-weight:500;">${lbl}</text>
           <rect x="0" y="0" width="${bW}" height="${bH}" rx="5" fill="#222"/>
           ${circles}
         </g>`;
       panelsBot = dy + +bH;
       dy += +bH + 12;
+    }
 
-      const idle = Math.abs(pwVal) <= 10;
-      const arrowCol = idle ? null : col;
-      const { circles: arrowC, bW: arrowBW, bH: arrowBH } = _arrowDots(idle ? true : isCharging, arrowCol);
-      const lblArrow = idle ? '' : (isCharging ? 'CHG' : 'DCH');
+    // Arrow panel (direction from master_status or power fallback)
+    if (pwVal !== null || masterState !== null) {
+      const arrowEntityId = master ? master.id : (power ? power.id : null);
+      const dirCol = isIdle ? null : (isCharging ? BLUE_EL : accent);
+      const { circles: arrowC, bW: arrowBW, bH: arrowBH } = _arrowDots(isIdle ? true : isCharging, dirCol);
+      const lblArrow = masterState ? masterState : (isIdle ? '' : (isCharging ? 'CHG' : 'DCH'));
       panelsSVG +=
-        `<g class="dp" data-entity="${power.id}" transform="translate(0,${dy})" style="cursor:pointer;${idle ? '' : ' filter:drop-shadow(0 0 6px ' + col + '55);'}">
-          <text x="2" y="-2" font-size="5.5" letter-spacing="1.1" fill="${col}" style="font-family:-apple-system,sans-serif;font-weight:500;">${lblArrow}</text>
+        `<g${arrowEntityId ? ` class="dp" data-entity="${arrowEntityId}"` : ''} transform="translate(0,${dy})" style="cursor:pointer;${isIdle ? '' : ' filter:drop-shadow(0 0 6px ' + dirCol + '55);'}">
+          <text x="2" y="-2" font-size="5.5" letter-spacing="1.1" fill="${dirCol || 'rgba(255,255,255,.28)'}" style="font-family:-apple-system,sans-serif;font-weight:500;">${lblArrow}</text>
           <rect x="0" y="0" width="${arrowBW}" height="${arrowBH}" rx="5" fill="#222"/>
           ${arrowC}
         </g>`;
@@ -832,6 +850,7 @@ class StoreyBatteryCardEditor extends HTMLElement {
         <!-- Sensors -->
         <div class="group">
           <div class="group-title">Sensors</div>
+          ${this._picker('Master Status', 'master_status_entity', 'sensor.storey_master_status')}
           ${this._picker('State of Charge %', 'soc_entity', 'sensor.storey_soc')}
           ${this._picker('Power W', 'power_entity', 'sensor.storey_power')}
           <div class="row2">
