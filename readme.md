@@ -1,11 +1,43 @@
-# 🌟 Home Assistant Neon Cards
+<div align="center">
 
-A collection of custom Lovelace cards for [Home Assistant](https://www.home-assistant.io/) with a **Neo Tokyo / cyberpunk neon aesthetic**. Glowing effects, SVG animations, vibrant colors, and full theme inheritance.
+# ⚡ Home Assistant Neon Cards
+
+### Cyberpunk / Neo Tokyo custom cards for Home Assistant
 
 [![hacs][hacs-badge]][hacs-url]
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)][license-url]
+[![Cards](https://img.shields.io/badge/cards-22-00fff9.svg)](#-cards-included)
+[![Theme](https://img.shields.io/badge/theme-Neo%20Tokyo-ff10f0.svg)](#-themes)
 
-> 📸 See [Screenshots.md](Screenshots.md) for visual previews.
+*Glowing SVG effects · Neon animations · Full theme inheritance · UI editors*
+
+</div>
+
+---
+
+## 📸 Previews
+
+<div align="center">
+
+| Battery Card | Solar Card | Dual Thermo |
+|:---:|:---:|:---:|
+| ![Battery](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon-battery-card.png) | ![Solar](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon-solar-card.png) | ![DualThermo](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon-dual-thermo-card.png) |
+
+| Header Card | Storey Battery |
+|:---:|:---:|
+| ![Header](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon-header-card.png) | ![Storey](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/sunology-storey.png) |
+
+</div>
+
+---
+
+## 📋 Table of Contents
+
+- [Cards Included](#-cards-included)
+- [Themes](#-themes)
+- [Installation](#-installation)
+- [Quick Config Examples](#-quick-config-examples)
+- [Support](#-support-this-project)
 
 ---
 
@@ -14,58 +46,58 @@ A collection of custom Lovelace cards for [Home Assistant](https://www.home-assi
 ### ⚡ Energy & Battery
 
 | Card | File | Version | Description |
-|------|------|---------|-------------|
-| 🔋 Neon Battery Card | `neon-battery-card.js` | v3.0.1 | EV battery gauge with HC/Solar/Charge controls and side info panels |
-| 🏭 Storey Battery Card | `storey-battery-card.js` | v10.0 | Isometric 3D battery for Sunology/modular storage systems |
+|------|------|:-------:|-------------|
+| 🔋 Neon Battery Card | `neon-battery-card.js` | `3.0.1` | EV battery gauge with HC/Solar/Charge controls and side info panels |
+| 🏭 Storey Battery Card | `storey-battery-card.js` | `10.0` | Isometric 3D battery for Sunology/modular storage systems |
 | ☀️ Neon Solar Production Card | `neon-solar-production-card.js` | — | Real-time solar panel production monitor |
-| 📊 Neon Dual Gauge Card | `neon-dual-gauge-card.js` | v2.0.0 | Dual concentric LED ring gauges with cyberpunk glow and theme inheritance |
+| 📊 Neon Dual Gauge Card | `neon-dual-gauge-card.js` | `2.0.0` | Dual concentric LED ring gauges with cyberpunk glow and theme inheritance |
 
 ### 🌡️ Climate & Temperature
 
 | Card | File | Version | Description |
-|------|------|---------|-------------|
-| 🌡️ Neon Thermo Card | `neon-thermo-card.js` | v1.4.0 | Temperature & humidity with neon styling |
-| 🌡️🌡️ Neon Dual Thermo Card | `neon-dual-thermo-card.js` | v2.0.0 | Two temperature sensors side by side |
-| ❄️ Neon Climate Card | `neon-climate-card.js` | v1.2.27 | Full climate control (heat/cool/off) with Neo Tokyo UV palette, wind stream animations |
+|------|------|:-------:|-------------|
+| 🌡️ Neon Thermo Card | `neon-thermo-card.js` | `1.4.0` | Temperature & humidity with neon styling |
+| 🌡️🌡️ Neon Dual Thermo Card | `neon-dual-thermo-card.js` | `2.0.0` | Two temperature sensors side by side |
+| ❄️ Neon Climate Card | `neon-climate-card.js` | `1.2.27` | Full climate control with Neo Tokyo UV palette and wind stream animations |
 | 🔥 Heat Pump Card | `heat-pump-card.js` | — | PAC/heat pump card (Ecodan Neo Tokyo edition) with UI editor |
-| 📈 Heat Monitor Card | `heat-monitor-card.js` | v1.17 | CRT-style heat pump monitoring with scrolling notes |
+| 📈 Heat Monitor Card | `heat-monitor-card.js` | `1.17` | CRT-style heat pump monitor with scrolling notes |
 
 ### 💡 Lighting & Switches
 
 | Card | File | Version | Description |
-|------|------|---------|-------------|
-| 💡 Neon Compact Light Card | `neon-compact-light-card.js` | v2.0.0 | Compact light toggle with cyberpunk flicker, Zigbee/WiFi adaptive timing |
-| 🔌 Neon Switch Card | `neon-switch-card.js` | v1.6 | Network switch port monitor with Neo Tokyo palette |
+|------|------|:-------:|-------------|
+| 💡 Neon Compact Light Card | `neon-compact-light-card.js` | `2.0.0` | Compact light toggle with cyberpunk flicker, Zigbee/WiFi adaptive timing |
+| 🔌 Neon Switch Card | `neon-switch-card.js` | `1.6` | Network switch port monitor with Neo Tokyo palette |
 
 ### 🏠 Dashboard & Layout
 
 | Card | File | Version | Description |
-|------|------|---------|-------------|
-| 🏷️ Neon Header Card | `neon-header-card.js` | v1.4.2 | Stylish neon section header |
-| 🏷️ Neon Header Card v2 | `neon-header-card-v2.js` | v2.3 | Advanced header with title/subtitle, glow, gradient, scanlines, flicker, glitch |
-| 📋 Neon Entities Card | `neon-entities-card.js` | v1.2.1 | Multi-entity card (switch, sensor, cover, climate, number, dividers) |
+|------|------|:-------:|-------------|
+| 🏷️ Neon Header Card | `neon-header-card.js` | `1.4.2` | Stylish neon section header |
+| 🏷️ Neon Header Card v2 | `neon-header-card-v2.js` | `2.3` | Advanced header — glow, gradient, scanlines, flicker, glitch effects |
+| 📋 Neon Entities Card | `neon-entities-card.js` | `1.2.1` | Multi-entity card (switch, sensor, cover, climate, number + dividers) |
 
 ### 🖥️ Network & NAS
 
 | Card | File | Version | Description |
-|------|------|---------|-------------|
-| 🖥️ Neon NAS Card | `neon-nas-card.js` | v1.9 | Synology NAS monitoring (RS + RX410) with LED bay status |
+|------|------|:-------:|-------------|
+| 🖥️ Neon NAS Card | `neon-nas-card.js` | `1.9` | Synology NAS monitor (RS + RX410) with LED bay status |
 
 ### 🚗 Vehicles
 
 | Card | File | Version | Description |
-|------|------|---------|-------------|
-| 🚗 VW Car Card | `vw-car-card.js` | v0.4.1 | VW ID.4 card with door/window status, battery, solar charge threshold |
-| 🚗 ID.3 Car Card | `id3-car-card.js` | v1.0.0 | VW ID.3 card using CarConnectivity MQTT entities |
-| 🤖 Mova Mower Card | `mova-mower-card.js` | v12.765 | Robot mower card with map, room selection, cleaning modes |
+|------|------|:-------:|-------------|
+| 🚗 VW Car Card | `vw-car-card.js` | `0.4.1` | VW ID.4 — door/window status, battery, solar charge threshold |
+| 🚗 ID.3 Car Card | `id3-car-card.js` | `1.0.0` | VW ID.3 via CarConnectivity MQTT (`id3_*` entities) |
+| 🤖 Mova Mower Card | `mova-mower-card.js` | `12.765` | Robot mower with map, room selection, cleaning modes |
 
 ### 🎵 Media & Entertainment
 
 | Card | File | Version | Description |
-|------|------|---------|-------------|
+|------|------|:-------:|-------------|
 | 🎵 Onkyo Card | `onkyo-card.js` | — | AV receiver control with input selection |
-| 🔔 Sonos Alarm Card | `sonos-alarm-card.js` | v1.0.0 | Glassmorphism Sonos alarm manager (Neo Tokyo UV) |
-| 🕐 Nixie Clock Card | `nixie-clock-card.js` | — | Retro nixie tube clock with configurable colors |
+| 🔔 Sonos Alarm Card | `sonos-alarm-card.js` | `1.0.0` | Glassmorphism Sonos alarm manager |
+| 🕐 Nixie Clock Card | `nixie-clock-card.js` | — | Retro nixie tube clock with configurable tube colors |
 
 ---
 
@@ -73,19 +105,18 @@ A collection of custom Lovelace cards for [Home Assistant](https://www.home-assi
 
 | Theme | File | Description |
 |-------|------|-------------|
-| 🌙 Neo Tokyo v3 | `themes/neo-tokyo-v3.yaml` | Main Neo Tokyo dark theme with full neon palette |
+| 🌙 Neo Tokyo v3 | `themes/neo-tokyo-v3.yaml` | Main dark theme — full neon palette, CSS variables for all cards |
 | 🌙 Neon Night Joi HDR | `themes/neon-night-joi-hdr.yaml` | HDR-style neon dark theme |
 | 🕶️ Netrunner 2 | `themes/netrunner2.yaml` | Cyberpunk netrunner variant |
 
-### Installing themes
-
-1. Copy theme files from `themes/` into your `config/themes/` directory.
+**Installing a theme:**
+1. Copy the `.yaml` file into your `config/themes/` folder
 2. In `configuration.yaml`:
    ```yaml
    frontend:
      themes: !include_dir_merge_named themes
    ```
-3. Restart Home Assistant → **Profile → Theme** → select your theme.
+3. Restart HA → **Profile → Theme** → select your theme
 
 ---
 
@@ -93,27 +124,28 @@ A collection of custom Lovelace cards for [Home Assistant](https://www.home-assi
 
 ### Via HACS (recommended)
 
-1. Open **HACS** → **Frontend** → **⋮** → **Custom repositories**
-2. Add: `https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards` (type: **Lovelace**)
-3. Search for **Neon Cards** → **Install**
-4. Reload your browser.
+1. **HACS → Frontend → ⋮ → Custom repositories**
+2. Add `https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards` — type **Lovelace**
+3. Search **Neon Cards** → **Install**
+4. Reload your browser
 
 ### Manual
 
-1. Download the `.js` files and copy them into `config/www/`.
-2. **Settings → Dashboards → Resources** → add each file as `module`:
+1. Download the `.js` files you need
+2. Copy them to `config/www/`
+3. **Settings → Dashboards → Resources** → add each file as `JavaScript Module`:
    ```
    /local/neon-battery-card.js
-   /local/neon-thermo-card.js
-   ...
    ```
-3. Reload your browser.
+4. Reload your browser
 
 ---
 
 ## 🔧 Quick Config Examples
 
-### 🔋 Neon Battery Card
+<details>
+<summary><b>🔋 Neon Battery Card</b></summary>
+
 ```yaml
 type: custom:neon-battery-card
 entity: sensor.battery_level
@@ -123,15 +155,21 @@ name: "EV Battery"
 kwh_capacity: 77
 show_kwh: true
 ```
+</details>
 
-### 🌡️ Neon Thermo Card
+<details>
+<summary><b>🌡️ Neon Thermo Card</b></summary>
+
 ```yaml
 type: custom:neon-thermo-card
 entity: sensor.living_room_temperature
 name: Living Room
 ```
+</details>
 
-### 🌡️🌡️ Neon Dual Thermo Card
+<details>
+<summary><b>🌡️🌡️ Neon Dual Thermo Card</b></summary>
+
 ```yaml
 type: custom:neon-dual-thermo-card
 entity_1: sensor.indoor_temperature
@@ -139,22 +177,31 @@ entity_2: sensor.outdoor_temperature
 name_1: Indoor
 name_2: Outdoor
 ```
+</details>
 
-### ❄️ Neon Climate Card
+<details>
+<summary><b>❄️ Neon Climate Card</b></summary>
+
 ```yaml
 type: custom:neon-climate-card
 entity: climate.living_room
 name: Living Room AC
 ```
+</details>
 
-### ☀️ Neon Solar Production Card
+<details>
+<summary><b>☀️ Neon Solar Production Card</b></summary>
+
 ```yaml
 type: custom:neon-solar-production-card
 entity: sensor.solar_production
 name: Solar Production
 ```
+</details>
 
-### 📊 Neon Dual Gauge Card
+<details>
+<summary><b>📊 Neon Dual Gauge Card</b></summary>
+
 ```yaml
 type: custom:neon-dual-gauge-card
 entity_1: sensor.power_consumption
@@ -162,30 +209,28 @@ entity_2: sensor.solar_production
 name_1: Consumption
 name_2: Production
 ```
+</details>
 
-### 🏷️ Neon Header Card
-```yaml
-type: custom:neon-header-card
-title: My Dashboard Section
-```
+<details>
+<summary><b>🏷️ Neon Header Card v2</b></summary>
 
-### 🏷️ Neon Header Card v2
 ```yaml
 type: custom:neon-header-card-v2
-mode: both          # title | subtitle | both
+mode: both
 title:
   text: "NEO TOKYO"
   glow: true
   gradient: true
   gradient_from: "#00fff9"
   gradient_to: "#ff10f0"
-  scanline: false
-  flicker: false
 subtitle:
   text: "{{ states('sensor.date') }}"
 ```
+</details>
 
-### 📋 Neon Entities Card
+<details>
+<summary><b>📋 Neon Entities Card</b></summary>
+
 ```yaml
 type: custom:neon-entities-card
 title: Home Devices
@@ -196,77 +241,41 @@ entities:
   - entity: sensor.temperature
     name: Temp
 ```
+</details>
 
-### 🖥️ Neon NAS Card
+<details>
+<summary><b>🕐 Nixie Clock Card</b></summary>
+
 ```yaml
-type: custom:neon-nas-card
-# Uses your Synology NAS sensor entities automatically
+type: custom:nixie-clock-card
+use_military: true
+tube_color: cyan    # orange | cyan | violet | green | blue | white
+label: "SALON"
+screws: true
 ```
+</details>
 
-### 🔌 Neon Switch Card
+<details>
+<summary><b>🚗 VW / ID.3 Car Card</b></summary>
+
 ```yaml
-type: custom:neon-switch-card
-# Network switch port monitor
-```
+# VW ID.4
+type: custom:vw-car-card
 
-### 💡 Neon Compact Light Card
-```yaml
-type: custom:neon-compact-light-card
-entity: light.bedroom
-name: Bedroom
+# VW ID.3 (CarConnectivity MQTT)
+type: custom:id3-car-card
 ```
+</details>
 
-### 🏭 Storey Battery Card
+<details>
+<summary><b>🏭 Storey Battery Card</b></summary>
+
 ```yaml
 type: custom:storey-battery-card
 entity: sensor.sunology_battery
 name: Home Battery
 ```
-
-### 🕐 Nixie Clock Card
-```yaml
-type: custom:nixie-clock-card
-use_military: true
-tube_color: cyan        # orange | cyan | violet | green | blue | white
-label: "SALON"
-screws: true
-```
-
-### 🚗 VW Car Card
-```yaml
-type: custom:vw-car-card
-# Uses VW CarConnect / Volkswagen We Connect entities
-```
-
-### 🚗 ID.3 Car Card
-```yaml
-type: custom:id3-car-card
-# Uses CarConnectivity MQTT entities (id3_* prefix)
-```
-
-### 🔥 Heat Pump Card
-```yaml
-type: custom:heat-pump-card
-# Ecodan PAC — full UI editor available
-```
-
-### 🎵 Onkyo Card
-```yaml
-type: custom:onkyo-card
-entity: media_player.onkyo
-```
-
-### 🔔 Sonos Alarm Card
-```yaml
-type: custom:sonos-alarm-card
-entity: media_player.sonos_salon
-```
-
----
-
-## 📸 Screenshots
-
-See [Screenshots.md](Screenshots.md) for visual previews.
+</details>
 
 ---
 
@@ -282,19 +291,19 @@ If you enjoy these cards, please consider donating to **Quatre Pattes**, an anim
 
 ## 🤝 Contributing
 
-1. Fork the repository
+1. Fork the repo
 2. Create your branch: `git checkout -b feature/my-card`
-3. Commit: `git commit -m 'Add my card'`
-4. Push: `git push origin feature/my-card`
-5. Open a Pull Request
+3. Commit and push
+4. Open a Pull Request
 
 ---
 
 ## 📄 License
 
-[MIT License](LICENSE)
+[MIT License][license-url]
 
 ---
 
 [hacs-badge]: https://img.shields.io/badge/HACS-Custom-orange.svg
 [hacs-url]: https://hacs.xyz
+[license-url]: LICENSE
