@@ -14,7 +14,7 @@
  * Config complète : voir NeonBatteryCard.getStubConfig()
  */
 
-const VERSION = '3.0.0';
+const VERSION = '3.0.1';
 
 // ═══════════════════════════════════════════════════════
 //  DEFAULTS
@@ -33,6 +33,7 @@ function buildConfig(raw) {
     smart_charging_entity: raw.smart_charging_entity || null,
     solar_charging_entity: raw.solar_charging_entity || null,
     charge_switch_entity:  raw.charge_switch_entity  || null,
+    time_left_entity:      raw.time_left_entity      || null,
 
     // ── Affichage ────────────────────────────────────
     name:             raw.name             || null,
@@ -46,6 +47,16 @@ function buildConfig(raw) {
     hc_label_off:    raw.hc_label_off    || 'HEURE PLEINE',
     hc_state_value:  raw.hc_state_value  || 'HEURE CREUSE',
 
+    // ── Infos latérales batterie ─────────────────────
+    side_l1_entity: raw.side_l1_entity || null,
+    side_l1_label:  raw.side_l1_label  || '',
+    side_l2_entity: raw.side_l2_entity || null,
+    side_l2_label:  raw.side_l2_label  || '',
+    side_r1_entity: raw.side_r1_entity || null,
+    side_r1_label:  raw.side_r1_label  || '',
+    side_r2_entity: raw.side_r2_entity || null,
+    side_r2_label:  raw.side_r2_label  || '',
+
     // ── Boutons intégrés ─────────────────────────────
     buttons: Array.isArray(raw.buttons) ? raw.buttons : [],
 
@@ -55,9 +66,13 @@ function buildConfig(raw) {
     // ── Couleurs (null = hérite du thème HA) ─────────
     color_primary:     raw.color_primary     || null,
     color_accent:      raw.color_accent      || null,
+    color_charge_off:  raw.color_charge_off  || null,
+    color_charge_on:   raw.color_charge_on   || null,
     color_fill_top:    raw.color_fill_top    || null,
     color_fill_mid:    raw.color_fill_mid    || null,
     color_fill_bottom: raw.color_fill_bottom || null,
+    color_side_val:    raw.color_side_val    || null,
+    color_batt_border: raw.color_batt_border || null,
 
     // ── Perf ─────────────────────────────────────────
     smooth_transitions: raw.smooth_transitions ?? true,
@@ -72,6 +87,7 @@ function buildConfig(raw) {
 //  SVG BATTERIE
 // ═══════════════════════════════════════════════════════
 function buildSVG(batt, isCharging, C, showTicks, fontSizePct = 38, fontSizeTicks = 11, colorPercent = null) {
+  const borderCol = C.battBorder || C.primary;
   const W = 160, H = 250;
   const bx = 18, by = 40, bw = W - 30, bh = H - 58;
   const ix = bx + 7, iy = by + 7, iw = bw - 14, ih = bh - 14;
@@ -88,18 +104,6 @@ function buildSVG(batt, isCharging, C, showTicks, fontSizePct = 38, fontSizeTick
     <text x="${bx+bw+6}" y="${sy.toFixed(1)}" fill="${C.primary}" font-size="${fontSizeTicks}"
       font-family="Rajdhani,monospace" dominant-baseline="middle" opacity="0.7">${v}</text>
   `).join('') : '';
-
-  const corners = [
-    [bx,    by+16,    bx,    by+5,    bx+14,    by+5],
-    [bx+bw, by+16,    bx+bw, by+5,    bx+bw-14, by+5],
-    [bx,    by+bh-16, bx,    by+bh-5, bx+14,    by+bh-5],
-    [bx+bw, by+bh-16, bx+bw, by+bh-5, bx+bw-14, by+bh-5],
-  ].map(([x1,y1,x2,y2,x3,y3]) => `
-    <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
-      stroke="${C.accent}" stroke-width="2.6" stroke-linecap="round" filter="url(#${uid}s)"/>
-    <line x1="${x2}" y1="${y2}" x2="${x3}" y2="${y3}"
-      stroke="${C.accent}" stroke-width="2.6" stroke-linecap="round" filter="url(#${uid}s)"/>
-  `).join('');
 
   return `
   <svg xmlns="http://www.w3.org/2000/svg"
@@ -138,19 +142,19 @@ function buildSVG(batt, isCharging, C, showTicks, fontSizePct = 38, fontSizeTick
 
     <!-- ambient ring -->
     <rect x="${bx-4}" y="${by-4}" width="${bw+8}" height="${bh+8}" rx="16"
-      fill="none" stroke="${C.primary}" stroke-width="1.2" stroke-opacity="0.08">
+      fill="none" stroke="${borderCol}" stroke-width="1.2" stroke-opacity="0.08">
       ${isCharging ? '<animate attributeName="stroke-opacity" values="0.05;0.3;0.05" dur="2.5s" repeatCount="indefinite"/>' : ''}
     </rect>
 
     <!-- terminal -->
     <rect x="${bx+bw/2-19}" y="${by-17}" width="38" height="21" rx="7"
-      fill="#0D1A28" stroke="${C.primary}" stroke-width="1.8" filter="url(#${uid}g)"/>
+      fill="#0D1A28" stroke="${borderCol}" stroke-width="1.8" filter="url(#${uid}g)"/>
     <rect x="${bx+bw/2-11}" y="${by-12}" width="22" height="9" rx="2.5"
-      fill="${C.primary}" fill-opacity="0.18"/>
+      fill="${borderCol}" fill-opacity="0.18"/>
 
     <!-- body -->
     <rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="11"
-      fill="#0D1A28" stroke="${C.primary}" stroke-width="2.2" filter="url(#${uid}g)"/>
+      fill="#0D1A28" stroke="${borderCol}" stroke-width="2.2" filter="url(#${uid}g)"/>
 
     <!-- fill -->
     <g clip-path="url(#${uid}c)">
@@ -163,22 +167,28 @@ function buildSVG(batt, isCharging, C, showTicks, fontSizePct = 38, fontSizeTick
       ${isCharging ? `
         <rect x="${ix}" y="${fy}" width="${iw}" height="3" fill="white" rx="1">
           <animate attributeName="fill-opacity" values="0.06;0.45;0.06" dur="1.5s" repeatCount="indefinite"/>
+        </rect>
+        <rect x="${ix}" y="${fy+fh}" width="${iw}" height="22" fill="white">
+          <animate attributeName="y" values="${fy+fh};${fy}" dur="1.6s" repeatCount="indefinite" calcMode="linear"/>
+          <animate attributeName="fill-opacity" values="0;0.06;0.10;0.04;0" dur="1.6s" repeatCount="indefinite"/>
+        </rect>
+        <rect x="${ix}" y="${fy+fh}" width="${iw}" height="4" fill="white" rx="1">
+          <animate attributeName="y" values="${fy+fh};${fy}" dur="1.6s" repeatCount="indefinite" calcMode="linear"/>
+          <animate attributeName="fill-opacity" values="0;0.9;0.9;0.85;0" dur="1.6s" repeatCount="indefinite"/>
         </rect>` : ''}
     </g>
 
     ${ticks}
-    ${corners}
 
     <!-- inner border -->
     <rect x="${ix}" y="${iy}" width="${iw}" height="${ih}" rx="4"
-      fill="none" stroke="${C.primary}" stroke-width="0.5" stroke-opacity="0.2"/>
+      fill="none" stroke="${borderCol}" stroke-width="0.5" stroke-opacity="0.2"/>
 
     <!-- pourcentage -->
-    <text x="${bx+bw/2}" y="${by+bh/2+6}"
+    <text x="${bx+bw/2}" y="${by+bh/2+6}" class="pct-glitch" data-batt-text
       fill="${colorPercent || C.primary}" font-size="${fontSizePct}" font-weight="700"
       font-family="Rajdhani,'Share Tech Mono',monospace"
-      text-anchor="middle" dominant-baseline="middle"
-      filter="url(#${uid}t)">${batt}%</text>
+      text-anchor="middle" dominant-baseline="middle">${batt}%</text>
 
     <!-- bolt -->
     ${isCharging ? `
@@ -205,17 +215,31 @@ function buildSVG(batt, isCharging, C, showTicks, fontSizePct = 38, fontSizeTick
 class NeonBatteryCardEditor extends HTMLElement {
   setConfig(config) {
     this._config = config;
-    if (this._hass && !this._built) { this._built = true; this._build(); }
-    else if (this._built) { this._built = false; this._build(); }
+    if (!this._built) {
+      if (this._hass) { this._built = true; this._build(); }
+    } else if (!this._ownChange) {
+      // Changement externe (undo/redo HA) → rebuild nécessaire
+      this._build();
+    }
+    // Si _ownChange : c'est notre propre dispatch config-changed,
+    // le DOM est déjà correct, on ne fait rien.
+    this._ownChange = false;
   }
 
   set hass(hass) {
     this._hass = hass;
     if (!this._built && this._config) { this._built = true; this._build(); }
+    else this.querySelectorAll('ha-entity-picker').forEach(p => { p.hass = hass; });
   }
 
   _entities(filter) {
     return Object.keys(this._hass.states).filter(filter);
+  }
+
+  _entityInput(key) {
+    const val = this._config[key] ?? '';
+    // Placeholder div — replaced by ha-entity-picker in _injectEntityPickers()
+    return `<div class="entity-picker-slot" data-key="${key}" data-val="${val.replace(/"/g,'&quot;')}"></div>`;
   }
 
   _select(label, key, opts, hint = '') {
@@ -301,9 +325,57 @@ class NeonBatteryCardEditor extends HTMLElement {
       </div>
       ${this._input('Valeur état HC (ex: HEURE CREUSE)', 'hc_state_value')}
 
+      <h3>Infos latérales batterie</h3>
+      <p class="hint" style="margin-bottom:8px">2 cases à gauche et 2 à droite de la batterie. L'unité est lue automatiquement depuis HA.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <p class="hint" style="text-align:center;margin-bottom:6px">◀ GAUCHE</p>
+          <div class="field">
+            <label>Slot gauche 1 — Entité</label>
+            ${this._entityInput('side_l1_entity')}
+          </div>
+          <div class="field">
+            <label>Slot gauche 1 — Libellé</label>
+            <input type="text" data-key="side_l1_label" value="${this._config.side_l1_label || ''}"/>
+          </div>
+          <div class="field" style="margin-top:10px">
+            <label>Slot gauche 2 — Entité</label>
+            ${this._entityInput('side_l2_entity')}
+          </div>
+          <div class="field">
+            <label>Slot gauche 2 — Libellé</label>
+            <input type="text" data-key="side_l2_label" value="${this._config.side_l2_label || ''}"/>
+          </div>
+        </div>
+        <div>
+          <p class="hint" style="text-align:center;margin-bottom:6px">DROITE ▶</p>
+          <div class="field">
+            <label>Slot droit 1 — Entité</label>
+            ${this._entityInput('side_r1_entity')}
+          </div>
+          <div class="field">
+            <label>Slot droit 1 — Libellé</label>
+            <input type="text" data-key="side_r1_label" value="${this._config.side_r1_label || ''}"/>
+          </div>
+          <div class="field" style="margin-top:10px">
+            <label>Slot droit 2 — Entité</label>
+            ${this._entityInput('side_r2_entity')}
+          </div>
+          <div class="field">
+            <label>Slot droit 2 — Libellé</label>
+            <input type="text" data-key="side_r2_label" value="${this._config.side_r2_label || ''}"/>
+          </div>
+        </div>
+      </div>
+
       <h3>Bouton de charge</h3>
       ${this._select('Bouton : Démarrer/Arrêter charge', 'charge_switch_entity', switches,
         'Ce bouton affichera une confirmation avant d\'agir.')}
+      <div class="field">
+        <label>Temps restant (entité)</label>
+        ${this._entityInput('time_left_entity')}
+        <p class="hint">Si renseigné, remplace le calcul interne. Ex: sensor.xxx_charging_time_left</p>
+      </div>
 
       <h3>Informations</h3>
       ${this._input('Nom du véhicule', 'name')}
@@ -335,36 +407,60 @@ class NeonBatteryCardEditor extends HTMLElement {
         <div>
           <label>Principal (contour, texte, glow)</label>
           <input type="color" data-key="color_primary" value="${this._config.color_primary || '#00E8FF'}"/>
-          <span class="color-reset" data-reset="color_primary">↺ Réinitialiser</span>
+          <span class="color-reset" data-reset="color_primary" data-default="#00E8FF">↺ Réinitialiser</span>
         </div>
         <div>
-          <label>Accent (coins)</label>
+          <label>Accent (glitch % en charge)</label>
           <input type="color" data-key="color_accent" value="${this._config.color_accent || '#FF50A0'}"/>
-          <span class="color-reset" data-reset="color_accent">↺ Réinitialiser</span>
+          <span class="color-reset" data-reset="color_accent" data-default="#FF50A0">↺ Réinitialiser</span>
+        </div>
+      </div>
+      <div class="row2">
+        <div>
+          <label>Bouton charge — inactif</label>
+          <input type="color" data-key="color_charge_off" value="${this._config.color_charge_off || '#00E8FF'}"/>
+          <span class="color-reset" data-reset="color_charge_off" data-default="#00E8FF">↺ Réinitialiser</span>
+        </div>
+        <div>
+          <label>Bouton charge — actif</label>
+          <input type="color" data-key="color_charge_on" value="${this._config.color_charge_on || '#FF0090'}"/>
+          <span class="color-reset" data-reset="color_charge_on" data-default="#FF0090">↺ Réinitialiser</span>
         </div>
       </div>
       <div class="row2">
         <div>
           <label>Pourcentage (texte batterie)</label>
           <input type="color" data-key="color_percent" value="${this._config.color_percent || '#00E8FF'}"/>
-          <span class="color-reset" data-reset="color_percent">↺ Réinitialiser</span>
+          <span class="color-reset" data-reset="color_percent" data-default="#00E8FF">↺ Réinitialiser</span>
+        </div>
+        <div>
+          <label>Valeur slots latéraux</label>
+          <input type="color" data-key="color_side_val" value="${this._config.color_side_val || '#00E8FF'}"/>
+          <span class="color-reset" data-reset="color_side_val" data-default="#00E8FF">↺ Réinitialiser</span>
+        </div>
+      </div>
+      <div class="row2">
+        <div>
+          <label>Contour batterie</label>
+          <input type="color" data-key="color_batt_border" value="${this._config.color_batt_border || '#00E8FF'}"/>
+          <span class="color-reset" data-reset="color_batt_border" data-default="#00E8FF">↺ Réinitialiser</span>
         </div>
       </div>
       <div class="row3">
         <div>
           <label>Remplissage haut</label>
           <input type="color" data-key="color_fill_top" value="${this._config.color_fill_top || '#00E8FF'}"/>
-          <span class="color-reset" data-reset="color_fill_top">↺ Réinitialiser</span>
+          <span class="color-reset" data-reset="color_fill_top" data-default="#00E8FF">↺ Réinitialiser</span>
         </div>
         <div>
           <label>Remplissage milieu</label>
           <input type="color" data-key="color_fill_mid" value="${this._config.color_fill_mid || '#FF50A0'}"/>
-          <span class="color-reset" data-reset="color_fill_mid">↺ Réinitialiser</span>
+          <span class="color-reset" data-reset="color_fill_mid" data-default="#FF50A0">↺ Réinitialiser</span>
         </div>
         <div>
           <label>Remplissage bas</label>
           <input type="color" data-key="color_fill_bottom" value="${this._config.color_fill_bottom || '#E946FF'}"/>
-          <span class="color-reset" data-reset="color_fill_bottom">↺ Réinitialiser</span>
+          <span class="color-reset" data-reset="color_fill_bottom" data-default="#E946FF">↺ Réinitialiser</span>
         </div>
       </div>
       <p class="hint">Les couleurs à null héritent de --primary-color, --state-active-color, --accent-color du thème HA.</p>
@@ -382,12 +478,46 @@ class NeonBatteryCardEditor extends HTMLElement {
 
     // Events — champs
     this.querySelectorAll('[data-key]').forEach(el => {
-      el.addEventListener('change', () => this._changed(el.dataset.key, el.value));
-      if (el.tagName === 'INPUT') el.addEventListener('input', () => this._changed(el.dataset.key, el.value));
+      if (el.type === 'color') {
+        // color picker : uniquement 'change' (déclenché à la fermeture), pas 'input' (1 event/px)
+        el.addEventListener('change', () => this._changed(el.dataset.key, el.value));
+      } else if (el.tagName === 'SELECT') {
+        el.addEventListener('change', () => this._changed(el.dataset.key, el.value));
+      } else if (el.dataset.autocomplete !== undefined) {
+        // dead code — entity fields now use ha-entity-picker
+      } else {
+        // text / number : 'change' immédiat + 'input' debouncé pour la preview en direct
+        el.addEventListener('change', () => { clearTimeout(el._t); this._changed(el.dataset.key, el.value); });
+        el.addEventListener('input',  () => { clearTimeout(el._t); el._t = setTimeout(() => this._changed(el.dataset.key, el.value), 300); });
+      }
     });
-    // Events — reset couleurs
-    this.querySelectorAll('[data-reset]').forEach(el => {
-      el.addEventListener('click', () => this._changed(el.dataset.reset, null));
+    // Color reset spans
+    this.querySelectorAll('.color-reset').forEach(el => {
+      el.addEventListener('click', () => {
+        const key = el.dataset.reset;
+        const input = this.querySelector(`[data-key="${key}"]`);
+        if (input && el.dataset.default) input.value = el.dataset.default;
+        this._changed(key, null);
+      });
+    });
+    // Inject ha-entity-picker for all entity slot placeholders
+    this._injectEntityPickers();
+  }
+
+  _injectEntityPickers() {
+    this.querySelectorAll('.entity-picker-slot').forEach(slot => {
+      const key = slot.dataset.key;
+      const val = slot.dataset.val || '';
+      const picker = document.createElement('ha-entity-picker');
+      if (this._hass) picker.hass = this._hass;
+      picker.value = val;
+      picker.allowCustomEntity = true;
+      picker.style.cssText = 'width:100%;display:block;';
+      picker.addEventListener('value-changed', (ev) => {
+        ev.stopPropagation();
+        this._changed(key, ev.detail.value || null);
+      });
+      slot.replaceWith(picker);
     });
   }
 
@@ -404,6 +534,7 @@ class NeonBatteryCardEditor extends HTMLElement {
     if (val === null || val === '') delete config[key];
     else config[key] = val;
     this._config = config;
+    this._ownChange = true;
     this.dispatchEvent(new CustomEvent('config-changed', {
       detail: { config }, bubbles: true, composed: true,
     }));
@@ -445,7 +576,16 @@ class NeonBatteryCard extends HTMLElement {
     };
   }
 
+  _cleanup() {
+    if (this._animFrame)   { cancelAnimationFrame(this._animFrame); this._animFrame = null; }
+    if (this._updateTimer) { clearTimeout(this._updateTimer); this._updateTimer = null; }
+    if (this._observer)    { this._observer.disconnect(); this._observer = null; }
+    // NOTE: _btnsRendered intentionally NOT reset here — shadow DOM persists through tab switch
+  }
+
   setConfig(raw) {
+    this._cleanup();
+    this._btnsRendered = false; // config changed → force full re-render
     this._config = buildConfig(raw);
     if (this._config.charge_switch_entity) {
       this._config._chargeSwitch = this._config.charge_switch_entity;
@@ -472,15 +612,13 @@ class NeonBatteryCard extends HTMLElement {
         if (this._isVisible && this._hass) this._render();
       }, { threshold: 0.1 });
       this._observer.observe(this);
+    } else if (this._btnsRendered && this._hass) {
+      // Tab return without power_save_mode: re-render to refresh values
+      this._render();
     }
   }
 
-  disconnectedCallback() {
-    clearTimeout(this._updateTimer);
-    cancelAnimationFrame(this._animFrame);
-    this._observer?.disconnect();
-    this._updateTimer = this._animFrame = this._observer = null;
-  }
+  disconnectedCallback() { this._cleanup(); }
 
   // ── Helpers ───────────────────────────────────────────
   _state(eid, fallback = null) {
@@ -492,7 +630,7 @@ class NeonBatteryCard extends HTMLElement {
     return isNaN(v) ? fallback : v;
   }
   _col(cfg, cssVar, hard) {
-    return cfg || `var(${cssVar}, ${hard})`;
+    return cfg || hard;
   }
 
   _moreInfo(entityId) {
@@ -556,7 +694,7 @@ class NeonBatteryCard extends HTMLElement {
     const c = this._config;
 
     const batt       = this._float(c.entity, 0);
-    const isCharging = this._state(c.charging_entity) === 'charging';
+    const isCharging = this._state(c.charging_entity)?.toLowerCase() === 'charging';
     const power      = this._float(c.power_entity, 0);
     const kwh        = (batt * c.kwh_capacity / 100).toFixed(1);
     const maxBatt    = this._float(c.max_target_entity, 100);
@@ -567,6 +705,19 @@ class NeonBatteryCard extends HTMLElement {
     const smartOn    = this._state(c.smart_charging_entity) === 'on';
     const solarOn    = this._state(c.solar_charging_entity) === 'on';
     const chargeOn   = this._state(c._chargeSwitch) === 'on';
+
+    // ── Infos latérales ───────────────────────────────────
+    const _sideSlot = (entityId, label) => {
+      if (!entityId) return null;
+      const st = this._hass?.states?.[entityId];
+      if (!st) return null;
+      const unit = st.attributes?.unit_of_measurement || '';
+      return { label: label || st.attributes?.friendly_name || entityId, value: st.state, unit };
+    };
+    const slotL1 = _sideSlot(c.side_l1_entity, c.side_l1_label);
+    const slotL2 = _sideSlot(c.side_l2_entity, c.side_l2_label);
+    const slotR1 = _sideSlot(c.side_r1_entity, c.side_r1_label);
+    const slotR2 = _sideSlot(c.side_r2_entity, c.side_r2_label);
 
     if (c.smooth_transitions && this._prevBatt !== null && this._prevBatt !== batt) {
       this._animateBatt(this._prevBatt, batt);
@@ -586,26 +737,41 @@ class NeonBatteryCard extends HTMLElement {
     this._lastIsHC     = isHC;
 
     let timeLeft = '';
-    if (isCharging && power > 0) {
+    if (c.time_left_entity) {
+      const tlState = this._hass?.states?.[c.time_left_entity]?.state;
+      if (tlState && tlState !== 'unknown' && tlState !== 'unavailable') {
+        const mins = Math.round(parseFloat(tlState));
+        if (!isNaN(mins) && mins >= 0) {
+          const hh = Math.floor(mins / 60), mm = String(mins % 60).padStart(2, '0');
+          timeLeft = hh > 0 ? `${hh}h${mm}` : `${mm}m`;
+        } else {
+          timeLeft = tlState;
+        }
+      }
+    } else if (isCharging && power > 0) {
       const h = ((maxBatt - batt) * c.kwh_capacity / 100) / (power / 1000);
-      const hh = Math.floor(h), mm = Math.round((h - hh) * 60);
-      timeLeft = hh > 0 ? `${hh}h${mm}m` : `${mm}m`;
+      const hh = Math.floor(h), mm = String(Math.round((h - hh) * 60)).padStart(2, '0');
+      timeLeft = hh > 0 ? `${hh}h${mm}` : `${mm}m`;
     }
 
     let mode = '';
     if (isCharging) {
-      if (solarOn && hasSurplus) mode = '☀ SOLAR';
-      else if (smartOn && isHC)  mode = '⚡ AUTO HC';
-      else                        mode = '🔌 MANUEL';
+      if (solarOn && hasSurplus) mode = '&#9728; SOLAR';
+      else if (smartOn && isHC)  mode = '&#9889; AUTO HC';
+      else                        mode = '&#128268; MANUEL';
     }
 
     const C = {
       primary:    this._col(c.color_primary,     '--primary-color',      '#00E8FF'),
       accent:     this._col(c.color_accent,      '--state-active-color', '#FF50A0'),
+      chargeOff:  this._col(c.color_charge_off,  '--primary-color',      '#00E8FF'),
+      chargeOn:   this._col(c.color_charge_on,   '--state-active-color', '#FF0090'),
       fillTop:    this._col(c.color_fill_top,    '--primary-color',      '#00E8FF'),
       fillMid:    this._col(c.color_fill_mid,    '--state-active-color', '#FF50A0'),
       fillBottom: this._col(c.color_fill_bottom, '--accent-color',       '#E946FF'),
       percent:    this._col(c.color_percent,     '--primary-color',      '#00E8FF'),
+      sideVal:    this._col(c.color_side_val,    '--primary-color',      '#00E8FF'),
+      battBorder: this._col(c.color_batt_border, '--primary-color',      '#00E8FF'),
     };
 
     const hcColor   = isHC ? `var(--primary-color, #00E8FF)` : `var(--state-active-color, #FF0090)`;
@@ -630,9 +796,13 @@ class NeonBatteryCard extends HTMLElement {
       <style>
         :host {
           display: block;
-          --nbc-primary:    ${C.primary};
-          --nbc-accent:     ${C.accent};
-          --nbc-hc-color:   ${hcColor};
+          --nbc-primary:      ${C.primary};
+          --nbc-accent:       ${C.accent};
+          --nbc-charge-off:   ${C.chargeOff};
+          --nbc-charge-on:    ${C.chargeOn};
+          --nbc-hc-color:     ${hcColor};
+          --nbc-side-val:     ${C.sideVal};
+          --nbc-batt-border:  ${C.battBorder};
           --nbc-font:       var(--primary-font-family, Rajdhani, 'Share Tech Mono', monospace);
           --nbc-radius:     var(--ha-card-border-radius, 14px);
           --nbc-bg:         var(--card-background-color, #0A0A14);
@@ -666,8 +836,8 @@ class NeonBatteryCard extends HTMLElement {
           50%      { box-shadow: 0 0 24px var(--nbc-primary), 0 0 40px var(--nbc-primary); }
         }
         @keyframes btnPulseCharge {
-          0%,100% { box-shadow: 0 0 14px rgba(255,0,144,.5); transform: scale(1); }
-          50%      { box-shadow: 0 0 30px rgba(255,0,144,.8); transform: scale(1.015); }
+          0%,100% { box-shadow: 0 0 14px color-mix(in srgb, var(--nbc-charge-on) 50%, transparent); transform: scale(1); }
+          50%      { box-shadow: 0 0 30px color-mix(in srgb, var(--nbc-charge-on) 80%, transparent); transform: scale(1.015); }
         }
         /* Glitch électrique au hover */
         @keyframes glitchShift {
@@ -692,6 +862,36 @@ class NeonBatteryCard extends HTMLElement {
           0%   { opacity: 0; transform: scale(.6) rotate(0deg); }
           20%  { opacity: 1; }
           100% { opacity: 0; transform: scale(1.4) rotate(15deg); }
+        }
+
+        /* ── Effet glitch RGB + flicker — calqué sur .menu .title du thème ── */
+        @keyframes pctGlitchRgb {
+          0%,  9%   { text-shadow: 0 0 5px #fff, 0 0 12px var(--nbc-accent), 0 0 28px var(--nbc-accent),  1px 0 color-mix(in srgb, var(--nbc-primary) 50%, transparent); letter-spacing: 2px; }
+          10%        { text-shadow: 0 0 5px #fff, 0 0 12px var(--nbc-accent), 0 0 28px var(--nbc-accent), -5px 0 var(--nbc-accent), 5px 0 var(--nbc-primary); letter-spacing: 3px; transform: skewX(-2deg); }
+          11%        { text-shadow: 0 0 5px #fff, 0 0 12px var(--nbc-accent), 0 0 28px var(--nbc-accent),  1px 0 color-mix(in srgb, var(--nbc-primary) 50%, transparent); letter-spacing: 2px; transform: skewX(0); }
+          12%,  39%  { text-shadow: 0 0 5px #fff, 0 0 12px var(--nbc-accent), 0 0 28px var(--nbc-accent),  1px 0 color-mix(in srgb, var(--nbc-primary) 50%, transparent); letter-spacing: 2px; }
+          40%        { text-shadow: 0 0 8px #fff, 0 0 18px var(--nbc-accent), 0 0 48px var(--nbc-accent),  8px 0 var(--nbc-accent), -8px 0 var(--nbc-primary); letter-spacing: 5px; transform: skewX(3deg); }
+          41%        { text-shadow: 0 0 2px #fff, 0 0  6px var(--nbc-accent), 0 0 14px var(--nbc-accent), -2px 0 color-mix(in srgb, var(--nbc-primary) 70%, transparent); letter-spacing: 1px; transform: skewX(-1deg); }
+          42%,  71%  { text-shadow: 0 0 5px #fff, 0 0 12px var(--nbc-accent), 0 0 28px var(--nbc-accent),  1px 0 color-mix(in srgb, var(--nbc-primary) 50%, transparent); letter-spacing: 2px; transform: skewX(0); }
+          72%        { text-shadow: 0 0 5px #fff, 0 0 12px var(--nbc-accent), 0 0 28px var(--nbc-accent), -4px 0 var(--nbc-accent), 4px 0 var(--nbc-primary); letter-spacing: 2px; }
+          73%,  100% { text-shadow: 0 0 5px #fff, 0 0 12px var(--nbc-accent), 0 0 28px var(--nbc-accent),  1px 0 color-mix(in srgb, var(--nbc-primary) 50%, transparent); letter-spacing: 2px; }
+        }
+        @keyframes pctFlicker {
+          0%,  14%  { opacity: 1;    filter: brightness(1.1) saturate(1.4); }
+          15%        { opacity: 0.4;  filter: brightness(0.5) saturate(0.8); }
+          16%        { opacity: 1;    filter: brightness(1.5) saturate(1.6); }
+          17%,  44%  { opacity: 1;    filter: brightness(1.1) saturate(1.4); }
+          45%        { opacity: 0.7;  filter: brightness(0.7) saturate(0.9); }
+          46%        { opacity: 1;    filter: brightness(1.4) saturate(1.5); }
+          47%        { opacity: 0.85; filter: brightness(0.9) saturate(1.2); }
+          48%,  79%  { opacity: 1;    filter: brightness(1.1) saturate(1.4); }
+          80%        { opacity: 0.15; filter: brightness(0.2) saturate(0.5); }
+          81%        { opacity: 1;    filter: brightness(1.7) saturate(1.8); }
+          82%,  100% { opacity: 1;    filter: brightness(1.1) saturate(1.4); }
+        }
+        .pct-glitch {
+          animation: pctGlitchRgb 11s step-end infinite, pctFlicker 7s step-end infinite;
+          text-shadow: 0 0 5px #fff, 0 0 12px var(--nbc-accent), 0 0 28px var(--nbc-accent);
         }
 
         .card {
@@ -722,6 +922,16 @@ class NeonBatteryCard extends HTMLElement {
           text-align: center; margin-bottom: 10px; opacity: .8;
         }
 
+        /* ── TOKEN pill : une seule source de vérité ── */
+        .pill, .surplus, .side-slot, .kwh-pill, .power-badge, .time-val, .mode-inner {
+          display: flex; align-items: center;
+          border-radius: 8px; box-sizing: border-box;
+          padding: 5px 10px;
+          border: 1px solid rgba(0,232,255,.25);
+          background: rgba(0,232,255,.07);
+          font-size: 13px; font-weight: 700;
+        }
+
         .top-row {
           display: flex;
           justify-content: ${c.price_entity || c.surplus_entity ? 'space-between' : 'center'};
@@ -729,24 +939,22 @@ class NeonBatteryCard extends HTMLElement {
         }
         .pill {
           display: ${c.price_entity ? 'flex' : 'none'};
-          align-items: center; gap: 6px; padding: 5px 11px;
-          border-radius: 8px;
-          border: 1px solid ${isHC ? 'rgba(0,232,255,.4)' : 'rgba(255,0,144,.4)'};
-          background: ${isHC ? 'rgba(0,232,255,.1)' : 'rgba(255,0,144,.1)'};
+          gap: 6px;
+          border-color: ${isHC ? 'rgba(0,232,255,.35)' : 'rgba(255,0,144,.35)'};
+          background:   ${isHC ? 'rgba(0,232,255,.09)' : 'rgba(255,0,144,.09)'};
         }
         .pill-label {
-          color: var(--nbc-hc-color); font-size: 11px; font-weight: 700;
-          letter-spacing: 2px; text-shadow: 0 0 10px var(--nbc-hc-color);
+          color: var(--nbc-hc-color); letter-spacing: 2px;
+          text-shadow: 0 0 10px var(--nbc-hc-color);
         }
         .surplus {
           display: ${c.surplus_entity ? 'flex' : 'none'};
-          align-items: center; gap: 5px; padding: 5px 10px;
-          border-radius: 8px;
-          border: 1px solid ${hasSurplus ? 'rgba(0,232,255,.4)' : 'rgba(255,255,255,.08)'};
-          background: ${hasSurplus ? 'rgba(0,232,255,.1)' : 'rgba(255,255,255,.04)'};
+          gap: 5px;
+          border-color: ${hasSurplus ? 'rgba(0,232,255,.35)' : 'rgba(255,255,255,.15)'};
+          background:   ${hasSurplus ? 'rgba(0,232,255,.09)' : 'rgba(255,255,255,.04)'};
         }
         .surplus-val {
-          color: ${surpColor}; font-size: 13px; font-weight: 700;
+          color: ${surpColor};
           text-shadow: ${hasSurplus ? `0 0 8px ${C.primary}` : 'none'};
         }
 
@@ -754,6 +962,34 @@ class NeonBatteryCard extends HTMLElement {
           display: flex; justify-content: center;
           position: relative; margin-bottom: 10px;
         }
+        .battery-outer {
+          display: flex; align-items: center; justify-content: space-between;
+          position: relative; margin-bottom: 10px;
+        }
+        .side-col {
+          display: flex; flex-direction: column; gap: 7px;
+          flex: 1; min-width: 0; padding: 0 6px;
+          align-items: flex-start;
+        }
+        .side-col.side-right { align-items: flex-end; }
+        .side-slot {
+          flex-direction: column; gap: 2px;
+          max-width: 100%;
+        }
+        .side-col.side-right .side-slot { align-items: flex-end; text-align: right; }
+        .side-slot-lbl {
+          font-size: 9px; letter-spacing: 1.5px;
+          text-transform: uppercase; color: rgba(0,232,255,.5);
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .side-slot-row {
+          display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap;
+        }
+        .side-col.side-right .side-slot-row { justify-content: flex-end; }
+        .side-slot-val {
+          font-size: 14px; color: var(--nbc-side-val); line-height: 1.1;
+        }
+        .side-slot-unit { font-size: 10px; color: rgba(255,255,255,.4); font-weight: 400; }
         .dots {
           display: ${isCharging ? 'flex' : 'none'};
           position: absolute; bottom: 0;
@@ -769,30 +1005,34 @@ class NeonBatteryCard extends HTMLElement {
 
         .info-bar {
           display: flex; align-items: center;
-          justify-content: center; gap: 10px; flex-wrap: wrap;
-          font-size: 12px; margin-bottom: 6px;
-          color: var(--nbc-text-dim);
+          justify-content: center; gap: 8px; flex-wrap: wrap;
+          margin-bottom: 8px;
+        }
+        .kwh-pill {
+          display: ${c.show_kwh ? 'flex' : 'none'};
+          gap: 5px;
+          border-color: rgba(0,232,255,.25);
+          background: rgba(0,232,255,.07);
+          color: #00E8FF;
         }
         .power-badge {
-          color: var(--nbc-primary); font-size: 11px; font-weight: 700;
-          padding: 2px 9px;
-          background: rgba(0,232,255,.12); border: 1px solid rgba(0,232,255,.4);
-          border-radius: 5px;
-          display: ${isCharging ? 'inline-block' : 'none'};
+          display: ${isCharging ? 'flex' : 'none'};
+          gap: 4px;
+          font-size: 13px;
+          color: var(--nbc-primary);
         }
         .time-val {
-          color: var(--nbc-accent-col); font-size: 11px; font-weight: 600;
-          display: ${isCharging && timeLeft ? 'inline' : 'none'};
+          display: ${isCharging && timeLeft ? 'flex' : 'none'};
+          gap: 4px;
+          color: var(--nbc-primary);
         }
         .mode-wrap {
           display: ${isCharging ? 'flex' : 'none'};
           justify-content: center; margin-bottom: 10px;
         }
         .mode-inner {
-          padding: 3px 16px; border-radius: 20px;
-          background: linear-gradient(90deg, rgba(0,232,255,.1), rgba(233,70,255,.1));
-          border: 1px solid rgba(0,232,255,.28);
-          font-size: 10px; font-weight: 700; letter-spacing: 2.5px;
+          gap: 6px; letter-spacing: 2.5px;
+          background: rgba(0,232,255,.07);
           color: var(--nbc-primary); text-shadow: 0 0 8px var(--nbc-primary);
         }
 
@@ -829,18 +1069,18 @@ class NeonBatteryCard extends HTMLElement {
         .btn:active { transform: scale(.96); }
 
         .charge-btn.charge-off {
-          background: linear-gradient(135deg, rgba(0,232,255,.14), rgba(0,232,255,.04));
-          border: 2px solid rgba(0,232,255,.6);
-          color: var(--nbc-primary);
-          text-shadow: 0 0 8px var(--nbc-primary);
-          box-shadow: 0 0 16px rgba(0,232,255,.25);
+          background: linear-gradient(135deg, color-mix(in srgb, var(--nbc-charge-off) 14%, transparent), color-mix(in srgb, var(--nbc-charge-off) 4%, transparent));
+          border: 2px solid color-mix(in srgb, var(--nbc-charge-off) 60%, transparent);
+          color: var(--nbc-charge-off);
+          text-shadow: 0 0 8px var(--nbc-charge-off);
+          box-shadow: 0 0 16px color-mix(in srgb, var(--nbc-charge-off) 25%, transparent);
         }
         .charge-btn.charge-on {
-          background: linear-gradient(135deg, rgba(255,0,144,.2), rgba(233,70,255,.1));
-          border: 2px solid rgba(255,0,144,.8);
-          color: #FF0090;
-          text-shadow: 0 0 8px #FF0090;
-          box-shadow: 0 0 22px rgba(255,0,144,.4), inset 0 0 12px rgba(255,0,144,.06);
+          background: linear-gradient(135deg, color-mix(in srgb, var(--nbc-charge-on) 20%, transparent), color-mix(in srgb, var(--nbc-charge-on) 10%, transparent));
+          border: 2px solid color-mix(in srgb, var(--nbc-charge-on) 80%, transparent);
+          color: var(--nbc-charge-on);
+          text-shadow: 0 0 8px var(--nbc-charge-on);
+          box-shadow: 0 0 22px color-mix(in srgb, var(--nbc-charge-on) 40%, transparent), inset 0 0 12px color-mix(in srgb, var(--nbc-charge-on) 6%, transparent);
           animation: btnPulseCharge 2.5s ease-in-out infinite;
         }
 
@@ -857,12 +1097,12 @@ class NeonBatteryCard extends HTMLElement {
           opacity: 0;
         }
         .charge-btn::before {
-          color: #00E8FF;
-          text-shadow: 2px 0 #FF0090, -2px 0 #00E8FF;
+          color: var(--nbc-charge-off);
+          text-shadow: 2px 0 var(--nbc-charge-on), -2px 0 var(--nbc-charge-off);
         }
         .charge-btn::after {
-          color: #FF0090;
-          text-shadow: -2px 0 #00E8FF, 2px 0 #FF0090;
+          color: var(--nbc-charge-on);
+          text-shadow: -2px 0 var(--nbc-charge-off), 2px 0 var(--nbc-charge-on);
         }
 
         .charge-btn:hover {
@@ -910,23 +1150,45 @@ class NeonBatteryCard extends HTMLElement {
             </div>
           </div>
 
-          <div class="battery-wrap">
-            ${svg}
-            <div class="dots">
-              <div class="dot"></div>
-              <div class="dot"></div>
-              <div class="dot"></div>
+          <div class="battery-outer">
+            <div class="side-col">
+              ${[slotL1, slotL2].map(s => s ? `
+                <div class="side-slot">
+                  <div class="side-slot-lbl">${s.label}</div>
+                  <div class="side-slot-row">
+                    <span class="side-slot-val">${s.value}</span>
+                    ${s.unit ? `<span class="side-slot-unit">${s.unit}</span>` : ''}
+                  </div>
+                </div>` : '').join('')}
+            </div>
+            <div class="battery-wrap">
+              ${svg}
+              <div class="dots">
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+              </div>
+            </div>
+            <div class="side-col side-right">
+              ${[slotR1, slotR2].map(s => s ? `
+                <div class="side-slot">
+                  <div class="side-slot-lbl">${s.label}</div>
+                  <div class="side-slot-row">
+                    <span class="side-slot-val">${s.value}</span>
+                    ${s.unit ? `<span class="side-slot-unit">${s.unit}</span>` : ''}
+                  </div>
+                </div>` : '').join('')}
             </div>
           </div>
 
           <div class="info-bar">
-            ${c.show_kwh ? `<span>${kwh} kWh / ${c.kwh_capacity} kWh</span>` : ''}
-            <span class="power-badge">⚡ ${power}W</span>
-            <span class="time-val">⏱ ${timeLeft}</span>
+            <div class="kwh-pill"><span>&#128267;</span><span class="kwh-val">${Math.round(kwh)} / ${c.kwh_capacity} kWh</span></div>
+            <div class="power-badge"><span>&#9889;</span><span class="power-val">${power}W</span></div>
+            <div class="time-val"><span>&#8987;</span><span>${timeLeft}</span></div>
           </div>
 
           <div class="mode-wrap">
-            <span class="mode-inner">${mode}</span>
+            <div class="mode-inner">${mode}</div>
           </div>
 
           ${btnHTML}
@@ -981,7 +1243,7 @@ customElements.define('neon-battery-card', NeonBatteryCard);
 console.info(
   '%c NEON-BATTERY-CARD %c v' + VERSION + ' ',
   'color:#00E8FF;font-weight:bold;background:#0A0A14;padding:2px 6px;border-radius:3px 0 0 3px',
-  'color:#FF50A0;font-weight:bold;background:#0A0A14;padding:2px 6px;border-radius:0 3px 3px 0',
+  'color:var(--nbc-accent);font-weight:bold;background:#0A0A14;padding:2px 6px;border-radius:0 3px 3px 0',
 );
 
 window.customCards = window.customCards || [];
@@ -992,3 +1254,9 @@ window.customCards.push({
   preview:          true,
   documentationURL: 'https://github.com/',
 });
+
+console.info(
+  '%c 🔋 neon-battery-card v3 %c Neo Tokyo ',
+  'background:#E0115F;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
+  'background:#040811;color:#FF6B9D;padding:2px 4px;border-radius:0 3px 3px 0;'
+);

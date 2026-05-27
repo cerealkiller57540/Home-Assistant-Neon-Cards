@@ -25,8 +25,12 @@
 const VERSION = '2.1.0';
 
 // ═══════════════════════════════════════════════════════════════
-//  SECTION 1 — Configuration Builder
+//  DEVICE DETECTION
 // ═══════════════════════════════════════════════════════════════
+// Detect iPad (including 8th gen and older) and low-power devices
+const IS_IPAD = /iPad/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IS_LOW_POWER = IS_IPAD || /iPhone|Android/.test(navigator.userAgent);
 // Merges user-supplied YAML with sensible defaults.
 // Every key is documented; `null` means "inherit from HA theme".
 
@@ -35,7 +39,7 @@ const VERSION = '2.1.0';
  * @param {Object} raw - User-supplied card configuration.
  * @returns {Object} Normalised configuration with defaults applied.
  */
-function buildConfig(raw) {
+function buildConfig(raw = {}) {
   return {
     /* ── Entity sensors ────────────────────────────────────── */
     entity:             raw.entity             || null,   // (required) main production sensor
@@ -71,14 +75,35 @@ function buildConfig(raw) {
     show_history:       raw.show_history       ?? true,
     show_efficiency:    raw.show_efficiency    ?? true,
     glow_effect:        raw.glow_effect        ?? true,
+    reduce_animations:  raw.reduce_animations  ?? IS_LOW_POWER,  // auto-enable on iPad/mobile
+
+    /* ── Typography & Text Colors ─────────────────────────────── */
+    color_efficiency_text:     raw.color_efficiency_text     || null,  // efficiency % text
+    color_mini_values_text:    raw.color_mini_values_text    || null,  // TODAY/FORECAST text
+    color_sparkline_stats_text: raw.color_sparkline_stats_text || null, // min/avg/max labels
+    efficiency_font_weight:    raw.efficiency_font_weight    ?? 700,   // bold/normal
+    label_font_weight:         raw.label_font_weight         ?? 400,   // label font weight
+    text_shadow_blur:          raw.text_shadow_blur          ?? 0,     // extra blur (px)
 
     /* ── Cyberpunk / Neo-Tokyo mode ────────────────────────── */
     cyberpunk_mode:     raw.cyberpunk_mode     ?? false,
-    neon_glow:          raw.neon_glow          ?? false,
+    neon_glow:          raw.neon_glow          ?? false,  // legacy — kept for back-compat
+    neon_panel_glow:    raw.neon_panel_glow    ?? (raw.neon_glow ?? false), // panel drop-shadow
+    neon_text_glow:     raw.neon_text_glow     ?? (raw.neon_glow ?? false), // value text-shadow
+    neon_card_glow:     raw.neon_card_glow     ?? (raw.neon_glow ?? false), // card box-shadow
+    neon_icon_glow:     raw.neon_icon_glow     ?? (raw.neon_glow ?? false), // header icon glow
+    neon_title_glow:    raw.neon_title_glow    ?? (raw.neon_glow ?? false), // title text glow
+    neon_bar_glow:      raw.neon_bar_glow      ?? (raw.neon_glow ?? false), // efficiency bar glow
+    neon_badge_glow:    raw.neon_badge_glow    ?? (raw.neon_glow ?? false), // efficiency badge glow
+    neon_mini_glow:     raw.neon_mini_glow     ?? (raw.neon_glow ?? false), // mini header values glow
+    neon_saturation:    raw.neon_saturation    ?? 60,     // glow intensity 0–100
 
     /* ── Typography ────────────────────────────────────────── */
     font_size:          raw.font_size          ?? 'medium', // small | medium | large
-    header_font_size:   raw.header_font_size   ?? 'medium', // small | medium | large
+    header_font_size:   raw.header_font_size   ?? 15,        // px (anciennement small|medium|large)
+    title_font_family:  raw.title_font_family  || null,     // optional header title font
+    title_shadow:       raw.title_shadow       || null,     // custom text-shadow on title
+    icon_size:          raw.icon_size          ?? 22,       // header icon size (px)
 
     /* ── Colors (null = inherit from HA theme) ─────────────── */
     color_primary:      raw.color_primary      || null,
@@ -86,8 +111,10 @@ function buildConfig(raw) {
     color_mid:          raw.color_mid          || null,
     color_cold:         raw.color_cold         || null,
     color_text:         raw.color_text         || null,
+    color_title:        raw.color_title        || null,   // title text colour override
     color_icon:         raw.color_icon         || null,
     color_badge:        raw.color_badge        || null,
+    color_neon_glow:    raw.color_neon_glow    || null,
   };
 }
 
@@ -446,100 +473,88 @@ function buildSparkline(history, colors, unit, dec, historyForecast = [], thresh
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  SECTION 7 — i18n Labels (French / English)
+//  SECTION 7 — UI Labels
 // ═══════════════════════════════════════════════════════════════
-// Language is auto-detected from navigator.language.
 
 const LABELS = {
-  fr: {
-    entities:      'Entités',
-    display:       'Affichage',
-    colors:        'Couleurs',
-    advanced:      'Avancé',
-    entity:        'Entité production (W) *',
-    daily:         'Production journalière (kWh)',
-    secondary:     'Capteur secondaire',
-    secLabel:      'Label capteur sec.',
-    secUnit:       'Unité capteur sec.',
-    forecast:      'Prévision solaire',
-    forecastUnit:  'Unité prévision',
-    lux:           'Capteur luminosité (lux)',
-    weather:       'Entité météo',
-    name:          'Nom / titre',
-    inputUnit:     'Unité capteur',
-    maxPower:      'Puissance max (W)',
-    dec:           'Décimales',
-    speed:         'Vitesse animation',
-    nightLux:      'Seuil nuit (lux)',
-    threshold:     'Seuil production (W)',
-    thresholdHint: 'Ligne de seuil sur le graphique & alerte couleur',
-    history:       'Historique 24h',
-    efficiency:    'Afficher efficacité',
-    glow:          'Effet lueur',
-    cyberpunk:     'Mode Neo Tokyo',
-    neonGlow:      'Lueur néon',
-    fontSize:      'Taille valeur',
-    headerFontSize:'Taille titre',
-    colorPrimary:  'Couleur principale',
-    colorCold:     'Froide (min)',
-    colorMid:      'Milieu',
-    colorHot:      'Chaude (max)',
-    colorIcon:     'Couleur icône',
-    colorBadge:    'Couleur badges',
-    small:         'Petit',
-    medium:        'Moyen',
-    large:         'Grand',
-  },
-  en: {
-    entities:      'Entities',
-    display:       'Display',
-    colors:        'Colors',
-    advanced:      'Advanced',
-    entity:        'Production entity (W) *',
-    daily:         'Daily production (kWh)',
-    secondary:     'Secondary sensor',
-    secLabel:      'Secondary label',
-    secUnit:       'Secondary unit',
-    forecast:      'Solar forecast',
-    forecastUnit:  'Forecast unit',
-    lux:           'Luminosity sensor (lux)',
-    weather:       'Weather entity',
-    name:          'Name / title',
-    inputUnit:     'Sensor unit',
-    maxPower:      'Max power (W)',
-    dec:           'Decimal places',
-    speed:         'Animation speed',
-    nightLux:      'Night threshold (lux)',
-    threshold:     'Production threshold (W)',
-    thresholdHint: 'Threshold line on sparkline & colour alert',
-    history:       '24h history',
-    efficiency:    'Show efficiency',
-    glow:          'Glow effect',
-    cyberpunk:     'Neo Tokyo Mode',
-    neonGlow:      'Neon Glow',
-    fontSize:      'Value font size',
-    headerFontSize:'Header font size',
-    colorPrimary:  'Primary color',
-    colorCold:     'Cold (min)',
-    colorMid:      'Mid',
-    colorHot:      'Hot (max)',
-    colorIcon:     'Icon color',
-    colorBadge:    'Badge color',
-    small:         'Small',
-    medium:        'Medium',
-    large:         'Large',
-  },
+  entities:      'Entities',
+  display:       'Display',
+  colors:        'Colors',
+  advanced:      'Advanced',
+  entity:        'Production entity (W) *',
+  daily:         'Daily production (kWh)',
+  secondary:     'Secondary sensor',
+  secLabel:      'Secondary label',
+  secUnit:       'Secondary unit',
+  forecast:      'Solar forecast',
+  forecastUnit:  'Forecast unit',
+  lux:           'Luminosity sensor (lux)',
+  weather:       'Weather entity',
+  name:          'Name / title',
+  inputUnit:     'Sensor unit',
+  maxPower:      'Max power (W)',
+  dec:           'Decimal places',
+  speed:         'Animation speed',
+  nightLux:      'Night threshold (lux)',
+  threshold:     'Production threshold (W)',
+  thresholdHint: 'Threshold line on sparkline & colour alert',
+  history:       '24h history',
+  efficiency:    'Show efficiency',
+  glow:          'Glow effect',
+  reduceAnim:    'Reduce animations (iPad/mobile)',
+  colorEffText:  'Efficiency % text color',
+  colorMiniText: 'Mini values text color',
+  colorStatsText: 'Sparkline stats text color',
+  effFontWt:     'Efficiency font weight',
+  labelFontWt:   'Label font weight',
+  textShadowBlur: 'Extra text shadow blur (px)',
+  cyberpunk:     'Neo Tokyo Mode',
+  neonPanelGlow: 'Panel glow',
+  neonTextGlow:  'Value text glow',
+  neonCardGlow:  'Card shadow glow',
+  neonIconGlow:  'Icon glow',
+  neonTitleGlow: 'Title glow',
+  neonBarGlow:   'Efficiency bar glow',
+  neonBadgeGlow: 'Efficiency badge glow',
+  neonMiniGlow:  'Mini values glow',
+  neonSat:       'Glow saturation (0–100)',
+  fontSize:      'Value font size',
+  headerFontSize:'Header font size',
+  titleFont:     'Title font family',
+  colorPrimary:  'Primary color',
+  colorCold:     'Cold (min)',
+  colorMid:      'Mid',
+  colorHot:      'Hot (max)',
+  colorIcon:     'Icon color',
+  colorBadge:    'Badge color',
+  colorTitle:    'Title text color',
+  colorNeonGlow: 'Neon glow color',
+  small:         'Small',
+  medium:        'Medium',
+  large:         'Large',
 };
+
+const TITLE_FONT_OPTIONS = [
+  'Rajdhani',
+  'Orbitron',
+  'Exo 2',
+  'Space Grotesk',
+  'Montserrat',
+  'Oswald',
+  'Bebas Neue',
+  'Poppins',
+  'Inter',
+  'Roboto',
+  'Arial',
+  'Georgia',
+  'Courier New',
+];
 
 /**
  * Return the correct label set based on the browser language.
  * @returns {Object} Label dictionary (fr or en).
  */
-function T() {
-  return (navigator?.language || 'en').toLowerCase().startsWith('fr')
-    ? LABELS.fr
-    : LABELS.en;
-}
+function T() { return LABELS; }
 
 // ═══════════════════════════════════════════════════════════════
 //  SECTION 8 — Visual Editor (config UI)
@@ -602,6 +617,17 @@ class NeonSolarCardEditor extends HTMLElement {
         placeholder="${ph}">${v}</textarea></div>`;
   }
 
+  /** Text input with autocomplete datalist. */
+  _dInput(label, key, list, ph = '') {
+    const v = this._cfg[key] ?? '';
+    const id = `dl-${key.replace(/\W/g, '')}`;
+    return `<div class="f"><label>${label}</label>
+      <input type="text" data-key="${key}" value="${v}" list="${id}"
+        placeholder="${ph}" autocomplete="off">
+      <datalist id="${id}">${list.map(e => `<option value="${e}">`).join('')}</datalist>
+    </div>`;
+  }
+
   /** Numeric input with min / max / step. */
   _num(label, key, min, max, step = 1) {
     const v = this._cfg[key] ?? '';
@@ -618,15 +644,19 @@ class NeonSolarCardEditor extends HTMLElement {
         ${v ? 'checked' : ''}><span class="sl"></span></label></div>`;
   }
 
-  /** Colour picker with hex-text input + reset button. */
+  /** Colour picker with hex-text input + reset button.
+   * CSS variables (e.g. var(--primary-color)) are supported in the text field;
+   * the colour swatch is dimmed but the value is preserved and applied as-is.
+   */
   _color(label, key, def) {
     const v = this._cfg[key] || '';
+    const isCssVar = v.startsWith('var(');
     return `<div class="f"><label>${label}</label>
       <div class="cr">
-        <input type="color" data-key="${key}" value="${v || def}"
-          ${!v ? 'style="opacity:.4"' : ''}>
+        <input type="color" data-key="${key}" value="${isCssVar ? def : (v || def)}"
+          ${(!v || isCssVar) ? 'style="opacity:.4"' : ''}>
         <input type="text" data-key="${key}" value="${v}"
-          placeholder="${def}" class="ct">
+          placeholder="${def} or var(--primary-color)" class="ct">
         <span class="rs" data-reset="${key}">↺</span>
       </div></div>`;
   }
@@ -736,28 +766,62 @@ class NeonSolarCardEditor extends HTMLElement {
     <p class="h">${t.thresholdHint}</p>
     <div class="r2">
       ${this._select(t.fontSize,       'font_size',        [['small', t.small], ['medium', t.medium], ['large', t.large]])}
-      ${this._select(t.headerFontSize, 'header_font_size', [['small', t.small], ['medium', t.medium], ['large', t.large]])}
+      ${this._num('Header font size (px)', 'header_font_size', 8, 32, 1)}
     </div>
+    ${this._dInput(t.titleFont, 'title_font_family', TITLE_FONT_OPTIONS, 'Rajdhani, Orbitron, Space Grotesk...')}
+    ${this._dInput('Title shadow', 'title_shadow', [], '0 0 8px rgba(0,212,255,0.7)')}
+    ${this._num('Icon size (px)', 'icon_size', 12, 48, 1)}
     <div class="g2">
       ${this._toggle(t.history,    'show_history')}
       ${this._toggle(t.efficiency, 'show_efficiency')}
     </div>
+    <div class="g2">
+      ${this._toggle(t.glow, 'glow_effect')}
+      ${this._toggle(t.reduceAnim, 'reduce_animations')}
+    </div>
+
+    <!-- ════ TYPOGRAPHY SECTION ════ -->
+    <h3>Typography</h3>
+    ${this._color(t.colorEffText, 'color_efficiency_text', '#FFD23F')}
+    ${this._color(t.colorMiniText, 'color_mini_values_text', '#ffffff')}
+    ${this._color(t.colorStatsText, 'color_sparkline_stats_text', '#888888')}
+    <div class="r2">
+      ${this._num(t.effFontWt, 'efficiency_font_weight', 300, 900, 100)}
+      ${this._num(t.labelFontWt, 'label_font_weight', 300, 900, 100)}
+    </div>
+    ${this._num(t.textShadowBlur, 'text_shadow_blur', 0, 20, 1)}
 
     <!-- ════ GLOW SECTION ════ -->
     <h3>GLOW</h3>
     <div class="g2">
       ${this._toggle(t.glow, 'glow_effect')}
     </div>
+    ${this._color(t.colorNeonGlow, 'color_neon_glow', '#00E8FF')}
 
     <!-- ════ CYBERPUNK SECTION ════ -->
     <h3>CYBERPUNK</h3>
+    ${this._toggle(t.cyberpunk, 'cyberpunk_mode')}
     <div class="g2">
-      ${this._toggle(t.cyberpunk, 'cyberpunk_mode')}
-      ${this._toggle(t.neonGlow,  'neon_glow')}
+      ${this._toggle(t.neonPanelGlow, 'neon_panel_glow')}
+      ${this._toggle(t.neonTextGlow,  'neon_text_glow')}
     </div>
+    <div class="g2">
+      ${this._toggle(t.neonCardGlow,  'neon_card_glow')}
+      ${this._toggle(t.neonIconGlow,  'neon_icon_glow')}
+    </div>
+    <div class="g2">
+      ${this._toggle(t.neonTitleGlow, 'neon_title_glow')}
+      ${this._toggle(t.neonBarGlow,   'neon_bar_glow')}
+    </div>
+    <div class="g2">
+      ${this._toggle(t.neonBadgeGlow, 'neon_badge_glow')}
+      ${this._toggle(t.neonMiniGlow,  'neon_mini_glow')}
+    </div>
+    ${this._num(t.neonSat, 'neon_saturation', 0, 100, 5)}
 
     <!-- ════ COLOURS SECTION ════ -->
-    <h3>${t.colors} <span style="font-size:10px;font-weight:400;opacity:.6">(empty = HA theme)</span></h3>
+    <h3>${t.colors} <span style="font-size:10px;font-weight:400;opacity:.6">(empty = HA theme — var(--css-var) supported)</span></h3>
+    ${this._color(t.colorTitle,   'color_title',   '#ffffff')}
     ${this._color(t.colorPrimary, 'color_primary', '#FFD23F')}
     <div class="r3">
       ${this._color(t.colorCold, 'color_cold', '#00E8FF')}
@@ -874,8 +938,6 @@ class NeonSolarCardEditor extends HTMLElement {
   }
 }
 
-customElements.define('neon-solar-card-editor', NeonSolarCardEditor);
-
 // ═══════════════════════════════════════════════════════════════
 //  SECTION 9 — Main Card Element
 // ═══════════════════════════════════════════════════════════════
@@ -925,6 +987,13 @@ class NeonSolarCard extends HTMLElement {
 
   /* ── Lifecycle ───────────────────────────────────────── */
 
+  /** Render once when attached so dashboard picker preview can paint without hass updates. */
+  connectedCallback() {
+    if (this._config && !this._rendered) {
+      this._render();
+    }
+  }
+
   /** Clean up timers when the element is removed from the DOM. */
   disconnectedCallback() {
     if (this._rafId)       { cancelAnimationFrame(this._rafId); this._rafId = 0; }
@@ -961,7 +1030,7 @@ class NeonSolarCard extends HTMLElement {
    * Normalises the raw YAML and invalidates caches.
    */
   setConfig(raw) {
-    this._config    = buildConfig(raw);
+    this._config    = buildConfig(raw || {});
     this._colors    = null;   // force palette re-resolve
     this._rendered  = false;
     this._cachedEls = null;
@@ -1134,19 +1203,18 @@ class NeonSolarCard extends HTMLElement {
 
   /** Re-render the complete card shell after a configuration change. */
   _render() {
-    if (this._hass && this._config?.entity) {
-      this._rendered = true;
-      this._renderShell();
-      if (this._lastPower !== null) {
-        this._updateDOM({
-          power:    this._lastPower,
-          daily:    this._lastDaily,
-          sec:      this._lastSec,
-          lux:      this._lastLux,
-          weather:  this._lastWeather,
-          forecast: this._lastForecast,
-        });
-      }
+    if (!this._config) return;
+    this._rendered = true;
+    this._renderShell();
+    if (this._lastPower !== null) {
+      this._updateDOM({
+        power:    this._lastPower,
+        daily:    this._lastDaily,
+        sec:      this._lastSec,
+        lux:      this._lastLux,
+        weather:  this._lastWeather,
+        forecast: this._lastForecast,
+      });
     }
   }
 
@@ -1157,13 +1225,31 @@ class NeonSolarCard extends HTMLElement {
     const col       = this._resolveColors();
     const dur       = (2 / (c.animation_speed || 1)).toFixed(1);
     const id        = this._svgId;
-    const neonGlow  = c.neon_glow;
+    const reduceAnim = c.reduce_animations ?? IS_LOW_POWER;
+    const neonPanelGlow  = c.neon_panel_glow;
+    const neonTextGlow   = c.neon_text_glow;
+    const neonCardGlow   = c.neon_card_glow;
+    const neonIconGlow   = c.neon_icon_glow;
+    const neonTitleGlow  = c.neon_title_glow;
+    const neonBarGlow    = c.neon_bar_glow;
+    const neonBadgeGlow  = c.neon_badge_glow;
+    const neonMiniGlow   = c.neon_mini_glow;
     const cyberpunk = c.cyberpunk_mode;
     const iconCol   = c.color_icon || col.primary;
+    const neonCol   = c.color_neon_glow || col.primary;
+    const sat       = Math.round(Math.min(100, Math.max(0, c.neon_saturation ?? 60)));
+    const satHi     = Math.round(sat * 1.33).toString(16).padStart(2, '0'); // ~hi opacity hex
+    const satMd     = Math.round(sat).toString(16).padStart(2, '0');         // ~mid opacity hex
+    const satLo     = Math.round(sat * 0.47).toString(16).padStart(2, '0'); // ~lo opacity hex
+    const titleFont = c.title_font_family
+      ? `'${c.title_font_family}', var(--nsc-font)`
+      : 'var(--nsc-font)';
 
     // Font sizes derived from the 'small | medium | large' option
     const valFs  = c.font_size === 'small' ? 24 : c.font_size === 'large' ? 40 : 32;
-    const hdrFs  = c.header_font_size === 'small' ? 12 : c.header_font_size === 'large' ? 18 : 15;
+    const hdrFs  = typeof c.header_font_size === 'number'
+      ? c.header_font_size
+      : c.header_font_size === 'small' ? 12 : c.header_font_size === 'large' ? 18 : 15;
     const unitFs = Math.max(10, Math.round(valFs * 0.375));
 
     this.shadowRoot.innerHTML = `<style>
@@ -1178,7 +1264,7 @@ class NeonSolarCard extends HTMLElement {
         padding: 14px 14px 12px;
         box-sizing: border-box;
         cursor: pointer;
-        transition: box-shadow 0.45s ease, opacity 0.2s ease;
+        ${reduceAnim ? '' : 'transition: box-shadow 0.45s ease, opacity 0.2s ease;'}
         background: ${col.bg};
         border-radius: var(--ha-card-border-radius, 12px);
         contain: layout style paint;
@@ -1187,65 +1273,89 @@ class NeonSolarCard extends HTMLElement {
 
       /* ── Header row ───────────────────────────── */
       .hdr {
-        display:flex; align-items:center; gap:10px; margin-bottom:10px;
+        display:flex; align-items:center; gap:10px;
+        padding-bottom: 10px; margin-bottom: 10px;
+        border-bottom: 1px solid;
+        border-image: linear-gradient(90deg, transparent, rgba(98,0,234,0.55), rgba(0,255,249,0.25), transparent) 1;
       }
       .hdr-icon {
-        width:22px; height:22px; color:${iconCol}; flex-shrink:0;
-        filter: ${cyberpunk ? 'none' : `drop-shadow(0 0 5px ${iconCol}90)`};
-        transition: color 0.4s;
+        width:${c.icon_size}px; height:${c.icon_size}px; color:${iconCol}; flex-shrink:0;
+        filter: ${(() => {
+          if (neonIconGlow) return `drop-shadow(0 0 6px ${neonCol}) drop-shadow(0 0 14px ${neonCol}${satMd})`;
+          if (c.title_shadow) {
+            const m = c.title_shadow.match(/rgba?\([^)]+\)|#[0-9a-fA-F]{3,8}/);
+            const sc = m ? m[0] : iconCol;
+            return `drop-shadow(0 0 6px ${sc}) drop-shadow(0 0 14px ${sc})`;
+          }
+          return cyberpunk ? 'none' : `drop-shadow(0 0 5px ${iconCol}90)`;
+        })()};
+        ${reduceAnim ? '' : 'transition: color 0.4s, filter 0.4s;'}
       }
       .hdr-title {
-        flex:1; font-size:${hdrFs}px; font-weight:600;
-        font-family: var(--nsc-font);
-        color:${col.text}; letter-spacing:0.5px;
+        flex:1 1 auto; 
+        font-size: clamp(14px, 1.5vw, ${hdrFs}px);
+        font-family: ${titleFont};
+        color:${c.color_title || col.text};
+        overflow: visible;
+        white-space: nowrap;
+        min-width: 0;
+        letter-spacing: 0.5px;
+		text-shadow: ${c.title_shadow
+          ? c.title_shadow
+          : neonTitleGlow
+            ? `0 1px 2px rgba(0, 0, 0, 0.8), 
+               0 0 5px #fff, 
+               0 0 10px ${neonCol}, 
+               0 0 20px ${neonCol}, 
+               0 0 40px ${neonCol}${satMd || '80'}`
+            : '1px 1px 2px rgba(0, 0, 0, 0.2)'};
+        ${reduceAnim ? '' : 'transition: text-shadow 0.4s;'}
       }
       .hdr-right {
         display:grid; grid-template-columns: auto auto;
         gap:4px 8px; align-items:center;
+        justify-items: end;
+		    flex-shrink: 0;
       }
       .hdr-mini       { cursor:pointer; text-align:right }
       .hdr-mini-label {
         font-size:10px; font-family:var(--nsc-font);
+        margin-left: 5px;
         color:${col.text}; opacity:0.35;
         letter-spacing:0.8px; text-transform:uppercase;
+        font-weight: ${c.label_font_weight ?? 400};
       }
       .hdr-mini-value {
         font-size:12px; font-weight:700; font-family:var(--nsc-font);
-        color:${col.text};
+        color:${c.color_mini_values_text || col.text};
+        margin-left: 5px;
+        text-shadow: ${neonMiniGlow
+          ? `0 0 6px ${neonCol}, 0 0 14px ${neonCol}${satLo}`
+          : 'none'};
+        ${reduceAnim ? '' : 'transition: text-shadow 0.4s;'}
       }
       .eff-badge {
-        font-size:10px; font-family:var(--nsc-font); letter-spacing:0.5px;
-        border-radius:4px; padding:2px 5px;
-        transition: color 0.3s, background 0.3s, border-color 0.3s;
-        grid-column: span 2; text-align:center; margin-top:1px;
+        font-size:14px; font-weight:${c.efficiency_font_weight ?? 700}; font-family:var(--nsc-font);
+        letter-spacing:0.5px;
+        text-align:center; margin-top:4px;
+        ${reduceAnim ? '' : 'transition: color 0.3s, text-shadow 0.4s;'}
+        color: ${c.color_efficiency_text || 'inherit'};
+        text-shadow: ${neonBadgeGlow
+          ? `0 0 8px ${neonCol}, 0 0 18px ${neonCol}${satMd}`
+          : 'none'};
       }
-
-      /* ── Threshold warning badge (shown when threshold is configured) ── */
-      .thresh-warn {
-        font-size:9px; font-family:var(--nsc-font); letter-spacing:0.8px;
-        text-transform:uppercase; text-align:center;
-        padding:2px 6px; border-radius:3px; margin-top:2px;
-        grid-column: span 2;
-        transition: opacity 0.3s, color 0.3s, background 0.3s;
+      .eff-badge .eff-label {
+        font-weight:700; opacity:0.5; font-size:11px;
+        letter-spacing:1px; text-transform:uppercase; margin-right:4px;
       }
-
-      /* ── Cyberpunk corner brackets ────────────── */
-      .cp-tl, .cp-br {
-        position:absolute; width:14px; height:14px; z-index:2;
-        pointer-events:none;
-        opacity:${cyberpunk ? '0.7' : '0'}; transition: opacity 0.3s;
-      }
-      .cp-tl { top:0; left:0; border-top:2px solid ${col.primary}; border-left:2px solid ${col.primary} }
-      .cp-br { bottom:0; right:0; border-bottom:2px solid ${col.primary}; border-right:2px solid ${col.primary} }
 
       /* ── Solar panel wrapper ──────────────────── */
       .panel-wrap {
         position:relative; margin:0 -4px;
-        filter: ${neonGlow
-          ? `drop-shadow(0 0 4px ${col.primary}) drop-shadow(0 8px 20px ${col.primary}60)`
-          : `drop-shadow(0 8px 18px ${col.primary}28)`};
-        transition: filter 0.4s;
-        will-change: filter;
+        filter: ${neonPanelGlow
+          ? `drop-shadow(0 0 4px ${neonCol}) drop-shadow(0 8px 20px ${neonCol}${satMd})`
+          : `drop-shadow(0 8px 18px ${neonCol}${satLo})`};
+        ${reduceAnim ? '' : 'transition: filter 0.4s; will-change: filter;'}
         isolation: isolate;
         contain: layout style;
       }
@@ -1255,16 +1365,22 @@ class NeonSolarCard extends HTMLElement {
         position:absolute; top:50%; left:50%;
         transform:translate3d(-50%,-50%,0);
         text-align:center; pointer-events:none;
-        will-change: contents;
+		
+        contain: layout style;
       }
       .val-main {
-        font-size:${valFs}px; font-weight:900;
+        font-size:${valFs}px; font-weight:750;
         font-family:var(--nsc-font); line-height:1;
+		letter-spacing: 0.02em;
         color:${col.text};
-        transition: color 0.35s;
-        text-shadow: ${neonGlow
-          ? `0 0 5px #fff, 0 0 12px ${col.primary}, 0 0 28px ${col.primary}`
-          : `0 2px 14px rgba(0,0,0,.85), 0 0 10px ${col.primary}50`};
+        ${reduceAnim ? '' : 'transition: color 0.35s;'}
+        text-shadow: ${neonTextGlow
+          ? `0 0 2px #fff,` +                                          /* tight white core */
+            ` 0 0 8px #fff,` +                                         /* soft white bloom */
+            ` 0 0 18px ${neonCol},` +                                  /* colour mid-range */
+            ` 0 0 42px ${neonCol}${satMd},` +                          /* wide colour corona */
+            ` 0 0 80px ${neonCol}${satLo}`                             /* far atmospheric bleed */
+          : `0 2px 14px rgba(0,0,0,.85), 0 0 10px ${neonCol}${satLo}`};
       }
       .val-unit {
         font-size:${unitFs}px; font-family:var(--nsc-font);
@@ -1273,15 +1389,33 @@ class NeonSolarCard extends HTMLElement {
 
       /* ── Efficiency bar ───────────────────────── */
       .eff-bar-wrap {
-        margin:5px 0 8px; height:4px;
-        background:${col.primary}1a; border-radius:2px; overflow:hidden;
+        margin:5px 0 8px; height:6px;
+        position:relative;
+        background:rgba(0,0,0,0.55); border-radius:3px; overflow:hidden;
+        box-shadow:inset 0 2px 4px rgba(0,0,0,0.7),
+                   inset 0 -1px 2px rgba(255,255,255,0.03),
+                   0 0 0 1px ${col.primary}40;
+      }
+      .eff-bar-wrap::after {
+        content:''; position:absolute;
+        top:1px; left:2px; right:2px; height:2px;
+        border-radius:2px;
+        background:linear-gradient(to bottom,rgba(255,255,255,0.14),transparent);
+        pointer-events:none; z-index:2;
       }
       .eff-bar {
-        height:100%; width:0%; border-radius:2px;
-        background: linear-gradient(90deg,
-          ${cyberpunk ? col.mid : col.cold}, ${col.mid}, ${col.hot});
-        transition: width 0.65s cubic-bezier(.4,0,.2,1);
-        will-change: width;
+        position:relative; height:100%; width:0%; border-radius:3px;
+        background:linear-gradient(90deg,
+          ${col.primary}73 0%,
+          ${col.primary} 40%,
+          rgba(255,255,255,0.25) 60%,
+          ${col.primary}cc 80%,
+          ${col.primary}73 100%);
+        background-size:250% 100%;
+        ${reduceAnim ? '' : 'transition:width 0.65s cubic-bezier(.4,0,.2,1); will-change:width;'}
+        box-shadow:${neonBarGlow
+          ? `0 0 12px ${neonCol}, 0 0 24px ${neonCol}${satLo}, inset 0 1px 2px rgba(255,255,255,0.2)`
+          : 'inset 0 1px 2px rgba(255,255,255,0.2)'};
       }
 
       /* ── Sparkline section ────────────────────── */
@@ -1311,8 +1445,9 @@ class NeonSolarCard extends HTMLElement {
       }
       .ss-label {
         font-size:8.5px; font-family:var(--nsc-font);
-        color:${col.text}; opacity:${cyberpunk ? 0.6 : 0.35};
+        color:${c.color_sparkline_stats_text || col.text}; opacity:${cyberpunk ? 0.6 : 0.35};
         letter-spacing:0.5px;
+        font-weight: ${c.label_font_weight ?? 400};
       }
       .ss-val {
         font-size:13px; font-weight:700;
@@ -1327,7 +1462,7 @@ class NeonSolarCard extends HTMLElement {
         50%      { opacity: 1.0 }
       }
       .cell-on {
-        animation: solar-pulse ${dur}s ease-in-out infinite;
+        animation: ${reduceAnim ? 'none' : `solar-pulse ${dur}s ease-in-out infinite`};
       }
     </style>
 
@@ -1356,8 +1491,6 @@ class NeonSolarCard extends HTMLElement {
             <div class="hdr-mini-label">FORECAST</div>
             <div class="hdr-mini-value"><span id="forecast-val">--</span> <span id="forecast-unit">W</span></div>
           </div>` : ''}
-          ${c.show_efficiency ? `<div class="eff-badge" id="eff-badge">-- %</div>` : ''}
-          ${c.production_threshold ? `<div class="thresh-warn" id="thresh-warn" style="opacity:0"></div>` : ''}
         </div>
       </div>
 
@@ -1373,7 +1506,8 @@ class NeonSolarCard extends HTMLElement {
 
       <!-- ── Efficiency bar ──────────────────────── -->
       ${c.show_efficiency
-        ? `<div class="eff-bar-wrap"><div class="eff-bar" id="eff-bar"></div></div>`
+        ? `<div class="eff-bar-wrap"><div class="eff-bar" id="eff-bar"></div></div>
+           <div class="eff-badge" id="eff-badge"><span class="eff-label">Efficiency</span>-- %</div>`
         : ''}
 
       <!-- ── Sparkline ───────────────────────────── -->
@@ -1424,7 +1558,7 @@ class NeonSolarCard extends HTMLElement {
 
     // Click → single tap or double-tap detection
     card.addEventListener('click', () => {
-      if (!this._holdTimer && this._holdTimer !== 0) return;
+      if (this._holdTimer) return; // hold was triggered, ignore click
       const dblAction = this._config.double_tap_action;
       if (dblAction && dblAction.action !== 'none') {
         if (this._dblTapTimer) {
@@ -1479,7 +1613,7 @@ class NeonSolarCard extends HTMLElement {
       secVal:       sr.querySelector('#sec-val'),
       forecastVal:  sr.querySelector('#forecast-val'),
       forecastUnit: sr.querySelector('#forecast-unit'),
-      threshWarn:   sr.querySelector('#thresh-warn'),
+
       nightOverlay: sr.querySelector(`#${id}-night`),
       spMin:        sr.querySelector('#sp-min'),
       spAvg:        sr.querySelector('#sp-avg'),
@@ -1500,14 +1634,10 @@ class NeonSolarCard extends HTMLElement {
     const ratio = clamp(power / Math.max(c.max_power, 1), 0, 1);
     const valFs = c.font_size === 'small' ? 24 : c.font_size === 'large' ? 40 : 32;
 
-    /* ── Value — auto W / kW display ──────────── */
+    /* ── Value — always in W ──────────────────── */
     if (this._cachedEls.valMain || this._cachedEls.valUnit) {
-      const showKw  = power >= 1000;
-      const dispVal = showKw
-        ? (power / 1000).toFixed(Math.max(c.decimal_places, 1))
-        : power.toFixed(c.decimal_places);
-      if (this._cachedEls.valMain) this._cachedEls.valMain.textContent = dispVal;
-      if (this._cachedEls.valUnit) this._cachedEls.valUnit.textContent = showKw ? 'kW' : 'W';
+      if (this._cachedEls.valMain) this._cachedEls.valMain.textContent = Math.round(power);
+      if (this._cachedEls.valUnit) this._cachedEls.valUnit.textContent = 'W';
     }
 
     /* ── Threshold: "Waiting for sun" when below ─ */
@@ -1527,47 +1657,36 @@ class NeonSolarCard extends HTMLElement {
       }
     }
 
-    // Threshold warning badge — shows ▼ BELOW / ▲ ABOVE message
-    if (this._cachedEls.threshWarn && c.production_threshold) {
-      const below = power < c.production_threshold;
-      const tw    = this._cachedEls.threshWarn;
-      if (below) {
-        tw.textContent      = `▼ BELOW ${fmtPower(c.production_threshold, 'W', 0)}`;
-        tw.style.opacity    = '1';
-        tw.style.color      = col.cold;
-        tw.style.background = col.cold + '1a';
-      } else {
-        tw.textContent      = `▲ ABOVE ${fmtPower(c.production_threshold, 'W', 0)}`;
-        tw.style.opacity    = '0.6';
-        tw.style.color      = col.hot;
-        tw.style.background = col.hot + '1a';
-      }
-    }
-
     /* ── Panel cells ──────────────────────────── */
-    if (Math.abs(ratio - this._lastRatio) >= 0.01) {
+    const prevRatio = this._lastRatio;
+    if (Math.abs(ratio - prevRatio) >= 0.01) {
       this._lastRatio = ratio;
       this._patchCells(ratio, col);
     }
 
-    /* ── Glow effect ──────────────────────────── */
-    if (c.glow_effect && Math.abs(ratio - this._lastRatio) >= 0.02) {
-      const glowCol = ratio > 0.02
+    /* ── Glow effect (skip entirely when reduced animations) ── */
+    if (c.glow_effect && !(c.reduce_animations ?? IS_LOW_POWER) && Math.abs(ratio - prevRatio) >= 0.02) {
+      const glowCol = c.color_neon_glow || (ratio > 0.02
         ? lerpColor(ratio, col.cold, col.mid, col.hot)
-        : col.primary;
-      const glowAmt = ratio > 0.02 ? Math.round(6 + ratio * 18) : 6;
-      const neonG   = c.neon_glow;
-      const glowKey = `${glowAmt}:${glowCol}`;
+        : col.primary);
+      const glowAmt    = ratio > 0.02 ? Math.round(6 + ratio * 18) : 6;
+      const dSat      = Math.round(Math.min(100, Math.max(0, c.neon_saturation ?? 60)));
+      const dHi       = Math.round(Math.min(255, dSat * 2.14)).toString(16).padStart(2, '0');
+      const dMd       = Math.round(dSat).toString(16).padStart(2, '0');
+      const dLo       = Math.round(dSat * 0.47).toString(16).padStart(2, '0');
+      const usePanel  = c.neon_panel_glow;
+      const useCard   = c.neon_card_glow;
+      const glowKey   = `${glowAmt}:${glowCol}:${dSat}:${usePanel}:${useCard}`;
       if (glowKey !== this._lastGlowKey) {
         this._lastGlowKey = glowKey;
         if (this._cachedEls.panelWrap) {
-          this._cachedEls.panelWrap.style.filter = neonG
-            ? `drop-shadow(0 0 4px ${glowCol}) drop-shadow(0 8px ${Math.round(glowAmt * 1.6)}px ${glowCol}80)`
-            : `drop-shadow(0 8px ${glowAmt}px ${glowCol}50)`;
+          this._cachedEls.panelWrap.style.filter = usePanel
+            ? `drop-shadow(0 0 4px ${glowCol}) drop-shadow(0 8px ${Math.round(glowAmt * 1.6)}px ${glowCol}${dHi})`
+            : `drop-shadow(0 8px ${glowAmt}px ${glowCol}${dMd})`;
         }
         if (this._cachedEls.haCard) {
-          this._cachedEls.haCard.style.boxShadow = ratio > 0.03
-            ? `0 0 ${Math.round(ratio * (neonG ? 40 : 24))}px ${glowCol}${neonG ? '50' : '28'}`
+          this._cachedEls.haCard.style.boxShadow = useCard && ratio > 0.03
+            ? `0 0 ${Math.round(ratio * 40)}px ${glowCol}${dMd}`
             : '';
         }
       }
@@ -1578,10 +1697,11 @@ class NeonSolarCard extends HTMLElement {
       this._cachedEls.dailyVal.textContent = daily.toFixed(1) + ' kWh';
     }
 
-    /* ── Efficiency badge & bar ───────────────── */
+    /* ── Efficiency text & bar ───────────────── */
     const eff = Math.round(ratio * 100);
     if (this._cachedEls.effBadge) {
-      this._cachedEls.effBadge.textContent = eff + '%';
+      this._cachedEls.effBadge.innerHTML =
+        `<span class="eff-label">Efficiency</span>${eff}%`;
       const band = eff > 60 ? 2 : eff > 25 ? 1 : 0;
       if (band !== this._lastEffBand) {
         this._lastEffBand = band;
@@ -1590,10 +1710,7 @@ class NeonSolarCard extends HTMLElement {
           : band === 1
             ? col.mid
             : (c.cyberpunk_mode ? col.mid : col.cold);
-        const s = this._cachedEls.effBadge.style;
-        s.color      = ec;
-        s.border     = `1px solid ${ec}50`;
-        s.background = ec + '1a';
+        this._cachedEls.effBadge.style.color = ec;
       }
     }
     if (this._cachedEls.effBar) {
@@ -1868,7 +1985,13 @@ class NeonSolarCard extends HTMLElement {
 //  SECTION 10 — Custom Element Registration
 // ═══════════════════════════════════════════════════════════════
 
-customElements.define('neon-solar-card', NeonSolarCard);
+if (!customElements.get('neon-solar-card-editor')) {
+  customElements.define('neon-solar-card-editor', NeonSolarCardEditor);
+}
+
+if (!customElements.get('neon-solar-card')) {
+  customElements.define('neon-solar-card', NeonSolarCard);
+}
 
 /* Console banner — useful for debugging version mismatches */
 console.info(
@@ -1879,9 +2002,17 @@ console.info(
 
 /* Register in HA's custom-card picker */
 window.customCards = window.customCards || [];
-window.customCards.push({
-  type:        'custom:neon-solar-card',
-  name:        'Neon Solar Production Card',
-  description: 'Solar panel card with animated cells, sparkline, night mode, weather & production threshold',
-  preview:     true,
-});
+if (!window.customCards.some(c => c.type === 'neon-solar-card' || c.type === 'custom:neon-solar-card')) {
+  window.customCards.push({
+    type:        'neon-solar-card',
+    name:        'Neon Solar Production Card',
+    description: 'Solar panel card with animated cells, sparkline, night mode, weather & production threshold',
+    preview:     true,
+  });
+}
+
+console.info(
+  '%c ☀️ neon-solar-production-card v2.1.0 %c Neo Tokyo ',
+  'background:#FFD700;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
+  'background:#040811;color:#FF6A00;padding:2px 4px;border-radius:0 3px 3px 0;'
+);

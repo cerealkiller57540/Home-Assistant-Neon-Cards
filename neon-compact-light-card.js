@@ -1,0 +1,1308 @@
+/**
+ * Neon Compact Light Card
+ * 
+ * Custom compact light card with neon cyberpunk effects for Home Assistant.
+ * CSS-driven styling with class-based state management.
+ * 
+ * Original Author: goggybox
+ * License: GPL-3.0
+ * 
+ * Enhancements v2.0:
+ * - Randomized flicker timing (4-7s per card, desynchronized across multiple cards)
+ * - Configurable off_blur for different blur values when light is OFF
+ * - 3-phase power animations (pending → state change → final animation)
+ * - Adaptive timing that syncs with entity response time (fast Zigbee / slow WiFi)
+ * - Smart contrast calculation for optimal text readability
+ * - Cyberpunk visual effects (scanlines, glitch, intense glow, color pulse)
+ * 
+ * @version 2.0.0
+ * @repository https://github.com/YOUR_USERNAME/neon-compact-light-card
+ */
+
+console.log("neon-compact-light-card.js loaded!");
+const _LEFT_OFFSET = 66; // private constant — was _LEFT_OFFSET (global pollution)
+
+const MDI_ICONS = [
+  'mdi:lightbulb', 'mdi:lightbulb-outline', 'mdi:lamp', 'mdi:floor-lamp',
+  'mdi:ceiling-light', 'mdi:chandelier', 'mdi:led-strip', 'mdi:led-strip-variant',
+  'mdi:string-lights', 'mdi:candle', 'mdi:fire', 'mdi:home', 'mdi:sofa',
+  'mdi:bed', 'mdi:bath', 'mdi:silverware-fork-knife', 'mdi:television',
+  'mdi:desk-lamp', 'mdi:outdoor-lamp', 'mdi:light-recessed', 'mdi:wall-sconce',
+  'mdi:wall-sconce-flat', 'mdi:coach-lamp', 'mdi:spotlight', 'mdi:spotlight-beam',
+  'mdi:track-light', 'mdi:vanity-light', 'mdi:sun-wireless', 'mdi:weather-sunny',
+  'mdi:star', 'mdi:heart', 'mdi:flower', 'mdi:tree',
+];
+
+
+class NeonCompactLightCard extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this.isDragging = false;
+    this.startX = 0;
+    this.startWidth = 0;
+    this.supportsBrightness = true;
+    this.pendingUpdate = null;
+    this._hass = null;
+    this._handlersSetup = false;
+    this._lastIconClick = 0;
+    this._lastState = null;
+    this._pendingStateChange = false;
+    this._powerAnimTimer = null;   // stored for cleanup
+    this._updateTimeout = null;    // stored for cleanup (was local var — leak)
+    // Diff cache — skip _updateDisplay if nothing changed
+    this._lastRenderKey = null;
+    
+    // Randomize flicker timing (4-7s duration, random initial offset)
+    this._flickerDuration = 4 + Math.random() * 3;
+    this._flickerDelay = Math.random() * -5;
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: block;
+          border-radius: var(--ha-card-border-radius, 12px);
+          --height: 64px;
+          --icon-width: var(--height);
+          --icon-border-radius: var(--ha-card-border-radius);
+          --icon-font-size: 36px;
+
+          --off-background-colour: var(--secondary-background-color);
+          --off-text-colour: var(--secondary-text-color);
+
+          --icon-border-colour: var(--card-background-color);
+          --card-border-colour: var(--card-background-color);
+        }
+
+        .card-container {
+          width: 100%;
+          height: var(--height);
+          background: rgba(0,0,0,0.0);
+          border-radius: var(--ha-card-border-radius, 12px);
+          overflow: visible;
+          position: relative;
+          border: 1px solid rgba(0, 232, 255, 0.25);
+          box-sizing: border-box;
+        }
+
+        .card {
+          height: var(--height);
+          background: rgba(0,0,0,0.1);
+          backdrop-filter: blur(6px);
+          display: flex;
+          align-items: center;
+          border-radius: var(--ha-card-border-radius, 12px);
+          overflow: hidden;
+        }
+
+        .icon-wrapper {
+          position: relative;
+          width: var(--icon-width);
+          height: var(--height);
+          flex-shrink: 0;
+        }
+
+        .icon {
+          position: relative;
+          z-index: 2;
+          width: 100%;
+          height: 100%;
+          background: var(--off-primary-colour);
+          border: 3px solid var(--icon-border-colour);
+          color: var(--off-text-colour);
+          border-radius: var(--icon-border-radius);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-sizing: border-box;
+          transition: background 0.6s ease;
+        }
+
+        .icon.no-border {
+          border: none;
+          box-shadow: rgba(0, 0, 0, 0.2) 0px 5px 15px;
+        }
+
+        .content {
+          height: var(--height);
+          width: 100%;
+          z-index: 1;
+          box-sizing: border-box;
+          padding: 3px 6px 3px 8px;
+          overflow: false;
+          background: var(--icon-border-colour);
+          margin-left: -69px;
+          flex: 1;
+          position: relative;
+          display: flex;
+          align-items: center;
+        }
+
+        .content.no-border {
+          padding: 0px 0px 0px 5px;
+        }
+
+        .brightness {
+          border-radius: var(--ha-card-border-radius);
+          width: 100%;
+          height: 100%;
+          transition: background 0.6s ease;
+          user-select: none;
+        }
+
+        .brightness-bar {
+          height: 100%;
+          background: var(--light-primary-colour, var(--primary-color));
+          border-radius: 12px;
+          box-shadow: rgba(0, 0, 0, 0.1) 0px 5px 15px;
+          transition: width 0.6s ease;
+        }
+
+        .overlay {
+          height: 100%;
+          width: 100%;
+          position: absolute;
+          top: 0;
+          z-index: 2;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          pointer-events: none;
+        }
+
+        .name {
+          padding-left: 79px;
+          font-weight: bold;
+          font-size: 18px;
+          color: var(--primary-text-color);
+          text-shadow: none;
+          transition: text-shadow 0.6s ease, color 0.6s ease;
+        }
+        
+        /* État ON: glow standard */
+        :host(.state-on) .name {
+          text-shadow: 0 0 8px var(--light-primary-colour, var(--primary-color)),
+                       0 0 15px var(--light-primary-colour, var(--primary-color));
+        }
+        
+        /* État OFF/Unavailable: pas de glow */
+        :host(.state-off) .name,
+        :host(.state-unavailable) .name {
+          text-shadow: none;
+        }
+
+        .right-info {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+        }
+
+        .percentage {
+          font-size: 14px;
+          color: var(--primary-text-color);
+          transition: color 0.6s ease;
+        }
+
+        .arrow {
+          padding-right: 10px;
+          --mdc-icon-size: 28px;
+          padding-top: 20px;
+          padding-bottom: 20px;
+          color: var(--primary-text-color);
+          pointer-events: auto;
+          transition: color 0.6s ease;
+        }
+        
+        /* Smart font colour: calcule automatiquement le contraste */
+        :host(.smart-contrast.state-on) .name,
+        :host(.smart-contrast.state-on) .percentage,
+        :host(.smart-contrast.state-on) .arrow {
+          color: var(--optimal-text-colour, var(--primary-text-color));
+        }
+
+        :host(.smart-contrast.state-off) .name,
+        :host(.smart-contrast.state-off) .percentage,
+        :host(.smart-contrast.state-off) .arrow,
+        :host(.smart-contrast.state-off) .icon,
+        :host(.smart-contrast.state-unavailable) .name,
+        :host(.smart-contrast.state-unavailable) .percentage,
+        :host(.smart-contrast.state-unavailable) .arrow,
+        :host(.smart-contrast.state-unavailable) .icon {
+          color: var(--optimal-off-text-colour, var(--off-text-colour));
+        }
+
+        /* Custom text colour: override tout le reste */
+        :host(.custom-text-colour) .name,
+        :host(.custom-text-colour) .percentage,
+        :host(.custom-text-colour) .arrow {
+          color: var(--custom-text-colour) !important;
+        }
+
+        .haicon {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: var(--icon-width);
+          height: var(--height);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--off-text-colour);
+          --mdc-icon-size: 32px;
+          filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.15));
+          /* changed from v1: pointer-events enabled here so click works without clone */
+          pointer-events: auto;
+          cursor: pointer;
+          user-select: none;
+          -webkit-tap-highlight-color: transparent;
+          transition: filter 0.6s ease, color 0.6s ease;
+        }
+        .haicon:active { opacity: 0.65; }
+        
+        /* États de la carte */
+        :host(.state-on) .haicon {
+          color: var(--light-primary-colour);
+          filter: drop-shadow(0 0 8px var(--light-primary-colour, var(--primary-color))); 
+                  drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.15));
+        }
+        
+        :host(.state-on) .icon {
+          background: var(--light-secondary-colour, var(--secondary-color));
+          color: var(--light-primary-colour, var(--primary-color));
+        }
+        
+        :host(.state-on) .brightness {
+          background: var(--light-secondary-colour, var(--secondary-color));
+        }
+        
+        :host(.state-off) .icon,
+        :host(.state-unavailable) .icon {
+          background: var(--off-background-colour);
+          color: var(--off-text-colour);
+        }
+        
+        :host(.state-off) .brightness,
+        :host(.state-unavailable) .brightness {
+          background: var(--off-background-colour);
+        }
+        
+        :host(.state-off) .haicon,
+        :host(.state-unavailable) .haicon {
+          color: var(--off-text-colour);
+          filter: drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.15));
+        }
+        
+        /* icon_colour override */
+        :host(.has-icon-colour.state-on) .icon {
+          color: var(--custom-icon-colour);
+        }
+        :host(.has-icon-colour.state-on) .haicon {
+          color: var(--custom-icon-colour);
+          filter: drop-shadow(0 0 8px var(--custom-icon-colour)) 
+                  drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.15));
+        }
+        
+        /* Intense glow: triple drop-shadow violet néon */
+        :host(.effect-intense-glow.state-on) .haicon {
+          filter: drop-shadow(0 0 6px #fff)
+                  drop-shadow(0 0 12px #B041FF)
+                  drop-shadow(0 0 24px #B041FF)
+                  drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.15)) !important;
+        }
+        
+        :host(.effect-intense-glow.state-on) .name {
+          text-shadow: 0 0 8px #fff,
+                       0 0 20px #B041FF,
+                       0 0 40px #B041FF !important;
+        }
+
+        /* ── Effects ──────────────────────────────────────── */
+        @keyframes colorpulse {
+          0%, 100% { 
+            filter: brightness(1);
+          }
+          50% { 
+            filter: brightness(1.18);
+          }
+        }
+        @keyframes boxGlowPulse {
+          0%, 100% { 
+            box-shadow: 0 0 20px 4px var(--glow-color, rgba(0, 232, 255, 0.3));
+          }
+          50% { 
+            box-shadow: 0 0 35px 8px var(--glow-color, rgba(0, 232, 255, 0.4)),
+                        0 0 50px 12px var(--glow-color, rgba(0, 232, 255, 0.2));
+          }
+        }
+        @keyframes flicker {
+          0%,19%,21%,23%,25%,54%,56%,100% { opacity: 1; }
+          20%,24%,55% { opacity: .5; }
+        }
+        @keyframes scanMove {
+          0%   { transform: translateY(-4px); }
+          100% { transform: translateY(calc(100% + 4px)); }
+        }
+        @keyframes glitchCard {
+          0%,100% { transform: translate(0,0); }
+          20%     { transform: translate(-4px, 2px); filter: drop-shadow(4px 0 #00E8FF) drop-shadow(-4px 0 #FF0090); }
+          40%     { transform: translate(4px,-2px); filter: drop-shadow(-4px 0 #B041FF) drop-shadow(4px 0 #FF0090); }
+          60%     { transform: translate(-3px, 1px); }
+        }
+        @keyframes powerOn {
+          0%   { transform: scale(0.6) rotate(-20deg); opacity: 0.3; }
+          40%  { transform: scale(1.3) rotate(8deg);  opacity: 1; }
+          65%  { transform: scale(0.9) rotate(-4deg); }
+          82%  { transform: scale(1.12) rotate(2deg); }
+          100% { transform: scale(1) rotate(0deg);    opacity: 1; }
+        }
+        @keyframes powerOff {
+          0%   { transform: scale(1);    opacity: 1; }
+          25%  { transform: scale(1.1);  }
+          55%  { transform: scale(0.75); opacity: 0.2; }
+          75%  { transform: scale(0.95); opacity: 0.8; }
+          88%  { transform: scale(0.85); opacity: 0.6; }
+          100% { transform: scale(0.9);  opacity: 1; }
+        }
+        @keyframes pending {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.08); opacity: 0.85; }
+        }
+
+        /* colorpulse: soft brightness variation on the light elements */
+        :host(.fx-colorpulse) .brightness-bar,
+        :host(.fx-colorpulse) .icon {
+          animation: colorpulse 3s ease-in-out infinite;
+        }
+        :host(.fx-colorpulse) .card-container {
+          animation: boxGlowPulse 3s ease-in-out infinite;
+        }
+
+        /* effect classes — applied via JS */
+        .fx-flicker .name,
+        .fx-flicker .percentage,
+        .fx-flicker .haicon {
+          animation: flicker var(--flicker-duration, 5s) ease-in-out infinite;
+          animation-delay: var(--flicker-delay, 0s);
+        }
+        .fx-glitch:hover {
+          animation: glitchCard 0.35s ease !important;
+        }
+        
+        /* Power transition animations */
+        .haicon.animating-power-on {
+          animation: powerOn 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+        .haicon.animating-power-off {
+          animation: powerOff 0.6s cubic-bezier(0.36, 0, 0.66, -0.56) forwards;
+        }
+        .haicon.animating-pending {
+          animation: pending 0.8s ease-in-out infinite;
+        }
+
+        .scanlines {
+          display: none;
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          z-index: 10;
+          border-radius: var(--icon-border-radius);
+          background: repeating-linear-gradient(
+            to bottom,
+            transparent 0px, transparent 3px,
+            rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 4px
+          );
+        }
+        .scanlines.active { display: block; }
+        .scanlines.active::after {
+          content: '';
+          position: absolute;
+          left: 0; right: 0; height: 4px;
+          background: linear-gradient(transparent, rgba(255,255,255,.10), transparent);
+          animation: scanMove 5s linear infinite;
+        }
+
+      </style>
+
+      <div class="card-container">
+        <div class="scanlines"></div>
+        <div class="card">
+          <div class="icon-wrapper">
+            <div class="icon">
+            </div>
+          </div>
+          <div class="content">
+            <div class="brightness">
+              <div class="brightness-bar"></div>
+            </div>
+          </div>
+          <div class="overlay">
+            <ha-icon id="main-icon" icon="mdi:close" class="haicon"></ha-icon>
+            <div class="name">Loading...</div>
+            <div class="right-info">
+              <span class="percentage">—</span>
+              <ha-icon class="arrow" icon="mdi:chevron-right"></ha-icon>
+            </div>
+          </div>
+        </div>
+      </div>
+    `
+  }
+
+  _hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : null;
+  }
+
+  _getLuminance(r, g, b) {
+    const [rs, gs, bs] = [r, g, b].map(c => {
+      c = c / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+  }
+
+  _getContrastRatio(colour1, colour2) {
+    const lum1 = this._getLuminance(colour1.r, colour1.g, colour1.b);
+    const lum2 = this._getLuminance(colour2.r, colour2.g, colour2.b);
+    const brightest = Math.max(lum1, lum2);
+    const darkest = Math.min(lum1, lum2);
+    return (brightest + 0.05) / (darkest + 0.05);
+  }
+
+  _parseColour(colour) {
+    if (colour.startsWith('var(--')) {
+      const computedStyle = getComputedStyle(this);
+      const varName = colour.match(/var\((--[^)]+)\)/)[1];
+      colour = computedStyle.getPropertyValue(varName).trim() || '#000000';
+    }
+    if (colour.startsWith('#')) {
+      return this._hexToRgb(colour);
+    }
+    const rgbMatch = colour.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+    if (rgbMatch) {
+      return {
+        r: parseInt(rgbMatch[1]),
+        g: parseInt(rgbMatch[2]),
+        b: parseInt(rgbMatch[3])
+      };
+    }
+    return { r: 0, g: 0, b: 0 };
+  }
+
+  _getTextColourForBackground(backgroundColour) {
+    const bgRgb = this._parseColour(backgroundColour);
+    const white = { r: 255, g: 255, b: 255 };
+    const black = { r: 0, g: 0, b: 0 };
+    const contrastWithWhite = this._getContrastRatio(bgRgb, white);
+    const contrastWithBlack = this._getContrastRatio(bgRgb, black);
+    if (contrastWithWhite >= 1.3) return 'white';
+    else if (contrastWithBlack >= 2.5) return 'black';
+    else return contrastWithWhite > contrastWithBlack ? 'white' : 'black';
+  }
+
+  setConfig(config) {
+    if (!config.entity) {
+      throw new Error("Neon Compact Light Card: Please provide an 'entity' in the config.")
+    }
+    // Cleanup avant rebuild
+    if (this.pendingUpdate) { cancelAnimationFrame(this.pendingUpdate); this.pendingUpdate = null; }
+    if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
+    this.config = {
+      ...config,
+      icon: config.icon || "mdi:lightbulb",
+      name: config.name,
+      glow: config.glow !== false,
+      icon_border: config.icon_border === true,
+      card_border: config.card_border === true,
+      off_colours: config.off_colours || null,
+      icon_border_colour: config.icon_border_colour,
+      card_border_colour: config.card_border_colour,
+      primary_colour: config.primary_colour,
+      secondary_colour: config.secondary_colour,
+      icon_colour: config.icon_colour,
+      chevron_action: config.chevron_action || { action: "hass-more-info" },
+      chevron_hold_action: config.chevron_hold_action,
+      chevron_double_tap_action: config.chevron_double_tap_action,
+      opacity: config.opacity !== undefined ? Math.max(config.opacity, 0.2) : 0.85,
+      blur: config.blur !== undefined ? Math.min(config.blur, 10) : 6,
+      off_blur: config.off_blur !== undefined ? Math.min(config.off_blur, 10) : undefined,
+      smart_font_colour: config.smart_font_colour !== false,
+      text_colour: config.text_colour || null,
+
+      // effects
+      effect_heartbeat:   config.effect_heartbeat   !== false,
+      effect_scanline:    config.effect_scanline     === true,
+      effect_flicker:     config.effect_flicker      === true,
+      effect_hover_glitch: config.effect_hover_glitch === true,
+      effect_intense_glow: config.effect_intense_glow === true,
+      icon_power_animation: config.icon_power_animation !== false,
+    };
+    if (config.off_colours) {
+      if (typeof config.off_colours !== "object" || (config.off_colours.light === undefined && config.off_colours.background === undefined)) {
+        throw new Error("Neon Compact Light Card: Invalid off_colours format.");
+      }
+    }
+  }
+
+  _getOffColours() {
+    const offColours = this.config.off_colours;
+    if (!offColours) return null;
+    let bg, text;
+    if (offColours.light && offColours.dark) {
+      const isDarkTheme = this._hass.themes.darkMode ?? false;
+      const theme = isDarkTheme ? offColours.dark : offColours.light;
+      bg = theme.background;
+      text = theme.text;
+    } else if (offColours.background && offColours.text) {
+      bg = offColours.background;
+      text = offColours.text;
+    } else {
+      throw new Error("Neon Compact Light Card: Invalid off_colours format.");
+    }
+    return { background: bg, text };
+  }
+
+  connectedCallback() {
+    if (!this._resizeObserver) {
+      this._resizeObserver = new ResizeObserver(() => {
+        if (!this.isDragging) this._refreshCard();
+      });
+      if (this.shadowRoot.querySelector(".card-container")) {
+        this._resizeObserver.observe(this.shadowRoot.querySelector(".card-container"));
+      }
+    }
+  }
+
+  disconnectedCallback() {
+    if (this.pendingUpdate) { cancelAnimationFrame(this.pendingUpdate); this.pendingUpdate = null; }
+    if (this._updateTimeout) { clearTimeout(this._updateTimeout); this._updateTimeout = null; }
+    if (this._powerAnimTimer) { clearTimeout(this._powerAnimTimer); this._powerAnimTimer = null; }
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
+    if (this._mousedownHandler) {
+      const brightnessEl = this.shadowRoot?.querySelector(".brightness");
+      if (brightnessEl) brightnessEl.removeEventListener("mousedown", this._mousedownHandler);
+    }
+    if (this._mousemoveHandler) document.removeEventListener("mousemove", this._mousemoveHandler);
+    if (this._mouseupHandler) document.removeEventListener("mouseup", this._mouseupHandler);
+    if (this._touchstartHandler) {
+      const brightnessEl = this.shadowRoot?.querySelector(".brightness");
+      if (brightnessEl) brightnessEl.removeEventListener("touchstart", this._touchstartHandler);
+    }
+    if (this._touchmoveHandler) document.removeEventListener("touchmove", this._touchmoveHandler);
+    if (this._touchendHandler) document.removeEventListener("touchend", this._touchendHandler);
+    if (this._iconClickHandler && this.shadowRoot) {
+      const ico = this.shadowRoot.querySelector('.icon-container, ha-icon');
+      if (ico) ico.removeEventListener('click', this._iconClickHandler);
+      this._iconClickHandler = null;
+    }
+  }
+
+  _refreshCard() {
+    if (!this._hass || !this.config.entity) return;
+    const { name, displayText, brightnessPercent, primaryColour, secondaryColour, icon } = this._getCardState();
+    this._updateDisplay(name, displayText, brightnessPercent, primaryColour, secondaryColour, icon);
+  }
+
+  _getCardState() {
+    if (!this._hass || !this.config.entity) {
+      return { name: null, displayText: null, brightnessPercent: null, primaryColour: null, secondaryColour: null, icon: null };
+    }
+    const entity = this.config.entity;
+    const stateObj = this._hass.states[entity];
+    if (!stateObj) {
+      return { name: "Entity not found", displayText: "-", brightnessPercent: 0, primaryColour: "#9e9e9e", secondaryColour: "#e0e0e0", icon: "mdi:alert" };
+    }
+    const state = stateObj.state;
+    const tempName = this.config.name || stateObj.attributes.friendly_name || entity.replace("light.", "");
+    const friendlyName = tempName.length > 30 ? tempName.slice(0, 30) + "..." : tempName;
+    this.supportsBrightness = (stateObj.attributes.supported_features & 1) || (stateObj.attributes.brightness !== undefined);
+
+    let brightnessPercent = 0;
+    let displayText = "Off";
+    if (state == "on") {
+      const brightness = stateObj.attributes.brightness || 255;
+      brightnessPercent = Math.round((brightness / 255) * 100);
+      if (this.supportsBrightness) { displayText = `${brightnessPercent}`; }
+      else { displayText = "On"; brightnessPercent = 100; }
+    } else if (state == "unavailable") {
+      displayText = "Unavailable";
+    }
+
+    let primaryColour = "#00E8FF";
+    let secondaryColour = "rgba(0, 232, 255, 0.6)";
+    if (this.config.primary_colour) {
+      primaryColour = this.config.primary_colour;
+    } else if (stateObj.attributes.rgb_color) {
+      const [r, g, b] = stateObj.attributes.rgb_color;
+      primaryColour = `rgb(${r}, ${g}, ${b})`;
+    }
+    if (this.config.secondary_colour) {
+      secondaryColour = this.config.secondary_colour;
+    } else if (stateObj.attributes.rgb_color) {
+      const [r, g, b] = stateObj.attributes.rgb_color;
+      // Opacité augmentée pour que la couleur soit visible sur le carré de l'icône
+      secondaryColour = `rgba(${r}, ${g}, ${b}, 0.6)`;
+    }
+
+    return { name: friendlyName, displayText, brightnessPercent, primaryColour, secondaryColour, icon: this.config.icon };
+  }
+
+  getUsableWidth = () => {
+    const buffer = 4;
+    const contentEl = this.shadowRoot.querySelector(".content");
+    const contentStyle = getComputedStyle(contentEl);
+    const paddingRight = parseFloat(contentStyle.paddingRight);
+    const contentWidth = contentEl.clientWidth - buffer - paddingRight - _LEFT_OFFSET;
+    return contentWidth;
+  };
+
+  _performAction(actionObj) {
+    if (!actionObj || !actionObj.action || !this._hass || !this.config.entity) return;
+    const action = actionObj.action;
+    const entityId = this.config.entity;
+    const moreInfoEvent = new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId } });
+
+    switch (action) {
+      case "hass-more-info":
+      case "more-info":
+        this.dispatchEvent(moreInfoEvent); break;
+      case "toggle":
+        this._hass.callService("light", "toggle", { entity_id: entityId }); break;
+      case "navigate":
+        if (actionObj.navigation_path) { history.pushState(null, "", actionObj.navigation_path); window.dispatchEvent(new Event("location-changed")); } break;
+      case "url":
+        if (actionObj.url_path || actionObj.url) window.open(actionObj.url_path || actionObj.url, "_blank"); break;
+      case "call-service":
+        if (actionObj.service) {
+          const [domain, service] = actionObj.service.split(".", 2);
+          const serviceData = { ...actionObj.service_data };
+          if (!serviceData.entity_id) serviceData.entity_id = entityId;
+          this._hass.callService(domain, service, serviceData);
+        } break;
+      case "perform-action":
+        if (actionObj.perform_action) {
+          const [domain, service] = actionObj.perform_action.split(".", 2);
+          const serviceData = { ...actionObj.data };
+          if (actionObj.target) serviceData.entity_id = actionObj.target.entity_id;
+          else if (!serviceData.entity_id) serviceData.entity_id = entityId;
+          this._hass.callService(domain, service, serviceData);
+        } break;
+      case "none": break;
+      default: console.warn("Neon Compact Light Card: Unsupported action:", action);
+    }
+  }
+
+  set hass(hass) {
+    if (!this.shadowRoot) return;
+    this._hass = hass;
+    const entity = this.config.entity;
+    const stateObj = hass.states[entity];
+    const state = stateObj.state;
+
+    const offColours = this._getOffColours();
+    if (offColours) {
+      this.style.setProperty("--off-background-colour", offColours.background);
+      this.style.setProperty("--off-text-colour", offColours.text);
+    } else {
+      this.style.removeProperty("--off-background-colour");
+      this.style.removeProperty("--off-text-colour");
+    }
+
+    if (this.config.icon_border_colour && this.config.icon_border === true) {
+      this.style.setProperty("--icon-border-colour", this.config.icon_border_colour);
+    } else {
+      this.style.setProperty("--icon-border-colour", "var(--card-background-color)");
+    }
+
+    if (this.config.card_border_colour && this.config.card_border === true) {
+      this.style.setProperty("--card-border-colour", this.config.card_border_colour);
+    } else {
+      this.style.setProperty("--card-border-colour", "var(--card-background-color)");
+    }
+
+    const { name, displayText, brightnessPercent, primaryColour, secondaryColour, icon } = this._getCardState();
+
+    // ── Diff: skip expensive _updateDisplay if nothing relevant changed ──
+    const renderKey = `${stateObj.state}|${displayText}|${primaryColour}|${secondaryColour}`;
+    if (this._handlersSetup && !this.isDragging && renderKey === this._lastRenderKey) return;
+    if (!this.isDragging) this._lastRenderKey = renderKey;
+
+    this._updateDisplay(name, displayText, brightnessPercent, primaryColour, secondaryColour, icon);
+
+    if (this._handlersSetup) return;
+    this._handlersSetup = true;
+
+    // ── Icon toggle (debounced) ────────────────────────────────────
+    const haIconEl = this.shadowRoot.querySelector("#main-icon");
+    this._iconClickHandler = (ev) => {
+      ev.stopPropagation();
+      const now = Date.now();
+      if (now - this._lastIconClick < 300) return;
+      this._lastIconClick = now;
+      const s = this._hass.states[this.config.entity];
+      if (!s) return;
+      
+      // Démarrer l'animation pending
+      if (this.config.icon_power_animation) {
+        this._pendingStateChange = true;
+        haIconEl.classList.add('animating-pending');
+      }
+      
+      this._hass.callService("light", s.state === "on" ? "turn_off" : "turn_on", {
+        entity_id: this.config.entity,
+      });
+    };
+    haIconEl.addEventListener("click", this._iconClickHandler);
+
+    // ── Chevron actions ─────────────────────────────────────────────
+    const brightnessEl = this.shadowRoot.querySelector(".brightness");
+    const barEl = this.shadowRoot.querySelector(".brightness-bar");
+    const percentageEl = this.shadowRoot.querySelector(".percentage");
+    const contentEl = this.shadowRoot.querySelector(".content");
+    let currentBrightness = brightnessPercent;
+
+    const arrowEl = this.shadowRoot.querySelector(".arrow");
+    if (arrowEl) {
+      const newArrowEl = arrowEl.cloneNode(true);
+      arrowEl.replaceWith(newArrowEl);
+
+      let tapCount = 0;
+      let tapTimer = null;
+      let holdTimer = null;
+      let holdTriggered = false;
+      const HOLD_THRESHOLD = 500;
+      const DOUBLE_TAP_THRESHOLD = 300;
+
+      const handleSingleTap = () => {
+        if (tapCount === 1) this._performAction(this.config.chevron_action);
+        tapCount = 0;
+      };
+      const startHold = () => {
+        holdTriggered = false;
+        holdTimer = setTimeout(() => {
+          holdTimer = null; holdTriggered = true; tapCount = 0;
+          this._performAction(this.config.chevron_hold_action);
+        }, HOLD_THRESHOLD);
+      };
+      const cancelHold = () => { if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; } };
+      const handleTap = () => {
+        cancelHold(); tapCount++;
+        if (tapCount === 1) { tapTimer = setTimeout(handleSingleTap, DOUBLE_TAP_THRESHOLD); }
+        else if (tapCount === 2) { clearTimeout(tapTimer); tapTimer = null; tapCount = 0; this._performAction(this.config.chevron_double_tap_action); }
+      };
+      const handlePointerDown = (ev) => { ev.stopPropagation(); if (ev.type === "touchstart") ev.preventDefault(); startHold(); };
+      const handlePointerUp = (ev) => { ev.stopPropagation(); if (holdTriggered) return; if (holdTimer) { cancelHold(); handleTap(); } };
+      const handlePointerCancel = () => { cancelHold(); tapCount = 0; if (tapTimer) { clearTimeout(tapTimer); tapTimer = null; } };
+
+      newArrowEl.addEventListener("mousedown", handlePointerDown);
+      newArrowEl.addEventListener("mouseup", handlePointerUp);
+      newArrowEl.addEventListener("mouseleave", handlePointerCancel);
+      newArrowEl.addEventListener("touchstart", handlePointerDown, { passive: false });
+      newArrowEl.addEventListener("touchend", handlePointerUp);
+      newArrowEl.addEventListener("touchcancel", handlePointerCancel);
+    }
+
+    // ── Brightness drag control ─────────────────────────────────────
+    const getBrightnessFromX = (clientX) => {
+      const rect = brightnessEl.getBoundingClientRect();
+      let x = clientX - (rect.left + _LEFT_OFFSET);
+      const usableWidth = this.getUsableWidth();
+      x = Math.max(0, Math.min(x, usableWidth));
+      return Math.round((x / usableWidth) * 100);
+    };
+
+    const updateBarPreview = (brightness) => {
+      const roundedBrightness = Math.round(brightness);
+      if (this.pendingUpdate) cancelAnimationFrame(this.pendingUpdate);
+      this.pendingUpdate = requestAnimationFrame(() => {
+        if (brightness !== 0) {
+          const usableWidth = this.getUsableWidth();
+          const effectiveWidth = (Math.max(1, brightness) / 100) * usableWidth;
+          const totalWidth = Math.min(effectiveWidth + _LEFT_OFFSET, usableWidth + _LEFT_OFFSET - 1);
+          barEl.style.width = `${totalWidth}px`;
+          if (percentageEl) percentageEl.textContent = `${roundedBrightness}%`;
+        } else {
+          const usableWidth = this.getUsableWidth();
+          const effectiveWidth = (1 / 100) * usableWidth;
+          const totalWidth = Math.min(effectiveWidth + _LEFT_OFFSET, usableWidth + _LEFT_OFFSET - 1);
+          barEl.style.width = `${totalWidth}px`;
+          if (percentageEl) percentageEl.textContent = `1%`;
+        }
+        this.pendingUpdate = null;
+      });
+    };
+
+    const applyBrightness = (hass, entityId, brightness) => {
+      clearTimeout(this._updateTimeout);
+      this._updateTimeout = setTimeout(() => {
+        const b = parseFloat(brightness);
+        if (isNaN(b)) return;
+        const brightness255 = Math.round((b / 100) * 255);
+        const clampedBrightness = Math.max(0, Math.min(255, brightness255));
+        hass.callService("light", "turn_on", { entity_id: entityId, brightness: clampedBrightness });
+      }, 125);
+    };
+
+    const onDragStart = (clientX) => {
+      if (!this.supportsBrightness) return;
+      this.isDragging = true;
+      this.startX = clientX;
+      this.startWidth = getBrightnessFromX(clientX);
+      const brightness = this.startWidth;
+      updateBarPreview(brightness);
+      currentBrightness = brightness;
+      if (state !== "on") {
+        const brightness255 = Math.round((brightness / 100) * 255);
+        hass.callService("light", "turn_on", { entity_id: this.config.entity, brightness: Math.max(1, brightness255) });
+      }
+      document.body.style.userSelect = "none";
+    };
+
+    const onDragMove = (clientX) => {
+      if (barEl.style.transition !== "none") barEl.style.transition = "none";
+      const dx = clientX - this.startX;
+      const usableWidth = this.getUsableWidth();
+      const deltaPercent = (dx / usableWidth) * 100;
+      const newBrightness = Math.round(Math.max(1, Math.min(100, this.startWidth + deltaPercent)));
+      updateBarPreview(newBrightness);
+      currentBrightness = newBrightness;
+    };
+
+    const onDragEnd = () => {
+      this.isDragging = false;
+      document.body.style.userSelect = "";
+      clearTimeout(this._updateTimeout);
+      applyBrightness(hass, entity, currentBrightness);
+      if (barEl.style.transition === "none") barEl.style.transition = "width 0.6s ease";
+    };
+
+    this._mousedownHandler = (e) => { e.preventDefault(); onDragStart(e.clientX); };
+    brightnessEl.addEventListener("mousedown", this._mousedownHandler);
+
+    this._mousemoveHandler = (e) => { if (!this.isDragging) return; e.preventDefault(); onDragMove(e.clientX); };
+    document.addEventListener("mousemove", this._mousemoveHandler);
+
+    this._mouseupHandler = () => { if (!this.isDragging) return; onDragEnd(); };
+    document.addEventListener("mouseup", this._mouseupHandler);
+
+    this._touchstartHandler = (e) => {
+      this._initialTouchY = e.touches[0].clientY;
+      this._initialTouchX = e.touches[0].clientX;
+      this._touchStarted = true;
+      this._dragStartedFromTouch = false;
+    };
+    brightnessEl.addEventListener("touchstart", this._touchstartHandler);
+
+    this._touchmoveHandler = (e) => {
+      if (!this._dragStartedFromTouch && this._touchStarted) {
+        const currentTouchY = e.touches[0].clientY;
+        const currentTouchX = e.touches[0].clientX;
+        const deltaY = Math.abs(currentTouchY - this._initialTouchY);
+        const deltaX = Math.abs(currentTouchX - this._initialTouchX);
+        const SCROLL_THRESHOLD = 10;
+        if (deltaY > SCROLL_THRESHOLD) { this._touchStarted = false; return; }
+        if (deltaX > SCROLL_THRESHOLD) {
+          this._dragStartedFromTouch = true;
+          e.preventDefault(); // safe: only when drag confirmed horizontal
+          onDragStart(this._initialTouchX);
+        }
+      }
+      if (this._dragStartedFromTouch && this.isDragging) { e.preventDefault(); onDragMove(e.touches[0].clientX); }
+    };
+    // passive:true by default — only prevents default inside handler when drag is confirmed
+    document.addEventListener("touchmove", this._touchmoveHandler, { passive: false });
+
+    this._touchendHandler = (e) => {
+      if (this._dragStartedFromTouch && this.isDragging) { e.preventDefault(); onDragEnd(); }
+      this._touchStarted = false;
+      this._dragStartedFromTouch = false;
+      this._initialTouchY = null;
+      this._initialTouchX = null;
+    };
+    document.addEventListener("touchend", this._touchendHandler);
+  }
+
+  static getStubConfig() {
+    return { entity: "light.bedroom", icon: "mdi:lightbulb" };
+  }
+
+  static getConfigElement() {
+    return document.createElement("neon-compact-light-card-editor");
+  }
+
+  _updateDisplay(name, percentageText, barWidth, primaryColour, secondaryColour, icon) {
+    const root = this.shadowRoot;
+    if (!root) return;
+
+    const nameEl = root.querySelector(".name");
+    const percentageEl = root.querySelector(".percentage");
+    const barEl = root.querySelector(".brightness-bar");
+    const iconEl = root.querySelector(".icon");
+    const haIconEl = root.querySelector("#main-icon");
+    const contentEl = root.querySelector(".content");
+    const cardContainer = root.querySelector(".card-container");
+
+    // ── Contenu (texte, icône, barre) ──────────────────────────────
+    if (icon) haIconEl.setAttribute("icon", icon);
+    if (nameEl) nameEl.textContent = name;
+    
+    if (!this.isDragging && percentageEl) {
+      percentageEl.textContent = (percentageText === "Off" || percentageText === "On" || percentageText === "Unavailable") 
+        ? percentageText 
+        : percentageText + "%";
+    }
+
+    if (!this.isDragging && barEl) {
+      if (barWidth !== 0) {
+        const buffer = 4;
+        const contentStyle = getComputedStyle(contentEl);
+        const paddingRight = parseFloat(contentStyle.paddingRight);
+        const contentWidth = contentEl.clientWidth - buffer - paddingRight - _LEFT_OFFSET;
+        const effectiveWidth = (barWidth / 100) * contentWidth;
+        const totalWidth = Math.min(effectiveWidth + _LEFT_OFFSET, contentWidth + _LEFT_OFFSET - 1);
+        barEl.style.width = `${totalWidth}px`;
+      } else {
+        barEl.style.width = `0px`;
+      }
+    }
+
+    // ── États et classes CSS ────────────────────────────────────────
+    const isOn = (percentageText !== "Off" && percentageText !== "Unavailable");
+    
+    // Détecter transition d'état pour animation power
+    if (this.config.icon_power_animation && this._lastState !== null && this._lastState !== isOn) {
+      // Arrêter l'animation pending si elle est active
+      if (this._pendingStateChange) {
+        haIconEl.classList.remove('animating-pending');
+        this._pendingStateChange = false;
+      }
+      
+      // Lancer l'animation finale (powerOn ou powerOff)
+      const animClass = isOn ? 'animating-power-on' : 'animating-power-off';
+      haIconEl.classList.add(animClass);
+      if (this._powerAnimTimer) clearTimeout(this._powerAnimTimer);
+      this._powerAnimTimer = setTimeout(() => { haIconEl.classList.remove(animClass); this._powerAnimTimer = null; }, 500);
+    }
+    this._lastState = isOn;
+    
+    // État principal
+    this.classList.remove("state-on", "state-off", "state-unavailable");
+    if (percentageText === "Off") this.classList.add("state-off");
+    else if (percentageText === "Unavailable") this.classList.add("state-unavailable");
+    else this.classList.add("state-on");
+
+    // Bordures
+    iconEl.classList.toggle("no-border", !this.config.icon_border);
+    contentEl.classList.toggle("no-border", !this.config.card_border);
+
+    // Effets visuels
+    this.classList.toggle("smart-contrast", !!this.config.smart_font_colour && !this.config.text_colour);
+    this.classList.toggle("custom-text-colour", !!this.config.text_colour);
+    if (this.config.text_colour) this.style.setProperty("--custom-text-colour", this.config.text_colour);
+    this.classList.toggle("has-icon-colour", !!(this.config.icon_colour && isOn));
+    this.classList.toggle("effect-intense-glow", !!(this.config.effect_intense_glow && isOn));
+    this.classList.toggle("fx-colorpulse", !!(this.config.effect_heartbeat && isOn));
+    cardContainer.classList.toggle("fx-flicker", !!(this.config.effect_flicker && isOn));
+    cardContainer.classList.toggle("fx-glitch", !!this.config.effect_hover_glitch);
+    root.querySelector(".scanlines").classList.toggle("active", !!this.config.effect_scanline);
+
+    // ── CSS Variables (couleurs dynamiques) ────────────────────────
+    if (isOn) {
+      if (primaryColour) this.style.setProperty("--light-primary-colour", primaryColour);
+      if (secondaryColour) this.style.setProperty("--light-secondary-colour", secondaryColour);
+      if (this.config.icon_colour) this.style.setProperty("--custom-icon-colour", this.config.icon_colour);
+      
+      // Flicker randomization (each card has unique timing)
+      if (this.config.effect_flicker) {
+        this.style.setProperty("--flicker-duration", `${this._flickerDuration}s`);
+        this.style.setProperty("--flicker-delay", `${this._flickerDelay}s`);
+      }
+      
+      // Smart contrast (calcul automatique du contraste)
+      if (this.config.smart_font_colour) {
+        const textColour = this._getTextColourForBackground(primaryColour);
+        const optimalColour = (textColour === 'white') ? '#ffffff' : '#7a7a7aff';
+        this.style.setProperty("--optimal-text-colour", optimalColour);
+      }
+      
+      // Glow effect (box-shadow + corners)
+      if (this.config.glow && primaryColour) {
+        const rgbMatch = primaryColour.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+        const glowColor = rgbMatch 
+          ? `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, ${Math.min(this.config.opacity * 0.6, 0.3)})`
+          : `${primaryColour}40`.replace("rgb", "rgba").replace(")", ", 0.3)");
+        
+        this.style.setProperty('--glow-color', glowColor);
+        if (!this.config.effect_heartbeat) {
+          cardContainer.style.boxShadow = `0 0 24px 8px ${glowColor}, inset 0 0 20px rgba(0, 232, 255, 0.05)`;
+        }
+        cardContainer.classList.add('has-corners');
+      } else {
+        cardContainer.style.boxShadow = "none";
+        cardContainer.classList.remove('has-corners');
+      }
+    } else {
+      // État OFF : smart contrast pour texte off
+      if (this.config.smart_font_colour) {
+        const offBgColour = getComputedStyle(this).getPropertyValue('--off-background-colour').trim();
+        const textColour = this._getTextColourForBackground(offBgColour);
+        const optimalColour = (textColour === 'white') ? '#ffffff' : '#7a7a7aff';
+        this.style.setProperty("--optimal-off-text-colour", optimalColour);
+      }
+      cardContainer.style.boxShadow = "none";
+      cardContainer.classList.remove('has-corners');
+    }
+
+    // ── Styles dynamiques (non-CSS) ─────────────────────────────────
+    this.style.transformOrigin = "center";
+    contentEl.style.opacity = this.config.opacity;
+    iconEl.style.opacity = 1;
+    
+    // Blur conditionnel (off_blur si défini et état OFF)
+    const blurValue = (!isOn && this.config.off_blur !== undefined) ? this.config.off_blur : this.config.blur;
+    root.querySelector(".card").style.backdropFilter = `blur(${blurValue}px)`;
+    
+    if (iconEl.classList.contains("no-border")) {
+      const shadowOpacity = 0.2 + (1 - this.config.opacity) * 0.4;
+      iconEl.style.boxShadow = `rgba(0, 0, 0, ${shadowOpacity}) 0px 5px 15px`;
+    }
+  }
+
+  getCardSize() { return 1; }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Visual Editor (Native HTML)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class NeonCompactLightCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this._config = {};
+    this._hass = null;
+    this._built = false;
+  }
+
+  setConfig(config) { this._config = { ...config }; this._render(); }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this._built) this._render();
+    else this._fillEntityOptions();
+  }
+
+  disconnectedCallback() { this.innerHTML = ""; this._built = false; }
+
+  _render() {
+    this._built = true;
+    this.innerHTML = "";
+    this.style.cssText = "display:block;padding:16px;font-family:var(--primary-font-family,Roboto,sans-serif)";
+
+    const style = document.createElement("style");
+    style.textContent = `
+      .sec { font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
+             color:var(--primary-color);margin:20px 0 10px; }
+      .row { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px; }
+      .row label { font-size:14px;color:var(--primary-text-color);flex:1; }
+      select, input[type=text] {
+        font-size:13px;padding:6px 8px;
+        border:1px solid var(--divider-color,#ccc);border-radius:6px;
+        background:var(--card-background-color,#fff);color:var(--primary-text-color,#000);
+        outline:none;flex-shrink:0; }
+      select { min-width:165px;cursor:pointer; }
+      input[type=text] { width:165px; }
+      .toggle-row { display:flex;align-items:center;justify-content:space-between;
+                    padding:8px 0;border-bottom:1px solid var(--divider-color,#eee); }
+      .toggle-row:last-child { border-bottom:none; }
+      .toggle-row label { font-size:14px;color:var(--primary-text-color); }
+      .toggle-row input[type=checkbox] { width:38px;height:20px;cursor:pointer;
+                                         accent-color:var(--primary-color,#03a9f4); }
+      .color-row { display:flex;align-items:center;gap:8px; }
+      .color-row input[type=text] { flex:1;min-width:0; }
+      input[type=color] { width:44px;height:30px;padding:2px 3px;
+                          border:1px solid var(--divider-color,#ccc);border-radius:6px;
+                          cursor:pointer;flex-shrink:0; }
+      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:2px 0 10px; }
+    `;
+    this.appendChild(style);
+
+    const c = this._config;
+
+    this._sec("Entity & Icon");
+    this._entityPicker("entity", "Light Entity *", c.entity || "");
+    this._iconPicker("icon", "Icon", c.icon || "mdi:lightbulb");
+    this._text("name", "Custom Name", c.name || "", "Leave empty for friendly name");
+
+    this._sec("Visual Effects");
+    this._toggle("glow",                "Glow Effect",                  c.glow                !== false);
+    this._toggle("effect_heartbeat",    "✦ Color pulse (when on)",       c.effect_heartbeat    !== false);
+    this._toggle("effect_intense_glow", "✧ Intense Glow (triple shadow)", c.effect_intense_glow === true);
+    this._toggle("effect_scanline",     "≡ Scanlines",                  c.effect_scanline     === true);
+    this._toggle("effect_flicker",      "↺ Flicker",                    c.effect_flicker      === true);
+    this._toggle("effect_hover_glitch", "⚡ Glitch on hover",           c.effect_hover_glitch === true);
+    this._toggle("icon_power_animation", "⚙ Icon power animation",     c.icon_power_animation !== false);
+    this._toggle("smart_font_colour",   "Smart Font Color (contrast)",  c.smart_font_colour   !== false);
+    this._text("opacity", "Opacity (0.2–1)", c.opacity !== undefined ? String(c.opacity) : "0.85", "e.g. 0.8");
+    this._text("blur",    "Blur px (0–10)",  c.blur    !== undefined ? String(c.blur)    : "6", "e.g. 4");
+    this._text("off_blur", "Blur OFF px (0–10)", c.off_blur !== undefined ? String(c.off_blur) : "", "Leave empty to use same blur");
+
+    this._sec("Color Overrides");
+    this._hint("Leave empty to use the light's own RGB color.");
+    this._colorRow("primary_colour",   "Primary Color (On)",   c.primary_colour   || "");
+    this._colorRow("secondary_colour", "Secondary Color (BG)", c.secondary_colour || "");
+    this._colorRow("icon_colour",      "Icon Color (Override)", c.icon_colour      || "");
+
+    this._sec("Chevron Actions");
+    const actions = [
+      { v: "hass-more-info", l: "More Info" },
+      { v: "toggle",         l: "Toggle" },
+      { v: "navigate",       l: "Navigate (YAML)" },
+      { v: "url",            l: "Open URL (YAML)" },
+      { v: "call-service",   l: "Call Service (YAML)" },
+      { v: "perform-action", l: "Perform Action (YAML)" },
+      { v: "none",           l: "None" },
+    ];
+    this._actionSelect("chevron_action",            "Tap Action",        c.chevron_action?.action            || "hass-more-info", actions);
+    this._actionSelect("chevron_hold_action",       "Hold Action",       c.chevron_hold_action?.action       || "none",           actions);
+    this._actionSelect("chevron_double_tap_action", "Double-Tap Action", c.chevron_double_tap_action?.action || "none",           actions);
+    this._hint("navigate / url / call-service: switch to YAML to add extra params.");
+
+    this._fillEntityOptions();
+  }
+
+  _sec(t)  { const d = document.createElement("div"); d.className = "sec"; d.textContent = t; this.appendChild(d); }
+  _hint(t) { const d = document.createElement("div"); d.className = "hint"; d.textContent = t; this.appendChild(d); }
+
+  _toggle(key, label, checked) {
+    const row = document.createElement("div"); row.className = "toggle-row";
+    const lbl = document.createElement("label"); lbl.textContent = label;
+    const cb  = document.createElement("input"); cb.type = "checkbox"; cb.checked = checked;
+    cb.addEventListener("change", (e) => this._set(key, e.target.checked));
+    row.appendChild(lbl); row.appendChild(cb); this.appendChild(row);
+  }
+
+  _text(key, label, value, placeholder = "") {
+    const row = document.createElement("div"); row.className = "row";
+    const lbl = document.createElement("label"); lbl.textContent = label;
+    const inp = document.createElement("input"); inp.type = "text"; inp.value = value; inp.placeholder = placeholder;
+    inp.addEventListener("change", (e) => {
+      const v = e.target.value.trim();
+      if (key === "opacity" || key === "blur" || key === "off_blur") { const n = parseFloat(v); this._set(key, isNaN(n) ? undefined : n); }
+      else this._set(key, v || undefined);
+    });
+    row.appendChild(lbl); row.appendChild(inp); this.appendChild(row);
+  }
+
+  _iconPicker(key, label, value) {
+    const row = document.createElement("div"); row.className = "row";
+    const lbl = document.createElement("label"); lbl.textContent = label;
+    const wrap = document.createElement("div"); wrap.style.cssText = "display:flex;gap:6px;align-items:center;flex-shrink:0";
+
+    // dropdown of common MDI icons
+    const sel = document.createElement("select"); sel.style.cssText = "min-width:0;flex:1;font-size:13px;padding:6px 8px;border:1px solid var(--divider-color,#ccc);border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#000);cursor:pointer";
+    MDI_ICONS.forEach(icon => {
+      const o = document.createElement("option"); o.value = icon; o.textContent = icon.replace("mdi:", ""); o.selected = (icon === value); sel.appendChild(o);
+    });
+    // free-text fallback
+    const inp = document.createElement("input"); inp.type = "text"; inp.value = value; inp.placeholder = "mdi:custom"; inp.style.cssText = "width:130px;font-size:13px;padding:6px 8px;border:1px solid var(--divider-color,#ccc);border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#000)";
+
+    sel.addEventListener("change", (e) => { inp.value = e.target.value; this._set(key, e.target.value); });
+    inp.addEventListener("change", (e) => {
+      const v = e.target.value.trim();
+      // sync dropdown if value matches
+      const match = Array.from(sel.options).find(o => o.value === v);
+      if (match) sel.value = v;
+      this._set(key, v || undefined);
+    });
+    wrap.appendChild(sel); wrap.appendChild(inp); row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
+  }
+
+  _entityPicker(key, label, value) {
+    const row = document.createElement("div"); row.className = "row";
+    const lbl = document.createElement("label"); lbl.textContent = label;
+    const sel = document.createElement("select"); sel.dataset.entityPicker = "1";
+    const ph  = document.createElement("option"); ph.value = ""; ph.textContent = "— select entity —"; ph.disabled = true; ph.selected = !value;
+    sel.appendChild(ph);
+    sel.addEventListener("change", (e) => this._set(key, e.target.value));
+    row.appendChild(lbl); row.appendChild(sel); this.appendChild(row);
+  }
+
+  _fillEntityOptions() {
+    if (!this._hass) return;
+    const sel = this.querySelector("select[data-entity-picker]");
+    if (!sel) return;
+    const current = sel.value || this._config.entity || "";
+    Array.from(sel.options).forEach((o) => { if (o.value) o.remove(); });
+    Object.keys(this._hass.states).filter((e) => e.startsWith("light.")).sort().forEach((id) => {
+      const o = document.createElement("option"); o.value = id; o.textContent = id; o.selected = (id === current); sel.appendChild(o);
+    });
+  }
+
+  _colorRow(key, label, value) {
+    const row = document.createElement("div"); row.className = "row";
+    const lbl = document.createElement("label"); lbl.textContent = label;
+    const wrap = document.createElement("div"); wrap.className = "color-row";
+    const text = document.createElement("input"); text.type = "text"; text.value = value; text.placeholder = "#rrggbb or rgb(…)";
+    const pick = document.createElement("input"); pick.type = "color"; pick.value = this._toHex(value) || "#00E8FF";
+    text.addEventListener("change", (e) => { const v = e.target.value.trim(); this._set(key, v || undefined); const h = this._toHex(v); if (h) pick.value = h; });
+    pick.addEventListener("input",  (e) => { text.value = e.target.value; this._set(key, e.target.value); });
+    wrap.appendChild(text); wrap.appendChild(pick); row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
+  }
+
+  _actionSelect(key, label, value, options) {
+    const row = document.createElement("div"); row.className = "row";
+    const lbl = document.createElement("label"); lbl.textContent = label;
+    const sel = document.createElement("select");
+    options.forEach(({ v, l }) => { const o = document.createElement("option"); o.value = v; o.textContent = l; o.selected = (v === value); sel.appendChild(o); });
+    sel.addEventListener("change", (e) => { const v = e.target.value; if (!v || v === "none") this._set(key, undefined); else this._set(key, { action: v }); });
+    row.appendChild(lbl); row.appendChild(sel); this.appendChild(row);
+  }
+
+  _set(key, value) {
+    if (value === undefined || value === null || value === "") delete this._config[key];
+    else this._config[key] = value;
+    this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config }, bubbles: true, composed: true }));
+  }
+
+  _toHex(color) {
+    if (!color) return null;
+    if (/^#[0-9a-f]{6}$/i.test(color)) return color;
+    const m = color.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/i);
+    if (m) return "#" + [m[1], m[2], m[3]].map((n) => (+n).toString(16).padStart(2, "0")).join("");
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Registration
+// ─────────────────────────────────────────────────────────────────────────────
+
+if (!customElements.get("neon-compact-light-card-editor")) customElements.define("neon-compact-light-card-editor", NeonCompactLightCardEditor);
+if (!customElements.get("neon-compact-light-card")) customElements.define("neon-compact-light-card", NeonCompactLightCard);
+
+window.customCards = window.customCards || [];
+window.customCards.push({
+  type: "neon-compact-light-card",
+  name: "Neon Compact Light Card",
+  description: "A compact light card with brightness drag and chevron actions.",
+  preview: true,
+});
+
+console.info(
+  "%c NEON-COMPACT-LIGHT-CARD %c loaded ",
+  "color:#00ff9f;font-weight:bold;background:#000",
+  "color:#fff;background:#444",
+);
+
+console.info(
+  '%c 💡 neon-compact-light-card v2.0 %c Neo Tokyo ',
+  'background:#FFEE58;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
+  'background:#040811;color:#FF6B00;padding:2px 4px;border-radius:0 3px 3px 0;'
+);

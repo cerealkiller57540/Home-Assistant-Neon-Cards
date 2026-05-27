@@ -319,8 +319,8 @@ neon-night-joi-hdr:
   card-mod-card: |
     /* ========== BASE CARD STYLES ========== */
     ha-card {
-      --card-contrast: 1.04;
-      --card-saturate: 1.10;
+      --card-contrast: 1.06;
+      --card-saturate: 1.12;
       --card-brightness: 1;
       font-family: var(--primary-font-family) !important;
       position: relative;

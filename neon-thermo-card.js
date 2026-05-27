@@ -11,7 +11,7 @@
  *   entity: sensor.temperature_salon
  */
 
-const VERSION = '1.4.0';
+const VERSION = '1.4.1';
 
 // ═══════════════════════════════════════════════════════
 //  DEFAULTS
@@ -576,17 +576,40 @@ class NeonThermoCard extends HTMLElement {
     return { entity: 'sensor.temperature', name: 'Salon', show_history: true };
   }
 
+  _cleanup(full = false) {
+    if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = 0; }
+    if (this._ro)    { this._ro.disconnect(); this._ro = null; }
+    if (full) this._rendered = false;
+    this._cachedEls = null;
+  }
+
   setConfig(raw) {
+    this._cleanup(true);
     this._config = buildConfig(raw);
     this._geo    = computeGeometry(this._config);
-    // Force full rebuild
-    this._rendered = false;
-    this._colors   = null;
-    this._cachedEls = null;
+    this._colors = null;
     if (this.shadowRoot.firstChild) this._render();
   }
 
   getCardSize() { return this._config?.show_history ? 4 : 2; }
+
+  connectedCallback() {
+    if (this._rendered && this.shadowRoot.querySelector('ha-card')) {
+      this._cacheElements();
+      if (this._hass) {
+        this._pendingUpdate = { temp: this._lastTemp, humidity: this._lastHumidity, secondary: this._lastSecondary };
+        if (!this._rafId) {
+          this._rafId = requestAnimationFrame(() => {
+            this._rafId = 0;
+            const u = this._pendingUpdate;
+            if (u) { this._pendingUpdate = null; this._updateDOM(u.temp, u.humidity, u.secondary); }
+          });
+        }
+      }
+    }
+  }
+
+  disconnectedCallback() { this._cleanup(); }
 
   _openMoreInfo(entityId = null) {
     const eId = entityId || this._config?.entity;
@@ -1042,3 +1065,9 @@ window.customCards.push({
   description: 'Thermomètre néon cyberpunk pour Home Assistant',
   preview:     true,
 });
+
+console.info(
+  '%c 🌡️ neon-thermo-card v1.4.0 %c Neo Tokyo ',
+  'background:#2EE5B6;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
+  'background:#040811;color:#9D4EDD;padding:2px 4px;border-radius:0 3px 3px 0;'
+);

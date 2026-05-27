@@ -1,0 +1,943 @@
+# Neo Tokyo Theme for Home Assistant — v3
+# UV Deep / Glassmorphism — fond plus sombre, tendance #6200EA
+# Sans transform hover global (sidebar + header uniquement)
+# Installation : /config/themes/neo-tokyo-v3.yaml
+
+neo-tokyo-v3:
+  modes:
+    dark:
+      # ══════════════════════════════════════════════════════════════════════
+      # COULEURS DE BASE
+      # ══════════════════════════════════════════════════════════════════════
+      primary-color: "#6200EA"                            # UV profond — accent principal (v3)
+      accent-color: "#00fff9"                             # Cyan électrique — accent secondaire
+      secondary-color: "#3D00B8"                          # UV sombre — badges, liens discrets
+      blacklight-color: "#B400FF"                         # Violet néon — glow ponctuel
+      lovelace-background: "center / cover no-repeat fixed url('/local/neo-tokyo-v4.png')"
+      shadow-color: "rgba(98, 0, 234, 0.25)"
+      bar-box-shadow: ""
+
+      # ══════════════════════════════════════════════════════════════════════
+      # ÉTATS
+      # ══════════════════════════════════════════════════════════════════════
+      state-active-color: "#6200EA"
+      state-inactive-color: "rgba(98, 0, 234, 0.15)"
+      state-on-color: "var(--state-active-color)"
+      state-off-color: "var(--state-inactive-color)"
+      state-home-color: "#00FFAA"
+      state-not-home-color: "#2a3658"
+      state-unavailable-color: "#0e1528"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # STATUTS
+      # ══════════════════════════════════════════════════════════════════════
+      success-color: "#00FFAA"
+      warning-color: "#FFB800"
+      error-color: "#FF2D6B"
+      error-state-color: "var(--error-color)"
+      warning-state-color: "var(--warning-color)"
+      success-state-color: "var(--success-color)"
+      info-color: "var(--accent-color)"
+      info-state-color: "var(--accent-color)"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # VARIABLES RGB
+      # ══════════════════════════════════════════════════════════════════════
+      rgb-primary-color: "98, 0, 234"
+      rgb-secondary-color: "61, 0, 184"
+      rgb-accent-color: "0, 255, 249"
+      rgb-blacklight-color: "180, 0, 255"
+      rgb-state-active-color: "98, 0, 234"
+      rgb-text-primary-color: "210, 200, 240"
+      rgb-disabled-color: "30, 20, 60"
+      rgb-card-background-color: "4, 2, 14"
+      rgb-success-color: "0, 255, 170"
+      rgb-warning-color: "255, 184, 0"
+      rgb-error-color: "255, 45, 107"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # TEXTE
+      # ══════════════════════════════════════════════════════════════════════
+      primary-text-color: "#e8e0ff"
+      #secondary-text-color: "#b0a0e0"
+      secondary-text-color: "rgba(176, 160, 224, 0.5)"
+      disabled-text-color: "#1e143c"
+      text-primary-color: "var(--primary-text-color)"
+      text-disabled-color: "var(--disabled-text-color)"
+      disabled-color: "rgba(98, 0, 234, 0.25)"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # TYPOGRAPHIE
+      # ══════════════════════════════════════════════════════════════════════
+      primary-font-family: "'Orbitron', 'Rajdhani', system-ui, sans-serif"
+      paper-font-common-base_-_font-family: "var(--primary-font-family)"
+      paper-font-body1_-_font-family: "var(--primary-font-family)"
+      paper-font-headline_-_font-family: "var(--primary-font-family)"
+      paper-font-title_-_font-family: "var(--primary-font-family)"
+      ha-card-header-font-family: "var(--primary-font-family)"
+      ha-font-family-body: "'Rajdhani', system-ui, sans-serif"
+      ha-font-family-heading: "var(--primary-font-family)"
+      ha-font-family-longform: "system-ui, sans-serif"
+      ha-font-family-code: "'Courier New', monospace"
+      ha-font-size-xs: "calc(12px * var(--ha-font-size-scale))"
+      ha-font-size-s: "calc(13px * var(--ha-font-size-scale))"
+      ha-font-size-m: "calc(15px * var(--ha-font-size-scale))"
+      ha-font-size-l: "calc(17px * var(--ha-font-size-scale))"
+      mdc-typography-font-family: "var(--primary-font-family)"
+      mdc-typography-body1-font-family: "'Rajdhani', system-ui, sans-serif"
+      mdc-typography-body2-font-family: "'Rajdhani', system-ui, sans-serif"
+      mdc-typography-subtitle1-font-family: "'Rajdhani', system-ui, sans-serif"
+      mdc-typography-headline6-font-family: "var(--primary-font-family)"
+      mdc-typography-button-font-family: "var(--primary-font-family)"
+      md-list-item-label-text-font: "var(--primary-font-family)"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # ARRIÈRE-PLANS
+      # ══════════════════════════════════════════════════════════════════════
+      primary-background-color: "#010108"
+      secondary-background-color: "#04020e"
+      card-background-color: "rgba(4, 2, 14, 0.78)"    # ◀ OPACITÉ CARDS — 0.0 transparent → 1.0 opaque (défaut 0.78)
+      paper-card-background-color: "var(--card-background-color)"
+      paper-listbox-background-color: "var(--card-background-color)"
+      paper-dialog-background-color: "rgba(2, 1, 10, 0.96)"  # ◀ OPACITÉ DIALOGUES
+      code-editor-background-color: "#010108"
+      divider-color: "rgba(98, 0, 234, 0.20)"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # CARTES — glassmorphism mix2 UV
+      # ══════════════════════════════════════════════════════════════════════
+      ha-card-border-radius: "18px"
+      ha-card-border-width: "1px"
+      ha-card-border-color: "rgba(98, 0, 234, 0.38)"
+      ha-card-box-shadow: >-
+        0 8px 32px rgba(0,0,0,0.75),
+        0 0 40px rgba(98,0,234,0.18),
+        inset 0 1px 0 rgba(200,150,255,0.10),
+        inset 1px 0 0 rgba(160,80,255,0.08)
+      ha-card-background: >-
+        linear-gradient(135deg, rgba(255,255,255,0.055) 0%, rgba(160,80,255,0.06) 28%, transparent 52%),
+        radial-gradient(ellipse at 0% 0%, rgba(98,0,234,0.22) 0%, transparent 56%),
+        rgba(4, 2, 14, 0.78)  /* ◀ OPACITÉ FOND CARD — ajuster ici (défaut 0.78) */
+      ha-card-backdrop-filter: "blur(12px) saturate(150%)"
+                              # v3 : argon plus UV (était #9D4EDD)
+      # ══════════════════════════════════════════════════════════════════════
+      # GAZ RARES & RADIATIONS — Palette nucléaire/néon pour glows
+      # ══════════════════════════════════════════════════════════════════════
+
+      # ─── Gaz communs (spectres d'émission)
+      gas-hydrogen: "#FF00FF"                            # Fuchsia saturé
+      gas-mercury: "#00FFFF"                             # Cyan froid labo
+      gas-nitrogen: "#BB86FC"                            # Violet pastel doux
+      gas-oxygen: "#A9D1FF"                              # Bleu ciel hiver
+      gas-sodium: "#FFCC00"                              # Jaune-orange chaud
+
+      # ─── Gaz nobles (utilisés pour les accents principaux)
+      gas-xenon: "#00D4FF"                               # Bleu électrique — headers ★
+      gas-argon: "#7B2FBE"                                # Violet ionisé — sidebars ★
+      gas-radon: "#E0115F"                               # Rose radioactif — accents
+      gas-neon: "#FF3D00"                                # Rouge plasma — alertes
+      gas-krypton: "#2EE5B6"                             # Vert spectral — états OK ★
+      gas-helium: "#FFEE58"                              # Or solaire — météo/curseurs
+      rgb-gas-xenon: "0, 212, 255"                       # Xénon RGB
+      rgb-gas-argon: "157, 78, 221"                      # Argon RGB
+      rgb-gas-radon: "224, 17, 95"                       # Radon RGB
+      rgb-gas-krypton: "46, 229, 182"                    # Krypton RGB
+      rgb-gas-helium: "255, 238, 88"                     # Hélium RGB
+      rgb-gas-neon: "255, 61, 0"                         # Néon RGB
+
+      # ─── Effets de rayonnement (fluorescence active)
+      radio-cherenkov: "#00E5FF"                         # Bleu réacteur hyper-vibrant
+      radio-uranium: "#CCFF00"                           # Vert vaseline fluo vintage
+      radio-plutonium: "#39FF14"                         # Vert toxique saturation max
+      radio-actinium: "#E0FFFF"                          # Lueur spectrale blanc-bleuté
+      radium-paint: "#C3FDB8"                            # Vert radium (peinture radioactive)
+      neutron-blue: "#A5F2F3"                            # Bleu neutronique réacteur
+      rgb-radio-cherenkov: "0, 229, 255"                 # Cherenkov RGB
+      rgb-radio-uranium: "204, 255, 0"                   # Uranium RGB
+      rgb-radio-plutonium: "57, 255, 20"                 # Plutonium RGB
+      rgb-radio-actinium: "224, 255, 255"                # Actinium RGB
+
+      # ─── Métaux réactifs (instabilité thermique)
+      metal-cesium: "#FFD700"                            # Or liquide instable
+      cesium-137-glow: "#1E90FF"                         # Bleu intense désintégration
+      metal-americium: "#FF4500"                         # Orange "Safety" chaleur alpha
+      metal-thallium: "#A0D6B4"                          # Vert gris poison spectral
+      rgb-metal-cesium: "255, 215, 0"                    # Cesium RGB
+      rgb-metal-americium: "255, 69, 0"                  # Americium RGB
+      rgb-metal-thallium: "160, 214, 180"                # Thallium RGB
+
+      # ─── États stellaires & fusion nucléaire (haute énergie)
+      plasma-corona: "#FFD600"                           # Plasma solaire ultra-dense
+      plasma-hydrogen: "#FF007F"                         # Rose fusion H ionisé
+      plasma-magnetic: "#00E5FF"                         # Confinement Tokamak
+      plasma-void: "#9D00FF"                             # Violet vide basse-pression
+      plasma-electric: "#B9F2FF"                         # Bleu foudre arc électrique
+      plasma-h-alpha: "#FF3366"                          # Rose-rouge stellaire (H)
+      plasma-o-iii: "#4AF2A1"                            # Vert fantomatique (O III)
+      plasma-sulfur: "#FFAD33"                           # Orange soufre ionisation
+      plasma-mercury: "#E573FF"                          # Violet électrique mercure
+      rgb-plasma-hydrogen: "255, 0, 127"                 # Hydrogen plasma RGB
+      rgb-plasma-magnetic: "0, 229, 255"                 # Magnetic plasma RGB
+      rgb-plasma-h-alpha: "255, 51, 102"                 # H-alpha RGB
+      rgb-plasma-o-iii: "74, 242, 161"                   # O-III RGB
+      rgb-plasma-sulfur: "255, 173, 51"                  # Sulfur RGB
+      rgb-plasma-mercury: "229, 115, 255"                # Mercury RGB
+      rgb-cesium-glow: "30, 144, 255"                    # Cesium glow RGB
+      rgb-critical-blue: "165, 242, 243"                 # Critical blue RGB
+
+      # ─── Fission & contrôle nucléaire
+      gas-iodine-131: "#9D81FF"                          # Violet spectral iode
+      safety-boron: "#7CFF00"                            # Vert flamme absorption neutrons
+      rgb-gas-iodine: "157, 129, 255"                    # Iodine RGB
+      rgb-safety-boron: "124, 255, 0"                    # Boron RGB
+
+      # ─── Couleurs profondes (fonds sombres)
+      radio-cobalt-60: "#001B44"                         # Bleu nuit irradié stockage gamma
+      plasma-ultraviolet: "#310062"                      # Indigo ionisé limite UV
+      plasma-uv-glow: "#6200EA"                          # Violet UV fluorescence active
+      dark-actinoid: "#120021"                           # Noir radioactif ombre-violet
+      metal-osmium: "#192231"                            # Bleu-gris métal lourd
+      gas-xenon-deep: "#004E64"                          # Bleu pétrole Xe haute-pression
+      rgb-radio-cobalt: "0, 27, 68"                      # Cobalt RGB
+      rgb-plasma-uv: "49, 0, 98"                         # UV plasma RGB
+      rgb-plasma-uv-glow: "98, 0, 234"                   # UV glow RGB
+
+      # ══════════════════════════════════════════════════════════════════════
+      # TUNING
+      # ══════════════════════════════════════════════════════════════════════
+      glow-opacity-idle: "0.08"
+      glow-opacity-hover: "0.20"
+      glow-opacity-active: "0.40"
+      border-opacity-idle: "0.20"
+      border-opacity-hover: "0.42"
+      blur-strength: "20px"
+      blur-strength-heavy: "28px"
+      animation-speed-card: "4s"
+      animation-speed-sidebar: "3s"
+      animation-speed-header: "5s"
+      animation-speed-badge: "2.5s"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # SIDEBAR
+      # ══════════════════════════════════════════════════════════════════════
+      #sidebar-background-color: "rgba(2, 1, 10, 0.45)"  # ◀ OPACITÉ SIDEBAR — 0.45 = semi-transparent
+      sidebar-background-color: "linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.8) 100%)"
+      sidebar-icon-color: "#b0a0e0"
+      sidebar-text-color: "#b0a0e0"
+      sidebar-selected-background-color: "#0e0820"
+      sidebar-selected-icon-color: "var(--primary-color)"
+      sidebar-selected-text-color: "#ffffff"
+      sidebar-menu-button-background-color: "#0e0820"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # HEADER
+      # ══════════════════════════════════════════════════════════════════════
+      #app-header-background-color: "rgba(2, 1, 10, 0.65)"  # ◀ OPACITÉ HEADER — quasi-opaque voulu
+      app-header-background-color: "linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.8) 100%)"
+      app-header-text-color: "var(--primary-text-color)"
+      app-header-edit-background-color: "rgba(2, 1, 10, 0.65)"
+      app-header-edit-text-color: "var(--accent-color)"
+      app-header-selection-bar-color: "var(--primary-color)"
+      #app-header-backdrop-filter: "blur(14px) saturate(150%)"
+      app-header-backdrop-filter: "blur(20px) saturate(180%) brightness(0.8)"
+      
+      # ══════════════════════════════════════════════════════════════════════
+      # ICÔNES
+      # ══════════════════════════════════════════════════════════════════════
+      state-icon-color: "var(--accent-color)"
+      state-icon-active-color: "var(--primary-color)"
+      state-icon-unavailable-color: "var(--disabled-text-color)"
+      icon-color: "var(--accent-color)"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # SWITCHES / SLIDERS
+      # ══════════════════════════════════════════════════════════════════════
+      switch-checked-color: "var(--primary-color)"
+      switch-checked-button-color: "var(--primary-color)"
+      switch-checked-track-color: "rgba(98, 0, 234, 0.45)"
+      switch-unchecked-button-color: "rgba(98, 0, 234, 0.35)"
+      switch-unchecked-track-color: "rgba(98, 0, 234, 0.15)"
+      switch-unchecked-color: "rgba(98, 0, 234, 0.15)"
+      paper-slider-knob-color: "var(--primary-color)"
+      paper-slider-knob-start-color: "var(--primary-color)"
+      paper-slider-pin-color: "var(--primary-color)"
+      paper-slider-active-color: "var(--primary-color)"
+      paper-slider-container-color: "rgba(98, 0, 234, 0.25)"
+      paper-slider-secondary-color: "var(--accent-color)"
+      ha-slider-indicator-color: "rgba(var(--rgb-primary-color), 0.85)"
+      ha-slider-thumb-color: "var(--primary-color)"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # DIALOGUES
+      # ══════════════════════════════════════════════════════════════════════
+      dialog-background-color: "rgba(2, 1, 10, 0.96)"         # ◀ OPACITÉ DIALOGUES (MDC)
+      mdc-dialog-scrim-color: "rgba(1, 0, 6, 0.92)"           # ◀ OPACITÉ SCRIM (fond derrière dialog)
+      mdc-dialog-content-ink-color: "var(--secondary-text-color)"
+      mdc-dialog-heading-ink-color: "var(--primary-text-color)"
+      ha-dialog-border-radius: "16px"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # BADGES / CHIPS / TABLES
+      # ══════════════════════════════════════════════════════════════════════
+      label-badge-border-color: "var(--primary-color)"
+      label-badge-text-color: "var(--primary-text-color)"
+      label-badge-red: "var(--error-color)"
+      label-badge-blue: "var(--accent-color)"
+      label-badge-green: "var(--success-color)"
+      label-badge-yellow: "var(--warning-color)"
+      label-badge-grey: "var(--disabled-text-color)"
+      chip-background-color: "rgba(98, 0, 234, 0.35)"
+      table-row-background-color: "rgba(4, 2, 14, 0.82)"              # ◀ OPACITÉ LIGNES TABLEAU
+      table-row-alternative-background-color: "rgba(8, 4, 20, 0.72)"  # ◀ OPACITÉ LIGNES ALTERNÉES
+
+      # ══════════════════════════════════════════════════════════════════════
+      # INPUTS / FORMULAIRES
+      # ══════════════════════════════════════════════════════════════════════
+      input-idle-line-color: "rgba(98, 0, 234, 0.35)"
+      input-hover-line-color: "var(--primary-color)"
+      input-fill-color: "rgba(4, 2, 14, 0.80)"  # ◀ OPACITÉ FOND INPUTS
+      input-ink-color: "var(--primary-text-color)"
+      input-label-ink-color: "var(--secondary-text-color)"
+      input-disabled-fill-color: "rgba(30, 20, 60, 0.20)"
+      input-disabled-ink-color: "var(--disabled-text-color)"
+      input-disabled-line-color: "rgba(30, 20, 60, 0.25)"
+      ha-input-border-color: "rgba(98, 0, 234, 0.35)"
+      ha-input-hover-border-color: "var(--primary-color)"
+      ha-input-focus-border-color: "var(--blacklight-color)"
+      paper-input-container-color: "var(--primary-color)"
+      paper-input-container-focus-color: "var(--blacklight-color)"
+      paper-input-container-input-color: "var(--primary-text-color)"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # BOUTONS
+      # ══════════════════════════════════════════════════════════════════════
+      ha-button-neutral-color: "var(--primary-color)"
+      mdc-button-outline-color: "var(--primary-color)"
+      mdc-button-disabled-ink-color: "var(--disabled-text-color)"
+      mdc-ripple-color: "rgba(98, 0, 234, 0.30)"
+      mdc-text-button-ripple-color: "rgba(98, 0, 234, 0.25)"
+      mdc-contained-button-ripple-color: "rgba(98, 0, 234, 0.40)"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # MDC / MATERIAL DESIGN
+      # ══════════════════════════════════════════════════════════════════════
+      mdc-tab-text-label-color-default: "var(--secondary-text-color)"
+      mdc-tab-color-default: "var(--primary-color)"
+      mdc-icon-color: "var(--accent-color)"
+      mdc-icon-button-color: "var(--accent-color)"
+      mdc-checkbox-unchecked-color: "var(--primary-color)"
+      mdc-radio-unchecked-color: "var(--primary-color)"
+      mdc-select-fill-color: "rgba(98, 0, 234, 0.10)"
+      mdc-select-ink-color: "var(--primary-text-color)"
+      mdc-select-label-ink-color: "var(--primary-color)"
+      mdc-select-dropdown-icon-color: "var(--primary-color)"
+      mdc-text-field-fill-color: "rgba(98, 0, 234, 0.10)"
+      mdc-text-field-ink-color: "var(--primary-text-color)"
+      mdc-text-field-label-ink-color: "var(--primary-color)"
+      mdc-theme-primary: "var(--primary-color)"
+      mdc-theme-secondary: "var(--accent-color)"
+      mdc-theme-surface: "var(--card-background-color)"
+      mdc-theme-background: "var(--primary-background-color)"
+      mdc-theme-error: "var(--error-color)"
+      mdc-theme-on-primary: "#010108"
+      mdc-theme-on-secondary: "#010108"
+      mdc-theme-on-surface: "var(--primary-text-color)"
+      material-background-color: "var(--primary-background-color)"
+      material-primary-color: "var(--primary-color)"
+      material-secondary-color: "var(--accent-color)"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # HA COLOR SYSTEM v2024+
+      # ══════════════════════════════════════════════════════════════════════
+      ha-color-fill-neutral-quiet-resting: "rgba(4, 2, 14, 0.92)"  # ◀ OPACITÉ ÉLÉMENTS UI NATIFS (chips, badges…)
+      ha-color-surface-default: "rgba(4, 2, 14, 0.92)"           # ◀ OPACITÉ SURFACE DÉFAUT HA
+      ha-color-fill-neutral-quiet: "rgba(8, 4, 20, 0.85)"        # ◀ OPACITÉ FILL DISCRET
+      ha-color-on-neutral-quiet: "var(--primary-text-color)"
+      ha-color-on-neutral-normal: "var(--primary-text-color)"
+      ha-color-on-primary-normal: "var(--primary-text-color)"
+      ha-color-fill-primary-normal-resting: "rgba(98, 0, 234, 0.18)"
+      ha-color-form-background: "rgba(4, 2, 14, 0.75)"           # ◀ OPACITÉ FOND FORMULAIRES
+
+      # ══════════════════════════════════════════════════════════════════════
+      # ENERGY DASHBOARD
+      # ══════════════════════════════════════════════════════════════════════
+      energy-grid-consumption-color: "#1F7FFF"
+      energy-grid-return-color: "#00E8FF"
+      energy-solar-color: "#FFD050"
+      energy-battery-in-color: "#FF9500"
+      energy-battery-out-color: "#AAFF00"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # HACS
+      # ══════════════════════════════════════════════════════════════════════
+      hacs-error-color: "var(--error-color)"
+      hacs-warning-color: "var(--warning-color)"
+      hacs-update-color: "var(--gas-helium)"
+      hacs-new-color: "var(--gas-krypton)"
+      hacs-default-icon-color: "var(--gas-argon)"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # MARKDOWN
+      # ══════════════════════════════════════════════════════════════════════
+      markdown-text-color: "#a0a0c8"
+      markdown-link-color: "var(--accent-color)"
+      markdown-code-background-color: "rgba(98, 0, 234, 0.12)"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # KIOSK
+      # ══════════════════════════════════════════════════════════════════════
+      kiosk-glow-intensity: "1.0"
+      kiosk-touch-scale: "0.97"
+      kiosk-card-spacing: "16px"
+      kiosk-min-touch-target: "44px"
+
+  card-mod-theme: neo-tokyo-v3
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # CARD-MOD CARD
+  # ══════════════════════════════════════════════════════════════════════════
+  card-mod-card: |
+    :host {
+      -webkit-font-smoothing: antialiased;
+      -webkit-text-stroke: 0.15px rgba(255,255,255,0.1);
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+      position: relative;
+      border-radius: 18px;
+      overflow: hidden;
+      transition: filter .35s ease, box-shadow .35s ease;
+      will-change: filter;
+      transform: translateZ(0);   /* promouvoir sur couche GPU dès le chargement */
+    }
+
+    /* ── Gradient top+left — épouse le radius ─────────────────────
+       Ligne top  : UV #6200EA → xenon #00D4FF (gaz rare, froid)
+       Ligne left : UV #6200EA → argon #7B2FBE (gaz rare, sombre)
+       Le mask 135deg limite l'effet au coin supérieur gauche       */
+    :host::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 18px;
+      pointer-events: none;
+      z-index: 2;
+      background:
+        linear-gradient(90deg,
+          rgba(98,0,234,1.0) 0%,
+          rgba(0,212,255,0.65) 35%,
+          rgba(0,212,255,0.15) 60%,
+          transparent 75%
+        ) top / 100% 2px no-repeat,
+        linear-gradient(180deg,
+          rgba(98,0,234,1.0) 0%,
+          rgba(123,47,190,0.55) 40%,
+          rgba(123,47,190,0.10) 65%,
+          transparent 80%
+        ) left / 2px 100% no-repeat;
+      mask-image: linear-gradient(135deg,
+        black 0%, black 22%, rgba(0,0,0,0.5) 40%, transparent 58%
+      );
+      -webkit-mask-image: linear-gradient(135deg,
+        black 0%, black 22%, rgba(0,0,0,0.5) 40%, transparent 58%
+      );
+      opacity: 1;
+      transition: opacity .35s ease;
+    }
+
+    /* ── Coin UV radial top-left ──────────────────────────────── */
+    :host::after {
+      content: "";
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      border-radius: 18px;
+      pointer-events: none;
+      z-index: 3;
+      background: radial-gradient(
+        ellipse 50% 40% at 0% 0%,
+        rgba(98,0,234,0.12) 0%,
+        transparent 70%
+      );
+      transition: opacity .35s ease;
+    }
+
+    /* ── Hover : progressif, zéro transform ──────────────────── */
+    :host(:hover) {
+      filter: brightness(1.10) saturate(1.15);
+    }
+    :host(:hover)::before {
+      opacity: 1;
+      background:
+        linear-gradient(90deg,
+          rgba(180,0,255,1.0) 0%,
+          rgba(0,212,255,0.90) 35%,
+          rgba(0,212,255,0.25) 60%,
+          transparent 78%
+        ) top / 100% 2px no-repeat,
+        linear-gradient(180deg,
+          rgba(180,0,255,1.0) 0%,
+          rgba(98,0,234,0.75) 38%,
+          rgba(123,47,190,0.20) 65%,
+          transparent 82%
+        ) left / 2px 100% no-repeat;
+    }
+    :host(:hover)::after {
+      background:
+        linear-gradient(45deg,
+          transparent 40%,
+          rgba(255,255,255,0.025) 50%,
+          transparent 60%
+        ),
+        radial-gradient(
+          ellipse 50% 40% at 0% 0%,
+          rgba(98,0,234,0.18) 0%,
+          transparent 70%
+        );
+      background-size: 250% 250%, 100% 100%;
+      background-position: -50% -50%, 0 0;
+      animation: reflet-sweep .6s ease forwards;
+    }
+    @keyframes reflet-sweep {
+      from { background-position: -50% -50%, 0 0; }
+      to   { background-position:  50%  50%, 0 0; }
+    }
+
+    /* ── plasma-flow : barres de progression ─────────────────────── */
+    @keyframes plasma-flow {
+      0%   { background-position: 100% 0%; }
+      100% { background-position: -100% 0%; }
+    }
+
+    /* ── Textes ───────────────────────────────────────────────── */
+    .card-header {
+      /* xenon (#00D4FF) pour les headers de section */
+      text-shadow: 0 0 8px rgba(0,212,255,0.45), 0 0 20px rgba(98,0,234,0.35);
+      border-bottom: 1px solid rgba(98, 0, 234, 0.30);
+    }
+    /* text-shadow retirés du global — trop coûteux sur toutes les cards */
+    /* Les custom cards gèrent leurs propres text-shadows */
+
+    /* ── Header / toolbar ─────────────────────────────────────── */
+    /* box-shadow fixé au max — seule l'opacity pulse (composite layer) */
+    app-header,
+    ha-app-layout app-header,
+    app-toolbar,
+    .header,
+    mwc-tab-bar {
+      border-bottom: 2px solid rgba(98, 0, 234, 0.7);
+      position: relative;
+    }
+    app-header::after,
+    ha-app-layout app-header::after,
+    app-toolbar::after,
+    .header::after,
+    mwc-tab-bar::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      box-shadow:
+        0 0 10px rgba(98,0,234,0.9),
+        0 0 28px rgba(98,0,234,0.5),
+        0 0 55px rgba(0,212,255,0.14);
+      animation: header-pulse 5s ease-in-out infinite;
+    }
+    @keyframes header-pulse {
+      0%,100% { opacity: 0.55; }
+      50%      { opacity: 1.0; }
+    }
+
+    /* ── Vignette top page ────────────────────────────────────── */
+    hui-root::before {
+      content: "";
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 140px;
+      background: linear-gradient(180deg, rgba(1,0,8,0.75) 0%, rgba(2,1,10,0.35) 55%, transparent 100%);
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* ── iPad — animations allégées ──────────────────────────── */
+    @media (min-width: 768px) and (min-height: 1000px) and (hover: none) and (pointer: coarse) {
+      :host::before { animation: none !important; }
+      :host(:hover) { filter: none !important; }
+      app-header, ha-app-layout app-header, app-toolbar, .header, mwc-tab-bar {
+        animation: none !important;
+        box-shadow: 0 0 8px rgba(98,0,234,0.5) !important;
+      }
+      app-header::after, ha-app-layout app-header::after, app-toolbar::after, .header::after, mwc-tab-bar::after {
+        animation: none !important;
+        opacity: 0.7;
+      }
+    }
+
+    /* ── Smartphone — animations OFF ─────────────────────────── */
+    @media (max-width: 767px) {
+      :host, :host::before, :host::after { animation: none !important; }
+      :host(:hover) { filter: none !important; }
+      app-header, ha-app-layout app-header, app-toolbar, .header, mwc-tab-bar {
+        animation: none !important;
+        box-shadow: 0 0 6px rgba(98,0,234,0.4) !important;
+      }
+      app-header::after, ha-app-layout app-header::after, app-toolbar::after, .header::after, mwc-tab-bar::after {
+        animation: none !important;
+        opacity: 0;
+      }
+    }
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # CARD-MOD-ROOT
+  # ══════════════════════════════════════════════════════════════════════════
+  card-mod-root: |
+    ha-icon:hover {
+      transform: scale(1.25) translateX(5px) rotate(-5deg);
+      opacity: 1.0;
+      transition: all 0.3s ease;
+      filter: 
+        drop-shadow(0 0 5px rgba(180, 0, 255, 1.0)) 
+        drop-shadow(0 0 10px rgba(180, 0, 255, 0.75)) !important;
+    }
+    
+    ha-icon, ha-svg-icon, ha-icon-button {
+      filter: drop-shadow(0 0 8px color-mix(in srgb, currentColor, transparent 10%));
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) !important;
+    }
+
+    @keyframes header-neon-pulse {
+      0%, 100% {
+        border-bottom-color: rgba(98, 0, 234, 1.0);
+        box-shadow:
+          0 0 6px rgba(98, 0, 234, 0.90),
+          0 2px 18px rgba(98, 0, 234, 0.55),
+          0 4px 40px rgba(98, 0, 234, 0.25),
+          0 0 80px rgba(180, 0, 255, 0.10);
+      }
+      50% {
+        border-bottom-color: rgba(180, 0, 255, 1.0);
+        box-shadow:
+          0 0 10px rgba(180, 0, 255, 1.0),
+          0 2px 28px rgba(180, 0, 255, 0.75),
+          0 4px 55px rgba(98, 0, 234, 0.40),
+          0 0 100px rgba(180, 0, 255, 0.18);
+      }
+    }
+       
+    app-header,
+    ha-app-layout app-header,
+    app-toolbar,
+    .header,
+    mwc-tab-bar {
+      border-bottom: 2px solid rgba(98, 0, 234, 1.0);
+      animation: header-neon-pulse 4s ease-in-out infinite;
+    }
+    
+  # ══════════════════════════════════════════════════════════════════════════
+  # CARD-MOD SIDEBAR
+  # ══════════════════════════════════════════════════════════════════════════
+  card-mod-sidebar: |
+    @keyframes title-glitch-rgb {
+      0%,  9%   { text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color), 1px 0 rgba(var(--rgb-accent-color),0.5); letter-spacing: 2px; }
+      10%        { text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color), -5px 0 rgba(var(--rgb-primary-color),1.0), 5px 0 rgba(var(--rgb-accent-color),1.0); letter-spacing: 3px; transform: skewX(-2deg); }
+      11%        { text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color), 1px 0 rgba(var(--rgb-accent-color),0.5); letter-spacing: 2px; transform: skewX(0); }
+      12%,  39%  { text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color), 1px 0 rgba(var(--rgb-accent-color),0.5); letter-spacing: 2px; }
+      40%        { text-shadow: 0 0 8px #fff, 0 0 18px var(--primary-color), 0 0 48px var(--primary-color), 8px 0 rgba(var(--rgb-primary-color),1.0), -8px 0 rgba(var(--rgb-accent-color),1.0); letter-spacing: 5px; transform: skewX(3deg); }
+      41%        { text-shadow: 0 0 2px #fff, 0 0 6px var(--primary-color), 0 0 14px var(--primary-color), -2px 0 rgba(var(--rgb-accent-color),0.7); letter-spacing: 1px; transform: skewX(-1deg); }
+      42%,  71%  { text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color), 1px 0 rgba(var(--rgb-accent-color),0.5); letter-spacing: 2px; transform: skewX(0); }
+      72%        { text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color), -4px 0 rgba(var(--rgb-primary-color),0.9), 4px 0 rgba(var(--rgb-accent-color),0.9); letter-spacing: 2px; }
+      73%,  100% { text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color), 1px 0 rgba(var(--rgb-accent-color),0.5); letter-spacing: 2px; }
+    }
+    @keyframes title-flicker {
+      0%,  14%  { opacity: 1;    filter: brightness(1.1) saturate(1.4); }
+      15%        { opacity: 0.4;  filter: brightness(0.5) saturate(0.8); }
+      16%        { opacity: 1;    filter: brightness(1.5) saturate(1.6); }
+      17%,  44%  { opacity: 1;    filter: brightness(1.1) saturate(1.4); }
+      45%        { opacity: 0.7;  filter: brightness(0.7) saturate(0.9); }
+      46%        { opacity: 1;    filter: brightness(1.4) saturate(1.5); }
+      47%        { opacity: 0.85; filter: brightness(0.9) saturate(1.2); }
+      48%,  79%  { opacity: 1;    filter: brightness(1.1) saturate(1.4); }
+      80%        { opacity: 0.15; filter: brightness(0.2) saturate(0.5); }
+      81%        { opacity: 1;    filter: brightness(1.7) saturate(1.8); }
+      82%,  100% { opacity: 1;    filter: brightness(1.1) saturate(1.4); }
+    }
+    @keyframes neon-flicker {
+      0%,  17%  { box-shadow: 0 0 5px rgba(var(--rgb-primary-color),0.5), 0 0 10px rgba(var(--rgb-primary-color),0.22); }
+      18%        { box-shadow: 0 0 2px rgba(var(--rgb-primary-color),0.1); }
+      19%        { box-shadow: 0 0 5px rgba(var(--rgb-primary-color),0.5), 0 0 10px rgba(var(--rgb-primary-color),0.22); }
+      20%        { box-shadow: 0 0 2px rgba(var(--rgb-primary-color),0.1); }
+      21%,  74%  { box-shadow: 0 0 5px rgba(var(--rgb-primary-color),0.5), 0 0 10px rgba(var(--rgb-primary-color),0.22); }
+      75%         { box-shadow: 0 0 14px rgba(var(--rgb-blacklight-color),0.6), 0 0 22px rgba(var(--rgb-primary-color),0.35); }
+      76%         { box-shadow: 0 0 2px rgba(var(--rgb-primary-color),0.1); }
+      77%,  100% { box-shadow: 0 0 5px rgba(var(--rgb-primary-color),0.5), 0 0 10px rgba(var(--rgb-primary-color),0.22); }
+    }
+    @keyframes edge-flicker {
+      /* transform scaleX au lieu de width — GPU only, zéro layout reflow */
+      0%,  100% { opacity:1.0; transform:scaleX(1);   box-shadow: 0 0 6px var(--primary-color), 0 0 14px rgba(var(--rgb-primary-color),0.7); }
+      12%        { opacity:0.2; transform:scaleX(0.8); box-shadow:none; }
+      13%        { opacity:1.0; transform:scaleX(1.3); box-shadow: 0 0 10px var(--primary-color), 0 0 22px rgba(var(--rgb-primary-color),1.0); }
+      14%        { opacity:0.7; transform:scaleX(1);   box-shadow: 0 0 6px var(--primary-color); }
+      45%        { opacity:0.85; }
+      46%        { opacity:1.0; transform:scaleX(1.5); box-shadow: 0 0 14px var(--blacklight-color), 0 0 28px rgba(var(--rgb-blacklight-color),0.9); }
+      47%        { opacity:0.4; transform:scaleX(0.8); box-shadow:none; }
+      48%        { opacity:1.0; transform:scaleX(1); }
+    }
+
+    @keyframes neon-subtle-flicker {
+      0%, 100% { opacity: 1; text-shadow: 0 0 10px rgba(var(--rgb-plasma-uv-glow), 0.8); }
+      92% { opacity: 1; }
+      93% { opacity: 0.8; text-shadow: none; }
+      94% { opacity: 1; }
+      96% { opacity: 1; }
+      97% { opacity: 0.9; }
+    }
+
+    :host {
+      position: relative;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      background:
+        linear-gradient(145deg,
+          rgba(255,255,255,0.04) 0%,
+          rgba(98,0,234,0.06) 25%,
+          rgba(255,255,255,0.00) 55%
+        ),
+        linear-gradient(0deg,
+          rgba(98, 0, 234, 0.06) 0%,
+          rgba(98, 0, 234, 0.03) 20%,
+          transparent 50%
+        ),
+        rgba(2, 1, 10, 0.50);  /* ◀ OPACITÉ BG SIDEBAR (card-mod) */
+        
+      backdrop-filter: blur(10px) saturate(180%) brightness(0.8);
+      -webkit-backdrop-filter: blur(10px) saturate(180%) brightness(0.8);
+    }
+
+    :host::after {
+      content: "";
+      position: absolute;
+      top: 0; right: 0;
+      width: 3px; height: 100%;
+      transform-origin: right center;
+      will-change: transform, opacity;
+      background: linear-gradient(180deg,
+        transparent                           0%,
+        rgba(var(--rgb-primary-color), 0.4)  15%,
+        var(--primary-color)                  35%,
+        var(--blacklight-color)               50%,
+        var(--primary-color)                  65%,
+        rgba(var(--rgb-primary-color), 0.4)  85%,
+        transparent                           100%);
+      box-shadow:
+        0 0 6px var(--primary-color),
+        0 0 14px rgba(var(--rgb-primary-color), 0.7),
+        0 0 30px rgba(var(--rgb-blacklight-color), 0.2);
+      animation: edge-flicker 6s step-end infinite;
+      z-index: 10;
+    }
+
+    @keyframes logo-glitch-rgb {
+      0%,  9%   { filter: blur(0.3px) drop-shadow(0 0 5px #fff) drop-shadow(0 0 12px var(--primary-color)) drop-shadow(0 0 28px var(--primary-color)); transform: skewX(0) translateZ(0); }
+      10%        { filter: blur(0.5px) drop-shadow(-5px 0 0 rgba(var(--rgb-primary-color),1.0)) drop-shadow(5px 0 0 rgba(var(--rgb-accent-color),1.0)) drop-shadow(0 0 12px var(--primary-color)); transform: skewX(-2deg) translateZ(0); }
+      11%        { filter: blur(0.3px) drop-shadow(0 0 5px #fff) drop-shadow(0 0 12px var(--primary-color)) drop-shadow(0 0 28px var(--primary-color)); transform: skewX(0) translateZ(0); }
+      12%,  39%  { filter: blur(0.3px) drop-shadow(0 0 5px #fff) drop-shadow(0 0 12px var(--primary-color)) drop-shadow(0 0 28px var(--primary-color)); transform: skewX(0) translateZ(0); }
+      40%        { filter: blur(0.6px) drop-shadow(8px 0 0 rgba(var(--rgb-primary-color),1.0)) drop-shadow(-8px 0 0 rgba(var(--rgb-accent-color),1.0)) drop-shadow(0 0 18px var(--primary-color)); transform: skewX(3deg) translateZ(0); }
+      41%        { filter: blur(0.4px) drop-shadow(-2px 0 0 rgba(var(--rgb-accent-color),0.7)) drop-shadow(0 0 6px var(--primary-color)); transform: skewX(-1deg) translateZ(0); }
+      42%,  71%  { filter: blur(0.3px) drop-shadow(0 0 5px #fff) drop-shadow(0 0 12px var(--primary-color)) drop-shadow(0 0 28px var(--primary-color)); transform: skewX(0) translateZ(0); }
+      72%        { filter: blur(0.3px) drop-shadow(-4px 0 0 rgba(var(--rgb-primary-color),0.9)) drop-shadow(4px 0 0 rgba(var(--rgb-accent-color),0.9)) drop-shadow(0 0 12px var(--primary-color)); transform: translateZ(0); }
+      73%,  100% { filter: blur(0.3px) drop-shadow(0 0 5px #fff) drop-shadow(0 0 12px var(--primary-color)) drop-shadow(0 0 28px var(--primary-color)); transform: skewX(0) translateZ(0); }
+    }
+    @keyframes logo-flicker {
+      0%,  14%  { opacity: 1; }
+      15%        { opacity: 0.4; }
+      16%        { opacity: 1; }
+      17%,  44%  { opacity: 1; }
+      45%        { opacity: 0.7; }
+      46%        { opacity: 1; }
+      47%        { opacity: 0.85; }
+      48%,  79%  { opacity: 1; }
+      80%        { opacity: 0.15; }
+      81%        { opacity: 1; }
+      82%,  100% { opacity: 1; }
+    }
+    .menu .title {
+      font-size: 0 !important;
+      color: transparent !important;
+      text-shadow: none !important;
+      display: block;
+      background-image: url('/local/afterlife-logo.svg');
+      background-repeat: no-repeat;
+      background-size: contain;
+      background-position: left center;
+      width: 100%;
+      aspect-ratio: 3 / 1;
+      max-height: 80px;
+      image-rendering: auto;
+      -webkit-font-smoothing: antialiased;
+      transform: translateZ(0);
+      will-change: filter, transform;
+      animation: logo-glitch-rgb 11s step-end infinite, logo-flicker 7s step-end infinite;
+    }
+
+    @keyframes menu-flicker {
+      0%,100% { box-shadow: 0 0 6px #fff, 0 0 12px var(--primary-color), 0 0 24px var(--primary-color); }
+      7%       { box-shadow: 0 0 2px #fff, 0 0 5px var(--primary-color); }
+      8%       { box-shadow: 0 0 10px #fff, 0 0 18px var(--blacklight-color), 0 0 30px var(--blacklight-color); }
+      9%       { box-shadow: 0 0 6px #fff, 0 0 12px var(--primary-color), 0 0 24px var(--primary-color); }
+      55%      { box-shadow: 0 0 3px #fff, 0 0 6px var(--primary-color); }
+      56%      { box-shadow: 0 0 8px #fff, 0 0 16px var(--accent-color), 0 0 28px var(--accent-color); }
+      57%      { box-shadow: 0 0 6px #fff, 0 0 12px var(--primary-color), 0 0 24px var(--primary-color); }
+    }
+    .menu {
+      border-bottom: 3px solid rgba(98, 0, 234, 0.9);
+      box-shadow:
+        0 0 8px #fff,
+        0 0 14px var(--primary-color),
+        0 0 28px var(--primary-color),
+        0 0 45px rgba(var(--rgb-primary-color), 0.6);
+      animation: menu-flicker 5s step-end infinite;
+    }
+
+    @keyframes item-scan {
+      0%   { transform: translateX(-100%); opacity: 0; }
+      30%  { opacity: 1; }
+      100% { transform: translateX(200%); opacity: 0; }
+    }
+    @keyframes icon-pulse {
+      0%,100% { filter: drop-shadow(0 0 4px rgba(var(--rgb-plasma-uv-glow),0.6)) drop-shadow(0 0 8px rgba(var(--rgb-plasma-uv-glow),0.3)); }
+      50%      { filter: drop-shadow(0 0 8px rgba(var(--rgb-plasma-uv-glow),1.0)) drop-shadow(0 0 18px rgba(var(--rgb-plasma-uv-glow),0.6)) drop-shadow(0 0 30px rgba(var(--rgb-primary-color),0.4)); }
+    }
+    @keyframes selected-scan {
+      0%   { transform: translateX(-120%); }
+      100% { transform: translateX(300%); }
+    }
+
+    ha-md-list-item {
+      position: relative;
+      overflow: hidden;
+      transition: background 0.2s ease, transform 0.25s ease, box-shadow 0.25s ease;
+      border-radius: 8px;
+    }
+    ha-md-list-item::after {
+      content: "";
+      position: absolute;
+      top: 0; left: 0;
+      width: 40%; height: 100%;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(var(--rgb-accent-color), 0.18) 40%,
+        rgba(255,255,255,0.08) 50%,
+        rgba(var(--rgb-accent-color), 0.18) 60%,
+        transparent 100%);
+      transform: translateX(-100%);
+      pointer-events: none;
+      z-index: 1;
+    }
+    ha-md-list-item:hover::after {
+      animation: item-scan 0.5s cubic-bezier(0.25,0.46,0.45,0.94) forwards;
+    }
+    ha-md-list-item:hover {
+      background: linear-gradient(90deg,
+        rgba(var(--rgb-primary-color), 0.15) 0%,
+        rgba(0, 255, 249, 0.05) 50%,
+        transparent 100%
+      ) !important;
+      transform: translateX(8px) scale(1.01);
+      transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      border-left: 2px solid rgba(var(--rgb-accent-color), 0.5) !important;
+      backdrop-filter: blur(30px) brightness(1.1) !important;
+      box-shadow:
+        inset 10px 0 15px -10px rgba(var(--rgb-accent-color), 0.4),
+        -4px 0 12px rgba(var(--rgb-primary-color), 0.3) !important;
+    }
+    ha-md-list-item ha-icon,
+    ha-md-list-item ha-svg-icon,
+    ha-md-list-item ha-icon[slot="start"] {
+      transition: transform 0.25s ease, filter 0.25s ease;
+    }
+    ha-md-list-item:hover ha-icon,
+    ha-md-list-item:hover ha-svg-icon,
+    ha-md-list-item:hover ha-icon[slot="start"] {
+      transform: scale(1.2) translateX(4px) rotate(-3deg);
+      filter:
+        drop-shadow(0 0 5px var(--accent-color))
+        drop-shadow(0 0 10px rgba(var(--rgb-primary-color), 0.6)) !important;
+    }
+    @keyframes border-pulse {
+      0%,100% { opacity: 0.7; }
+      50%      { opacity: 1.0; }
+    }
+    ha-md-list-item.selected {
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(90deg,
+        rgba(var(--rgb-plasma-uv-glow), 0.15) 0%,
+        rgba(var(--rgb-plasma-uv-glow), 0.05) 40%,
+        transparent 100%
+      ) !important;
+      border: 1px solid rgba(98, 0, 234, 0.3);
+      border-left: 3px solid rgba(var(--rgb-plasma-uv-glow), 1) !important;
+      /* box-shadow fixe au max — l'opacity pulse via ::before */
+      box-shadow:
+        -5px 0 18px rgba(var(--rgb-plasma-uv-glow), 0.7),
+        inset 12px 0 22px -10px rgba(var(--rgb-plasma-uv-glow), 0.45) !important;
+      border-radius: 8px;
+      animation: neon-flicker 7s step-end infinite, border-pulse 3s ease-in-out infinite;
+      transform: translateX(8px);
+    }
+    ha-md-list-item.selected::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 8px;
+      overflow: hidden;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(var(--rgb-plasma-uv-glow), 0.12) 40%,
+        rgba(255,255,255,0.06) 50%,
+        transparent 100%);
+      background-size: 35% 100%;
+      background-repeat: no-repeat;
+      animation: selected-scan 4s ease-in-out infinite;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* border-left assure l'indicateur visuel — pas de ::before needed */
+
+    ha-md-list-item.selected .item-text {
+      color: #fff;
+      text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color);
+    }
+    ha-md-list-item.selected ha-icon,
+    ha-md-list-item.selected ha-svg-icon {
+      animation: icon-pulse 2.5s ease-in-out infinite;
+    }
+    ha-md-list-item ha-icon,
+    ha-md-list-item ha-svg-icon {
+      filter: drop-shadow(0 0 4px currentColor);
+      transition: all 0.3s ease;
+    }
+
+    /* Smartphone */
+    @media (max-width: 767px) {
+      :host, :host::after { animation: none !important; }
+      .menu { animation: none !important; box-shadow: 0 0 8px var(--primary-color) !important; }
+      .menu .title { animation: none !important; }
+      ha-md-list-item.selected { animation: none !important; }
+      ha-md-list-item.selected ha-icon, ha-md-list-item.selected ha-svg-icon { animation: none !important; }
+      ha-md-list-item::after, ha-md-list-item.selected::after { animation: none !important; display: none; }
+      ha-md-list-item:hover { transform: none !important; }
+    }
+
+    /* iPad */
+    @media (min-width: 768px) and (min-height: 1000px) and (hover: none) and (pointer: coarse) {
+      :host::after { animation: none !important; }
+      .menu { animation: none !important; box-shadow: 0 0 8px var(--primary-color) !important; }
+      .menu .title { animation: none !important; text-shadow: 0 0 5px #fff, 0 0 14px var(--primary-color); }
+      ha-md-list-item.selected { animation: none !important; border-left: 2px solid var(--primary-color); }
+      ha-md-list-item.selected ha-icon, ha-md-list-item.selected ha-svg-icon { animation: icon-pulse 2.5s ease-in-out infinite; }
+      ha-md-list-item.selected::after { display: none; }
+      ha-md-list-item.selected .item-text { text-shadow: 0 0 8px var(--primary-color); }
+      ha-md-list-item:hover { transform: none !important; }
+    }
