@@ -1,5 +1,5 @@
 /**
- * neon-dual-thermo-card v2.0.0
+ * neon-dual-thermo-card v2.0.1
  * Double thermomètre néon pour Home Assistant - Comparaison côte à côte
  *
  * Installation :
@@ -432,7 +432,7 @@ function buildThermoSkeleton(c, color, id, geo, sideCtx) {
 function buildBgGraphSVG(histWind, histPressure, primaryColor) {
   const hasWind     = histWind     && histWind.length     > 1;
   const hasPressure = histPressure && histPressure.length > 1;
-  if (!hasWind && !hasPressure) return '';
+  if (!hasWind && !hasPressure) return { svg: '', labels: '' };
 
   const W = 100, H = 100, PAD = 3;
 
@@ -456,12 +456,39 @@ function buildBgGraphSVG(histWind, histPressure, primaryColor) {
     windArea = `${d} L${last.x},${H - PAD} L${first.x},${H - PAD} Z`;
   }
 
+  // Pression : échelle fixe 970–1040 hPa
+  const P_MIN = 970, P_MAX = 1040;
+  let pressureSVG = '', pressureLabels = '';
+
   if (hasPressure) {
-    const pts = normalize(histPressure);
+    const pNorm = (v) => {
+      const clamped = Math.max(P_MIN, Math.min(P_MAX, v));
+      return (H - PAD - ((clamped - P_MIN) / (P_MAX - P_MIN)) * (H - PAD * 2)).toFixed(2);
+    };
+    const pts = histPressure.map((v, i) => ({
+      x: (PAD + (i / (histPressure.length - 1)) * (W - PAD * 2)).toFixed(2),
+      y: pNorm(v),
+    }));
     pressurePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
+
+    const refs = [
+      { hpa: 980,  label: '980',  color: '#ff4060', opacity: 0.45 },
+      { hpa: 1000, label: '1000', color: '#ffaa30', opacity: 0.35 },
+      { hpa: 1013, label: '1013', color: '#9090c0', opacity: 0.30 },
+      { hpa: 1025, label: '1025', color: '#40d0a0', opacity: 0.35 },
+    ];
+    pressureSVG = refs.map(r => {
+      const y = pNorm(r.hpa);
+      return `<line x1="${PAD}" y1="${y}" x2="${W}" y2="${y}"
+        stroke="${r.color}" stroke-width="0.4" stroke-dasharray="1.5,2" opacity="${r.opacity}" vector-effect="non-scaling-stroke"/>`;
+    }).join('');
+    pressureLabels = refs.map(r => {
+      const yPct = ((parseFloat(pNorm(r.hpa)) / H) * 100).toFixed(1);
+      return `<div style="position:absolute;right:4px;top:${yPct}%;transform:translateY(-50%);font-size:9px;font-family:monospace;color:${r.color};opacity:${(r.opacity + 0.25).toFixed(2)};line-height:1;pointer-events:none;white-space:nowrap;">${r.label}</div>`;
+    }).join('');
   }
 
-  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"
+  const svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"
     preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;display:block;overflow:hidden"
     shape-rendering="geometricPrecision">
     <defs>
@@ -480,11 +507,14 @@ function buildBgGraphSVG(histWind, histPressure, primaryColor) {
     <path d="${windPath}" fill="none" stroke="${primaryColor}" stroke-width="0.85"
       opacity="0.92" vector-effect="non-scaling-stroke"/>` : ''}
     ${hasPressure ? `
+    ${pressureSVG}
     <path d="${pressurePath}" fill="none" stroke="#6200EA" stroke-width="1.4"
       opacity="0.35" vector-effect="non-scaling-stroke" filter="url(#bg-pressure-glow)"/>
     <path d="${pressurePath}" fill="none" stroke="#b060ff" stroke-width="0.6"
       opacity="0.55" vector-effect="non-scaling-stroke"/>` : ''}
   </svg>`;
+
+  return { svg, labels: pressureLabels };
 }
 
 // ── Dual Sparkline 24h ──────────────────────────────────────────
@@ -593,36 +623,50 @@ class NeonDualThermoCardEditor extends HTMLElement {
   }
 
   _entitySelect(label, key, hint = '') {
+    // §22 : input + <datalist> inline dans le template (même placement que _input/_color).
+    const val = this._config[key] || '';
     return `<div class="field"><label>${label}</label>
-      <div data-picker="${key}"></div>
+      <input type="text" data-entity-key="${key}" value="${val}" list="ndt-ent-list"
+        autocomplete="off" placeholder="sensor.…"/>
       ${hint ? `<p class="hint">${hint}</p>` : ''}</div>`;
   }
 
   _initPickers() {
-    this.querySelectorAll('[data-picker]').forEach(container => {
-      const key = container.dataset.picker;
-      const picker = document.createElement('ha-entity-picker');
-      picker.hass = this._hass;
-      picker.value = this._config[key] || '';
-      picker.includeDomains = ['sensor', 'input_number'];
-      picker.allowCustomEntity = true;
-      picker.dataset.entityKey = key;
-      picker.addEventListener('value-changed', (e) => {
-        e.stopPropagation();
-        this._changed(key, e.detail.value || null);
-      });
-      container.appendChild(picker);
+    // Construit le <datalist> partagé + câble les events des inputs entité.
+    this._fillEntityList();
+    this.querySelectorAll('input[data-entity-key]').forEach(inp => {
+      const key = inp.dataset.entityKey;
+      inp.addEventListener('keydown', e => e.stopPropagation(), { passive: true });
+      inp.addEventListener('input',   e => e.stopPropagation(), { passive: true });
+      inp.addEventListener('change', (e) => { e.stopPropagation(); this._changed(key, e.target.value.trim() || null); });
     });
   }
 
+  _fillEntityList() {
+    if (!this._hass) return;
+    let dl = this.querySelector('#ndt-ent-list');
+    if (!dl) { dl = document.createElement('datalist'); dl.id = 'ndt-ent-list'; this.appendChild(dl); }
+    const ids = Object.keys(this._hass.states)
+      .filter(e => e.startsWith('sensor.') || e.startsWith('input_number.')).sort();
+    if (dl.childElementCount === ids.length) return;
+    dl.textContent = '';
+    const frag = document.createDocumentFragment();
+    ids.forEach(id => {
+      const o = document.createElement('option'); o.value = id;
+      const fn = this._hass.states[id].attributes?.friendly_name;
+      if (fn && fn !== id) o.label = fn;
+      frag.appendChild(o);
+    });
+    dl.appendChild(frag);
+  }
+
   _syncPickers() {
-    this.querySelectorAll('ha-entity-picker').forEach(picker => {
-      const key = picker.dataset.entityKey;
-      if (key) {
-        if (this._hass) picker.hass = this._hass;
-        const expected = this._config[key] || '';
-        if (picker.value !== expected) picker.value = expected;
-      }
+    this._fillEntityList();
+    this.querySelectorAll('input[data-entity-key]').forEach(inp => {
+      if (inp === document.activeElement) return;   // guard focus §22
+      const key = inp.dataset.entityKey;
+      const expected = this._config[key] || '';
+      if (inp.value !== expected) inp.value = expected;
     });
   }
 
@@ -1895,7 +1939,8 @@ class NeonDualThermoCard extends HTMLElement {
     if (el._key === key) return;
     el._key = key;
     const colors = this._resolveColors();
-    el.innerHTML = buildBgGraphSVG(hW, hP, colors.primary);
+    const { svg, labels } = buildBgGraphSVG(hW, hP, colors.primary);
+    el.innerHTML = svg + labels;
   }
 
   _updateSparkline() {

@@ -2200,8 +2200,11 @@ class NeonDualGaugeCardEditor extends HTMLElement {
           cursor: pointer;
           max-width: 100%;
         }
-        select.entity-select {
+        select.entity-select,
+        input.entity-select {
           font-family: monospace;
+          width: 100%;
+          box-sizing: border-box;
         }
         input[type="text"]:focus,
         input[type="number"]:focus,
@@ -2468,14 +2471,10 @@ class NeonDualGaugeCardEditor extends HTMLElement {
               <div class="field">
                 <label>${t.entity} *</label>
                 <div class="entity-input">
-                  <select id="gauge${idx}_entity" class="entity-select" required>
-                    <option value="">${lang === 'fr' ? '-- Sélectionner une entité --' : '-- Select an entity --'}</option>
-                    ${entities.map(entity => `
-                      <option value="${entity}" ${entity === currentEntity ? 'selected' : ''}>
-                        ${entity}
-                      </option>
-                    `).join('')}
-                  </select>
+                  <input type="text" id="gauge${idx}_entity" class="entity-select"
+                    value="${currentEntity}" list="ndg-ent-list-${idx}" autocomplete="off"
+                    placeholder="sensor.example" required>
+                  <datalist id="ndg-ent-list-${idx}">${entities.map(e => `<option value="${e}">`).join('')}</datalist>
                   ${!currentEntity ? `<div class="no-entity-warning">${lang === 'fr' ? 'Entité requise' : 'Entity required'}</div>` : ''}
                 </div>
               </div>

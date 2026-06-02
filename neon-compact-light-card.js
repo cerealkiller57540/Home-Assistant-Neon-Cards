@@ -1090,7 +1090,12 @@ class NeonCompactLightCardEditor extends HTMLElement {
     this._built = false;
   }
 
-  setConfig(config) { this._config = { ...config }; this._render(); }
+  setConfig(config) {
+    // §22 : reconstruire le DOM une seule fois ; ensuite sync chirurgical (garde le focus).
+    this._config = { ...config };
+    if (!this._built) this._render();
+    else this._syncValues();
+  }
 
   set hass(hass) {
     this._hass = hass;
@@ -1099,6 +1104,30 @@ class NeonCompactLightCardEditor extends HTMLElement {
   }
 
   disconnectedCallback() { this.innerHTML = ""; this._built = false; }
+
+  // §22 : met à jour les champs sans recréer le DOM. Guard activeElement.
+  _syncValues() {
+    const c = this._config;
+    this.querySelectorAll("[data-key]").forEach((el) => {
+      if (el === document.activeElement) return;
+      const k = el.dataset.key;
+      if (el.type === "checkbox") {
+        el.checked = el.dataset.defaultOn ? (c[k] !== false) : (c[k] === true);
+      } else if (el.dataset.num) {
+        const v = c[k];
+        el.value = (v === undefined || v === null) ? "" : String(v);
+      } else {
+        const v = c[k];
+        el.value = (v === undefined || v === null) ? "" : v;
+        if (el._pick) { const h = this._toHex(el.value); if (h) el._pick.value = h; }
+      }
+    });
+    // Action selects : valeur config = { action } → "none" si absent.
+    this.querySelectorAll("select[data-action-key]").forEach((sel) => {
+      if (sel === document.activeElement) return;
+      sel.value = c[sel.dataset.actionKey]?.action || "none";
+    });
+  }
 
   _render() {
     this._built = true;
@@ -1141,14 +1170,14 @@ class NeonCompactLightCardEditor extends HTMLElement {
     this._text("name", "Custom Name", c.name || "", "Leave empty for friendly name");
 
     this._sec("Visual Effects");
-    this._toggle("glow",                "Glow Effect",                  c.glow                !== false);
-    this._toggle("effect_heartbeat",    "✦ Color pulse (when on)",       c.effect_heartbeat    !== false);
+    this._toggle("glow",                "Glow Effect",                  c.glow                !== false, true);
+    this._toggle("effect_heartbeat",    "✦ Color pulse (when on)",       c.effect_heartbeat    !== false, true);
     this._toggle("effect_intense_glow", "✧ Intense Glow (triple shadow)", c.effect_intense_glow === true);
     this._toggle("effect_scanline",     "≡ Scanlines",                  c.effect_scanline     === true);
     this._toggle("effect_flicker",      "↺ Flicker",                    c.effect_flicker      === true);
     this._toggle("effect_hover_glitch", "⚡ Glitch on hover",           c.effect_hover_glitch === true);
-    this._toggle("icon_power_animation", "⚙ Icon power animation",     c.icon_power_animation !== false);
-    this._toggle("smart_font_colour",   "Smart Font Color (contrast)",  c.smart_font_colour   !== false);
+    this._toggle("icon_power_animation", "⚙ Icon power animation",     c.icon_power_animation !== false, true);
+    this._toggle("smart_font_colour",   "Smart Font Color (contrast)",  c.smart_font_colour   !== false, true);
     this._text("opacity", "Opacity (0.2–1)", c.opacity !== undefined ? String(c.opacity) : "0.85", "e.g. 0.8");
     this._text("blur",    "Blur px (0–10)",  c.blur    !== undefined ? String(c.blur)    : "6", "e.g. 4");
     this._text("off_blur", "Blur OFF px (0–10)", c.off_blur !== undefined ? String(c.off_blur) : "", "Leave empty to use same blur");
@@ -1180,10 +1209,11 @@ class NeonCompactLightCardEditor extends HTMLElement {
   _sec(t)  { const d = document.createElement("div"); d.className = "sec"; d.textContent = t; this.appendChild(d); }
   _hint(t) { const d = document.createElement("div"); d.className = "hint"; d.textContent = t; this.appendChild(d); }
 
-  _toggle(key, label, checked) {
+  _toggle(key, label, checked, defaultOn = false) {
     const row = document.createElement("div"); row.className = "toggle-row";
     const lbl = document.createElement("label"); lbl.textContent = label;
-    const cb  = document.createElement("input"); cb.type = "checkbox"; cb.checked = checked;
+    const cb  = document.createElement("input"); cb.type = "checkbox"; cb.checked = checked; cb.dataset.key = key;
+    if (defaultOn) cb.dataset.defaultOn = "1";   // coché tant que config != false explicite
     cb.addEventListener("change", (e) => this._set(key, e.target.checked));
     row.appendChild(lbl); row.appendChild(cb); this.appendChild(row);
   }
@@ -1191,10 +1221,12 @@ class NeonCompactLightCardEditor extends HTMLElement {
   _text(key, label, value, placeholder = "") {
     const row = document.createElement("div"); row.className = "row";
     const lbl = document.createElement("label"); lbl.textContent = label;
-    const inp = document.createElement("input"); inp.type = "text"; inp.value = value; inp.placeholder = placeholder;
+    const isNum = (key === "opacity" || key === "blur" || key === "off_blur");
+    const inp = document.createElement("input"); inp.type = "text"; inp.value = value; inp.placeholder = placeholder; inp.dataset.key = key;
+    if (isNum) inp.dataset.num = "1";
     inp.addEventListener("change", (e) => {
       const v = e.target.value.trim();
-      if (key === "opacity" || key === "blur" || key === "off_blur") { const n = parseFloat(v); this._set(key, isNaN(n) ? undefined : n); }
+      if (isNum) { const n = parseFloat(v); this._set(key, isNaN(n) ? undefined : n); }
       else this._set(key, v || undefined);
     });
     row.appendChild(lbl); row.appendChild(inp); this.appendChild(row);
@@ -1210,8 +1242,8 @@ class NeonCompactLightCardEditor extends HTMLElement {
     MDI_ICONS.forEach(icon => {
       const o = document.createElement("option"); o.value = icon; o.textContent = icon.replace("mdi:", ""); o.selected = (icon === value); sel.appendChild(o);
     });
-    // free-text fallback
-    const inp = document.createElement("input"); inp.type = "text"; inp.value = value; inp.placeholder = "mdi:custom"; inp.style.cssText = "width:130px;font-size:13px;padding:6px 8px;border:1px solid var(--divider-color,#ccc);border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#000)";
+    // free-text fallback (porte la valeur réelle → tag data-key pour _syncValues)
+    const inp = document.createElement("input"); inp.type = "text"; inp.value = value; inp.placeholder = "mdi:custom"; inp.dataset.key = key; inp.style.cssText = "width:130px;font-size:13px;padding:6px 8px;border:1px solid var(--divider-color,#ccc);border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#000)";
 
     sel.addEventListener("change", (e) => { inp.value = e.target.value; this._set(key, e.target.value); });
     inp.addEventListener("change", (e) => {
@@ -1225,32 +1257,47 @@ class NeonCompactLightCardEditor extends HTMLElement {
   }
 
   _entityPicker(key, label, value) {
+    // §22 : input + <datalist> (jamais <select> brut — inutilisable avec 100+ entités).
     const row = document.createElement("div"); row.className = "row";
     const lbl = document.createElement("label"); lbl.textContent = label;
-    const sel = document.createElement("select"); sel.dataset.entityPicker = "1";
-    const ph  = document.createElement("option"); ph.value = ""; ph.textContent = "— select entity —"; ph.disabled = true; ph.selected = !value;
-    sel.appendChild(ph);
-    sel.addEventListener("change", (e) => this._set(key, e.target.value));
-    row.appendChild(lbl); row.appendChild(sel); this.appendChild(row);
+    const inp = document.createElement("input");
+    inp.type = "text"; inp.value = value || "";
+    inp.placeholder = "light.bedroom";
+    inp.autocomplete = "off";
+    inp.dataset.entityPicker = "1";
+    inp.dataset.key = key;
+    inp.setAttribute("list", "ncl-ent-list");
+    inp.style.cssText = "min-width:0;flex:1;font-size:13px;padding:6px 8px;border:1px solid var(--divider-color,#ccc);border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#000)";
+    inp.addEventListener("change", (e) => this._set(key, e.target.value.trim() || undefined));
+    row.appendChild(lbl); row.appendChild(inp); this.appendChild(row);
   }
 
   _fillEntityOptions() {
     if (!this._hass) return;
-    const sel = this.querySelector("select[data-entity-picker]");
-    if (!sel) return;
-    const current = sel.value || this._config.entity || "";
-    Array.from(sel.options).forEach((o) => { if (o.value) o.remove(); });
-    Object.keys(this._hass.states).filter((e) => e.startsWith("light.")).sort().forEach((id) => {
-      const o = document.createElement("option"); o.value = id; o.textContent = id; o.selected = (id === current); sel.appendChild(o);
+    let dl = this.querySelector("#ncl-ent-list");
+    if (!dl) { dl = document.createElement("datalist"); dl.id = "ncl-ent-list"; this.appendChild(dl); }
+    // Domaine light. uniquement (cette card pilote une lumière).
+    const ids = Object.keys(this._hass.states).filter((e) => e.startsWith("light.")).sort();
+    if (dl.childElementCount === ids.length) return;   // déjà à jour
+    dl.textContent = "";
+    const frag = document.createDocumentFragment();
+    ids.forEach((id) => {
+      const o = document.createElement("option");
+      o.value = id;
+      const fn = this._hass.states[id].attributes?.friendly_name;
+      if (fn && fn !== id) o.label = fn;
+      frag.appendChild(o);
     });
+    dl.appendChild(frag);
   }
 
   _colorRow(key, label, value) {
     const row = document.createElement("div"); row.className = "row";
     const lbl = document.createElement("label"); lbl.textContent = label;
     const wrap = document.createElement("div"); wrap.className = "color-row";
-    const text = document.createElement("input"); text.type = "text"; text.value = value; text.placeholder = "#rrggbb or rgb(…)";
+    const text = document.createElement("input"); text.type = "text"; text.value = value; text.placeholder = "#rrggbb or rgb(…)"; text.dataset.key = key;
     const pick = document.createElement("input"); pick.type = "color"; pick.value = this._toHex(value) || "#00E8FF";
+    text._pick = pick;   // resync color picker dans _syncValues
     text.addEventListener("change", (e) => { const v = e.target.value.trim(); this._set(key, v || undefined); const h = this._toHex(v); if (h) pick.value = h; });
     pick.addEventListener("input",  (e) => { text.value = e.target.value; this._set(key, e.target.value); });
     wrap.appendChild(text); wrap.appendChild(pick); row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
@@ -1259,7 +1306,7 @@ class NeonCompactLightCardEditor extends HTMLElement {
   _actionSelect(key, label, value, options) {
     const row = document.createElement("div"); row.className = "row";
     const lbl = document.createElement("label"); lbl.textContent = label;
-    const sel = document.createElement("select");
+    const sel = document.createElement("select"); sel.dataset.actionKey = key;
     options.forEach(({ v, l }) => { const o = document.createElement("option"); o.value = v; o.textContent = l; o.selected = (v === value); sel.appendChild(o); });
     sel.addEventListener("change", (e) => { const v = e.target.value; if (!v || v === "none") this._set(key, undefined); else this._set(key, { action: v }); });
     row.appendChild(lbl); row.appendChild(sel); this.appendChild(row);

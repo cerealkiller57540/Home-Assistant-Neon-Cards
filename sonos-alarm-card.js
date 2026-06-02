@@ -482,28 +482,42 @@ class SonosAlarmCardEditor extends HTMLElement {
   }
 
   _rowInto(parent, key, label, value, isEntity, placeholder='') {
+    // §22 : input + <datalist> partout (jamais ha-entity-picker).
     const row=document.createElement('div'); row.className='row';
+    const lbl=document.createElement('label'); lbl.textContent=label;
+    const inp=document.createElement('input'); inp.type='text'; inp.value=value;
     if (isEntity) {
-      const picker=document.createElement('ha-entity-picker');
-      if (this._hass) picker.hass = this._hass;
-      picker.value = value || '';
-      picker.label = label;
-      picker.allowCustomEntity = true;
-      picker.style.cssText = 'flex:1;';
-      picker.addEventListener('value-changed', (ev) => { ev.stopPropagation(); this._set(key, ev.detail.value||undefined); });
-      row.appendChild(picker);
+      inp.placeholder=placeholder||'switch.alarme';
+      inp.autocomplete='off';
+      inp.setAttribute('list','sonos-ent-list');
     } else {
-      const lbl=document.createElement('label'); lbl.textContent=label;
-      const inp=document.createElement('input'); inp.type='text'; inp.value=value; inp.placeholder=placeholder||label;
-      inp.addEventListener('change', e => this._set(key, e.target.value||undefined));
-      row.appendChild(lbl); row.appendChild(inp);
+      inp.placeholder=placeholder||label;
     }
-    parent.appendChild(row);
+    inp.addEventListener('change', e => this._set(key, e.target.value.trim()||undefined));
+    row.appendChild(lbl); row.appendChild(inp); parent.appendChild(row);
+  }
+
+  _fillEntities() {
+    if (!this._hass) return;
+    let dl=this.querySelector('#sonos-ent-list');
+    if (!dl) { dl=document.createElement('datalist'); dl.id='sonos-ent-list'; this.appendChild(dl); }
+    // Les alarmes Sonos sont des switch.*
+    const ids=Object.keys(this._hass.states).filter(e=>e.startsWith('switch.')).sort();
+    if (dl.childElementCount === ids.length) return;
+    dl.textContent='';
+    const frag=document.createDocumentFragment();
+    ids.forEach(id => {
+      const o=document.createElement('option'); o.value=id;
+      const fn=this._hass.states[id].attributes?.friendly_name;
+      if (fn && fn!==id) o.label=fn;
+      frag.appendChild(o);
+    });
+    dl.appendChild(frag);
   }
 
   _updatePickers() {
-    if (!this._hass) return;
-    this.querySelectorAll('ha-entity-picker').forEach(p => { p.hass = this._hass; });
+    // Renommé : alimente désormais le <datalist> d'autocomplétion.
+    this._fillEntities();
   }
 
   _getNestedConfig(path) {

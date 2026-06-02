@@ -927,12 +927,34 @@ class NeonClimateCard extends HTMLElement {
 class NeonClimateCardEditor extends HTMLElement {
   constructor() { super(); this._config = {}; this._hass = null; this._built = false; }
 
-  setConfig(config) { this._config = { ...config }; this._render(); }
+  setConfig(config) {
+    // §22 : ne reconstruire le DOM qu'une fois ; sinon sync chirurgical (garde le focus).
+    this._config = { ...config };
+    if (!this._built) this._render();
+    else              this._syncValues();
+  }
 
   set hass(hass) {
     this._hass = hass;
     if (!this._built) this._render();
     else              this._fillEntities();
+  }
+
+  // §22 : met à jour les champs sans recréer le DOM. Guard activeElement = ne pas
+  // écraser le champ en cours d'édition.
+  _syncValues() {
+    const c = this._config;
+    this.querySelectorAll('[data-key]').forEach(el => {
+      if (el === document.activeElement) return;
+      const k = el.dataset.key;
+      if (el.type === 'checkbox') {
+        el.checked = el.dataset.defaultOn ? (c[k] !== false) : !!c[k];
+      } else {
+        const v = c[k];
+        el.value = (v === undefined || v === null) ? '' : v;
+        if (el._pick) { const h = this._toHex(el.value); if (h) el._pick.value = h; }
+      }
+    });
   }
 
   disconnectedCallback() { this.innerHTML = ''; this._built = false; }
@@ -980,10 +1002,10 @@ class NeonClimateCardEditor extends HTMLElement {
 
     this._sec('Couleur display AC');
     this._colorRow('color_display', 'Dot-matrix / display', c.color_display || '#00fff9');
-    this._toggle('neon_display_glow', 'Triple neon glow', c.neon_display_glow !== false);
+    this._toggle('neon_display_glow', 'Triple neon glow', c.neon_display_glow !== false, true);
 
     this._sec('Options');
-    this._toggle('show_wind', 'Animation air (désactivable)', c.show_wind !== false);
+    this._toggle('show_wind', 'Animation air (désactivable)', c.show_wind !== false, true);
 
     this._fillEntities();
   }
@@ -991,10 +1013,11 @@ class NeonClimateCardEditor extends HTMLElement {
   _sec(t)  { const d=document.createElement('div'); d.className='sec'; d.textContent=t; this.appendChild(d); }
   _hint(t) { const d=document.createElement('div'); d.className='hint'; d.textContent=t; this.appendChild(d); }
 
-  _toggle(key, label, checked) {
+  _toggle(key, label, checked, defaultOn=false) {
     const row=document.createElement('div'); row.className='row';
     const lbl=document.createElement('label'); lbl.textContent=label;
-    const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=checked;
+    const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=checked; cb.dataset.key=key;
+    if (defaultOn) cb.dataset.defaultOn='1';   // coché tant que la config ne dit pas explicitement false
     cb.style.cssText='width:38px;height:20px;cursor:pointer;accent-color:var(--primary-color,#03a9f4);';
     cb.addEventListener('change', e => this._set(key, e.target.checked));
     row.appendChild(lbl); row.appendChild(cb); this.appendChild(row);
@@ -1003,28 +1026,31 @@ class NeonClimateCardEditor extends HTMLElement {
   _text(key, label, value, placeholder='') {
     const row=document.createElement('div'); row.className='row';
     const lbl=document.createElement('label'); lbl.textContent=label;
-    const inp=document.createElement('input'); inp.type='text'; inp.value=value; inp.placeholder=placeholder;
+    const inp=document.createElement('input'); inp.type='text'; inp.value=value; inp.placeholder=placeholder; inp.dataset.key=key;
     inp.addEventListener('change', e => this._set(key, e.target.value || undefined));
     row.appendChild(lbl); row.appendChild(inp); this.appendChild(row);
   }
 
   _entityRow(key, label, value, prefix) {
+    // §22 : input + <datalist> par préfixe de domaine (jamais <select> brut).
     const row=document.createElement('div'); row.className='row';
     const lbl=document.createElement('label'); lbl.textContent=label;
-    const sel=document.createElement('select'); sel.dataset.key=key; sel.dataset.prefix=prefix;
-    const ph=document.createElement('option'); ph.value=''; ph.textContent='— sélectionner —';
-    if (!value) ph.selected=true;
-    sel.appendChild(ph);
-    sel.addEventListener('change', e => this._set(key, e.target.value || undefined));
-    row.appendChild(lbl); row.appendChild(sel); this.appendChild(row);
+    const inp=document.createElement('input');
+    inp.type='text'; inp.value=value||''; inp.autocomplete='off';
+    inp.placeholder=(prefix||'')+'…';
+    inp.dataset.key=key; inp.dataset.prefix=prefix||'';
+    inp.setAttribute('list', 'ncc-ent-'+(prefix||'all').replace(/[^a-z]/g,''));
+    inp.addEventListener('change', e => this._set(key, e.target.value.trim() || undefined));
+    row.appendChild(lbl); row.appendChild(inp); this.appendChild(row);
   }
 
   _colorRow(key, label, value) {
     const row=document.createElement('div'); row.className='row';
     const lbl=document.createElement('label'); lbl.textContent=label;
     const wrap=document.createElement('div'); wrap.className='color-row';
-    const txt=document.createElement('input'); txt.type='text'; txt.value=value; txt.placeholder='#rrggbb';
+    const txt=document.createElement('input'); txt.type='text'; txt.value=value; txt.placeholder='#rrggbb'; txt.dataset.key=key;
     const pick=document.createElement('input'); pick.type='color'; pick.value=this._toHex(value)||'#00fff9';
+    txt._pick=pick;   // référence pour resync (cf. _syncValues)
     txt.addEventListener('change',  e => { const v=e.target.value.trim(); this._set(key,v||undefined); const h=this._toHex(v); if(h) pick.value=h; });
     pick.addEventListener('input',  e => { txt.value=e.target.value; this._set(key,e.target.value); });
     wrap.appendChild(txt); wrap.appendChild(pick); row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
@@ -1032,12 +1058,22 @@ class NeonClimateCardEditor extends HTMLElement {
 
   _fillEntities() {
     if (!this._hass) return;
-    this.querySelectorAll('select[data-key]').forEach(sel => {
-      const key=sel.dataset.key, prefix=sel.dataset.prefix||'', cur=this._config[key]||'';
-      while (sel.options.length > 1) sel.remove(1);
-      Object.keys(this._hass.states).filter(e=>e.startsWith(prefix)).sort().forEach(id => {
-        const o=document.createElement('option'); o.value=id; o.textContent=id; o.selected=(id===cur); sel.appendChild(o);
+    // Un <datalist> par préfixe de domaine, partagé par les inputs de ce préfixe.
+    this.querySelectorAll('input[data-key][list]').forEach(inp => {
+      const prefix=inp.dataset.prefix||'', listId=inp.getAttribute('list');
+      let dl=this.querySelector('#'+listId);
+      if (!dl) { dl=document.createElement('datalist'); dl.id=listId; this.appendChild(dl); }
+      const ids=Object.keys(this._hass.states).filter(e=>e.startsWith(prefix)).sort();
+      if (dl.childElementCount === ids.length) return;   // déjà à jour
+      dl.textContent='';
+      const frag=document.createDocumentFragment();
+      ids.forEach(id => {
+        const o=document.createElement('option'); o.value=id;
+        const fn=this._hass.states[id].attributes?.friendly_name;
+        if (fn && fn!==id) o.label=fn;
+        frag.appendChild(o);
       });
+      dl.appendChild(frag);
     });
   }
 

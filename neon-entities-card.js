@@ -1011,20 +1011,19 @@ class NeonEntitiesCardEditor extends HTMLElement {
   _entityRow(parent, idx, field, label, value, prefix, placeholder='') {
     const row  = document.createElement('div'); row.className = 'row';
     const lbl  = document.createElement('label'); lbl.textContent = label;
-    if (prefix) {
-      const sel = document.createElement('select');
-      sel.dataset.entIdx   = idx;
-      sel.dataset.entField = field;
-      const ph = document.createElement('option'); ph.value = ''; ph.textContent = '— sélectionner —';
-      if (!value) ph.selected = true;
-      sel.appendChild(ph);
-      sel.addEventListener('change', e => this._setEnt(idx, field, e.target.value || undefined));
-      row.appendChild(lbl); row.appendChild(sel);
+    const inp  = document.createElement('input');
+    inp.type = 'text'; inp.value = value;
+    if (prefix === 'entity') {
+      // Autocomplétion HTML native via <datalist> partagé (filtrage par le navigateur,
+      // saisie libre toujours possible).
+      inp.setAttribute('list', 'neon-ent-list');
+      inp.placeholder = placeholder || 'domain.objet';
+      inp.autocomplete = 'off';
     } else {
-      const inp = document.createElement('input'); inp.type = 'text'; inp.value = value; inp.placeholder = placeholder;
-      inp.addEventListener('change', e => this._setEnt(idx, field, e.target.value || undefined));
-      row.appendChild(lbl); row.appendChild(inp);
+      inp.placeholder = placeholder;
     }
+    inp.addEventListener('change', e => this._setEnt(idx, field, e.target.value || undefined));
+    row.appendChild(lbl); row.appendChild(inp);
     parent.appendChild(row);
   }
 
@@ -1050,17 +1049,22 @@ class NeonEntitiesCardEditor extends HTMLElement {
 
   _fillSelects() {
     if (!this._hass) return;
-    this.querySelectorAll('select[data-ent-idx]').forEach(sel => {
-      const idx   = parseInt(sel.dataset.entIdx);
-      const field = sel.dataset.entField;
-      const cur   = this._config.entities[idx]?.[field] || '';
-      while (sel.options.length > 1) sel.remove(1);
-      Object.keys(this._hass.states).sort().forEach(id => {
-        const o = document.createElement('option');
-        o.value = id; o.textContent = id; o.selected = (id === cur);
-        sel.appendChild(o);
-      });
+    // (Re)construit le <datalist> partagé alimentant l'autocomplétion des champs entité.
+    let dl = this.querySelector('#neon-ent-list');
+    if (!dl) { dl = document.createElement('datalist'); dl.id = 'neon-ent-list'; this.appendChild(dl); }
+    const ids = Object.keys(this._hass.states).sort();
+    // Skip si déjà à jour (évite de reconstruire à chaque tick hass).
+    if (dl.childElementCount === ids.length) return;
+    dl.textContent = '';
+    const frag = document.createDocumentFragment();
+    ids.forEach(id => {
+      const o = document.createElement('option');
+      o.value = id;
+      const fn = this._hass.states[id].attributes?.friendly_name;
+      if (fn && fn !== id) o.label = fn;   // affiché en complément de l'id dans la liste
+      frag.appendChild(o);
     });
+    dl.appendChild(frag);
   }
 
   _setNested(path, value) {

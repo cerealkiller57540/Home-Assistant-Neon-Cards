@@ -588,9 +588,173 @@ class OnkyoCard extends HTMLElement {
   }
 
   getCardSize() { return 3; }
+
+  static getConfigElement() { return document.createElement("onkyo-card-editor"); }
+  static getStubConfig(hass) {
+    const mp = hass ? Object.keys(hass.states).find(e => e.startsWith("media_player.")) : "";
+    return { entity: mp || "media_player.onkyo" };
+  }
 }
 
 customElements.define("onkyo-card", OnkyoCard);
+
+// ═══════════════════════════════════════════════════════
+//  ÉDITEUR VISUEL (§22 : render une fois + _syncValues, input+datalist)
+// ═══════════════════════════════════════════════════════
+class OnkyoCardEditor extends HTMLElement {
+  constructor() { super(); this._config = {}; this._hass = null; this._built = false; }
+
+  setConfig(config) {
+    this._config = { ...config };
+    if (!this._built) this._render();
+    else this._syncValues();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this._built) this._render();
+    else this._fillEntities();
+  }
+
+  disconnectedCallback() { this.innerHTML = ""; this._built = false; }
+
+  _syncValues() {
+    const c = this._config;
+    this.querySelectorAll("[data-key]").forEach((el) => {
+      if (el === document.activeElement) return;
+      const k = el.dataset.key;
+      if (el.type === "checkbox") {
+        el.checked = el.dataset.defaultOn ? (c[k] !== false) : (c[k] === true);
+      } else {
+        const v = c[k];
+        el.value = (v === undefined || v === null) ? "" : v;
+        if (el._pick) { const h = this._toHex(el.value); if (h) el._pick.value = h; }
+      }
+    });
+  }
+
+  _render() {
+    this._built = true;
+    this.innerHTML = "";
+    this.style.cssText = "display:block;padding:16px;font-family:var(--primary-font-family,Roboto,sans-serif);";
+
+    const style = document.createElement("style");
+    style.textContent = `
+      .sec { font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--primary-color);margin:18px 0 8px; }
+      .row { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px; }
+      .row label { font-size:14px;color:var(--primary-text-color);flex:1; }
+      input[type=text] { font-size:13px;padding:6px 8px;border:1px solid var(--divider-color,#ccc);border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#000);outline:none;flex-shrink:0;min-width:165px; }
+      .color-row { display:flex;align-items:center;gap:8px; }
+      .color-row input[type=text] { flex:1;min-width:0; }
+      input[type=color] { width:44px;height:30px;padding:2px 3px;border:1px solid var(--divider-color,#ccc);border-radius:6px;cursor:pointer;flex-shrink:0; }
+      input[type=checkbox] { width:38px;height:20px;cursor:pointer;accent-color:var(--primary-color,#9D4EDD);flex-shrink:0; }
+      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:-4px 0 10px; }
+    `;
+    this.appendChild(style);
+
+    const c = this._config;
+
+    this._sec("Entité");
+    this._entityRow("entity", "Media player *", c.entity || "");
+
+    this._sec("Couleurs");
+    this._colorRow("color_primary", "Couleur primaire", c.color_primary || "#00d4ff");
+    this._colorRow("color_accent",  "Couleur accent",   c.color_accent  || "#5D0CED");
+
+    this._sec("Options");
+    this._toggle("theme_background",     "Fond depuis le thème",         c.theme_background     === true);
+    this._toggle("show_chassis_texture", "Texture châssis",              c.show_chassis_texture !== false, true);
+    this._text("image_url", "URL image (override)", c.image_url || "", "/local/… ou https://…");
+
+    this._fillEntities();
+  }
+
+  _sec(t)  { const d = document.createElement("div"); d.className = "sec";  d.textContent = t; this.appendChild(d); }
+  _hint(t) { const d = document.createElement("div"); d.className = "hint"; d.textContent = t; this.appendChild(d); }
+
+  _toggle(key, label, checked, defaultOn = false) {
+    const row = document.createElement("div"); row.className = "row";
+    const lbl = document.createElement("label"); lbl.textContent = label;
+    const cb  = document.createElement("input"); cb.type = "checkbox"; cb.checked = checked; cb.dataset.key = key;
+    if (defaultOn) cb.dataset.defaultOn = "1";
+    cb.addEventListener("change", (e) => this._set(key, e.target.checked));
+    row.appendChild(lbl); row.appendChild(cb); this.appendChild(row);
+  }
+
+  _text(key, label, value, placeholder = "") {
+    const row = document.createElement("div"); row.className = "row";
+    const lbl = document.createElement("label"); lbl.textContent = label;
+    const inp = document.createElement("input"); inp.type = "text"; inp.value = value; inp.placeholder = placeholder; inp.dataset.key = key;
+    inp.addEventListener("change", (e) => this._set(key, e.target.value.trim() || undefined));
+    row.appendChild(lbl); row.appendChild(inp); this.appendChild(row);
+  }
+
+  _entityRow(key, label, value) {
+    const row = document.createElement("div"); row.className = "row";
+    const lbl = document.createElement("label"); lbl.textContent = label;
+    const inp = document.createElement("input");
+    inp.type = "text"; inp.value = value || ""; inp.placeholder = "media_player.onkyo";
+    inp.autocomplete = "off"; inp.dataset.key = key;
+    inp.setAttribute("list", "onkyo-ent-list");
+    inp.addEventListener("change", (e) => this._set(key, e.target.value.trim() || undefined));
+    row.appendChild(lbl); row.appendChild(inp); this.appendChild(row);
+  }
+
+  _fillEntities() {
+    if (!this._hass) return;
+    let dl = this.querySelector("#onkyo-ent-list");
+    if (!dl) { dl = document.createElement("datalist"); dl.id = "onkyo-ent-list"; this.appendChild(dl); }
+    const ids = Object.keys(this._hass.states).filter((e) => e.startsWith("media_player.")).sort();
+    if (dl.childElementCount === ids.length) return;
+    dl.textContent = "";
+    const frag = document.createDocumentFragment();
+    ids.forEach((id) => {
+      const o = document.createElement("option"); o.value = id;
+      const fn = this._hass.states[id].attributes?.friendly_name;
+      if (fn && fn !== id) o.label = fn;
+      frag.appendChild(o);
+    });
+    dl.appendChild(frag);
+  }
+
+  _colorRow(key, label, value) {
+    const row = document.createElement("div"); row.className = "row";
+    const lbl = document.createElement("label"); lbl.textContent = label;
+    const wrap = document.createElement("div"); wrap.className = "color-row";
+    const txt = document.createElement("input"); txt.type = "text"; txt.value = value; txt.placeholder = "#rrggbb"; txt.dataset.key = key;
+    const pick = document.createElement("input"); pick.type = "color"; pick.value = this._toHex(value) || "#00d4ff";
+    txt._pick = pick;
+    txt.addEventListener("change", (e) => { const v = e.target.value.trim(); this._set(key, v || undefined); const h = this._toHex(v); if (h) pick.value = h; });
+    pick.addEventListener("input",  (e) => { txt.value = e.target.value; this._set(key, e.target.value); });
+    wrap.appendChild(txt); wrap.appendChild(pick); row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
+  }
+
+  _toHex(color) {
+    if (!color) return null;
+    if (/^#[0-9a-f]{6}$/i.test(color)) return color;
+    const m = color.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/i);
+    if (m) return "#" + [m[1], m[2], m[3]].map((n) => (+n).toString(16).padStart(2, "0")).join("");
+    return null;
+  }
+
+  _set(key, value) {
+    if (value === undefined || value === null || value === "") delete this._config[key];
+    else this._config[key] = value;
+    this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: { ...this._config } }, bubbles: true, composed: true }));
+  }
+}
+
+customElements.define("onkyo-card-editor", OnkyoCardEditor);
+
+window.customCards = window.customCards || [];
+if (!window.customCards.some((c) => c.type === "onkyo-card")) {
+  window.customCards.push({
+    type: "onkyo-card",
+    name: "Onkyo Card",
+    description: "Receiver Onkyo (Neo Tokyo) — media_player",
+    preview: true,
+  });
+}
 
 console.info(
   '%c 🎵 onkyo-card v129.05 %c Neo Tokyo ',
