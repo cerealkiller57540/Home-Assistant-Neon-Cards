@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neon Cards — Aperçus</title>
+
+<!-- Material Design Icons (pour le stub ha-icon) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+
+<style>
+  :root {
+    /* Palette Neo Tokyo (fallbacks des cards) */
+    --primary-color: #9D4EDD;
+    --accent-color: #00fff9;
+    --rgb-primary-color: 98,0,234;
+    --rgb-accent-color: 0,255,249;
+    --rgb-blacklight-color: 180,0,255;
+    --rgb-error-color: 255,45,107;
+    --primary-text-color: #e6e6f0;
+    --secondary-text-color: #9aa0b5;
+    --disabled-text-color: #5a6075;
+    --divider-color: #2a2f45;
+    --card-background-color: #0a0e1a;
+    --secondary-background-color: #0d1220;
+    --ha-card-border-radius: 18px;
+    --error-color: #ff2d6b;
+    --warning-color: #ff9800;
+    --primary-font-family: 'Rajdhani', 'Orbitron', system-ui, sans-serif;
+    --glow-opacity-idle: 0.08;
+    --glow-opacity-hover: 0.20;
+    --glow-opacity-active: 0.40;
+    --blur-strength: 20px;
+    --animation-speed-card: 4s;
+  }
+  body {
+    margin: 0; padding: 32px;
+    background:
+      radial-gradient(1200px 600px at 20% -10%, rgba(98,0,234,.18), transparent 60%),
+      radial-gradient(900px 500px at 90% 10%, rgba(0,255,249,.10), transparent 55%),
+      #04060d;
+    font-family: var(--primary-font-family);
+    color: var(--primary-text-color);
+    min-height: 100vh;
+  }
+  /* Mode galerie (?gallery=1) : fond image Neo Tokyo v3, grille dense */
+  body.gallery {
+    background: center / cover no-repeat fixed url('../neo-tokyo-v4.png'), #04020e;
+  }
+  body.gallery ha-card { background: rgba(4, 2, 14, 0.78); }
+  h1 { font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+       color: #fff; text-shadow: 0 0 18px rgba(0,255,249,.5); margin: 0 0 6px; }
+  .sub { color: var(--secondary-text-color); margin: 0 0 28px; font-size: 13px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+          gap: 22px; align-items: start; max-width: 1500px; }
+  .tile { }
+  .tile .label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;
+                 color: var(--accent-color); margin: 0 0 8px; opacity: .85; }
+  /* ha-card stub : conteneur visuel comme dans HA */
+  ha-card { display: block; background: var(--card-background-color);
+            border-radius: var(--ha-card-border-radius); overflow: hidden;
+            border: 1px solid rgba(var(--rgb-primary-color), .25); }
+  /* ha-icon stub via MDI font */
+  ha-icon { display: inline-flex; align-items: center; justify-content: center;
+            width: var(--mdc-icon-size, 24px); height: var(--mdc-icon-size, 24px);
+            color: currentColor; vertical-align: middle; }
+  ha-icon::before { font-family: "Material Design Icons";
+                    font-size: var(--mdc-icon-size, 24px);
+                    line-height: 1; color: currentColor;
+                    content: attr(data-icon-glyph); }
+</style>
+</head>
+<body>
+  <h1>Neon Tokyo Cards</h1>
+  <p class="sub">Aperçus générés avec des données factices — capture chaque tuile à ta convenance.</p>
+  <div class="grid" id="grid"></div>
+
+<script>
+/* ───────────────────────────────────────────────────────────
+   Stub <ha-icon> : convertit l'attribut icon="mdi:xxx" en glyphe MDI.
+   ─────────────────────────────────────────────────────────── */
+const ICON_STUBS = new Set();
+class HaIconStub extends HTMLElement {
+  static get observedAttributes() { return ['icon']; }
+  attributeChangedCallback() { this._upd(); }
+  connectedCallback() { ICON_STUBS.add(this); this._upd(); }
+  set icon(v) { this.setAttribute('icon', v); }
+  get icon() { return this.getAttribute('icon'); }
+  _upd() {
+    const name = (this.getAttribute('icon') || '').replace('mdi:', '');
+    if (!name) return;
+    // Mappe le nom MDI vers son glyphe via une classe MDI cachée mesurée
+    const probe = document.createElement('i');
+    probe.className = 'mdi mdi-' + name;
+    probe.style.cssText = 'position:absolute;visibility:hidden';
+    document.body.appendChild(probe);
+    const glyph = getComputedStyle(probe, '::before').content.replace(/"/g, '');
+    probe.remove();
+    if (glyph && glyph !== 'none') this.setAttribute('data-icon-glyph', glyph);
+  }
+}
+if (!customElements.get('ha-icon')) customElements.define('ha-icon', HaIconStub);
+// La police MDI peut charger après les icônes → ré-évaluer une fois prête.
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(() => { ICON_STUBS.forEach((i) => i._upd()); });
+}
+document.addEventListener('DOMContentLoaded', () =>
+  setTimeout(() => ICON_STUBS.forEach((i) => i._upd()), 600));
+
+/* ───────────────────────────────────────────────────────────
+   Faux objet hass : états réalistes pour les démos.
+   ─────────────────────────────────────────────────────────── */
+const HASS = {
+  themes: { darkMode: true },
+  language: 'fr',
+  callService: (d, s, data) => console.log('callService', d, s, data),
+  callWS: async () => ([]),
+  formatEntityState: (st) => st.state,
+  states: {
+    'light.bureau': { entity_id: 'light.bureau', state: 'on',
+      attributes: { friendly_name: 'Bureau', brightness: 200, rgb_color: [0, 232, 255],
+                    supported_features: 1, supported_color_modes: ['rgb'] } },
+    'climate.salon': { entity_id: 'climate.salon', state: 'heat',
+      attributes: { friendly_name: 'Salon', current_temperature: 20.5, temperature: 21.5,
+                    current_humidity: 48, hvac_modes: ['off','heat','cool'], min_temp: 7, max_temp: 30,
+                    hvac_action: 'heating' } },
+    'sensor.temp_ext': { entity_id: 'sensor.temp_ext', state: '14.7',
+      attributes: { friendly_name: 'Température extérieure', unit_of_measurement: '°C', device_class: 'temperature' } },
+    'sensor.temp_salon': { entity_id: 'sensor.temp_salon', state: '22.1',
+      attributes: { friendly_name: 'Température salon', unit_of_measurement: '°C', device_class: 'temperature' } },
+    'sensor.power': { entity_id: 'sensor.power', state: '63',
+      attributes: { friendly_name: 'Puissance', unit_of_measurement: '%' } },
+    'sensor.power2': { entity_id: 'sensor.power2', state: '41',
+      attributes: { friendly_name: 'Charge', unit_of_measurement: '%' } },
+    'switch.prise': { entity_id: 'switch.prise', state: 'on',
+      attributes: { friendly_name: 'Prise salon' } },
+    'media_player.onkyo': { entity_id: 'media_player.onkyo', state: 'on',
+      attributes: { friendly_name: 'Ampli', source: 'TV', volume_level: 0.4, is_volume_muted: false } },
+
+    // ── neon-thermo / dual-thermo
+    'sensor.temperature': { entity_id: 'sensor.temperature', state: '21.3',
+      attributes: { friendly_name: 'Salon', unit_of_measurement: '°C', device_class: 'temperature' } },
+    'sensor.temperature_salon': { entity_id: 'sensor.temperature_salon', state: '22.1',
+      attributes: { friendly_name: 'Salon', unit_of_measurement: '°C', device_class: 'temperature' } },
+    'sensor.temperature_chambre': { entity_id: 'sensor.temperature_chambre', state: '19.4',
+      attributes: { friendly_name: 'Chambre', unit_of_measurement: '°C', device_class: 'temperature' } },
+
+    // ── neon-solar
+    'sensor.solar_power': { entity_id: 'sensor.solar_power', state: '3240',
+      attributes: { friendly_name: 'Production', unit_of_measurement: 'W', device_class: 'power' } },
+    'sensor.solar_energy_today': { entity_id: 'sensor.solar_energy_today', state: '18.6',
+      attributes: { friendly_name: 'Énergie du jour', unit_of_measurement: 'kWh', device_class: 'energy' } },
+
+    // ── storey-battery
+    'sensor.storey_soc': { entity_id: 'sensor.storey_soc', state: '74',
+      attributes: { friendly_name: 'SoC', unit_of_measurement: '%', device_class: 'battery' } },
+    'sensor.storey_power': { entity_id: 'sensor.storey_power', state: '-820',
+      attributes: { friendly_name: 'Puissance batterie', unit_of_measurement: 'W', device_class: 'power' } },
+    'sensor.storey_master_status': { entity_id: 'sensor.storey_master_status', state: 'discharging',
+      attributes: { friendly_name: 'Statut' } },
+
+    // ── neon-battery (véhicule / domestique)
+    'sensor.car_battery': { entity_id: 'sensor.car_battery', state: '68',
+      attributes: { friendly_name: 'Batterie', unit_of_measurement: '%', device_class: 'battery' } },
+    'binary_sensor.car_charging': { entity_id: 'binary_sensor.car_charging', state: 'on',
+      attributes: { friendly_name: 'En charge' } },
+    'sensor.car_power': { entity_id: 'sensor.car_power', state: '7400',
+      attributes: { friendly_name: 'Puissance charge', unit_of_measurement: 'W', device_class: 'power' } },
+    'sensor.car_time_left': { entity_id: 'sensor.car_time_left', state: '95',
+      attributes: { friendly_name: 'Temps restant', unit_of_measurement: 'min' } },
+
+    // ── heat-pump (Ecodan)
+    'climate.pac_ecodan': { entity_id: 'climate.pac_ecodan', state: 'heat',
+      attributes: { friendly_name: 'PAC Ecodan', current_temperature: 21, temperature: 21.5,
+        hvac_action: 'heating', hvac_modes: ['off','heat'], min_temp: 10, max_temp: 30 } },
+    'sensor.ecodan_heatpump_fan_speed': { entity_id: 'sensor.ecodan_heatpump_fan_speed', state: '540',
+      attributes: { friendly_name: 'Ventilateur', unit_of_measurement: 'RPM' } },
+    'sensor.ecodan_heatpump_feed_temp': { entity_id: 'sensor.ecodan_heatpump_feed_temp', state: '38.5',
+      attributes: { friendly_name: 'Départ eau', unit_of_measurement: '°C' } },
+    'sensor.ecodan_heatpump_return_temp': { entity_id: 'sensor.ecodan_heatpump_return_temp', state: '33.2',
+      attributes: { friendly_name: 'Retour eau', unit_of_measurement: '°C' } },
+    'sensor.nodon_capteur_power': { entity_id: 'sensor.nodon_capteur_power', state: '1850',
+      attributes: { friendly_name: 'Puissance PAC', unit_of_measurement: 'W', device_class: 'power' } },
+    'sensor.ecodan_heatpump_operation_mode': { entity_id: 'sensor.ecodan_heatpump_operation_mode', state: 'Heating',
+      attributes: { friendly_name: 'Mode' } },
+    'binary_sensor.ecodan_heatpump_compressor': { entity_id: 'binary_sensor.ecodan_heatpump_compressor', state: 'on',
+      attributes: { friendly_name: 'Compresseur' } },
+    'sensor.ecodan_heatpump_outside_temp': { entity_id: 'sensor.ecodan_heatpump_outside_temp', state: '6.5',
+      attributes: { friendly_name: 'T° extérieure', unit_of_measurement: '°C' } },
+    'sensor.ecodan_heatpump_compressor_frequency': { entity_id: 'sensor.ecodan_heatpump_compressor_frequency', state: '62',
+      attributes: { friendly_name: 'Fréquence compresseur', unit_of_measurement: 'Hz' } },
+  },
+};
+
+/* sonos : switch.sonos_alarm_* */
+['switch.sonos_alarm_1','switch.sonos_alarm_3','switch.sonos_alarm_63'].forEach((id, i) => {
+  HASS.states[id] = { entity_id: id, state: i < 2 ? 'on' : 'off',
+    attributes: { friendly_name: `06:5${i} Réveil` } };
+});
+
+/* nas : rackstation_* (volumes, température, santé, disques) */
+HASS.states['sensor.rackstation_volume_1_taille_totale'] = { entity_id: 'sensor.rackstation_volume_1_taille_totale', state: '7.3', attributes: { friendly_name: 'Total', unit_of_measurement: 'TB' } };
+HASS.states['sensor.rackstation_volume_1_espace_utilise'] = { entity_id: 'sensor.rackstation_volume_1_espace_utilise', state: '4.8', attributes: { friendly_name: 'Utilisé', unit_of_measurement: 'TB' } };
+HASS.states['sensor.rackstation_volume_1_volume_utilise'] = { entity_id: 'sensor.rackstation_volume_1_volume_utilise', state: '66', attributes: { friendly_name: 'Utilisé %', unit_of_measurement: '%' } };
+HASS.states['sensor.rackstation_temperature'] = { entity_id: 'sensor.rackstation_temperature', state: '41', attributes: { friendly_name: 'Température', unit_of_measurement: '°C' } };
+HASS.states['sensor.rackstation_volume_1_etat'] = { entity_id: 'sensor.rackstation_volume_1_etat', state: 'normal', attributes: { friendly_name: 'État volume' } };
+for (let d = 1; d <= 4; d++) {
+  HASS.states[`sensor.rackstation_drive_${d}_etat`] = { entity_id: `sensor.rackstation_drive_${d}_etat`, state: 'normal', attributes: { friendly_name: `Disque ${d}` } };
+  HASS.states[`sensor.rackstation_drive_${d}_rx410_1_etat`] = { entity_id: `sensor.rackstation_drive_${d}_rx410_1_etat`, state: 'normal', attributes: { friendly_name: `Disque RX ${d}` } };
+}
+
+/* Génère les entités du switch GS108T (8 ports) pour neon-switch. */
+for (let n = 1; n <= 8; n++) {
+  const up = n <= 5;
+  HASS.states[`binary_sensor.gs108t_port_${n}_status`] = {
+    entity_id: `binary_sensor.gs108t_port_${n}_status`, state: up ? 'on' : 'off',
+    attributes: { friendly_name: `Port ${n}` } };
+  HASS.states[`sensor.gs108t_port_${n}_traffic_received`] = {
+    entity_id: `sensor.gs108t_port_${n}_traffic_received`, state: up ? String(40 + n * 7) : '0',
+    attributes: { friendly_name: `Port ${n} RX`, unit_of_measurement: 'Mbit/s' } };
+  HASS.states[`sensor.gs108t_port_${n}_traffic_sent`] = {
+    entity_id: `sensor.gs108t_port_${n}_traffic_sent`, state: up ? String(12 + n * 3) : '0',
+    attributes: { friendly_name: `Port ${n} TX`, unit_of_measurement: 'Mbit/s' } };
+  HASS.states[`sensor.gs108t_port_${n}_speed`] = {
+    entity_id: `sensor.gs108t_port_${n}_speed`, state: up ? '1000' : '0',
+    attributes: { friendly_name: `Port ${n} vitesse`, unit_of_measurement: 'Mbit/s' } };
+}
+// modules storey (sensor.storey_module_0..N)
+for (let m = 0; m < 3; m++) {
+  HASS.states[`sensor.storey_module_${m}`] = {
+    entity_id: `sensor.storey_module_${m}`, state: String(70 + m * 4),
+    attributes: { friendly_name: `Module ${m}`, unit_of_measurement: '%' } };
+}
+
+/* ───────────────────────────────────────────────────────────
+   Registre des cards à prévisualiser.
+   ─────────────────────────────────────────────────────────── */
+const CARDS = [
+  { file: '../neon-compact-light-card.js', tag: 'neon-compact-light-card', label: 'Compact Light',
+    config: { entity: 'light.bureau', icon: 'mdi:desk-lamp', name: 'Bureau' } },
+  { file: '../neon-climate-card.js', tag: 'neon-climate-card', label: 'Climate',
+    config: { entity: 'climate.salon', humidity_entity: 'sensor.power' } },
+  { file: '../neon-dual-gauge-card.js', tag: 'neon-dual-gauge-card', label: 'Dual Gauge',
+    config: { name: 'Énergie', gauges: [
+      { entity: 'sensor.power',  min: 0, max: 100, unit: '%' },
+      { entity: 'sensor.power2', min: 0, max: 100, unit: '%' } ] } },
+  { file: '../neon-entities-card.js', tag: 'neon-entities-card', label: 'Entities',
+    config: { header: { title: 'Maison', icon: 'mdi:home' },
+      entities: [ { entity: 'switch.prise', name: 'Prise', icon: 'mdi:power-socket-eu' },
+                  { entity: 'light.bureau', name: 'Bureau' } ] } },
+  { file: '../onkyo-card.js', tag: 'onkyo-card', label: 'Onkyo',
+    config: { entity: 'media_player.onkyo' } },
+  { file: '../neon-thermo-card.js', tag: 'neon-thermo-card', label: 'Thermo',
+    config: { entity: 'sensor.temperature', name: 'Salon', show_history: false } },
+  { file: '../neon-dual-thermo-card.js', tag: 'neon-dual-thermo-card', label: 'Dual Thermo',
+    config: { entity_left: 'sensor.temperature_salon', entity_right: 'sensor.temperature_chambre',
+      name_left: 'Salon', name_right: 'Chambre', show_history: false } },
+  { file: '../neon-solar-production-card.js', tag: 'neon-solar-card', label: 'Solar',
+    config: { entity: 'sensor.solar_power', daily_entity: 'sensor.solar_energy_today',
+      name: 'Production Solaire', max_power: 5000, show_history: false } },
+  { file: '../neon-switch-card.js', tag: 'neon-switch-card', label: 'Switch GS108T',
+    config: { title: 'GS108T · ProSafe', show_stats: true } },
+  { file: '../storey-battery-card.js', tag: 'storey-battery-card', label: 'Storey Battery',
+    config: { modules: 3, soc_entity: 'sensor.storey_soc', power_entity: 'sensor.storey_power',
+      master_status_entity: 'sensor.storey_master_status' } },
+  { file: '../neon-header-card.js', tag: 'neon-header-card', label: 'Header',
+    config: { title: 'Neo Tokyo Dashboard', icon: 'mdi:home-automation', align_h: 'left' } },
+  { file: '../neon-header-card-v2.js', tag: 'neon-header-card-v2', label: 'Header v2',
+    config: { mode: 'title', title: { text: 'Neo Tokyo', icon: 'mdi:city' }, subtitle: { text: 'Maison connectée' } } },
+  { file: '../neon-battery-card.js', tag: 'neon-battery-card', label: 'Battery',
+    config: { entity: 'sensor.car_battery', name: 'Voiture', charging_entity: 'binary_sensor.car_charging',
+      power_entity: 'sensor.car_power', time_left_entity: 'sensor.car_time_left' } },
+  { file: '../neon-nas-card.js', tag: 'neon-nas-card', label: 'NAS',
+    config: { title: 'Rackstation',
+      total_entity: 'sensor.rackstation_volume_1_taille_totale',
+      used_entity: 'sensor.rackstation_volume_1_espace_utilise',
+      used_pct_entity: 'sensor.rackstation_volume_1_volume_utilise',
+      temp_entity: 'sensor.rackstation_temperature',
+      health_entity: 'sensor.rackstation_volume_1_etat',
+      drives: ['sensor.rackstation_drive_1_etat','sensor.rackstation_drive_2_etat',
+               'sensor.rackstation_drive_3_etat','sensor.rackstation_drive_4_etat'] } },
+  { file: '../heat-pump-card.js', tag: 'heat-pump-card', label: 'Heat Pump',
+    config: { title: 'PAC Ecodan', climate: 'climate.pac_ecodan', max_power: 3, power_unit: 'kW',
+      entities: { fan_rpm: 'sensor.ecodan_heatpump_fan_speed', temp_water_out: 'sensor.ecodan_heatpump_feed_temp',
+        temp_water_ret: 'sensor.ecodan_heatpump_return_temp', power: 'sensor.nodon_capteur_power',
+        status: 'sensor.ecodan_heatpump_operation_mode', compressor: 'binary_sensor.ecodan_heatpump_compressor' },
+      tiles: [
+        { entity: 'sensor.ecodan_heatpump_outside_temp', label: 'T_EXT', color: 'xenon', unit: '°C' },
+        { entity: 'sensor.ecodan_heatpump_fan_speed', label: 'FAN RPM', color: 'argon', unit: 'RPM' },
+        { entity: 'sensor.ecodan_heatpump_compressor_frequency', label: 'COMP HZ', color: 'xenon', unit: 'Hz' } ] } },
+  { file: '../heat-monitor-card.js', tag: 'heat-monitor-card', label: 'Heat Monitor',
+    config: { climate: 'climate.pac_ecodan' } },
+  { file: '../sonos-alarm-card.js', tag: 'sonos-alarm-card', label: 'Sonos Alarm',
+    config: { name: 'Chambre', alarms: [
+      { entity: 'switch.sonos_alarm_1',  label: 'Réveil semaine', schedule: 'LUN — VEN' },
+      { entity: 'switch.sonos_alarm_3',  label: 'Réveil week-end', schedule: 'SAM — DIM' },
+      { entity: 'switch.sonos_alarm_63', label: 'Sieste',          schedule: 'QUOTIDIEN' } ] } },
+  { file: '../nixie-clock-card.js', tag: 'nixie-clock-card', label: 'Nixie Clock',
+    config: {} },
+];
+window.CARDS = CARDS;  // exposé pour l'outil de capture Playwright
+
+/* Charge un script classique (les cards font customElements.define, pas d'export). */
+function loadScript(src) {
+  return new Promise((resolve) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => resolve(true);
+    s.onerror = () => { console.warn('script KO', src); resolve(false); };
+    document.head.appendChild(s);
+  });
+}
+
+/* Charge séquentiellement chaque .js puis instancie la card. */
+const grid = document.getElementById('grid');
+async function load(card) {
+  await loadScript(card.file);
+  await Promise.race([
+    customElements.whenDefined(card.tag),
+    new Promise(r => setTimeout(r, 1500)),
+  ]).catch(() => {});
+  const tile = document.createElement('div'); tile.className = 'tile';
+  const lab = document.createElement('p'); lab.className = 'label'; lab.textContent = card.label;
+  tile.appendChild(lab);
+  try {
+    const el = document.createElement(card.tag);
+    el.setConfig(card.config);
+    el.hass = HASS;
+    tile.appendChild(el);
+  } catch (e) {
+    const err = document.createElement('pre');
+    err.style.cssText = 'color:#ff6b8a;font-size:11px;white-space:pre-wrap';
+    err.textContent = card.label + ' : ' + (e && e.message || e);
+    tile.appendChild(err);
+    console.error(card.label, e);
+  }
+  grid.appendChild(tile);
+}
+// ?card=<tag> → n'affiche que cette card (évite les collisions de globals entre cards).
+// ?gallery=1 → fond image Neo Tokyo v3 (aperçu du thème).
+const params = new URLSearchParams(location.search);
+const only = params.get('card');
+if (params.get('gallery')) document.body.classList.add('gallery');
+const list = only ? CARDS.filter(c => c.tag === only) : CARDS;
+(async () => {
+  for (const c of list) await load(c);
+  document.body.dataset.ready = '1';
+})();
+</script>
+</body>
+</html>

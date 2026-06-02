@@ -19,13 +19,25 @@
 
 <div align="center">
 
-| Battery Card | Solar Card | Dual Thermo |
-|:---:|:---:|:---:|
-| ![Battery](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon-battery-card.png) | ![Solar](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon-solar-card.png) | ![DualThermo](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon-dual-thermo-card.png) |
+![Neo Tokyo theme](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/previews/generated/_theme-neo-tokyo-v3.png)
 
-| Header Card | Storey Battery |
-|:---:|:---:|
-| ![Header](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/neon-header-card.png) | ![Storey](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/Screenshots/sunology-storey.png) |
+*Démonstrateur du thème **Neo Tokyo v3** — généré depuis [`themes/neo-tokyo-v3.yaml`](themes/neo-tokyo-v3.yaml) (sidebar, header, cards, contrôles, palette gaz/plasma)*
+
+### Gallery
+
+| Heat Pump | Dual Thermo | Solar |
+|:---:|:---:|:---:|
+| ![Heat Pump](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/previews/generated/heat-pump.png) | ![Dual Thermo](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/previews/generated/dual-thermo.png) | ![Solar](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/previews/generated/solar.png) |
+| **Storey Battery** | **Battery** | **NAS** |
+| ![Storey](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/previews/generated/storey-battery.png) | ![Battery](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/previews/generated/battery.png) | ![NAS](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/previews/generated/nas.png) |
+| **Climate** | **Dual Gauge** | **Entities** |
+| ![Climate](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/previews/generated/climate.png) | ![Dual Gauge](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/previews/generated/dual-gauge.png) | ![Entities](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/previews/generated/entities.png) |
+| **Nixie Clock** | **Sonos Alarm** | **Onkyo** |
+| ![Nixie](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/previews/generated/nixie-clock.png) | ![Sonos](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/previews/generated/sonos-alarm.png) | ![Onkyo](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/previews/generated/onkyo.png) |
+| **Switch GS108T** | **Thermo** | **Compact Light** |
+| ![Switch](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/previews/generated/switch-gs108t.png) | ![Thermo](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/previews/generated/thermo.png) | ![Compact Light](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/previews/generated/compact-light.png) |
+
+<sub>Aperçus générés via [`previews/`](previews/) (données factices, thème Neo Tokyo). Régénérables avec Playwright — voir [`.preview-tooling/`](.preview-tooling/).</sub>
 
 </div>
 

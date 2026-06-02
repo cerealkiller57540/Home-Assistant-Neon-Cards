@@ -1,0 +1,3 @@
+# Outillage de capture des aperçus (dépendances lourdes — ne pas versionner)
+.preview-tooling/node_modules/
+.preview-tooling/package-lock.json

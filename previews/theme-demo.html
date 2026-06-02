@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neo Tokyo — démonstrateur de thème</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+<style>
+  /* ─── Variables injectées depuis neo-tokyo-v3.yaml ─────────────── */
+  :root {
+      --primary-color: #6200EA;
+      --accent-color: #00fff9;
+      --secondary-color: #3D00B8;
+      --blacklight-color: #B400FF;
+      --shadow-color: rgba(98, 0, 234, 0.25);
+      --state-active-color: #6200EA;
+      --state-inactive-color: rgba(98, 0, 234, 0.15);
+      --state-on-color: var(--state-active-color);
+      --state-off-color: var(--state-inactive-color);
+      --state-home-color: #00FFAA;
+      --state-not-home-color: #2a3658;
+      --state-unavailable-color: #0e1528;
+      --success-color: #00FFAA;
+      --warning-color: #FFB800;
+      --error-color: #FF2D6B;
+      --error-state-color: var(--error-color);
+      --warning-state-color: var(--warning-color);
+      --success-state-color: var(--success-color);
+      --info-color: var(--accent-color);
+      --info-state-color: var(--accent-color);
+      --rgb-primary-color: 98, 0, 234;
+      --rgb-secondary-color: 61, 0, 184;
+      --rgb-accent-color: 0, 255, 249;
+      --rgb-blacklight-color: 180, 0, 255;
+      --rgb-state-active-color: 98, 0, 234;
+      --rgb-text-primary-color: 210, 200, 240;
+      --rgb-disabled-color: 30, 20, 60;
+      --rgb-card-background-color: 4, 2, 14;
+      --rgb-success-color: 0, 255, 170;
+      --rgb-warning-color: 255, 184, 0;
+      --rgb-error-color: 255, 45, 107;
+      --primary-text-color: #e8e0ff;
+      --secondary-text-color: rgba(176, 160, 224, 0.5);
+      --disabled-text-color: #1e143c;
+      --text-primary-color: var(--primary-text-color);
+      --text-disabled-color: var(--disabled-text-color);
+      --disabled-color: rgba(98, 0, 234, 0.25);
+      --primary-font-family: 'Orbitron', 'Rajdhani', system-ui, sans-serif;
+      --paper-font-common-base_-_font-family: var(--primary-font-family);
+      --paper-font-body1_-_font-family: var(--primary-font-family);
+      --paper-font-headline_-_font-family: var(--primary-font-family);
+      --paper-font-title_-_font-family: var(--primary-font-family);
+      --ha-card-header-font-family: var(--primary-font-family);
+      --ha-font-family-body: 'Rajdhani', system-ui, sans-serif;
+      --ha-font-family-heading: var(--primary-font-family);
+      --ha-font-family-longform: system-ui, sans-serif;
+      --ha-font-family-code: 'Courier New', monospace;
+      --mdc-typography-font-family: var(--primary-font-family);
+      --mdc-typography-body1-font-family: 'Rajdhani', system-ui, sans-serif;
+      --mdc-typography-body2-font-family: 'Rajdhani', system-ui, sans-serif;
+      --mdc-typography-subtitle1-font-family: 'Rajdhani', system-ui, sans-serif;
+      --mdc-typography-headline6-font-family: var(--primary-font-family);
+      --mdc-typography-button-font-family: var(--primary-font-family);
+      --md-list-item-label-text-font: var(--primary-font-family);
+      --primary-background-color: #010108;
+      --secondary-background-color: #04020e;
+      --card-background-color: rgba(4, 2, 14, 0.78);
+      --paper-card-background-color: var(--card-background-color);
+      --paper-listbox-background-color: var(--card-background-color);
+      --paper-dialog-background-color: rgba(2, 1, 10, 0.96);
+      --code-editor-background-color: #010108;
+      --divider-color: rgba(98, 0, 234, 0.20);
+      --ha-card-border-radius: 18px;
+      --ha-card-border-width: 1px;
+      --ha-card-border-color: rgba(98, 0, 234, 0.38);
+      --ha-card-backdrop-filter: blur(12px) saturate(150%);
+      --gas-hydrogen: #FF00FF;
+      --gas-mercury: #00FFFF;
+      --gas-nitrogen: #BB86FC;
+      --gas-oxygen: #A9D1FF;
+      --gas-sodium: #FFCC00;
+      --gas-xenon: #00D4FF;
+      --gas-argon: #7B2FBE;
+      --gas-radon: #E0115F;
+      --gas-neon: #FF3D00;
+      --gas-krypton: #2EE5B6;
+      --gas-helium: #FFEE58;
+      --rgb-gas-xenon: 0, 212, 255;
+      --rgb-gas-argon: 157, 78, 221;
+      --rgb-gas-radon: 224, 17, 95;
+      --rgb-gas-krypton: 46, 229, 182;
+      --rgb-gas-helium: 255, 238, 88;
+      --rgb-gas-neon: 255, 61, 0;
+      --radio-cherenkov: #00E5FF;
+      --radio-uranium: #CCFF00;
+      --radio-plutonium: #39FF14;
+      --radio-actinium: #E0FFFF;
+      --radium-paint: #C3FDB8;
+      --neutron-blue: #A5F2F3;
+      --rgb-radio-cherenkov: 0, 229, 255;
+      --rgb-radio-uranium: 204, 255, 0;
+      --rgb-radio-plutonium: 57, 255, 20;
+      --rgb-radio-actinium: 224, 255, 255;
+      --metal-cesium: #FFD700;
+      --cesium-137-glow: #1E90FF;
+      --metal-americium: #FF4500;
+      --metal-thallium: #A0D6B4;
+      --rgb-metal-cesium: 255, 215, 0;
+      --rgb-metal-americium: 255, 69, 0;
+      --rgb-metal-thallium: 160, 214, 180;
+      --plasma-corona: #FFD600;
+      --plasma-hydrogen: #FF007F;
+      --plasma-magnetic: #00E5FF;
+      --plasma-void: #9D00FF;
+      --plasma-electric: #B9F2FF;
+      --plasma-h-alpha: #FF3366;
+      --plasma-o-iii: #4AF2A1;
+      --plasma-sulfur: #FFAD33;
+      --plasma-mercury: #E573FF;
+      --rgb-plasma-hydrogen: 255, 0, 127;
+      --rgb-plasma-magnetic: 0, 229, 255;
+      --rgb-plasma-h-alpha: 255, 51, 102;
+      --rgb-plasma-o-iii: 74, 242, 161;
+      --rgb-plasma-sulfur: 255, 173, 51;
+      --rgb-plasma-mercury: 229, 115, 255;
+      --rgb-cesium-glow: 30, 144, 255;
+      --rgb-critical-blue: 165, 242, 243;
+      --gas-iodine-131: #9D81FF;
+      --safety-boron: #7CFF00;
+      --rgb-gas-iodine: 157, 129, 255;
+      --rgb-safety-boron: 124, 255, 0;
+      --radio-cobalt-60: #001B44;
+      --plasma-ultraviolet: #310062;
+      --plasma-uv-glow: #6200EA;
+      --dark-actinoid: #120021;
+      --metal-osmium: #192231;
+      --gas-xenon-deep: #004E64;
+      --rgb-radio-cobalt: 0, 27, 68;
+      --rgb-plasma-uv: 49, 0, 98;
+      --rgb-plasma-uv-glow: 98, 0, 234;
+      --glow-opacity-idle: 0.08;
+      --glow-opacity-hover: 0.20;
+      --glow-opacity-active: 0.40;
+      --border-opacity-idle: 0.20;
+      --border-opacity-hover: 0.42;
+      --blur-strength: 20px;
+      --blur-strength-heavy: 28px;
+      --animation-speed-card: 4s;
+      --animation-speed-sidebar: 3s;
+      --animation-speed-header: 5s;
+      --animation-speed-badge: 2.5s;
+      --sidebar-background-color: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.8) 100%);
+      --sidebar-icon-color: #b0a0e0;
+      --sidebar-text-color: #b0a0e0;
+      --sidebar-selected-background-color: #0e0820;
+      --sidebar-selected-icon-color: var(--primary-color);
+      --sidebar-selected-text-color: #ffffff;
+      --sidebar-menu-button-background-color: #0e0820;
+      --app-header-background-color: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.8) 100%);
+      --app-header-text-color: var(--primary-text-color);
+      --app-header-edit-background-color: rgba(2, 1, 10, 0.65);
+      --app-header-edit-text-color: var(--accent-color);
+      --app-header-selection-bar-color: var(--primary-color);
+      --app-header-backdrop-filter: blur(20px) saturate(180%) brightness(0.8);
+      --state-icon-color: var(--accent-color);
+      --state-icon-active-color: var(--primary-color);
+      --state-icon-unavailable-color: var(--disabled-text-color);
+      --icon-color: var(--accent-color);
+      --switch-checked-color: var(--primary-color);
+      --switch-checked-button-color: var(--primary-color);
+      --switch-checked-track-color: rgba(98, 0, 234, 0.45);
+      --switch-unchecked-button-color: rgba(98, 0, 234, 0.35);
+      --switch-unchecked-track-color: rgba(98, 0, 234, 0.15);
+      --switch-unchecked-color: rgba(98, 0, 234, 0.15);
+      --paper-slider-knob-color: var(--primary-color);
+      --paper-slider-knob-start-color: var(--primary-color);
+      --paper-slider-pin-color: var(--primary-color);
+      --paper-slider-active-color: var(--primary-color);
+      --paper-slider-container-color: rgba(98, 0, 234, 0.25);
+      --paper-slider-secondary-color: var(--accent-color);
+      --ha-slider-indicator-color: rgba(var(--rgb-primary-color), 0.85);
+      --ha-slider-thumb-color: var(--primary-color);
+      --dialog-background-color: rgba(2, 1, 10, 0.96);
+      --mdc-dialog-scrim-color: rgba(1, 0, 6, 0.92);
+      --mdc-dialog-content-ink-color: var(--secondary-text-color);
+      --mdc-dialog-heading-ink-color: var(--primary-text-color);
+      --ha-dialog-border-radius: 16px;
+      --label-badge-border-color: var(--primary-color);
+      --label-badge-text-color: var(--primary-text-color);
+      --label-badge-red: var(--error-color);
+      --label-badge-blue: var(--accent-color);
+      --label-badge-green: var(--success-color);
+      --label-badge-yellow: var(--warning-color);
+      --label-badge-grey: var(--disabled-text-color);
+      --chip-background-color: rgba(98, 0, 234, 0.35);
+      --table-row-background-color: rgba(4, 2, 14, 0.82);
+      --table-row-alternative-background-color: rgba(8, 4, 20, 0.72);
+      --input-idle-line-color: rgba(98, 0, 234, 0.35);
+      --input-hover-line-color: var(--primary-color);
+      --input-fill-color: rgba(4, 2, 14, 0.80);
+      --input-ink-color: var(--primary-text-color);
+      --input-label-ink-color: var(--secondary-text-color);
+      --input-disabled-fill-color: rgba(30, 20, 60, 0.20);
+      --input-disabled-ink-color: var(--disabled-text-color);
+      --input-disabled-line-color: rgba(30, 20, 60, 0.25);
+      --ha-input-border-color: rgba(98, 0, 234, 0.35);
+      --ha-input-hover-border-color: var(--primary-color);
+      --ha-input-focus-border-color: var(--blacklight-color);
+      --paper-input-container-color: var(--primary-color);
+      --paper-input-container-focus-color: var(--blacklight-color);
+      --paper-input-container-input-color: var(--primary-text-color);
+      --ha-button-neutral-color: var(--primary-color);
+      --mdc-button-outline-color: var(--primary-color);
+      --mdc-button-disabled-ink-color: var(--disabled-text-color);
+      --mdc-ripple-color: rgba(98, 0, 234, 0.30);
+      --mdc-text-button-ripple-color: rgba(98, 0, 234, 0.25);
+      --mdc-contained-button-ripple-color: rgba(98, 0, 234, 0.40);
+      --mdc-tab-text-label-color-default: var(--secondary-text-color);
+      --mdc-tab-color-default: var(--primary-color);
+      --mdc-icon-color: var(--accent-color);
+      --mdc-icon-button-color: var(--accent-color);
+      --mdc-checkbox-unchecked-color: var(--primary-color);
+      --mdc-radio-unchecked-color: var(--primary-color);
+      --mdc-select-fill-color: rgba(98, 0, 234, 0.10);
+      --mdc-select-ink-color: var(--primary-text-color);
+      --mdc-select-label-ink-color: var(--primary-color);
+      --mdc-select-dropdown-icon-color: var(--primary-color);
+      --mdc-text-field-fill-color: rgba(98, 0, 234, 0.10);
+      --mdc-text-field-ink-color: var(--primary-text-color);
+      --mdc-text-field-label-ink-color: var(--primary-color);
+      --mdc-theme-primary: var(--primary-color);
+      --mdc-theme-secondary: var(--accent-color);
+      --mdc-theme-surface: var(--card-background-color);
+      --mdc-theme-background: var(--primary-background-color);
+      --mdc-theme-error: var(--error-color);
+      --mdc-theme-on-primary: #010108;
+      --mdc-theme-on-secondary: #010108;
+      --mdc-theme-on-surface: var(--primary-text-color);
+      --material-background-color: var(--primary-background-color);
+      --material-primary-color: var(--primary-color);
+      --material-secondary-color: var(--accent-color);
+      --ha-color-fill-neutral-quiet-resting: rgba(4, 2, 14, 0.92);
+      --ha-color-surface-default: rgba(4, 2, 14, 0.92);
+      --ha-color-fill-neutral-quiet: rgba(8, 4, 20, 0.85);
+      --ha-color-on-neutral-quiet: var(--primary-text-color);
+      --ha-color-on-neutral-normal: var(--primary-text-color);
+      --ha-color-on-primary-normal: var(--primary-text-color);
+      --ha-color-fill-primary-normal-resting: rgba(98, 0, 234, 0.18);
+      --ha-color-form-background: rgba(4, 2, 14, 0.75);
+      --energy-grid-consumption-color: #1F7FFF;
+      --energy-grid-return-color: #00E8FF;
+      --energy-solar-color: #FFD050;
+      --energy-battery-in-color: #FF9500;
+      --energy-battery-out-color: #AAFF00;
+      --hacs-error-color: var(--error-color);
+      --hacs-warning-color: var(--warning-color);
+      --hacs-update-color: var(--gas-helium);
+      --hacs-new-color: var(--gas-krypton);
+      --hacs-default-icon-color: var(--gas-argon);
+      --markdown-text-color: #a0a0c8;
+      --markdown-link-color: var(--accent-color);
+      --markdown-code-background-color: rgba(98, 0, 234, 0.12);
+      --kiosk-glow-intensity: 1.0;
+      --kiosk-touch-scale: 0.97;
+      --kiosk-card-spacing: 16px;
+      --kiosk-min-touch-target: 44px;
+      --ha-font-size-scale: 1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--primary-font-family, system-ui);
+    color: var(--primary-text-color);
+    background: center/cover no-repeat fixed url('../neo-tokyo-v4.png'), var(--primary-background-color);
+    min-height: 100vh;
+  }
+  .layout { display: flex; min-height: 100vh; }
+
+  /* ─── Sidebar ─────────────────────────────────────────────── */
+  .sidebar {
+    width: 240px; flex-shrink: 0; padding: 14px 10px;
+    background: var(--sidebar-background-color);
+    backdrop-filter: blur(10px) saturate(180%) brightness(.8);
+    border-right: 1px solid var(--divider-color);
+    position: relative;
+  }
+  .sidebar .brand { font-size: 20px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase;
+    color: #fff; text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color);
+    padding: 10px 12px 18px; }
+  .nav-item { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 8px;
+    color: var(--sidebar-text-color); font-size: 14px; cursor: pointer; margin-bottom: 3px; }
+  .nav-item ha-icon, .nav-item .mdi { color: var(--state-icon-color); font-size: 22px;
+    filter: drop-shadow(0 0 4px currentColor); }
+  .nav-item.selected {
+    background: linear-gradient(90deg, rgba(var(--rgb-primary-color),0.18) 0%, transparent 100%);
+    border-left: 3px solid var(--primary-color);
+    color: #fff; text-shadow: 0 0 8px var(--primary-color);
+    box-shadow: -5px 0 18px rgba(var(--rgb-primary-color),0.5);
+  }
+  .nav-item.selected .mdi { color: var(--primary-color); }
+
+  /* ─── Zone principale ─────────────────────────────────────── */
+  .main { flex: 1; display: flex; flex-direction: column; }
+  .app-header {
+    height: 56px; display: flex; align-items: center; gap: 14px; padding: 0 22px;
+    background: var(--app-header-background-color);
+    backdrop-filter: blur(20px) saturate(180%) brightness(.8);
+    border-bottom: 2px solid rgba(var(--rgb-primary-color), 0.8);
+    box-shadow: 0 0 10px rgba(var(--rgb-primary-color),0.9), 0 0 28px rgba(var(--rgb-primary-color),0.5);
+    color: var(--app-header-text-color); font-weight: 700; letter-spacing: 1px;
+  }
+  .app-header .mdi { color: var(--accent-color); font-size: 24px; }
+  .content { padding: 26px; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px,1fr));
+    gap: 18px; align-items: start; }
+
+  /* ─── ha-card (réplique le rendu HA + card-mod) ───────────── */
+  .ha-card {
+    position: relative; border-radius: var(--ha-card-border-radius, 18px);
+    border: var(--ha-card-border-width,1px) solid var(--ha-card-border-color, var(--divider-color));
+    background: var(--card-background-color);
+    backdrop-filter: blur(12px) saturate(150%);
+    box-shadow: 0 8px 32px rgba(0,0,0,.75), 0 0 40px rgba(var(--rgb-primary-color),0.18);
+    padding: 16px 18px; overflow: hidden;
+  }
+  /* Bordure néon top+left issue du card-mod-card du thème */
+  .ha-card::before {
+    content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:2;
+    background:
+      linear-gradient(90deg, rgba(var(--rgb-primary-color),1) 0%, rgba(0,212,255,.65) 35%,
+        rgba(0,212,255,.15) 60%, transparent 75%) top / 100% 2px no-repeat,
+      linear-gradient(180deg, rgba(var(--rgb-primary-color),1) 0%, rgba(123,47,190,.55) 40%,
+        rgba(123,47,190,.10) 65%, transparent 80%) left / 2px 100% no-repeat;
+    -webkit-mask-image: linear-gradient(135deg, black 0%, black 22%, rgba(0,0,0,.5) 40%, transparent 58%);
+            mask-image: linear-gradient(135deg, black 0%, black 22%, rgba(0,0,0,.5) 40%, transparent 58%);
+  }
+  .card-header { font-size: 16px; font-weight: 700; margin: 0 0 14px;
+    color: var(--primary-text-color);
+    text-shadow: 0 0 8px rgba(0,212,255,.45), 0 0 20px rgba(var(--rgb-primary-color),.35);
+    border-bottom: 1px solid rgba(var(--rgb-primary-color),.3); padding-bottom: 8px; }
+
+  .row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; }
+  .row + .row { border-top: 1px solid var(--divider-color); }
+  .row .label { display: flex; align-items: center; gap: 12px; font-size: 14px; }
+  .row .mdi { color: var(--state-icon-color); font-size: 22px; filter: drop-shadow(0 0 5px currentColor); }
+  .row.active .mdi { color: var(--state-icon-active-color); }
+  .val { color: var(--accent-color); font-weight: 700; }
+
+  /* Switch façon HA */
+  .switch { width: 42px; height: 24px; border-radius: 14px; position: relative; cursor: pointer;
+    background: var(--switch-unchecked-track-color); border: 1px solid rgba(var(--rgb-primary-color),.4); }
+  .switch::after { content:""; position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%;
+    background: var(--switch-unchecked-button-color); transition:.25s; }
+  .switch.on { background: var(--switch-checked-track-color); }
+  .switch.on::after { left: 20px; background: var(--switch-checked-button-color);
+    box-shadow: 0 0 8px var(--primary-color), 0 0 16px var(--primary-color); }
+
+  /* Slider */
+  .slider { height: 6px; border-radius: 4px; background: var(--paper-slider-container-color); position: relative; margin: 14px 0 6px; }
+  .slider .fill { position:absolute; left:0; top:0; height:100%; width:62%; border-radius:4px;
+    background: var(--primary-color); box-shadow: 0 0 10px var(--primary-color); }
+  .slider .knob { position:absolute; left:62%; top:50%; width:16px; height:16px; border-radius:50%;
+    transform: translate(-50%,-50%); background: var(--primary-color);
+    box-shadow: 0 0 8px var(--primary-color), 0 0 18px var(--primary-color); }
+
+  /* Badges / chips / boutons */
+  .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { padding: 5px 12px; border-radius: 14px; font-size: 12px; font-weight: 600;
+    background: var(--chip-background-color); border: 1px solid var(--primary-color); color: var(--primary-text-color); }
+  .badge { padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+  .badge.ok { color: var(--success-color); border:1px solid var(--success-color); }
+  .badge.warn { color: var(--warning-color); border:1px solid var(--warning-color); }
+  .badge.err { color: var(--error-color); border:1px solid var(--error-color); }
+  .btns { display:flex; gap:10px; margin-top:6px; }
+  .btn { padding: 9px 16px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer;
+    border: 1px solid var(--primary-color); color: var(--primary-text-color);
+    background: var(--ha-color-fill-primary-normal-resting, rgba(var(--rgb-primary-color),.18)); }
+  .btn.accent { border-color: var(--accent-color); color: var(--accent-color); }
+
+  /* Palette gaz/plasma : montre les variables de couleur du thème */
+  .swatches { display:grid; grid-template-columns: repeat(6, 1fr); gap:8px; }
+  .swatch { height: 40px; border-radius: 8px; position: relative; box-shadow: 0 0 12px currentColor; }
+  .swatch span { position:absolute; bottom:3px; left:5px; font-size:8px; color:#fff;
+    text-shadow:0 0 3px #000; letter-spacing:.3px; }
+
+  .stat { font-size: 40px; font-weight: 800; color: var(--accent-color);
+    text-shadow: 0 0 10px var(--accent-color), 0 0 28px rgba(var(--rgb-accent-color),.5); }
+  .stat .unit { font-size: 16px; color: var(--secondary-text-color); }
+</style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">Neo Tokyo</div>
+      <div class="nav-item selected"><i class="mdi mdi-view-dashboard"></i> Accueil</div>
+      <div class="nav-item"><i class="mdi mdi-lightbulb-group"></i> Lumières</div>
+      <div class="nav-item"><i class="mdi mdi-thermometer"></i> Climat</div>
+      <div class="nav-item"><i class="mdi mdi-solar-power"></i> Énergie</div>
+      <div class="nav-item"><i class="mdi mdi-shield-home"></i> Sécurité</div>
+      <div class="nav-item"><i class="mdi mdi-cog"></i> Réglages</div>
+    </aside>
+    <div class="main">
+      <header class="app-header"><i class="mdi mdi-home-assistant"></i> Tableau de bord · Neo Tokyo</header>
+      <div class="content">
+
+        <div class="ha-card">
+          <h2 class="card-header">Salon</h2>
+          <div class="row active"><span class="label"><i class="mdi mdi-lightbulb"></i> Plafonnier</span><div class="switch on"></div></div>
+          <div class="row"><span class="label"><i class="mdi mdi-lamp"></i> Lampe d'appoint</span><div class="switch"></div></div>
+          <div class="row active"><span class="label"><i class="mdi mdi-television"></i> TV</span><div class="switch on"></div></div>
+          <div class="slider"><div class="fill"></div><div class="knob"></div></div>
+        </div>
+
+        <div class="ha-card">
+          <h2 class="card-header">États</h2>
+          <div class="chips">
+            <span class="chip">Maison</span><span class="chip">Nuit</span><span class="chip">Cinéma</span>
+          </div>
+          <div class="row"><span class="label">Statut système</span><span class="badge ok">OK</span></div>
+          <div class="row"><span class="label">Mise à jour</span><span class="badge warn">DISPO</span></div>
+          <div class="row"><span class="label">Alarme</span><span class="badge err">ARMÉE</span></div>
+          <div class="btns"><button class="btn">Activer</button><button class="btn accent">Scène</button></div>
+        </div>
+
+        <div class="ha-card">
+          <h2 class="card-header">Température extérieure</h2>
+          <div class="stat">14.7<span class="unit">°C</span></div>
+          <div class="row"><span class="label"><i class="mdi mdi-water-percent"></i> Humidité</span><span class="val">63 %</span></div>
+          <div class="row"><span class="label"><i class="mdi mdi-weather-windy"></i> Vent</span><span class="val">12 km/h</span></div>
+        </div>
+
+        <div class="ha-card" style="grid-column: span 2;">
+          <h2 class="card-header">Palette du thème — gaz rares & plasma</h2>
+          <div class="swatches">
+            <div class="swatch" style="background:var(--gas-xenon);color:var(--gas-xenon)"><span>xenon</span></div>
+            <div class="swatch" style="background:var(--gas-argon);color:var(--gas-argon)"><span>argon</span></div>
+            <div class="swatch" style="background:var(--gas-krypton);color:var(--gas-krypton)"><span>krypton</span></div>
+            <div class="swatch" style="background:var(--gas-radon);color:var(--gas-radon)"><span>radon</span></div>
+            <div class="swatch" style="background:var(--gas-helium);color:var(--gas-helium)"><span>helium</span></div>
+            <div class="swatch" style="background:var(--gas-neon);color:var(--gas-neon)"><span>neon</span></div>
+            <div class="swatch" style="background:var(--radio-cherenkov);color:var(--radio-cherenkov)"><span>cherenkov</span></div>
+            <div class="swatch" style="background:var(--radio-uranium);color:var(--radio-uranium)"><span>uranium</span></div>
+            <div class="swatch" style="background:var(--radio-plutonium);color:var(--radio-plutonium)"><span>plutonium</span></div>
+            <div class="swatch" style="background:var(--plasma-hydrogen);color:var(--plasma-hydrogen)"><span>plasma-H</span></div>
+            <div class="swatch" style="background:var(--metal-cesium);color:var(--metal-cesium)"><span>cesium</span></div>
+            <div class="swatch" style="background:var(--plasma-uv-glow);color:var(--plasma-uv-glow)"><span>uv-glow</span></div>
+          </div>
+        </div>
+
+        <div class="ha-card">
+          <h2 class="card-header">Énergie</h2>
+          <div class="row"><span class="label" style="color:var(--energy-solar-color)"><i class="mdi mdi-solar-power" style="color:var(--energy-solar-color)"></i> Solaire</span><span class="val" style="color:var(--energy-solar-color)">3.24 kW</span></div>
+          <div class="row"><span class="label" style="color:var(--energy-grid-consumption-color)"><i class="mdi mdi-transmission-tower" style="color:var(--energy-grid-consumption-color)"></i> Réseau</span><span class="val" style="color:var(--energy-grid-consumption-color)">0.8 kW</span></div>
+          <div class="row"><span class="label" style="color:var(--energy-battery-out-color)"><i class="mdi mdi-battery-charging" style="color:var(--energy-battery-out-color)"></i> Batterie</span><span class="val" style="color:var(--energy-battery-out-color)">74 %</span></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</body>
+</html>
