@@ -1,3 +1,5 @@
-# Outillage de capture des aperçus (dépendances lourdes — ne pas versionner)
-.preview-tooling/node_modules/
-.preview-tooling/package-lock.json
+# Outillage de capture des aperçus — on ne versionne que les scripts réutilisables
+.preview-tooling/*
+!.preview-tooling/shoot.mjs
+!.preview-tooling/shoot-theme.mjs
+!.preview-tooling/package.json

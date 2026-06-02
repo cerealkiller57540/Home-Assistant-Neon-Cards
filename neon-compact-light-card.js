@@ -79,7 +79,7 @@ class NeonCompactLightCard extends HTMLElement {
           height: var(--height);
           background: rgba(0,0,0,0.0);
           border-radius: var(--ha-card-border-radius, 12px);
-          overflow: visible;
+          overflow: hidden;          /* clippe la barre 100% sous le border arrondi (fix coin tronqué) */
           position: relative;
           border: 1px solid rgba(0, 232, 255, 0.25);
           box-sizing: border-box;
@@ -91,7 +91,9 @@ class NeonCompactLightCard extends HTMLElement {
           backdrop-filter: blur(6px);
           display: flex;
           align-items: center;
-          border-radius: var(--ha-card-border-radius, 12px);
+          /* rayon intérieur = rayon container − épaisseur du border, sinon le coin
+             de la barre à 100% pointe à travers le border arrondi */
+          border-radius: calc(var(--ha-card-border-radius, 12px) - 1px);
           overflow: hidden;
         }
 
@@ -129,7 +131,7 @@ class NeonCompactLightCard extends HTMLElement {
           z-index: 1;
           box-sizing: border-box;
           padding: 3px 6px 3px 8px;
-          overflow: false;
+          overflow: visible;   /* (était 'overflow: false' — valeur CSS invalide) */
           background: var(--icon-border-colour);
           margin-left: -69px;
           flex: 1;
@@ -146,6 +148,7 @@ class NeonCompactLightCard extends HTMLElement {
           border-radius: var(--ha-card-border-radius);
           width: 100%;
           height: 100%;
+          overflow: hidden;            /* clippe la barre → épouse le radius à 100% */
           transition: background 0.6s ease;
           user-select: none;
         }
@@ -153,9 +156,11 @@ class NeonCompactLightCard extends HTMLElement {
         .brightness-bar {
           height: 100%;
           background: var(--light-primary-colour, var(--primary-color));
-          border-radius: 12px;
+          /* Coin gauche fixe. Coin droit : --bar-right-radius grandit vers la fin de
+             course (piloté en JS) pour que la barre se torde et épouse l'arc de la card. */
+          border-radius: 12px var(--bar-right-radius, 0px) var(--bar-right-radius, 0px) 12px;
           box-shadow: rgba(0, 0, 0, 0.1) 0px 5px 15px;
-          transition: width 0.6s ease;
+          transition: width 0.6s ease, border-radius 0.4s ease;
         }
 
         .overlay {
@@ -356,12 +361,11 @@ class NeonCompactLightCard extends HTMLElement {
           100% { transform: scale(1) rotate(0deg);    opacity: 1; }
         }
         @keyframes powerOff {
-          0%   { transform: scale(1);    opacity: 1; }
-          25%  { transform: scale(1.1);  }
-          55%  { transform: scale(0.75); opacity: 0.2; }
-          75%  { transform: scale(0.95); opacity: 0.8; }
-          88%  { transform: scale(0.85); opacity: 0.6; }
-          100% { transform: scale(0.9);  opacity: 1; }
+          0%   { transform: scale(1)    rotate(0);     opacity: 1; }
+          18%  { transform: scale(1.18) rotate(3deg);  filter: brightness(1.8); }  /* sursaut lumineux */
+          45%  { transform: scale(0.7)  rotate(-6deg); opacity: 0.15; }
+          70%  { transform: scale(1.04) rotate(2deg);  opacity: 0.9; }
+          100% { transform: scale(1)    rotate(0);     opacity: 1; }  /* fix: revient à 100% (était 0.9) */
         }
         @keyframes pending {
           0%, 100% { transform: scale(1); opacity: 1; }
@@ -419,6 +423,110 @@ class NeonCompactLightCard extends HTMLElement {
           left: 0; right: 0; height: 4px;
           background: linear-gradient(transparent, rgba(255,255,255,.10), transparent);
           animation: scanMove 5s linear infinite;
+        }
+
+        /* ═══════════════════════════════════════════════════════════
+           ── v2.1 — Améliorations opt-in ──────────────────────────── */
+
+        /* ── 1. Barre néon "plasma" (option fill_style: plasma) ────── */
+        :host(.fill-plasma.state-on) .brightness-bar {
+          background:
+            /* reflet verre horizontal (haut clair, bas sombre) */
+            linear-gradient(180deg, rgba(255,255,255,.22) 0%, transparent 38%, rgba(0,0,0,.18) 100%),
+            /* dégradé plasma : très sombre → couleur → quasi-blanc au front */
+            linear-gradient(90deg,
+              color-mix(in srgb, var(--light-primary-colour, var(--primary-color)) 35%, #000) 0%,
+              color-mix(in srgb, var(--light-primary-colour, var(--primary-color)) 70%, #000) 40%,
+              var(--light-primary-colour, var(--primary-color)) 80%,
+              color-mix(in srgb, var(--light-primary-colour, var(--primary-color)) 65%, #fff) 100%);
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.35),
+            inset -2px 0 0 rgba(255,255,255,.7),
+            -10px 0 26px -4px var(--light-primary-colour, var(--primary-color)),
+            0 0 1px rgba(255,255,255,.5);
+          position: relative;
+          overflow: hidden;
+        }
+        /* Front lumineux : boîte calée sur toute la barre, fond transparent, seul le
+           border-right est dessiné. Comme il hérite du même border-radius que la barre
+           (--bar-right-radius), le bord se COURBE en fin de course pour épouser l'arc
+           de la card — au lieu d'un trait vertical rigide. */
+        :host(.fill-plasma.state-on) .brightness-bar::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          border-radius: 12px var(--bar-right-radius, 0px) var(--bar-right-radius, 0px) 12px;
+          border-right: 2px solid #fff;
+          box-shadow: 0 0 8px 1px var(--light-primary-colour, var(--primary-color)),
+                      0 0 16px 2px var(--light-primary-colour, var(--primary-color));
+          opacity: var(--front-opacity, .9);
+          animation: frontPulse 2.4s ease-in-out infinite;
+          transition: opacity .35s ease, border-radius .4s ease;
+          pointer-events: none;
+        }
+        :host(.fill-plasma.state-on) .brightness-bar::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(105deg,
+            transparent 30%, rgba(255,255,255,.22) 48%, rgba(255,255,255,.05) 56%, transparent 70%);
+          background-size: 240% 100%;
+          animation: barShimmer 4.5s ease-in-out infinite;
+          pointer-events: none;
+        }
+        @keyframes frontPulse { 0%,100%{opacity:.55;} 50%{opacity:1;} }
+        @keyframes barShimmer {
+          0%   { background-position: 160% 0; }
+          55%  { background-position: -60% 0; }
+          100% { background-position: -60% 0; }
+        }
+
+        /* ── 2. Bordure néon Neo Tokyo (option neon_border) ────────── */
+        :host(.neon-border) .card-container { border-color: transparent; }
+        :host(.neon-border) .card-container::before {
+          content: '';
+          position: absolute; inset: 0; z-index: 5; pointer-events: none;
+          border-radius: inherit;
+          background:
+            linear-gradient(90deg,
+              rgba(var(--rgb-primary-color,98,0,234),1) 0%,
+              rgba(var(--rgb-accent-color,0,255,249),.6) 35%,
+              rgba(var(--rgb-accent-color,0,255,249),.12) 60%,
+              transparent 75%) top / 100% 2px no-repeat,
+            linear-gradient(180deg,
+              rgba(var(--rgb-primary-color,98,0,234),1) 0%,
+              rgba(123,47,190,.5) 40%,
+              rgba(123,47,190,.08) 65%,
+              transparent 80%) left / 2px 100% no-repeat;
+          -webkit-mask-image: linear-gradient(135deg, #000 0%, #000 20%, rgba(0,0,0,.5) 40%, transparent 58%);
+                  mask-image: linear-gradient(135deg, #000 0%, #000 20%, rgba(0,0,0,.5) 40%, transparent 58%);
+        }
+        :host(.neon-border) .card-container::after {
+          content: '';
+          position: absolute; inset: 0; z-index: 4; pointer-events: none;
+          border-radius: inherit;
+          background: radial-gradient(ellipse 55% 60% at 0% 0%,
+            rgba(var(--rgb-primary-color,98,0,234),.16) 0%, transparent 70%);
+        }
+
+        /* ── 3. Power-down cinématique de la barre (option power_fx) ── */
+        :host(.power-fx) .brightness-bar { transition: width .55s cubic-bezier(.5,0,.2,1), filter .25s ease; }
+        :host(.power-fx.powering-off) .brightness-bar { filter: brightness(2.4) saturate(1.4); }
+
+        /* ── LOW_POWER : coupe les animations décoratives sur mobile / iPad
+           (shimmer, front pulse, color pulse, flicker) — garde le rendu statique. */
+        @media (max-width: 767px),
+               (min-width: 768px) and (min-height: 1000px) and (hover: none) and (pointer: coarse) {
+          :host(.fill-plasma.state-on) .brightness-bar::before,
+          :host(.fill-plasma.state-on) .brightness-bar::after { animation: none; }
+          :host(.fx-colorpulse) .brightness-bar,
+          :host(.fx-colorpulse) .icon,
+          :host(.fx-colorpulse) .card-container,
+          .fx-flicker .name, .fx-flicker .percentage, .fx-flicker .haicon { animation: none !important; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          :host .brightness-bar::before, :host .brightness-bar::after,
+          .haicon, :host *,  .scanlines.active::after { animation: none !important; }
         }
 
       </style>
@@ -569,6 +677,7 @@ class NeonCompactLightCard extends HTMLElement {
   connectedCallback() {
     if (!this._resizeObserver) {
       this._resizeObserver = new ResizeObserver(() => {
+        this._contentWidth = null;   // invalide la largeur cachée (cf. _updateDisplay)
         if (!this.isDragging) this._refreshCard();
       });
       if (this.shadowRoot.querySelector(".card-container")) {
@@ -581,6 +690,7 @@ class NeonCompactLightCard extends HTMLElement {
     if (this.pendingUpdate) { cancelAnimationFrame(this.pendingUpdate); this.pendingUpdate = null; }
     if (this._updateTimeout) { clearTimeout(this._updateTimeout); this._updateTimeout = null; }
     if (this._powerAnimTimer) { clearTimeout(this._powerAnimTimer); this._powerAnimTimer = null; }
+    if (this._powerFxTimer) { clearTimeout(this._powerFxTimer); this._powerFxTimer = null; }
     if (this._resizeObserver) {
       this._resizeObserver.disconnect();
       this._resizeObserver = null;
@@ -598,10 +708,15 @@ class NeonCompactLightCard extends HTMLElement {
     if (this._touchmoveHandler) document.removeEventListener("touchmove", this._touchmoveHandler);
     if (this._touchendHandler) document.removeEventListener("touchend", this._touchendHandler);
     if (this._iconClickHandler && this.shadowRoot) {
-      const ico = this.shadowRoot.querySelector('.icon-container, ha-icon');
+      const ico = this.shadowRoot.querySelector('#main-icon');
       if (ico) ico.removeEventListener('click', this._iconClickHandler);
       this._iconClickHandler = null;
     }
+    // Les handlers viennent d'être retirés → permettre leur ré-attache au reconnect.
+    // Sans ça, après un changement d'onglet (fréquent sur iPad/kiosk), set hass()
+    // saute la ré-attache (guard _handlersSetup) et le toggle ne répond plus → F5 obligatoire.
+    this._handlersSetup = false;
+    this._lastRenderKey = null;   // force un _updateDisplay complet au retour
   }
 
   _refreshCard() {
@@ -704,6 +819,9 @@ class NeonCompactLightCard extends HTMLElement {
     this._hass = hass;
     const entity = this.config.entity;
     const stateObj = hass.states[entity];
+    // Garde : pendant un toggle, HA peut émettre un état transitoire sans l'entité.
+    // Sans ce guard, l'accès à stateObj.state throw et fige la card jusqu'au F5.
+    if (!stateObj) return;
     const state = stateObj.state;
 
     const offColours = this._getOffColours();
@@ -961,13 +1079,29 @@ class NeonCompactLightCard extends HTMLElement {
 
     if (!this.isDragging && barEl) {
       if (barWidth !== 0) {
-        const buffer = 4;
-        const contentStyle = getComputedStyle(contentEl);
-        const paddingRight = parseFloat(contentStyle.paddingRight);
-        const contentWidth = contentEl.clientWidth - buffer - paddingRight - _LEFT_OFFSET;
-        const effectiveWidth = (barWidth / 100) * contentWidth;
-        const totalWidth = Math.min(effectiveWidth + _LEFT_OFFSET, contentWidth + _LEFT_OFFSET - 1);
+        // Perf : la largeur dispo ne change qu'au resize → cachée (invalidée par le ResizeObserver).
+        // Évite un getComputedStyle + lecture clientWidth (reflow synchrone) à chaque tick hass.
+        if (this._contentWidth == null) {
+          const buffer = 4;
+          const paddingRight = parseFloat(getComputedStyle(contentEl).paddingRight) || 0;
+          this._contentWidth = contentEl.clientWidth - buffer - paddingRight - _LEFT_OFFSET;
+        }
+        const cw = this._contentWidth;
+        const effectiveWidth = (barWidth / 100) * cw;
+        const totalWidth = Math.min(effectiveWidth + _LEFT_OFFSET, cw + _LEFT_OFFSET - 1);
         barEl.style.width = `${totalWidth}px`;
+        // Fin de course : la barre se "tord" pour épouser l'arc de la card.
+        // ratio 0 jusqu'à 88%, puis 0→1 entre 88% et 100% → arrondit le coin droit
+        // de la barre jusqu'au radius de la card (border-right qui suit la courbe).
+        const tail = Math.max(0, Math.min(1, (barWidth - 88) / 12));
+        this.style.setProperty(
+          "--bar-right-radius",
+          tail > 0 ? `calc(${tail.toFixed(2)} * var(--ha-card-border-radius, 12px))` : "0px"
+        );
+        // Front : reste visible et se COURBE (via le border-radius du ::after qui
+        // suit --bar-right-radius). On ne l'efface plus — il épouse l'arc du coin.
+        // À 100% pile, léger fade pour ne pas surligner le bord parfaitement plein.
+        this.style.setProperty("--front-opacity", barWidth >= 100 ? "0.35" : "0.9");
       } else {
         barEl.style.width = `0px`;
       }
@@ -1012,6 +1146,17 @@ class NeonCompactLightCard extends HTMLElement {
     cardContainer.classList.toggle("fx-flicker", !!(this.config.effect_flicker && isOn));
     cardContainer.classList.toggle("fx-glitch", !!this.config.effect_hover_glitch);
     root.querySelector(".scanlines").classList.toggle("active", !!this.config.effect_scanline);
+
+    // ── v2.1 — options opt-in ───────────────────────────────────────
+    this.classList.toggle("fill-plasma", this.config.fill_style === "plasma");
+    this.classList.toggle("neon-border", this.config.neon_border === true);
+    this.classList.toggle("power-fx", this.config.power_fx === true);
+    // Power-down : flash bref de la barre au passage ON→OFF
+    if (this.config.power_fx && this._lastState === true && isOn === false) {
+      this.classList.add("powering-off");
+      if (this._powerFxTimer) clearTimeout(this._powerFxTimer);
+      this._powerFxTimer = setTimeout(() => this.classList.remove("powering-off"), 280);
+    }
 
     // ── CSS Variables (couleurs dynamiques) ────────────────────────
     if (isOn) {
@@ -1127,6 +1272,11 @@ class NeonCompactLightCardEditor extends HTMLElement {
       if (sel === document.activeElement) return;
       sel.value = c[sel.dataset.actionKey]?.action || "none";
     });
+    // Toggles à valeur string (fill_style=plasma…)
+    this.querySelectorAll("input[data-val-key]").forEach((cb) => {
+      if (cb === document.activeElement) return;
+      cb.checked = c[cb.dataset.valKey] === cb.dataset.onValue;
+    });
   }
 
   _render() {
@@ -1182,6 +1332,11 @@ class NeonCompactLightCardEditor extends HTMLElement {
     this._text("blur",    "Blur px (0–10)",  c.blur    !== undefined ? String(c.blur)    : "6", "e.g. 4");
     this._text("off_blur", "Blur OFF px (0–10)", c.off_blur !== undefined ? String(c.off_blur) : "", "Leave empty to use same blur");
 
+    this._sec("Neo Tokyo FX");
+    this._toggleVal("fill_style", "🌈 Plasma fill bar", c.fill_style === "plasma", "plasma");
+    this._toggle("neon_border", "▞ Neon border (UV→cyan)", c.neon_border === true);
+    this._toggle("power_fx", "⚡ Power-down flash", c.power_fx === true);
+
     this._sec("Color Overrides");
     this._hint("Leave empty to use the light's own RGB color.");
     this._colorRow("primary_colour",   "Primary Color (On)",   c.primary_colour   || "");
@@ -1215,6 +1370,16 @@ class NeonCompactLightCardEditor extends HTMLElement {
     const cb  = document.createElement("input"); cb.type = "checkbox"; cb.checked = checked; cb.dataset.key = key;
     if (defaultOn) cb.dataset.defaultOn = "1";   // coché tant que config != false explicite
     cb.addEventListener("change", (e) => this._set(key, e.target.checked));
+    row.appendChild(lbl); row.appendChild(cb); this.appendChild(row);
+  }
+
+  // Toggle qui écrit une valeur string (ex: fill_style="plasma") au lieu d'un booléen.
+  _toggleVal(key, label, checked, onValue) {
+    const row = document.createElement("div"); row.className = "toggle-row";
+    const lbl = document.createElement("label"); lbl.textContent = label;
+    const cb  = document.createElement("input"); cb.type = "checkbox"; cb.checked = checked;
+    cb.dataset.valKey = key; cb.dataset.onValue = onValue;
+    cb.addEventListener("change", (e) => this._set(key, e.target.checked ? onValue : undefined));
     row.appendChild(lbl); row.appendChild(cb); this.appendChild(row);
   }
 

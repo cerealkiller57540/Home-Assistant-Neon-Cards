@@ -96,10 +96,28 @@ class HaIconStub extends HTMLElement {
     document.body.appendChild(probe);
     const glyph = getComputedStyle(probe, '::before').content.replace(/"/g, '');
     probe.remove();
-    if (glyph && glyph !== 'none') this.setAttribute('data-icon-glyph', glyph);
+    if (glyph && glyph !== 'none') {
+      this.setAttribute('data-icon-glyph', glyph);
+      // Rendu DIRECT du glyphe (le ::before du document ne traverse pas le shadow DOM
+      // de la card → on pose le caractère + la police MDI en style inline sur l'élément).
+      this.textContent = glyph;
+      this.style.fontFamily = '"Material Design Icons"';
+      this.style.fontSize = 'var(--mdc-icon-size, 24px)';
+      this.style.lineHeight = '1';
+      this.style.fontStyle = 'normal';
+    } else if (!this._retried) {
+      // Police MDI pas encore prête → réessaie une fois qu'elle est chargée
+      this._retried = true;
+      (document.fonts ? document.fonts.ready : Promise.resolve())
+        .then(() => requestAnimationFrame(() => { this._retried = false; this._upd(); }));
+    }
   }
 }
 if (!customElements.get('ha-icon')) customElements.define('ha-icon', HaIconStub);
+// Re-scan global quand la police MDI est chargée (les icônes posées avant sont rafraîchies)
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(() => ICON_STUBS.forEach(i => i._upd()));
+}
 // La police MDI peut charger après les icônes → ré-évaluer une fois prête.
 if (document.fonts && document.fonts.ready) {
   document.fonts.ready.then(() => { ICON_STUBS.forEach((i) => i._upd()); });
@@ -237,7 +255,8 @@ for (let m = 0; m < 3; m++) {
    ─────────────────────────────────────────────────────────── */
 const CARDS = [
   { file: '../neon-compact-light-card.js', tag: 'neon-compact-light-card', label: 'Compact Light',
-    config: { entity: 'light.bureau', icon: 'mdi:desk-lamp', name: 'Bureau' } },
+    config: { entity: 'light.bureau', icon: 'mdi:desk-lamp', name: 'Bureau',
+      glow: true, fill_style: 'plasma', neon_border: true, power_fx: true } },
   { file: '../neon-climate-card.js', tag: 'neon-climate-card', label: 'Climate',
     config: { entity: 'climate.salon', humidity_entity: 'sensor.power' } },
   { file: '../neon-dual-gauge-card.js', tag: 'neon-dual-gauge-card', label: 'Dual Gauge',
