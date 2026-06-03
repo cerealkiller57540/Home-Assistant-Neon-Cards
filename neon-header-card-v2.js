@@ -1,4 +1,4 @@
-/* ── neon-header-card-v2 v2.3 ── */
+/* ── neon-header-card-v2 v2.5 ── */
 /**
  * neon-header-card-v2
  *
@@ -89,38 +89,202 @@ function nhv2LoadFont(family) {
 }
 
 // ── Template engine ──────────────────────────────────────────────
-function nhv2ParseTemplate(hass, text) {
-  if (!hass || !text || typeof text !== 'string' || !text.includes('{{')) return text;
-  return text.replace(/\{\{\s*(.+?)\s*\}\}/g, (match, formula) => {
+function nhv2ParseTemplate(hass, text, vars) {
+  if (!hass || !text || typeof text !== 'string') return text;
+  vars = vars || {};
+
+  // ── Pré-passe : {% set nom = expression %} (collecte les variables, retire les blocs) ──
+  if (text.includes('{%')) {
+    text = text.replace(/\{\%\s*set\s+([a-zA-Z_]\w*)\s*=\s*([\s\S]+?)\s*\%\}/g, (m, name, raw) => {
+      try {
+        const { expr, filters } = nhv2SplitFilters(raw.trim());
+        let v = nhv2Eval(expr, hass, vars);
+        if (filters) v = nhv2ApplyFilters(v == null ? '' : String(v), filters);
+        // re-caster en nombre si possible (pour l'arithmétique aval)
+        const n = parseFloat(v);
+        vars[name] = (typeof v === 'string' && !isNaN(n) && String(n) === v.trim()) ? n : v;
+      } catch(e) { vars[name] = ''; }
+      return '';
+    });
+  }
+  if (!text.includes('{{')) return text.trim();
+
+  return text.replace(/\{\{\s*([\s\S]+?)\s*\}\}/g, (match, formula) => {
     try {
       formula = formula.trim();
-      const condMatch = formula.match(/^['"](.+?)['"]?\s+if\s+(.+?)\s+else\s+['"](.+?)['"]$/);
-      if (condMatch) {
-        const [, trueVal, condition, falseVal] = condMatch;
-        return nhv2EvalCondition(condition, hass) ? trueVal : falseVal;
-      }
-      const statesMatch = formula.match(/^\s*states\(['"](.+?)['"]\)\s*(.*)$/);
-      if (statesMatch) {
-        const [, entityId, filters] = statesMatch;
-        const s = hass.states[entityId];
-        if (!s) return '---';
-        return nhv2ApplyFilters(s.state, filters);
-      }
-      const isStateMatch = formula.match(/^\s*is_state\(['"](.+?)['"],\s*['"](.+?)['"]\)\s*(.*)$/);
-      if (isStateMatch) {
-        const [, entityId, expected, filters] = isStateMatch;
-        const s = hass.states[entityId];
-        return nhv2ApplyFilters((s && s.state === expected) ? '1' : '0', filters);
-      }
-      return match;
+      // séparer la chaîne de filtres ( | xxx ) de l'expression — en ignorant les | dans les parenthèses/quotes
+      const { expr, filters } = nhv2SplitFilters(formula);
+      const val = nhv2Eval(expr, hass, vars);
+      return nhv2ApplyFilters(val == null ? '' : String(val), filters);
     } catch(e) { return match; }
   });
 }
 
-function nhv2EvalCondition(cond, hass) {
-  const m = cond.trim().match(/is_state\(['"](.+?)['"],\s*['"](.+?)['"]\)/);
-  if (m) { const s = hass.states[m[1]]; return s && s.state === m[2]; }
-  return false;
+// Sépare "expr | f1 | f2(arg)" → { expr, filters:"| f1 | f2(arg)" } sans couper les | internes
+function nhv2SplitFilters(s) {
+  let depth = 0, inStr = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) { if (c === inStr) inStr = ''; continue; }
+    if (c === '"' || c === "'") { inStr = c; continue; }
+    if (c === '(' ) depth++;
+    else if (c === ')') depth--;
+    else if (c === '|' && depth === 0) return { expr: s.slice(0, i).trim(), filters: s.slice(i) };
+  }
+  return { expr: s.trim(), filters: '' };
+}
+
+/* ── Évaluateur d'expression sûr (pas d'eval) ──
+ * Gère : nombres, chaînes, variables (set), states(...), is_state(...),
+ * arithmétique + - * / ( ), comparaisons, et ternaire "A if COND else B". */
+function nhv2Eval(expr, hass, vars) {
+  expr = String(expr).trim();
+
+  // ternaire : <A> if <cond> else <B>  (récursif, gère l'imbrication via le 1er if/else de niveau 0)
+  const tern = nhv2SplitTernary(expr);
+  if (tern) {
+    return nhv2Truthy(nhv2Eval(tern.cond, hass, vars))
+      ? nhv2Eval(tern.t, hass, vars)
+      : nhv2Eval(tern.f, hass, vars);
+  }
+
+  // comparaisons de niveau 0
+  const cmp = nhv2SplitCompare(expr);
+  if (cmp) {
+    const a = nhv2Eval(cmp.a, hass, vars), b = nhv2Eval(cmp.b, hass, vars);
+    const na = parseFloat(a), nb = parseFloat(b);
+    const num = !isNaN(na) && !isNaN(nb);
+    switch (cmp.op) {
+      case '==': return (num ? na === nb : String(a) === String(b)) ? 1 : 0;
+      case '!=': return (num ? na !== nb : String(a) !== String(b)) ? 1 : 0;
+      case '>':  return na >  nb ? 1 : 0;
+      case '<':  return na <  nb ? 1 : 0;
+      case '>=': return na >= nb ? 1 : 0;
+      case '<=': return na <= nb ? 1 : 0;
+    }
+  }
+
+  // arithmétique : seulement s'il reste un vrai opérateur APRÈS avoir masqué
+  // les appels de fonction (states(...), etc.) et les chaînes — pour ne pas
+  // confondre les parenthèses de states() avec un groupement, ni un point d'IP avec un nombre.
+  if (!/^['"]/.test(expr)) {
+    const masked = expr
+      .replace(/(states|is_state|state_attr)\([^)]*\)/g, '0')  // appels → token neutre
+      .replace(/['"][^'"]*['"]/g, '0');                          // chaînes → token neutre
+    if (/[+\-*/]/.test(masked) || /\([^)]*[+\-*/]/.test(expr)) {
+      const r = nhv2EvalArith(expr, hass, vars);
+      if (r !== undefined) return r;
+    }
+  }
+  return nhv2Atom(expr, hass, vars);
+}
+
+// atome : littéral nombre/chaîne, variable, states(), is_state()
+function nhv2Atom(s, hass, vars) {
+  s = s.trim();
+  if (s === '') return '';
+  if (/^-?\d+(\.\d+)?$/.test(s)) return parseFloat(s);
+  if (/^['"][\s\S]*['"]$/.test(s)) return s.slice(1, -1);
+  let m = s.match(/^states\(\s*['"](.+?)['"]\s*\)$/);
+  if (m) { const st = hass.states[m[1]]; return st ? st.state : ''; }
+  m = s.match(/^is_state\(\s*['"](.+?)['"]\s*,\s*['"](.+?)['"]\s*\)$/);
+  if (m) { const st = hass.states[m[1]]; return (st && st.state === m[2]) ? 1 : 0; }
+  m = s.match(/^state_attr\(\s*['"](.+?)['"]\s*,\s*['"](.+?)['"]\s*\)$/);
+  if (m) { const st = hass.states[m[1]]; return st && st.attributes ? (st.attributes[m[2]] ?? '') : ''; }
+  if (Object.prototype.hasOwnProperty.call(vars, s)) return vars[s];
+  // expression entre parenthèses pures
+  if (s.startsWith('(') && s.endsWith(')')) return nhv2Eval(s.slice(1, -1), hass, vars);
+  return s; // chaîne nue
+}
+
+function nhv2Truthy(v) {
+  if (v === '' || v === 0 || v === '0' || v == null) return false;
+  if (v === 'off' || v === 'false' || v === 'unavailable' || v === 'unknown' || v === 'None') return false;
+  return true;
+}
+
+// trouve un " if ... else " au niveau 0 de parenthèses/quotes
+function nhv2SplitTernary(s) {
+  let depth = 0, inStr = '', ifIdx = -1, elseIdx = -1;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) { if (c === inStr) inStr = ''; continue; }
+    if (c === '"' || c === "'") { inStr = c; continue; }
+    if (c === '(') depth++; else if (c === ')') depth--;
+    else if (depth === 0) {
+      if (ifIdx < 0 && s.substr(i, 4) === ' if ') ifIdx = i;
+      else if (ifIdx >= 0 && s.substr(i, 6) === ' else ') { elseIdx = i; break; }
+    }
+  }
+  if (ifIdx >= 0 && elseIdx > ifIdx)
+    return { t: s.slice(0, ifIdx).trim(), cond: s.slice(ifIdx + 4, elseIdx).trim(), f: s.slice(elseIdx + 6).trim() };
+  return null;
+}
+
+// trouve un opérateur de comparaison au niveau 0
+function nhv2SplitCompare(s) {
+  let depth = 0, inStr = '';
+  const ops = ['==', '!=', '>=', '<=', '>', '<'];
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) { if (c === inStr) inStr = ''; continue; }
+    if (c === '"' || c === "'") { inStr = c; continue; }
+    if (c === '(') depth++; else if (c === ')') depth--;
+    else if (depth === 0) {
+      for (const op of ops) {
+        if (s.substr(i, op.length) === op) {
+          // éviter de confondre > avec >= déjà capturé : ops triés, ok
+          return { a: s.slice(0, i), op, b: s.slice(i + op.length) };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// arithmétique : tokenise puis shunting-yard → RPN → eval
+function nhv2EvalArith(expr, hass, vars) {
+  const toks = nhv2Tokenize(expr, hass, vars);
+  if (!toks) return undefined;
+  const out = [], ops = [], prec = { '+': 1, '-': 1, '*': 2, '/': 2 };
+  for (const t of toks) {
+    if (typeof t === 'number') out.push(t);
+    else if (t === '(') ops.push(t);
+    else if (t === ')') { while (ops.length && ops[ops.length-1] !== '(') out.push(ops.pop()); ops.pop(); }
+    else { while (ops.length && prec[ops[ops.length-1]] >= prec[t]) out.push(ops.pop()); ops.push(t); }
+  }
+  while (ops.length) out.push(ops.pop());
+  const st = [];
+  for (const t of out) {
+    if (typeof t === 'number') st.push(t);
+    else { const b = st.pop(), a = st.pop();
+      st.push(t === '+' ? a+b : t === '-' ? a-b : t === '*' ? a*b : (b === 0 ? 0 : a/b)); }
+  }
+  return st.length === 1 ? st[0] : undefined;
+}
+
+// découpe en nombres / opérateurs / parenthèses ; les atomes non-numériques sont résolus puis castés en nombre
+function nhv2Tokenize(expr, hass, vars) {
+  const toks = []; let i = 0;
+  const re = /\s*(states\([^)]*\)|is_state\([^)]*\)|state_attr\([^)]*\)|[a-zA-Z_]\w*|-?\d+\.?\d*|[()+\-*/])/g;
+  let m, last = 0;
+  while ((m = re.exec(expr)) !== null) {
+    if (m.index !== last && expr.slice(last, m.index).trim() !== '') return null; // caractère inconnu
+    last = re.lastIndex;
+    const tk = m[1];
+    if (tk === '(' || tk === ')' || tk === '+' || tk === '*' || tk === '/') toks.push(tk);
+    else if (tk === '-') {
+      // moins unaire vs binaire
+      const prev = toks[toks.length-1];
+      if (toks.length === 0 || prev === '(' || prev === '+' || prev === '-' || prev === '*' || prev === '/') toks.push(0, '-');
+      else toks.push('-');
+    } else {
+      const v = parseFloat(nhv2Atom(tk, hass, vars));
+      toks.push(isNaN(v) ? 0 : v);
+    }
+  }
+  if (last < expr.length && expr.slice(last).trim() !== '') return null;
+  return toks;
 }
 
 function nhv2ApplyFilters(val, filterStr) {
@@ -1197,7 +1361,7 @@ console.info(
 );
 
 console.info(
-  '%c 🏠 neon-header-card-v2 v2.3 %c Neo Tokyo ',
+  '%c 🏠 neon-header-card-v2 v2.5 %c Neo Tokyo ',
   'background:#1E90FF;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#00D4FF;padding:2px 4px;border-radius:0 3px 3px 0;'
 );

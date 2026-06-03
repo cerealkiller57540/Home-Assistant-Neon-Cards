@@ -554,7 +554,7 @@ class NeonNasCard extends HTMLElement {
           <div class="donut" id="donut"><div class="pct" id="pct">—</div></div>
           <div class="vol">
             <div class="line1"><span id="used">—</span> <span class="tot">/ <span id="total">—</span></span></div>
-            <div class="line2" id="volLabel">Volume 1</div>
+            <div class="line2" id="volLabel"></div>
           </div>
           <button class="btn-action btn-reboot" id="btn-reboot">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -715,8 +715,11 @@ class NeonNasCard extends HTMLElement {
 
     this.shadowRoot.getElementById('used').textContent  = used  ? this._fmtBytes(used.v, used.a)   : '—';
     this.shadowRoot.getElementById('total').textContent = total ? this._fmtBytes(total.v, total.a) : '—';
-    this.shadowRoot.getElementById('volLabel').textContent =
-      c.volume_label || (total && total.a && total.a.friendly_name ? 'Volume 1' : 'Volume 1');
+    // label volume : si vide dans la config → masqué (pas de fallback hardcodé)
+    const volLabelEl = this.shadowRoot.getElementById('volLabel');
+    const volLabel = (c.volume_label != null && String(c.volume_label).trim() !== '') ? c.volume_label : '';
+    volLabelEl.textContent = volLabel;
+    volLabelEl.style.display = volLabel ? '' : 'none';
 
     // temp
     const t = this._ent(c.temp_entity);
@@ -1017,7 +1020,7 @@ console.info('%c NEON-NAS-CARD %c v1.5 ',
 })();
 
 console.info(
-  '%c 🖥️ neon-nas-card v1.9 %c Neo Tokyo ',
+  '%c 🖥️ neon-nas-card v2.0 %c Neo Tokyo ',
   'background:#FF6A00;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#FFD700;padding:2px 4px;border-radius:0 3px 3px 0;'
 );

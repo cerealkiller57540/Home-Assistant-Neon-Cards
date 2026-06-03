@@ -632,7 +632,7 @@ class NeonDualThermoCardEditor extends HTMLElement {
   }
 
   _initPickers() {
-    // Construit le <datalist> partagé + câble les events des inputs entité.
+    // §22 : construit le <datalist> partagé + câble les events des inputs entité (input+datalist, pas de ha-entity-picker).
     this._fillEntityList();
     this.querySelectorAll('input[data-entity-key]').forEach(inp => {
       const key = inp.dataset.entityKey;
@@ -945,7 +945,7 @@ class NeonDualThermoCardEditor extends HTMLElement {
       });
     });
 
-    // Entity pickers (ha-entity-picker with full autocomplete)
+    // Entity inputs (§22 : input + <datalist> partagé, jamais ha-entity-picker)
     this._initPickers();
 
     // Other fields

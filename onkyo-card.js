@@ -86,9 +86,37 @@ class OnkyoCard extends HTMLElement {
 
     this._ensureFonts();
 
-    /* volume arc math */
-    const arcMax  = 56.5;
-    const arcFill = isOn && !isMuted ? +(vol / 100 * arcMax).toFixed(1) : 0;
+    /* volume arc math — r=20 → circonférence ≈ 125.66 ; anneau plein = 360°, départ midi, sens horaire */
+    const arcCirc = 125.66;
+    const arcFill = isOn && !isMuted ? +(vol / 100 * arcCirc).toFixed(1) : 0;
+
+    /* input selector — knob rotatif à crans : pointe la source active sur un balayage de 270° (7h30 → 4h30) */
+    const srcList   = Array.isArray(attr.source_list) ? attr.source_list : [];
+    const srcIdx    = Math.max(0, srcList.indexOf(attr.source));
+    const srcCount  = Math.max(1, srcList.length);
+    const SEL_SWEEP = 270;                                  // amplitude du cadran
+    const selFrac   = srcCount > 1 ? srcIdx / (srcCount - 1) : 0;
+    // -135° = 7h30 (premier cran), +135° = 4h30 (dernier cran) ; OFF → centré midi (0°)
+    const inputAngle = isOn ? Math.round(-SEL_SWEEP / 2 + selFrac * SEL_SWEEP) : 0;
+    // ticks (un cran par source) + aiguille SVG — viewBox fixe (0..44), centre (22,22), 0 = midi
+    const SEL_CX = 22, SEL_CY = 22;
+    const polar = (ang, r) => [SEL_CX + r * Math.sin(ang), SEL_CY - r * Math.cos(ang)];
+    let inputTicks = "";
+    for (let i = 0; i < srcCount; i++) {
+      const f = srcCount > 1 ? i / (srcCount - 1) : 0.5;
+      const ang = (-SEL_SWEEP / 2 + f * SEL_SWEEP) * Math.PI / 180;
+      const [sx, sy] = polar(ang, 17), [ex, ey] = polar(ang, 19.5);
+      const on = isOn && i === srcIdx;
+      inputTicks += `<line x1="${sx.toFixed(2)}" y1="${sy.toFixed(2)}" x2="${ex.toFixed(2)}" y2="${ey.toFixed(2)}" `
+        + `stroke="${on ? acc : 'rgba(93,12,237,0.18)'}" stroke-width="${on ? 1.4 : 1}" stroke-linecap="round"`
+        + `${on ? ` style="filter:drop-shadow(0 0 2px ${acc})"` : ''}/>`;
+    }
+    // aiguille : pointe le cran actif (ou midi si OFF), du centre vers le bord
+    const needleAng = inputAngle * Math.PI / 180;
+    const [nx, ny] = polar(needleAng, 14);
+    const inputNeedle = `<line x1="${SEL_CX}" y1="${SEL_CY}" x2="${nx.toFixed(2)}" y2="${ny.toFixed(2)}" `
+      + `stroke="${isOn ? acc : 'rgba(93,12,237,0.25)'}" stroke-width="${isOn ? 1.6 : 1.2}" stroke-linecap="round"`
+      + `${isOn ? ` style="filter:drop-shadow(0 0 3px ${acc});transition:all .4s cubic-bezier(.4,1.3,.5,1)"` : ''}/>`;
 
     /* volume bar segments */
     const segs = 32;
@@ -203,6 +231,9 @@ class OnkyoCard extends HTMLElement {
     box-shadow: 0 0 4px var(--onkyo-accent);
     border-radius: 1px;
   }
+  /* knob INPUT : aiguille rendue dans le SVG → pas de trait ::after fixe */
+  :host .knob-input::after { display: none; }
+  :host .knob-input.on { border-color: rgba(93,12,237,0.18); }
   :host .klbl {
     font-family: 'Rajdhani', sans-serif;
     font-size: 6.5px; color: rgba(255,255,255,0.15);
@@ -489,9 +520,10 @@ class OnkyoCard extends HTMLElement {
         <div class="knob">
           <svg class="ksvg" viewBox="0 0 44 44">
             <circle cx="22" cy="22" r="20" fill="none" stroke="rgba(0,212,255,0.06)" stroke-width="2"
-              stroke-dasharray="${arcMax} ${75.4 - arcMax}" stroke-dashoffset="14" stroke-linecap="round"/>
+              transform="rotate(-90 22 22)"/>
             <circle cx="22" cy="22" r="20" fill="none" stroke="${pri}" stroke-width="2"
-              stroke-dasharray="${arcFill} ${101.8 - arcFill}" stroke-dashoffset="14" stroke-linecap="round"
+              stroke-dasharray="${arcFill} ${(arcCirc - arcFill).toFixed(2)}" stroke-dashoffset="0" stroke-linecap="round"
+              transform="rotate(-90 22 22)"
               style="filter:drop-shadow(0 0 3px ${pri}40); animation:onkyo-arc-breathe 3s ease-in-out infinite;"/>
           </svg>
         </div>
@@ -533,11 +565,11 @@ class OnkyoCard extends HTMLElement {
       </div>
 
       <div class="kwrap">
-        <div class="knob">
+        <div class="knob knob-input${isOn ? ' on' : ''}">
           <svg class="ksvg" viewBox="0 0 44 44">
-            <circle cx="22" cy="22" r="20" fill="none" stroke="rgba(93,12,237,0.06)" stroke-width="1.5"
-              stroke-dasharray="3 3.5"/>
+            ${inputTicks}
             <circle cx="22" cy="22" r="6" fill="rgba(93,12,237,0.04)" stroke="rgba(93,12,237,0.15)" stroke-width="0.5"/>
+            ${inputNeedle}
           </svg>
         </div>
         <span class="klbl">INPUT</span>
@@ -757,7 +789,7 @@ if (!window.customCards.some((c) => c.type === "onkyo-card")) {
 }
 
 console.info(
-  '%c 🎵 onkyo-card v129.05 %c Neo Tokyo ',
+  '%c 🎵 onkyo-card v129.09 %c Neo Tokyo ',
   'background:#9D4EDD;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#E0115F;padding:2px 4px;border-radius:0 3px 3px 0;'
 );

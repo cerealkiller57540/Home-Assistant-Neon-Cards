@@ -1,4 +1,4 @@
-/* ── neon-switch-card v1.6 ── */
+/* ── neon-switch-card v1.7 ── */
 (() => {
 
 /* ── Device detection (MD §1) ───────────────────────────────────────────── */
@@ -69,6 +69,22 @@ function _speedClass(val, unit) {
   if (n >= 100)  return 'm100';
   if (n > 0)     return 'm10';
   return 'off';
+}
+
+/* Mappe le débit réel d'un port (ioRaw en MB/s) sur l'aspect visuel de la LED d'activité
+ * + le halo du numéro de port. Échelle log (les débits réseau s'étalent sur plusieurs
+ * ordres de grandeur) : repos → calme & sans halo, saturé → flicker rapide & halo intense. */
+function _ioVisual(ioRaw) {
+  const io = parseFloat(ioRaw);
+  if (!io || io <= 0 || isNaN(io)) return { dur: 0.5, glow: 0, op: 0 };
+  const LO = 0.02, HI = 50;                                   // bornes MB/s
+  const x = Math.max(LO, Math.min(io, HI));
+  const t = (Math.log10(x) - Math.log10(LO)) / (Math.log10(HI) - Math.log10(LO)); // 0..1
+  return {
+    dur:  +(0.6 - t * (0.6 - 0.07)).toFixed(3),  // s : 0.6 (repos) → 0.07 (saturé)
+    glow: +(2 + t * 10).toFixed(1),              // px : rayon du halo
+    op:   +(0.15 + t * 0.55).toFixed(2),         // opacité du halo
+  };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -201,7 +217,8 @@ const STYLES = `
   .led-l-gig { animation: pulse-led 2s ease-in-out infinite; will-change: opacity; }
   .led-l-100 { animation: pulse-led 2.5s ease-in-out infinite; will-change: opacity; }
   .led-l-10  { animation: pulse-led 3.5s ease-in-out infinite; will-change: opacity; }
-  .led-r-act { animation: hdd-flicker 0.18s step-end infinite; will-change: opacity; }
+  /* vitesse de clignotement pilotée par le débit réel du port (var --act-dur, défaut = repos) */
+  .led-r-act { animation: hdd-flicker var(--act-dur, 0.5s) step-end infinite; will-change: opacity; }
 
   ${NSW_IS_LOW_POWER ? `
   .led-l-gig, .led-l-100, .led-l-10 { animation: pulse-led 3s ease-in-out infinite; }
@@ -300,6 +317,9 @@ const STYLES = `
     color: rgba(var(--sw-cy),.7);
     mix-blend-mode: screen;
     animation: flicker 4s infinite alternate;
+    /* halo de débit : intensité pilotée par l'I/O réel du port (--io-glow px / --io-op opacité) */
+    text-shadow: 0 0 var(--io-glow, 0px) rgba(var(--sw-cy), var(--io-op, 0));
+    transition: text-shadow .5s ease;
   }
 
   .legend { display: flex; gap: clamp(3px, 1.2cqi, 9px); justify-content: center; margin-top: 7px; overflow: hidden; }
@@ -726,7 +746,10 @@ class NeonSwitchCard extends HTMLElement {
               };
           }
           ledAct.style.setProperty('animation-delay', this._ledDelays[n].act + 's');
-          ledAct.setAttribute('filter', `url(#led-glow-${n})`);
+
+          /* vitesse de clignotement pilotée par le débit réel du port */
+          const iov = _ioVisual(d.ioRaw);
+          ledAct.style.setProperty('--act-dur', iov.dur + 's');
 
           const filterUrl = `url(#led-glow-${n})`;
           if (ledAct.getAttribute('filter') !== filterUrl) {
@@ -738,6 +761,7 @@ class NeonSwitchCard extends HTMLElement {
           ledAct.setAttribute('fill', rCol);
           ledAct.removeAttribute('class');
           ledAct.style.removeProperty('animation-delay'); // On nettoie aussi le delay
+          ledAct.style.removeProperty('--act-dur');
           ledAct.removeAttribute('filter');
         }
       }
@@ -756,6 +780,16 @@ class NeonSwitchCard extends HTMLElement {
           if (pnum.textContent !== label) pnum.textContent = label;
         }
         pnum.classList.toggle('on', d.speedCls !== 'off');
+
+        /* halo de débit sur le numéro de port — suit le même I/O réel que la LED */
+        if (d.isActive) {
+          const iov = _ioVisual(d.ioRaw);
+          pnum.style.setProperty('--io-glow', iov.glow + 'px');
+          pnum.style.setProperty('--io-op',   iov.op);
+        } else {
+          pnum.style.removeProperty('--io-glow');
+          pnum.style.removeProperty('--io-op');
+        }
       }
     }
 
@@ -1009,7 +1043,7 @@ console.info('%c NEON-SWITCH-CARD %c v1.4 ',
 })();
 
 console.info(
-  '%c 🔌 neon-switch-card v1.6 %c Neo Tokyo ',
+  '%c 🔌 neon-switch-card v1.7 %c Neo Tokyo ',
   'background:#2EE5B6;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#6200EA;padding:2px 4px;border-radius:0 3px 3px 0;'
 );
