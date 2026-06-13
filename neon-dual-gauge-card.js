@@ -751,6 +751,73 @@ ha-card {
   box-shadow: none !important;
 }
 
+/* ── Tête de comète + traînée (enable_comet_head) ─────────────────────────
+   Halo ::after surdimensionné : reste visible même quand les LEDs se
+   chevauchent en ruban continu (200 LEDs / rayon 105 → 3,3 px d'espacement).
+   Pas de transform ici — il porte déjà le positionnement rotate/translate. */
+.led.active.head { z-index: 2; }
+.led.active.head::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+    rgba(255,255,255,0.95) 0%,
+    rgba(255,255,255,0.55) 30%,
+    transparent 68%);
+  pointer-events: none;
+}
+.led[id^="led-inner-"].active.head {
+  background: radial-gradient(circle, #ffffff 0%, var(--active-led-color-inner) 75%);
+  box-shadow: 0 0 14px #ffffff, 0 0 26px var(--active-led-color-inner);
+}
+.led[id^="led-outer-"].active.head {
+  background: radial-gradient(circle, #ffffff 0%, var(--active-led-color-outer) 75%);
+  box-shadow: 0 0 14px #ffffff, 0 0 26px var(--active-led-color-outer);
+}
+/* Traînée : gradient de luminosité, lisible sur ruban chevauché */
+.led.active.tr1 { filter: brightness(1.65); z-index: 1; }
+.led.active.tr2 { filter: brightness(1.40); }
+.led.active.tr3 { filter: brightness(1.18); }
+
+/* ── Graduations gravées (enable_tick_marks) ────────────────────────────── */
+.ndg-tick {
+  position: absolute; left: 50%; top: 50%;
+  width: 1.5px; height: 6px;
+  margin-left: -0.75px; margin-top: -3px;
+  background: rgba(167, 139, 250, 0.45);
+  pointer-events: none;
+}
+.ndg-tick.maj { height: 9px; width: 2px; margin-left: -1px; background: rgba(167, 139, 250, 0.70); }
+
+/* ── Anneau de verre central (enable_glass_center) ──────────────────────── */
+.ndg-glass {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  /* alphas calibrés pour rester lisibles sur le centerBackground quasi-opaque */
+  background: conic-gradient(from 210deg,
+    rgba(98,0,234,0.26),  rgba(0,255,249,0.10),
+    rgba(180,0,255,0.20), rgba(61,0,184,0.12),
+    rgba(98,0,234,0.26));
+  border: 1px solid rgba(167,139,250,0.40);
+  box-shadow:
+    inset 0 0 30px rgba(98,0,234,0.32),
+    inset 0 2px 1px rgba(255,255,255,0.10),
+    inset 0 -10px 24px rgba(0,0,0,0.35);
+}
+/* Reflet de courbure : arc lumineux en haut, signature « verre » */
+.ndg-glass::after {
+  content: '';
+  position: absolute;
+  inset: 4% 12% 55% 12%;
+  border-radius: 50%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.10), transparent 75%);
+}
+/* Les valeurs restent au-dessus du verre */
+.dual-center .value-group { position: relative; z-index: 1; }
+
 :host(.kiosk-mode) .center-shadow,
 :host(.kiosk-mode) .outer-shadow {
   display: none;
@@ -999,6 +1066,15 @@ function generateLedsHTML(ledsCount, radius, ledSize, prefix = '') {
   return leds.join('');
 }
 
+function generateTicksHTML(radius) {
+  const out = [];
+  for (let i = 0; i < 20; i++) {
+    const angle = (i / 20) * 360 - 90;
+    out.push(`<div class="ndg-tick${i % 5 === 0 ? ' maj' : ''}" style="transform: rotate(${angle}deg) translate(${radius}px) rotate(90deg);"></div>`);
+  }
+  return out.join('');
+}
+
 function renderDual(context) {
   const config1 = context.config.gauges[0];
   const config2 = context.config.gauges[1];
@@ -1117,11 +1193,17 @@ function renderDual(context) {
     --title-font-weight: ${context.config.title_font_weight || 'normal'};
     --title-font-color: ${context.config.title_font_color || globalTheme.textColor};
 
+    --ndg-dyn-inner: ${context.config.value_glow_dynamic !== false ? 'var(--active-led-color-inner)' : 'static'};
+    --ndg-dyn-outer: ${context.config.value_glow_dynamic !== false ? 'var(--active-led-color-outer)' : 'static'};
     --neon-value-glow-inner: ${context.config.neon_value_glow !== false
-      ? `0 0 2px #fff, 0 0 8px #fff, 0 0 18px ${vColorInner}, 0 0 42px ${vColorInner}70, 0 0 80px ${vColorInner}38`
+      ? (context.config.value_glow_dynamic !== false
+          ? `0 0 2px #fff, 0 0 8px #fff, 0 0 18px var(--active-led-color-inner, ${vColorInner}), 0 0 42px color-mix(in srgb, var(--active-led-color-inner, ${vColorInner}) 45%, transparent), 0 0 80px color-mix(in srgb, var(--active-led-color-inner, ${vColorInner}) 22%, transparent)`
+          : `0 0 2px #fff, 0 0 8px #fff, 0 0 18px ${vColorInner}, 0 0 42px ${vColorInner}70, 0 0 80px ${vColorInner}38`)
       : `0 1px 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.4)`};
     --neon-value-glow-outer: ${context.config.neon_value_glow !== false
-      ? `0 0 2px #fff, 0 0 8px #fff, 0 0 18px ${vColorOuter}, 0 0 42px ${vColorOuter}70, 0 0 80px ${vColorOuter}38`
+      ? (context.config.value_glow_dynamic !== false
+          ? `0 0 2px #fff, 0 0 8px #fff, 0 0 18px var(--active-led-color-outer, ${vColorOuter}), 0 0 42px color-mix(in srgb, var(--active-led-color-outer, ${vColorOuter}) 45%, transparent), 0 0 80px color-mix(in srgb, var(--active-led-color-outer, ${vColorOuter}) 22%, transparent)`
+          : `0 0 2px #fff, 0 0 8px #fff, 0 0 18px ${vColorOuter}, 0 0 42px ${vColorOuter}70, 0 0 80px ${vColorOuter}38`)
       : `0 1px 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.4)`};
     --neon-value-color-inner: ${context.config.neon_value_glow !== false ? '#fff' : vColorInner};
     --neon-value-color-outer: ${context.config.neon_value_glow !== false ? '#fff' : vColorOuter};
@@ -1187,9 +1269,11 @@ function renderDual(context) {
         <div class="outer-shadow" id="outer-shadow-outer"></div>
         <div class="center-shadow" id="center-shadow-inner"></div>
         <div class="center-shadow" id="center-shadow-outer"></div>
+        ${context.config.enable_tick_marks !== false ? generateTicksHTML(innerGaugeRadius - ledSize1 - 12) : ''}
         ${generateLedsHTML(ledsCount2, outerGaugeSize / 2, ledSize2, 'outer')}
         ${generateLedsHTML(ledsCount1, innerGaugeRadius, ledSize1, 'inner')}
         <div class="center dual-center" style="background: ${globalTheme.centerBackground}">
+          ${context.config.enable_glass_center !== false ? '<div class="ndg-glass"></div>' : ''}
           <div class="value-group ${isPrimaryInner ? '' : 'secondary'}" id="group-inner">
             <div class="value" id="value-inner">0</div>
             <div class="unit" id="unit-inner"></div>
@@ -1554,6 +1638,31 @@ function updateLedsDual(context, value, ledsCount, prefix, gaugeConfig) {
       }
     }
   }
+  // ── Tête de comète + traînée (enable_comet_head, défaut actif) ──
+  if (!context._cometLeds) context._cometLeds = {};
+  const prevComet = context._cometLeds[prefix];
+  if (prevComet) for (const el of prevComet) el.classList.remove('head', 'tr1', 'tr2', 'tr3');
+  context._cometLeds[prefix] = null;
+  if (context.config.enable_comet_head !== false && ledInfo.activeLeds > 0) {
+    let head, step;
+    if (ledInfo.direction === 'negative') {
+      head = ledInfo.activeLeds > 1 ? ledsCount - ledInfo.activeLeds + 1 : 0;
+      step = 1;   // la traînée remonte vers le point zéro
+    } else {
+      head = ledInfo.activeLeds - 1;
+      step = -1;
+    }
+    const marks = ['head', 'tr1', 'tr2', 'tr3'], applied = [];
+    for (let k = 0; k < marks.length; k++) {
+      const idx = head + step * k;
+      if (idx < 0 || idx >= ledsCount) break;
+      const el = cachedLedArray ? cachedLedArray[idx] : context.shadowRoot.getElementById(`led-${prefix}-${idx}`);
+      if (!el || !el.classList.contains('active')) break;
+      el.classList.add(marks[k]);
+      applied.push(el);
+    }
+    context._cometLeds[prefix] = applied;
+  }
 }
 
 function animateValueChangeDual(context, fromValue, toValue, min, max, prefix, gaugeIndex) {
@@ -1729,6 +1838,11 @@ function updateDualGauge(context) {
   // Update inner gauge (skip if unavailable)
   if (rawState1 !== null) {
     const state1 = rawState1;
+    // Ignition : premier update → sweep depuis 0 (bidirectionnel) ou min
+    if (context.config.enable_ignition !== false && !context._ignited1 && context.previousState1 === null) {
+      context._ignited1 = true;
+      context.previousState1 = config1.bidirectional ? 0 : (config1.min ?? 0);
+    }
     const previousState1 = context.previousState1 !== null ? context.previousState1 : state1;
     const min1 = config1.min;
     const max1 = config1.max;
@@ -1756,6 +1870,10 @@ function updateDualGauge(context) {
   // Update outer gauge (skip if unavailable)
   if (rawState2 !== null) {
     const state2 = rawState2;
+    if (context.config.enable_ignition !== false && !context._ignited2 && context.previousState2 === null) {
+      context._ignited2 = true;
+      context.previousState2 = config2.bidirectional ? 0 : (config2.min ?? 0);
+    }
     const previousState2 = context.previousState2 !== null ? context.previousState2 : state2;
     const min2 = config2.min;
     const max2 = config2.max;
@@ -2065,6 +2183,11 @@ class NeonDualGaugeCardEditor extends HTMLElement {
       effects: lang === 'fr' ? 'Effets visuels' : 'Visual Effects',
       topGlow: lang === 'fr' ? 'Lueur supérieure' : 'Top Glow',
       neonValueGlow: lang === 'fr' ? 'Triple neon glow (valeurs)' : 'Triple neon glow (values)',
+      cometHead: lang === 'fr' ? 'Tête de comète + traînée' : 'Comet head + trail',
+      ignition: lang === 'fr' ? "Sweep d'allumage (ignition)" : 'Ignition sweep',
+      tickMarks: lang === 'fr' ? 'Graduations gravées' : 'Engraved tick marks',
+      glassCenter: lang === 'fr' ? 'Anneau de verre central' : 'Glass center ring',
+      valueGlowDynamic: lang === 'fr' ? 'Glow de valeur dynamique (suit la sévérité)' : 'Dynamic value glow (follows severity)',
       pulse: lang === 'fr' ? 'Animation pulse' : 'Pulse Animation',
       pulseIntensity: lang === 'fr' ? 'Intensité pulse (px)' : 'Pulse Intensity (px)',
       pulseSpeed: lang === 'fr' ? 'Vitesse pulse (s)' : 'Pulse Speed (s)',
@@ -2343,6 +2466,31 @@ class NeonDualGaugeCardEditor extends HTMLElement {
           <input type="checkbox" id="neon_value_glow" 
                  ${this._config.neon_value_glow !== false ? 'checked' : ''}>
           <label for="neon_value_glow">${t.neonValueGlow}</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="value_glow_dynamic" 
+                 ${this._config.value_glow_dynamic !== false ? 'checked' : ''}>
+          <label for="value_glow_dynamic">${t.valueGlowDynamic}</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="enable_comet_head" 
+                 ${this._config.enable_comet_head !== false ? 'checked' : ''}>
+          <label for="enable_comet_head">${t.cometHead}</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="enable_ignition" 
+                 ${this._config.enable_ignition !== false ? 'checked' : ''}>
+          <label for="enable_ignition">${t.ignition}</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="enable_tick_marks" 
+                 ${this._config.enable_tick_marks !== false ? 'checked' : ''}>
+          <label for="enable_tick_marks">${t.tickMarks}</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="enable_glass_center" 
+                 ${this._config.enable_glass_center !== false ? 'checked' : ''}>
+          <label for="enable_glass_center">${t.glassCenter}</label>
         </div>
         <div class="field">
           <label>${t.pulseIntensity}</label>
@@ -2785,6 +2933,11 @@ class NeonDualGaugeCardEditor extends HTMLElement {
       enable_top_glow: getValue('enable_top_glow'),
       enable_pulse_animation: getValue('enable_pulse_animation'),
       neon_value_glow: getValue('neon_value_glow'),
+      value_glow_dynamic: getValue('value_glow_dynamic'),
+      enable_comet_head: getValue('enable_comet_head'),
+      enable_ignition: getValue('enable_ignition'),
+      enable_tick_marks: getValue('enable_tick_marks'),
+      enable_glass_center: getValue('enable_glass_center'),
       pulse_intensity: getValue('pulse_intensity'),
       pulse_speed: getValue('pulse_speed'),
       pulse_min_opacity: getValue('pulse_min_opacity'),

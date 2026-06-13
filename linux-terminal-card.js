@@ -60,6 +60,7 @@ class LinuxTerminalCard extends HTMLElement {
       kernel_entity:  'sensor.chris_latitude_5420_rugged_kernel',
       uptime_entity:  'sensor.chris_latitude_5420_rugged_uptime',
       updates_entity: 'sensor.chris_latitude_5420_rugged_apt_pending_upgrades',
+      release_entity: 'sensor.chris_latitude_5420_rugged_release_upgrade',
       reboot_entity:  'binary_sensor.chris_latitude_5420_rugged_reboot_required',
       proc_entity:    'sensor.192_168_1_53_total',
       cpu_entity:     'sensor.192_168_1_53_utilisation_cpu',
@@ -96,6 +97,9 @@ class LinuxTerminalCard extends HTMLElement {
     const proc = this._ent(c.proc_entity)?.v;
     const updRaw = this._ent(c.updates_entity)?.v;
     const updates = _num(updRaw);
+    // release upgrade Ubuntu (do-release-upgrade) : version dispo, ou 'none'/'?'/null si rien
+    const relRaw = this._ent(c.release_entity)?.v;
+    const release = (relRaw && !['none', '?', 'unknown', 'unavailable'].includes(String(relRaw).toLowerCase())) ? relRaw : null;
     const reboot = this._ent(c.reboot_entity)?.v === 'on';
     const loadRaw = _num(this._ent(c.load_entity)?.v);
     const cores = c.load_cores || 8;
@@ -104,7 +108,7 @@ class LinuxTerminalCard extends HTMLElement {
     const charging = String(battA.status || '').toLowerCase().includes('charg');
     // kernel court : 6.17.0-35-generic -> k6.17
     const kshort = kernel ? 'k' + kernel.split('-')[0].split('.').slice(0, 2).join('.') : null;
-    return { cpu, gpu, ram, disk, temp, batt, rx, tx, os, kshort, up, proc, updates, reboot, load, charging };
+    return { cpu, gpu, ram, disk, temp, batt, rx, tx, os, kshort, up, proc, updates, release, reboot, load, charging };
   }
 
   _alertLevel(s){
@@ -215,10 +219,15 @@ class LinuxTerminalCard extends HTMLElement {
     const updTxt = s.updates == null ? '' :
       (s.updates > 0 ? `<span class="updN">${s.updates} MAJ</span>` : `<span class="upd0">à jour</span>`);
     const rebootTxt = s.reboot ? `<span class="reboot"> · reboot *</span>` : '';
+    // ligne dédiée release upgrade Ubuntu (montée de version)
+    const releaseLine = s.release
+      ? `<div class="ln alert warn">⬆ Ubuntu ${s.release} disponible (do-release-upgrade)</div>`
+      : '';
 
     const html = `
       <div class="ln dim"><span class="k">OS</span> ${s.os || 'Linux'}${s.kshort ? ' · ' + s.kshort : ''}</div>
       <div class="ln dim"><span class="k">up</span> ${s.up || '—'}${s.proc ? ' · ' + s.proc + ' proc' : ''}${updTxt ? ' · ' + updTxt : ''}${rebootTxt}</div>
+      ${releaseLine}
       ${warnLines}
       ${this._bar('CPU',  s.cpu,  70, 90, c.cpu_entity)}
       ${s.gpu != null ? this._bar('GPU', s.gpu, 70, 90, c.gpu_entity) : ''}
@@ -497,6 +506,7 @@ class LinuxTerminalCardEditor extends HTMLElement {
           ${this._entity('Kernel', 'kernel_entity')}
           ${this._entity('Uptime', 'uptime_entity')}
           ${this._entity('MAJ en attente', 'updates_entity')}
+          ${this._entity('Release upgrade', 'release_entity')}
           ${this._entity('Reboot requis (binary)', 'reboot_entity', 'binary_sensor.…')}
           ${this._entity('Process total', 'proc_entity')}
         </div>
@@ -559,7 +569,7 @@ window.customCards.push({
   preview: true,
 });
 
-console.info('%c 🐧 linux-terminal-card v1.1 %c GLITCH ',
+console.info('%c 🐧 linux-terminal-card v1.2 %c GLITCH ',
   'background:#6200EA;color:#fff;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#4AF2A1;padding:2px 4px;border-radius:0 3px 3px 0;');
 

@@ -1,8 +1,37 @@
-/* ── heat-monitor-card v1.17 ── */
+/* ── heat-monitor-card v2.2.0 ──
+   v2.2.0 : éditeur UI (getConfigElement) — Silverhand on/off + fréquence, image du chat,
+            flou/halo CRT, police + URL. Re-render intelligent (focus préservé), n'écrit
+            que les surcharges (YAML minimal). Options appliquées à chaud (cat_image,
+            silverhand) sans re-render complet ; listener Silverhand rendu idempotent.
+   v2.1.0 : easter-egg « Johnny Silverhand » sur le chat GIF — aléatoirement (≈12% par
+            traversée), le chat se matérialise en hologramme glitché RGB-split (3 calques
+            rouge/cyan en mix-blend:screen + clip-path qui saute + scanlines) au milieu
+            de l'écran avant de reprendre sa marche. Opt-out via silverhand:false ;
+            proba réglable silverhand_chance ; respecte prefers-reduced-motion.
+   v2.0.2 : fix liseré au changement de canal — contain:paint + translateZ sur les
+            canaux : le glow flou ne bave plus hors du cadre après display:none→flex
+            (artefact WebKit/iPad de re-rastérisation du clip sur couche filtrée).
+   v2.0.1 : fix overlays — ancrage sur .svg-wrap (et non ha-card) pour éviter
+            le décalage haut du cadre quand le thème/card-mod ajoute du padding
+            ou quand les icônes de prévision recalculent la hauteur après chargement.
+   v2.0.0 : refonte écran unifié
+     - CH1 passe en overlay HTML (ex-texte SVG) → texte fluide iPad/Android paysage
+     - rendu phosphore CRT reconstruit en CSS (.hmc-crt-fx : blur + glow cyan)
+     - flou / glow / police pilotables en YAML (crt_blur, crt_glow, font, font_url)
+     - framework canaux : HMC_CHANNELS_META → ajouter CH4/CH5 = 1 entrée + 1 template + 1 _updateChN
+     - zone sous l'écran refaite en HTML (variante B) : LCD nommé + glyphe chat, points scalables,
+       chat GIF qui marche sur la grille de ventilation (cat_image configurable)
+     - cadrage en-tête / corps / pied (scroll = footer)
+   v1.21 : centralisation entités (HMC_CFG), _update éclaté, grille CH3, fix _isOn CH3
+*/
+/* ── heat-monitor-card v1.20 (historique) ── */
 const HMC_IS_IPAD    = /iPad/.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const HMC_IS_ANDROID = /Android/.test(navigator.userAgent);
 const HMC_IS_LOW_POWER = HMC_IS_IPAD || HMC_IS_ANDROID || /iPhone/.test(navigator.userAgent);
+
+// Cadence de tirage de l'easter-egg Silverhand (ms) — la proba s'applique à chaque tick.
+const HMC_SH_TICK = 9000;
 
 // ── SVG structure — écran x=14 y=22 w=132 h=90
 // Zone note scroll : y=96..112  Zone boutons : y=122..132
@@ -109,32 +138,7 @@ const HMC_SVG = `
   <!-- Sérigraphies -->
   <text x="16" y="13.5" font-family="Courier New,monospace" font-size="2.8" fill="#38384e" letter-spacing="0.2">ARASAKA tactical hardware // secure line</text>
 
-  <!-- Grilles + diode -->
-  <line x1="16" y1="142" x2="44" y2="142" stroke="#060609" stroke-width="1" stroke-dasharray="1,1"/>
-  <line x1="116" y1="142" x2="144" y2="142" stroke="#060609" stroke-width="1" stroke-dasharray="1,1"/>
-  <!-- highlight relief grilles (lumière rasante) -->
-  <line x1="16" y1="142.4" x2="44" y2="142.4" stroke="#ffffff" stroke-width="0.3" stroke-dasharray="1,1" opacity="0.12"/>
-  <line x1="116" y1="142.4" x2="144" y2="142.4" stroke="#ffffff" stroke-width="0.3" stroke-dasharray="1,1" opacity="0.12"/>
-  <circle cx="56" cy="128" r="0.8" fill="#00ffcc" class="hmc-arasaka-pulse" style="filter:drop-shadow(0 0 1.5px #00ffcc)"/>
-  <text x="44" y="128.8" font-family="Courier New,monospace" font-size="2.2" fill="#38384e">SYS.OK</text>
-  <!-- Sérigraphies zone inférieure -->
-  <text x="16" y="139.5" font-family="Courier New,monospace" font-size="1.8" fill="#29293a" opacity="0.8">VENTILATION PORT // DO NOT BLOCK</text>
-
-  <!-- Boutons chaîne : ◄ CH▪ ► -->
-  <g id="hmc-btn-prev" style="cursor:pointer">
-    <rect x="14" y="122" width="14" height="8" rx="1.5" fill="url(#hmc-btn-grad)" stroke="#222235" stroke-width="0.5"/>
-    <text x="21" y="127.8" font-family="Courier New,monospace" font-size="4.5" fill="rgba(0,200,255,0.6)" text-anchor="middle">◄</text>
-  </g>
-  <!-- Encoche LCD dédiée pour le label CH -->
-  <g id="hmc-lcd-display">
-    <rect x="62" y="121.5" width="36" height="9" rx="1" fill="url(#hmc-lcd-bg)"/>
-    <rect x="62" y="121.5" width="36" height="9" rx="1" fill="none" stroke="rgba(0,160,210,0.25)" stroke-width="0.4"/>
-    <text id="hmc-ch-label" x="80" y="127.8" font-family="Courier New,monospace" font-size="4.2" fill="rgba(0,220,255,0.85)" text-anchor="middle">CH 1</text>
-  </g>
-  <g id="hmc-btn-next" style="cursor:pointer">
-    <rect x="132" y="122" width="14" height="8" rx="1.5" fill="url(#hmc-btn-grad)" stroke="#222235" stroke-width="0.5"/>
-    <text x="139" y="127.8" font-family="Courier New,monospace" font-size="4.5" fill="rgba(0,200,255,0.6)" text-anchor="middle">►</text>
-  </g>
+  <!-- Zone bezel inférieure : contrôles rendus en HTML (overlay .hmc-bezel) -->
 
   <!-- ECRAN -->
   <g clip-path="url(#hmc-screen-clip)">
@@ -167,21 +171,7 @@ const HMC_SVG = `
       <path d="M443.12,830.575 C443.12,830.575 450.065,843.745 448.655,858.085 C447.28,872.41 443.12,887.705 443.12,887.705 C443.12,887.705 438.93,872.41 437.525,858.085 C436.175,843.745 443.12,830.575 443.12,830.575" fill="#ffffff"/>
     </g>
 
-    <!-- ═══ CH1 : terminal ═══ -->
-    <g id="hmc-ch1" filter="url(#hmc-crt)">
-      <text x="22" y="36" font-family="Courier New,monospace" font-size="5.5" fill="rgba(185,242,255,0.97)" letter-spacing="1">HEAT AGENT v2.0</text>
-      <line x1="20" y1="39" x2="143" y2="39" stroke="rgba(0,200,255,0.2)" stroke-width="0.35"/>
-      <text x="22" y="46" font-family="Courier New,monospace" font-size="4.5" fill="rgba(80,190,230,0.95)">PHASE  <tspan id="hmc-phase" fill="rgba(200,248,255,1)" font-size="5">---</tspan></text>
-      <text x="22" y="55" font-family="Courier New,monospace" font-size="4.5" fill="rgba(80,190,230,0.95)">BIAS   <tspan id="hmc-bias" fill="rgba(160,238,255,1)" font-size="5">+0.00 C</tspan><tspan id="hmc-bias-src" fill="rgba(80,180,210,0.85)" font-size="3.8"> [--]</tspan></text>
-      <text x="22" y="64" font-family="Courier New,monospace" font-size="4.5" fill="rgba(80,190,230,0.95)">EXT    <tspan id="hmc-ext" fill="rgba(190,242,255,0.97)">--.- C</tspan><tspan id="hmc-mult" fill="rgba(80,180,210,0.85)" font-size="3.8"> x-.-</tspan></text>
-      <text x="22" y="73" font-family="Courier New,monospace" font-size="4.5" fill="rgba(80,190,230,0.95)">SALON  <tspan id="hmc-salon" fill="rgba(190,242,255,0.97)">--.- C</tspan></text>
-      <text x="22" y="82" font-family="Courier New,monospace" font-size="4.5" fill="rgba(80,190,230,0.95)">TARIF  <tspan id="hmc-tarif" fill="rgba(200,248,255,1)">---</tspan></text>
-      <text x="22" y="91" font-family="Courier New,monospace" font-size="4.5" fill="rgba(80,190,230,0.95)">SOLAR  <tspan id="hmc-solar-w" fill="rgba(150,225,255,0.97)">---W</tspan><tspan id="hmc-solar-res" fill="rgba(80,180,210,0.85)" font-size="3.8"> ---</tspan></text>
-    </g>
-    <!-- Cursor hors du filtre CRT — évite invalidation cache feTurbulence à chaque blink -->
-    <rect id="hmc-cursor-el" x="22" y="93" width="4" height="5" fill="rgba(185,242,255,0.9)" class="hmc-cursor"/>
-
-    <!-- Note scroll déplacé en HTML hors SVG -->
+    <!-- CH1 + CH2 + CH3 : contenu rendu en overlay HTML (.hmc-screen) -->
 
     <!-- Flash canal -->
     <rect id="hmc-ch-flash" rx="9" ry="8" height="90" width="132" y="22" x="14" fill="white" filter="url(#hmc-flash)"/>
@@ -215,7 +205,61 @@ const HMC_SVG = `
   </g>
 </svg>`;
 
-const HMC_CHANNELS = 3;
+// Glyphe tête de chat pixel (path fourni) — utilisé comme marqueur LCD
+const HMC_CAT_GLYPH = 'M53.9993 0H108L108 54.0443H162.001V107.978H216L216.007 54.0443H270V0H324.001V54.0443V108.045V161.978L324 216H378V270H324H270.007H216.007V216L270 216.022L270.007 161.978H216L216.007 216L162 216.022L162.001 161.978H108V216.022H162L162.001 270H108H53.9993H0V216L53.9993 216.022V161.978V107.978V54.0003V0Z';
+
+// ── Canaux : ajouter une entrée ici + un template body + un _updateChN suffit ──
+// (le n° de canal, le nom LCD/en-tête et les points indicateurs en découlent)
+const HMC_CHANNELS_META = [
+  { name: 'HEAT AGENT' },
+  { name: 'ÉTAT PAC' },
+  { name: 'MÉTÉO & TENDANCE' },
+];
+const HMC_CHANNELS = HMC_CHANNELS_META.length;
+
+// ── Valeurs CRT par défaut (surchargées par le YAML) ──
+const HMC_THEME = {
+  crt_blur:  0.35,                       // flou phosphore (px)
+  crt_glow:  5,                          // halo cyan (px)
+  font:      "'Courier New', monospace", // police terminal
+  font_url:  null,                       // ex: Google Fonts pour Rajdhani
+  cat_image: '/local/cat-walking-white.gif',
+  walk_dur:          34,                 // s : durée d'un cycle de marche (grand = balade rare)
+  silverhand:        true,               // easter-egg : glitch hologramme Silverhand sur le chat
+  silverhand_chance: 0.08,               // proba par tick — "de temps à autre" (0..1)
+  silverhand_tick:   9,                  // s : cadence de tirage de l'effet
+};
+
+
+// ════════════════════════════════════════════════════════════════
+//  CONFIG — point unique de vérité pour les entités.
+//  Pour adapter la card : modifier UNIQUEMENT ce bloc.
+// ════════════════════════════════════════════════════════════════
+const HMC_CFG = {
+  // Capteurs principaux (CH1 + clés de rendu)
+  planned:    'sensor.ecodan_planned_bias',
+  note:       'input_text.heat_agent_last_note',
+  bias:       'number.ecodan_heatpump_auto_adaptive_setpoint_bias',
+  mode:       'sensor.ecodan_heatpump_operation_mode',
+  biasStatus: 'sensor.heat_pump_bias_status',
+  weather:    'weather.forecast_maison',
+
+  // CH2 — tuiles binaires : id DOM, entité, classe quand "on"
+  ch2Tiles: [
+    { id: 'hmc2-t-comp',    entity: 'binary_sensor.ecodan_heatpump_compressor',    on: 's-on'    },
+    { id: 'hmc2-t-boost',   entity: 'binary_sensor.ecodan_heatpump_booster_heater', on: 's-warn'  },
+    { id: 'hmc2-t-defrost', entity: 'binary_sensor.defrost_likely_soon',            on: 's-on'    },
+    { id: 'hmc2-t-gel',     entity: 'binary_sensor.freeze_risk_expected',           on: 's-alert' },
+    { id: 'hmc2-t-humid',   entity: 'binary_sensor.low_humidity_alert',             on: 's-warn'  },
+  ],
+
+  // CH3 — conditions solaires : libellés descriptifs (texte long, aligné à droite)
+  ch3Solar: [
+    { id: 'hmc3-sol-afternoon', entity: 'binary_sensor.high_afternoon_solar_expected', on: 'PM ENSOLEILLÉ',  off: 'PM mitigé'   },
+    { id: 'hmc3-sol-goodday',   entity: 'binary_sensor.good_solar_day_expected',        on: 'JOUR FAVORABLE', off: 'jour mitigé' },
+    { id: 'hmc3-sol-cloudy',    entity: 'binary_sensor.poor_solar_conditions_expected', on: 'CIEL COUVERT',   off: 'ciel dégagé' },
+  ],
+};
 
 function _fcIcon(condition) {
   const map = {
@@ -243,13 +287,48 @@ class HeatMonitorCard extends HTMLElement {
     this._channel   = 1;  // 1, 2 or 3
     this._lastSigKey = '';
     this._forecast  = [];
+    this._shTimers  = new Set();  // timers ponctuels de l'effet Silverhand (cleanup)
+    this._shBusy    = false;      // un glitch est-il en cours ?
+    this._shTick    = null;       // setInterval de tirage Silverhand
   }
 
   static getStubConfig() { return {}; }
+  static getConfigElement() { return document.createElement('heat-monitor-card-editor'); }
 
   setConfig(c) {
-    this._config = { ...c };
+    // Fusionne les valeurs CRT par défaut avec la config YAML
+    this._config = { ...HMC_THEME, ...(c || {}) };
+    this._injectFont();
+    if (this._rendered) {
+      this._applyTheme();
+      // Applique à chaud les options modifiées via l'éditeur (sans re-render complet) :
+      const cat = this._el('hmc-cat');
+      if (cat) {
+        const src = this._config.cat_image || HMC_THEME.cat_image;
+        if (cat.getAttribute('src') !== src) cat.setAttribute('src', src);
+      }
+      this._initSilverhand();   // ré-arme/retire le listener selon silverhand on/off
+    }
     if (this._hass && !this._rendered) this._render();
+  }
+
+  // Applique flou / glow / police via custom properties (surchargeables par UI)
+  _applyTheme() {
+    const c = this._config || HMC_THEME;
+    this.style.setProperty('--hmc-blur', (c.crt_blur ?? HMC_THEME.crt_blur) + 'px');
+    this.style.setProperty('--hmc-glow', (c.crt_glow ?? HMC_THEME.crt_glow) + 'px');
+    this.style.setProperty('--hmc-font', c.font || HMC_THEME.font);
+  }
+
+  // Injection unique d'une police externe (ex: Rajdhani) dans le <head>, avec garde
+  _injectFont() {
+    const url = this._config?.font_url;
+    if (!url) return;
+    const key = 'hmc-font-' + btoa(url).slice(0, 12);
+    if (document.getElementById(key)) return;
+    const link = document.createElement('link');
+    link.id = key; link.rel = 'stylesheet'; link.href = url;
+    document.head.appendChild(link);
   }
 
   set hass(h) {
@@ -268,10 +347,10 @@ class HeatMonitorCard extends HTMLElement {
     try {
       const resp = await this._hass.callWS({
         type: 'weather/get_forecasts',
-        entity_id: 'weather.forecast_maison',
+        entity_id: HMC_CFG.weather,
         forecast_type: 'hourly',
       });
-      this._forecast = resp?.forecast?.['weather.forecast_maison']?.forecast || [];
+      this._forecast = resp?.forecast?.[HMC_CFG.weather]?.forecast || [];
       // expire le cache après 30 min
       setTimeout(() => { this._forecast = []; }, 30 * 60 * 1000);
     } catch (_) {}
@@ -313,7 +392,171 @@ class HeatMonitorCard extends HTMLElement {
           overflow: hidden;
           position: relative;
         }
-        .svg-wrap { display: block; width: 100%; line-height: 0; }
+        .svg-wrap { display: block; width: 100%; position: relative; }
+        .svg-wrap > svg { display: block; width: 100%; height: auto; }
+
+        /* ── Pilotage CRT (surchargé par YAML via custom properties) ── */
+        :host { --hmc-blur: 0.35px; --hmc-glow: 5px; --hmc-font: 'Courier New', monospace; }
+        .hmc-crt-fx {
+          filter: blur(var(--hmc-blur, 0.35px));
+          text-shadow: 0 0 1px currentColor, 0 0 var(--hmc-glow, 5px) rgba(0,255,249,0.35);
+        }
+        @keyframes hmc-blink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+
+        /* ── CH1 : terminal Heat Agent (overlay HTML, ex-texte SVG) ── */
+        #hmc-ch1 {
+          display: none; position: absolute;
+          top: 14.2%; height: 47%; left: 8.75%; width: 82.5%;
+          box-sizing: border-box; padding: 4px 3% 4px;
+          border-radius: 5.6% / 7.3%; overflow: hidden;
+          flex-direction: column; gap: 0; isolation: isolate;
+          font-family: var(--hmc-font, 'Courier New', monospace);
+          -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+          text-rendering: optimizeLegibility; container-type: inline-size;
+        }
+        #hmc-ch1.visible { display: flex; }
+        #hmc-ch1 > * { position: relative; z-index: 1; }
+        #hmc-ch1::before { content:''; position:absolute; inset:0; pointer-events:none; z-index:2;
+          background: repeating-linear-gradient(to bottom, transparent 0 1.8px, rgba(0,0,0,0.28) 1.8px 2.5px); }
+        #hmc-ch1::after { content:''; position:absolute; inset:0; pointer-events:none; z-index:3;
+          background: radial-gradient(ellipse 90% 80% at 50% 50%, transparent 38%, rgba(0,0,0,0.65) 100%); }
+        .ch1-hdr { display:flex; align-items:baseline; border-bottom:0.4px solid rgba(0,200,255,0.18);
+          padding-bottom:3px; margin-bottom:4px; flex-shrink:0; }
+        .ch1-title { font-size: clamp(12px, 8cqi, 16px); letter-spacing:1px; color: rgba(185,242,255,0.97); }
+        .ch1-sub { font-size: clamp(9px, 5cqi, 12px); color: rgba(0,200,255,0.55); margin-left:auto; }
+        .ch1-grid { display:grid; grid-template-columns:max-content 1fr; column-gap:8px; row-gap:2px; align-items:baseline; }
+        .ch1-lbl { font-size: clamp(10px, 6cqi, 14px); color: rgba(80,190,230,0.95); white-space:nowrap; }
+        .ch1-val { font-size: clamp(11px, 7cqi, 15px); color: rgba(200,248,255,1); text-align:right;
+          white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .ch1-val small { font-size: clamp(8px, 4.5cqi, 11px); color: rgba(80,180,210,0.85); }
+        .ch1-cursor { display:inline-block; width:0.55em; height:1em; background: rgba(185,242,255,0.9);
+          vertical-align:-2px; margin-top:3px; animation: hmc-blink 1.05s step-end infinite; }
+
+        /* ── Bezel HTML (sous l'écran) — remplace les contrôles SVG, scalable ── */
+        #hmc-bezel {
+          position: absolute; left: 6%; right: 6%; top: 74%; bottom: 3%; z-index: 4;
+          display: flex; flex-direction: column; justify-content: space-between;
+          container-type: inline-size; font-family: var(--hmc-font, 'Courier New', monospace);
+        }
+        .hmc-ctrl { display:flex; align-items:center; gap: 3cqi; }
+        .hmc-btn {
+          flex: 0 0 auto; width: clamp(34px, 13cqi, 50px); height: clamp(20px, 8cqi, 30px);
+          display:grid; place-items:center; cursor:pointer; border-radius:5px;
+          background: linear-gradient(180deg,#1b1b3a,#0d0d1a 40%,#05050a);
+          border: 0.5px solid #222235; color: rgba(0,200,255,0.6);
+          font-size: clamp(13px, 6cqi, 18px); transition: .15s;
+        }
+        .hmc-btn:hover { color:#00fff9; border-color: rgba(0,255,249,0.4); box-shadow:0 0 10px rgba(0,255,249,0.25); }
+        .hmc-lcd {
+          flex:1; min-width:0; height: clamp(20px, 8cqi, 30px);
+          display:flex; align-items:center; justify-content:center; gap: 2cqi; padding:0 2.5cqi;
+          border-radius:4px; background: linear-gradient(180deg,#000308,#020914);
+          border:0.5px solid rgba(0,160,210,0.25); white-space:nowrap; overflow:hidden;
+        }
+        .hmc-lcd .cat-glyph { width: clamp(14px,5cqi,20px); height: clamp(10px,3.6cqi,15px); color:#00fff9;
+          filter: drop-shadow(0 0 4px rgba(0,255,249,0.5)); flex:0 0 auto; }
+        .hmc-lcd .num { color:#00fff9; font-size: clamp(11px,5.5cqi,15px); letter-spacing:1px; text-shadow:0 0 6px rgba(0,255,249,0.6); }
+        .hmc-lcd .nm { color: rgba(0,200,255,0.7); font-size: clamp(9px,4.5cqi,13px); letter-spacing:0.5px; overflow:hidden; text-overflow:ellipsis; }
+        .hmc-dots { display:flex; gap: 2cqi; align-items:center; justify-content:center; }
+        .hmc-dot { width: clamp(5px,1.8cqi,8px); height: clamp(5px,1.8cqi,8px); border-radius:50%;
+          background: rgba(0,200,255,0.18); border:0.5px solid rgba(0,200,255,0.3); cursor:pointer; transition:.2s; }
+        .hmc-dot.on { background:#00fff9; border-color:#00fff9; box-shadow:0 0 8px #00fff9; }
+        .hmc-vent { position:relative; height: clamp(22px, 11cqi, 44px); overflow:hidden;
+          border-top:0.5px dashed rgba(0,200,255,0.18); border-bottom:0.5px dashed rgba(0,200,255,0.12);
+          background: repeating-linear-gradient(90deg, transparent 0 6px, rgba(0,0,0,0.25) 6px 7px); }
+        .hmc-vent .vl { position:absolute; left:6px; top:3px; font-size: clamp(7px,2.6cqi,9px); color:#2f4a55; letter-spacing:0.4px; }
+        .hmc-vent .sys { position:absolute; right:6px; top:3px; font-size: clamp(7px,2.6cqi,9px); color:#38384e; display:flex; align-items:center; gap:4px; }
+        .hmc-vent .di { width:5px; height:5px; border-radius:50%; background:#00ffcc; box-shadow:0 0 6px #00ffcc; }
+        .hmc-cat { position:absolute; bottom:-2px; height: clamp(24px,12cqi,46px); image-rendering:pixelated;
+          animation: hmc-walk var(--hmc-walk-dur, 34s) linear infinite;
+          filter: drop-shadow(0 0 5px rgba(0,255,249,0.25)); }
+        /* Balade plus rare : traversée sur ~35% du cycle, puis longue pause hors-champ. */
+        @keyframes hmc-walk {
+          0%   { left:-16%; }
+          35%  { left:100%; }
+          100% { left:100%; }
+        }
+
+        /* ── Easter-egg : glitch hologramme « Johnny Silverhand » sur le chat ──
+           Transposition de la recette SVG (RGB-split 3 calques) sur le GIF rasterisé :
+           on clone l'image en 3 couches teintées (rouge / cyan) en mix-blend:screen,
+           qui se décalent par à-coups → aberration chromatique. Calque principal :
+           jitter + clip-path qui saute. Scanlines holographiques balayées. */
+        /* Pendant le glitch, l'animation de marche (hmc-walk) est remplacée par
+           hmc-sh-main ; la position figée est portée par cat.style.left (JS). */
+        .hmc-cat.sh-active.sh-main { animation: hmc-sh-main 1.6s steps(1) forwards; }
+        .hmc-cat-ghost {
+          position:absolute; bottom:-2px; height: clamp(24px,12cqi,46px);
+          image-rendering:pixelated; pointer-events:none;
+          mix-blend-mode: screen; will-change: transform, opacity;
+        }
+        .hmc-cat-ghost.rd { filter: brightness(1.15) sepia(1) hue-rotate(-55deg) saturate(12);
+          animation: hmc-sh-rd 1.6s steps(2) forwards; }
+        .hmc-cat-ghost.cy { filter: brightness(1.1) sepia(1) hue-rotate(150deg) saturate(12);
+          animation: hmc-sh-cy 1.6s steps(2) forwards; }
+        .hmc-cat-ghost.gn { filter: brightness(1.15) sepia(1) hue-rotate(75deg) saturate(12);
+          animation: hmc-sh-gn 1.6s steps(2) forwards; }
+        .hmc-cat-scan {
+          position:absolute; bottom:-2px; height: clamp(24px,12cqi,46px); pointer-events:none;
+          mix-blend-mode: overlay; opacity:0;
+          background: repeating-linear-gradient(0deg,
+            rgba(0,255,249,0.0) 0px, rgba(0,255,249,0.18) 1px, rgba(0,255,249,0.0) 3px);
+          animation: hmc-sh-scan 1.6s linear forwards;
+        }
+        @keyframes hmc-sh-main {
+          0%   { opacity:.2; clip-path: inset(0 0 0 0); transform: translateX(0); }
+          8%   { opacity:.9; clip-path: inset(40% 0 30% 0); transform: translateX(-2px); }
+          16%  { opacity:.5; clip-path: inset(0 0 0 0); transform: translateX(1px); }
+          26%  { opacity:.95; clip-path: inset(0 0 60% 0); transform: translateX(0); }
+          40%  { opacity:.85; clip-path: inset(0 0 0 0); }
+          70%  { opacity:.9;  clip-path: inset(0 0 0 0); }
+          80%  { opacity:.7;  clip-path: inset(55% 0 0 0); }
+          90%  { opacity:.35; clip-path: inset(0 0 0 0); }
+          100% { opacity:1;   clip-path: inset(0 0 0 0); transform: translateX(0); }
+        }
+        @keyframes hmc-sh-rd {
+          0%,100% { opacity:0; transform: translateX(0); }
+          10%  { opacity:.8; transform: translateX(-6px) translateY(1px); }
+          26%  { opacity:.6; transform: translateX(5px); }
+          50%  { opacity:.7; transform: translateX(-3px); }
+          80%  { opacity:.4; transform: translateX(4px); }
+          92%  { opacity:.2; transform: translateX(0); }
+        }
+        @keyframes hmc-sh-cy {
+          0%,100% { opacity:0; transform: translateX(0); }
+          10%  { opacity:.8; transform: translateX(6px) translateY(-1px); }
+          26%  { opacity:.6; transform: translateX(-5px); }
+          50%  { opacity:.7; transform: translateX(3px); }
+          80%  { opacity:.4; transform: translateX(-4px); }
+          92%  { opacity:.2; transform: translateX(0); }
+        }
+        @keyframes hmc-sh-gn {
+          0%,100% { opacity:0; transform: translateX(0); }
+          10%  { opacity:.6; transform: translateX(-3px) translateY(1px); }
+          26%  { opacity:.5; transform: translateX(4px); }
+          50%  { opacity:.55; transform: translateX(-2px); }
+          80%  { opacity:.3; transform: translateX(3px); }
+          92%  { opacity:.15; transform: translateX(0); }
+        }
+        @keyframes hmc-sh-scan {
+          0%   { opacity:0;   background-position-y:0; }
+          12%  { opacity:.9; }
+          85%  { opacity:.6; }
+          100% { opacity:0;   background-position-y:-24px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .hmc-cat.sh-active, .hmc-cat-ghost, .hmc-cat-scan { animation: none !important; }
+          .hmc-cat.sh-active { animation-play-state: running; }
+        }
+
+        /* ── Flash changement de canal (overlay HTML au-dessus du contenu) ── */
+        #hmc-flash-html {
+          position:absolute; top:14.2%; height:47%; left:8.75%; width:82.5%;
+          border-radius:5.6% / 7.3%; background:#bdf6ff; opacity:0; pointer-events:none; z-index:6;
+        }
+        #hmc-flash-html.go { animation: hmc-zap 0.3s ease-out; }
+        @keyframes hmc-zap { 0% { opacity:0.5; } 100% { opacity:0; } }
+
         #hmc-ch2 {
           display: none;
           position: absolute;
@@ -422,7 +665,14 @@ class HeatMonitorCard extends HTMLElement {
         }
         #hmc-ch3.visible { display: flex; }
         /* Effets CRT sur CH2/CH3 — clippés par clip-path du parent */
-        #hmc-ch2, #hmc-ch3 { isolation: isolate; }
+        /* Conteneur de peinture stable : empêche le glow flou de baver hors du cadre
+           après un toggle display:none→flex (artefact WebKit/iPad au changement de canal) */
+        #hmc-ch1, #hmc-ch2, #hmc-ch3 {
+          isolation: isolate;
+          contain: paint;
+          transform: translateZ(0);
+          backface-visibility: hidden;
+        }
         #hmc-ch2 > *, #hmc-ch3 > * { position: relative; z-index: 1; }
         #hmc-ch2::before, #hmc-ch3::before {
           content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
@@ -443,35 +693,45 @@ class HeatMonitorCard extends HTMLElement {
           padding-bottom: 3px; margin-bottom: 4px; flex-shrink: 0;
         }
         .ch3-title {
-          font-size: clamp(10px, 8cqi, 14px);
+          font-size: clamp(12px, 8cqi, 16px);
           letter-spacing: 1px;
           color: rgba(185,242,255,0.97);
         }
         .ch3-sub {
-          font-size: clamp(9px, 5cqi, 12px);
+          font-size: clamp(10px, 6cqi, 14px);
           color: rgba(0,200,255,0.55);
           margin-left: auto;
         }
-        .ch3-row {
-          display: flex; align-items: baseline;
+        /* Grille 2 colonnes : libellé à gauche, valeur calée à droite (pleine largeur) */
+        .ch3-grid {
+          display: grid;
+          grid-template-columns: max-content 1fr;
+          column-gap: 8px;
+          row-gap: 2px;
+          align-items: baseline;
           flex-shrink: 0;
-          padding: 1px 0;
-          gap: 0;
         }
         .ch3-lbl {
-          font-size: clamp(8px, 4.5cqi, 11px);
+          font-size: clamp(10px, 6cqi, 14px);
           color: rgba(80,190,230,0.95);
-          white-space: pre;
+          white-space: nowrap;
         }
         .ch3-val {
-          font-size: clamp(9px, 5.5cqi, 12px);
+          font-size: clamp(11px, 7cqi, 15px);
           color: rgba(200,248,255,1);
-          white-space: pre;
+          text-align: right;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .ch3-unit {
-          font-size: clamp(7px, 3.5cqi, 10px);
+          font-size: clamp(9px, 5cqi, 12px);
           color: rgba(80,180,210,0.85);
-          white-space: pre;
+        }
+        /* États (conditions solaires) : texte descriptif, légèrement plus compact */
+        .ch3-state {
+          font-size: clamp(10px, 6cqi, 13px);
+          letter-spacing: 0.3px;
         }
         .ch3-sep {
           width: 100%; height: 0.4px;
@@ -558,11 +818,30 @@ class HeatMonitorCard extends HTMLElement {
         #hmc-scroll-txt { color: rgba(30,195,255,1); }
 
         ` : ''}
+        /* police pilotable (YAML) sur tous les canaux */
+        #hmc-ch2, #hmc-ch3, #hmc-scroll-txt { font-family: var(--hmc-font, 'Courier New', monospace); }
       </style>
       <ha-card>
-        <div class="svg-wrap">${HMC_SVG}</div>
+        <div class="svg-wrap">${HMC_SVG}
         <div id="hmc-scroll-wrap">
           <span id="hmc-scroll-txt">&gt; ...</span>
+        </div>
+        <div id="hmc-ch1">
+          <div class="hmc-crt-fx" style="display:flex; flex-direction:column; height:100%">
+            <div class="ch1-hdr">
+              <span class="ch1-title">HEAT AGENT</span>
+              <span class="ch1-sub" id="hmc1-sub">---</span>
+            </div>
+            <div class="ch1-grid">
+              <span class="ch1-lbl">PHASE</span><span class="ch1-val" id="hmc-phase">---</span>
+              <span class="ch1-lbl">BIAS</span><span class="ch1-val"><span id="hmc-bias">+0.00 C</span> <small id="hmc-bias-src">[--]</small></span>
+              <span class="ch1-lbl">EXT</span><span class="ch1-val"><span id="hmc-ext">--.- C</span> <small id="hmc-mult">x-.-</small></span>
+              <span class="ch1-lbl">SALON</span><span class="ch1-val" id="hmc-salon">--.- C</span>
+              <span class="ch1-lbl">TARIF</span><span class="ch1-val" id="hmc-tarif">---</span>
+              <span class="ch1-lbl">SOLAR</span><span class="ch1-val"><span id="hmc-solar-w">---W</span> <small id="hmc-solar-res">---</small></span>
+            </div>
+            <div><span class="ch1-cursor"></span></div>
+          </div>
         </div>
         <div id="hmc-ch2">
           <div class="ch2-hdr">
@@ -600,34 +879,65 @@ class HeatMonitorCard extends HTMLElement {
           </div>
         </div>
         <div id="hmc-ch3">
+          <div class="hmc-crt-fx" style="display:flex; flex-direction:column; height:100%">
           <div class="ch3-hdr">
             <span class="ch3-title">METEO &amp; TENDANCE</span>
             <span class="ch3-sub" id="hmc3-upd">--:--</span>
           </div>
-          <div class="ch3-row">
-            <span class="ch3-lbl">MIN 12H  </span>
-            <span class="ch3-val" id="hmc3-min12">---</span>
-            <span class="ch3-unit"> C</span>
+          <div class="ch3-grid">
+            <span class="ch3-lbl">MIN 12H</span>
+            <span class="ch3-val"><span id="hmc3-min12">---</span><span class="ch3-unit"> °C</span></span>
+
+            <span class="ch3-lbl">SALON dT</span>
+            <span class="ch3-val"><span id="hmc3-trend">---</span><span class="ch3-unit"> °C/h</span></span>
+
+            <span class="ch3-lbl">EXT ACT</span>
+            <span class="ch3-val"><span id="hmc3-ext">---</span><span class="ch3-unit"> °C</span></span>
           </div>
-          <div class="ch3-row">
-            <span class="ch3-lbl">SALON dT </span>
-            <span class="ch3-val" id="hmc3-trend">---</span>
-            <span class="ch3-unit" id="hmc3-trend-u"> C/h</span>
-          </div>
-          <div class="ch3-row">
-            <span class="ch3-lbl">EXT ACT  </span>
-            <span class="ch3-val" id="hmc3-ext">---</span>
-            <span class="ch3-unit"> C</span>
+          <div class="ch3-sep"></div>
+          <div class="ch3-grid">
+            <span class="ch3-lbl">SOLEIL PM</span>
+            <span class="ch3-val ch3-state" id="hmc3-sol-afternoon">---</span>
+
+            <span class="ch3-lbl">JOURNÉE</span>
+            <span class="ch3-val ch3-state" id="hmc3-sol-goodday">---</span>
+
+            <span class="ch3-lbl">CIEL</span>
+            <span class="ch3-val ch3-state" id="hmc3-sol-cloudy">---</span>
           </div>
           <div class="ch3-sep"></div>
           <div class="ch3-fc" id="hmc3-fc">
             <!-- rempli dynamiquement -->
           </div>
+          </div>
+        </div>
+        <div id="hmc-bezel">
+          <div class="hmc-ctrl">
+            <div class="hmc-btn" id="hmc-btn-prev">◄</div>
+            <div class="hmc-lcd">
+              <svg class="cat-glyph" viewBox="0 0 378 270" aria-hidden="true"><path d="${HMC_CAT_GLYPH}" fill="currentColor"/></svg>
+              <span class="num" id="hmc-lcd-num">CH 1</span>
+              <span class="nm" id="hmc-lcd-nm">· HEAT AGENT</span>
+            </div>
+            <div class="hmc-btn" id="hmc-btn-next">►</div>
+          </div>
+          <div class="hmc-dots" id="hmc-dots">
+            ${HMC_CHANNELS_META.map((_, k) => `<div class="hmc-dot" data-ch="${k + 1}"></div>`).join('')}
+          </div>
+          <div class="hmc-vent">
+            <span class="vl">VENTILATION PORT // DO NOT BLOCK</span>
+            <span class="sys"><span class="di"></span>SYS.OK</span>
+            <img class="hmc-cat" id="hmc-cat" alt="" src="${(this._config && this._config.cat_image) || HMC_THEME.cat_image}" style="--hmc-walk-dur:${(this._config && this._config.walk_dur) || HMC_THEME.walk_dur}s">
+          </div>
+        </div>
+        <div id="hmc-flash-html"></div>
         </div>
       </ha-card>`;
 
     this._rendered = true;
+    this._applyTheme();
     this._bindButtons();
+    this._initSilverhand();
 
     if (window.ResizeObserver) {
       this._ro = new ResizeObserver(() => {
@@ -654,6 +964,9 @@ class HeatMonitorCard extends HTMLElement {
     const sig = { signal: this._ac.signal };
     if (prev) prev.addEventListener('click', () => this._switchChannel(-1), sig);
     if (next) next.addEventListener('click', () => this._switchChannel(+1), sig);
+    // Accès direct par les points indicateurs
+    sr.querySelectorAll('#hmc-dots .hmc-dot').forEach(d =>
+      d.addEventListener('click', () => this._setChannel(+d.dataset.ch), sig));
   }
 
   _switchChannel(dir) {
@@ -663,42 +976,96 @@ class HeatMonitorCard extends HTMLElement {
     this._update();
   }
 
-  _triggerFlash() {
-    const sr = this.shadowRoot;
-    const svg = sr.querySelector('svg');
-    const flash = sr.getElementById('hmc-ch-flash');
-    if (!svg || !flash) return;
-    // reset animation
-    svg.classList.remove('hmc-ch-switching');
-    void flash.getBoundingClientRect(); // reflow
-    svg.classList.add('hmc-ch-switching');
-    setTimeout(() => svg.classList.remove('hmc-ch-switching'), 350);
+  _setChannel(n) {
+    if (!Number.isFinite(n) || n < 1 || n > HMC_CHANNELS || n === this._channel) return;
+    this._channel = n;
+    this._triggerFlash();
+    this._renderKey = null;
+    this._update();
   }
 
-  _makeKey() {
-    if (!this._hass) return '';
-    const h = this._hass.states;
-    const p = h['sensor.ecodan_planned_bias'];
-    const n = h['input_text.heat_agent_last_note'];
-    const bias = h['number.ecodan_heatpump_auto_adaptive_setpoint_bias'];
-    const _s = id => { const e = h[id]; return e ? e.state : ''; };
-    return [
-      p ? p.state : '',
-      p ? (p.attributes.phase || '') : '',
-      p ? (p.attributes.tariff || '') : '',
-      n ? n.state : '',
-      bias ? bias.state : '',
-      _s('sensor.ecodan_heatpump_operation_mode'),
-      _s('binary_sensor.ecodan_heatpump_compressor'),
-      _s('binary_sensor.ecodan_heatpump_booster_heater'),
-      _s('binary_sensor.defrost_likely_soon'),
-      _s('binary_sensor.freeze_risk_expected'),
-      _s('binary_sensor.low_humidity_alert'),
-      _s('sensor.heat_pump_bias_status'),
-      p ? (p.attributes.meteo_min_12h ?? '') : '',
-      p ? (p.attributes.salon_trend_2h ?? '') : '',
-      this._channel,
-    ].join('|');
+  // ── Easter-egg « Johnny Silverhand » ──
+  // Timer interne : à intervalle régulier (HMC_SH_TICK), tirage au sort selon
+  // silverhand_chance. S'il tombe, le chat se fige à une position aléatoire de
+  // l'écran et se matérialise en hologramme glitché RGB-split, puis reprend sa marche.
+  // (Ancienne approche via 'animationiteration' abandonnée : ne se déclenchait
+  //  qu'en fin de cycle 12s ET là où le chat était — souvent hors champ.)
+  _initSilverhand() {
+    const cat = this._el('hmc-cat');
+    if (!cat) return;
+    // Idempotent : un seul timer à la fois (setConfig peut rappeler cette méthode).
+    if (this._shTick) { clearInterval(this._shTick); this._shTick = null; }
+    const cfg0 = this._config || HMC_THEME;
+    const tickMs = (Number(cfg0.silverhand_tick ?? HMC_THEME.silverhand_tick) || 9) * 1000;
+    this._shTick = setInterval(() => {
+      const cfg = this._config || HMC_THEME;
+      if (cfg.silverhand === false) return;
+      if (this._shBusy) return;
+      if (!this.isConnected) return;
+      const chance = Number(cfg.silverhand_chance ?? HMC_THEME.silverhand_chance) || 0;
+      if (Math.random() < chance) this._spawnSilverhand();
+    }, tickMs);
+  }
+
+  _spawnSilverhand() {
+    const cat  = this._el('hmc-cat');
+    const vent = this.shadowRoot.querySelector('.hmc-vent');
+    if (!cat || !vent || this._shBusy) return;
+    this._shBusy = true;
+
+    const src = cat.getAttribute('src') || (this._config && this._config.cat_image) || HMC_THEME.cat_image;
+    // Position aléatoire dans la zone visible à chaque apparition (≈8 %–74 %) → varie
+    // les emplacements pour ne pas lasser, tout en évitant les bords (chat hors cadre)
+    // et le coin droit occupé par « SYS.OK ».
+    const left = (8 + Math.random() * 66).toFixed(1) + '%';
+
+    // 2 calques fantômes (rouge / cyan) + scanlines, clones du GIF, posés au même endroit.
+    const mk = cls => {
+      const g = document.createElement('img');
+      g.className = 'hmc-cat-ghost ' + cls;
+      g.alt = ''; g.src = src; g.style.left = left;
+      return g;
+    };
+    const rd = mk('rd');
+    const cy = mk('cy');
+    const gn = mk('gn');
+    const scan = document.createElement('div');
+    scan.className = 'hmc-cat-scan';
+    scan.style.left  = left;
+    scan.style.width = (cat.offsetWidth || 30) + 'px';
+
+    cat.style.left = left;            // téléporte + fige (sh-active remplace hmc-walk)
+    cat.classList.add('sh-active', 'sh-main');
+    vent.appendChild(rd);
+    vent.appendChild(cy);
+    vent.appendChild(gn);
+    vent.appendChild(scan);
+
+    // Fin de vie : à la fin de l'anim du calque principal, on nettoie et relance la marche.
+    const done = () => {
+      rd.remove(); cy.remove(); gn.remove(); scan.remove();
+      cat.classList.remove('sh-active', 'sh-main');
+      cat.style.left = '';            // rend la main à hmc-walk
+      this._shBusy = false;
+    };
+    cat.addEventListener('animationend', function onEnd(ev) {
+      if (ev.animationName !== 'hmc-sh-main') return;
+      cat.removeEventListener('animationend', onEnd);
+      done();
+    }, this._ac ? { signal: this._ac.signal } : undefined);
+
+    // Filet de sécurité si animationend ne se déclenche pas (onglet en arrière-plan…).
+    const t = setTimeout(() => { this._shTimers.delete(t); done(); }, 2200);
+    this._shTimers.add(t);
+  }
+
+  _triggerFlash() {
+    const f = this._el('hmc-flash-html');
+    if (!f) return;
+    f.classList.remove('go');
+    void f.offsetWidth; // reflow
+    f.classList.add('go');
+    setTimeout(() => f.classList.remove('go'), 350);
   }
 
   // Auto-switch to CH1 only when phase or tariff changes (meaningful events)
@@ -722,194 +1089,176 @@ class HeatMonitorCard extends HTMLElement {
     el.style.animation = '';
   }
 
+  // ── Helpers DOM / état ──
+  _el(id)  { return this.shadowRoot.getElementById(id); }
+  _setText(id, txt) { const el = this._el(id); if (el) el.textContent = txt; }
+  _isOn(id) { const s = this._hass.states[id]; return !!s && s.state === 'on'; }
+
   _update() {
     if (!this._hass || !this._rendered) return;
 
-    const sr = this.shadowRoot;
-    const planned = this._hass.states['sensor.ecodan_planned_bias'];
-    const noteEnt = this._hass.states['input_text.heat_agent_last_note'];
-    const biasEnt = this._hass.states['number.ecodan_heatpump_auto_adaptive_setpoint_bias'];
+    const hs      = this._hass.states;
+    const planned = hs[HMC_CFG.planned];
+    const noteEnt = hs[HMC_CFG.note];
+    const biasEnt = hs[HMC_CFG.bias];
 
     this._checkAutoSwitch(planned);
 
-    // fullKey inclut channel — recalculé après _checkAutoSwitch
-    const dataKey = [
+    // Clé de rendu (inclut le canal) — court-circuite les re-rendus identiques
+    const fullKey = [
       planned ? planned.state : '',
       planned ? (planned.attributes.phase || '') : '',
       planned ? (planned.attributes.tariff || '') : '',
       noteEnt ? noteEnt.state : '',
       biasEnt ? biasEnt.state : '',
+      this._channel,
     ].join('|');
-    const fullKey = dataKey + '|' + this._channel;
     if (fullKey === this._renderKey) return;
     this._renderKey = fullKey;
 
-    const _t = (id) => sr.getElementById(id);
-
-    // CH label
-    const chLabel = _t('hmc-ch-label');
-    if (chLabel) chLabel.textContent = 'CH ' + this._channel;
-
-    // Show/hide channels
-    const ch1 = _t('hmc-ch1');
-    const ch2 = _t('hmc-ch2');
-    const ch3 = _t('hmc-ch3');
-    if (ch1) ch1.setAttribute('display', this._channel === 1 ? '' : 'none');
-    const cur = sr.getElementById('hmc-cursor-el');
-    if (cur) cur.setAttribute('display', this._channel === 1 ? '' : 'none');
-    if (ch2) { ch2.classList.toggle('visible', this._channel === 2); }
-    if (ch3) { ch3.classList.toggle('visible', this._channel === 3); }
+    // LCD (n° + nom) + points indicateurs + visibilité des canaux
+    const meta = HMC_CHANNELS_META[this._channel - 1];
+    this._setText('hmc-lcd-num', 'CH ' + this._channel);
+    this._setText('hmc-lcd-nm', '· ' + (meta ? meta.name : ''));
+    this.shadowRoot.querySelectorAll('#hmc-dots .hmc-dot')
+      .forEach((d, k) => d.classList.toggle('on', k === this._channel - 1));
+    for (let n = 1; n <= HMC_CHANNELS; n++) {
+      const el = this._el('hmc-ch' + n);
+      if (el) el.classList.toggle('visible', this._channel === n);
+    }
 
     if (!planned) {
-      const sc = _t('hmc-scroll-txt');
-      if (sc) sc.textContent = '> sensor indisponible';
+      this._setText('hmc-scroll-txt', '> sensor indisponible');
       return;
     }
 
-    const attrs = planned.attributes;
+    // Contexte partagé entre canaux
+    const attrs     = planned.attributes;
+    const noteState = noteEnt?.state || '';
+    const ctx = {
+      hs, attrs,
+      plannedVal: parseFloat(planned.state),          // plan courant (déterministe ± LLM)
+      biasSrc:    noteState.startsWith('[llm]') ? 'llm' : 'plan',
+      ext:    parseFloat(attrs.temp_ext ?? 7),
+      mult:   parseFloat(attrs.temp_mult ?? 1),
+      salon:  parseFloat(attrs.temp_salon ?? 0),
+      solar:  parseFloat(attrs.surplus_solaire ?? 0),
+      solRes: attrs.solar_resolution || 'none',
+      phase:  attrs.phase || planned.state || '---',
+      isHC:   (attrs.tariff || '').toUpperCase() === 'HC',
+    };
 
-    // Shared computed values
-    // plannedVal = décision finale (plan déterministe, potentiellement ajusté LLM)
-    // biasApplied = ce qui est réellement sur la PAC (peut diverger si modif manuelle)
-    const plannedVal  = parseFloat(planned.state);
-    const biasApplied = biasEnt ? parseFloat(biasEnt.state) : null;
-    const biasDisp    = plannedVal;   // affiche toujours le plan courant
-    const biasSign    = biasDisp >= 0 ? '+' : '';
-    // [llm] si la note est préfixée [llm] par heat_agent, sinon [plan]
-    const noteState   = this._hass.states['input_text.heat_agent_last_note']?.state || '';
-    const isLlm       = noteState.startsWith('[llm]');
-    const biasSrc     = isLlm ? 'llm' : 'plan';
-    const ext        = parseFloat(attrs.temp_ext ?? 7);
-    const mult       = parseFloat(attrs.temp_mult ?? 1);
-    const salon      = parseFloat(attrs.temp_salon ?? 0);
-    const solar      = parseFloat(attrs.surplus_solaire ?? 0);
-    const solRes     = attrs.solar_resolution || 'none';
-    const phase      = attrs.phase || planned.state || '---';
-    const tariff     = (attrs.tariff || '').toUpperCase();
-    const isHC       = tariff === 'HC';
+    if      (this._channel === 1) this._updateCh1(ctx);
+    else if (this._channel === 2) this._updateCh2(ctx);
+    else if (this._channel === 3) this._updateCh3(ctx);
 
-    // ── CH1 updates ──
-    if (this._channel === 1) {
-      const phaseEl = _t('hmc-phase');
-      if (phaseEl) phaseEl.textContent = phase;
+    // Note défilante (toujours visible)
+    this._updateScroll(noteEnt);
+  }
 
-      const biasEl = _t('hmc-bias');
-      if (biasEl) biasEl.textContent = biasSign + biasDisp.toFixed(2) + ' C';
-
-      const biasSrcEl = _t('hmc-bias-src');
-      if (biasSrcEl) biasSrcEl.textContent = ' [' + biasSrc + ']';
-
-      const extEl = _t('hmc-ext');
-      if (extEl) extEl.textContent = (ext >= 0 ? '+' : '') + ext.toFixed(1) + ' C';
-
-      const mulEl = _t('hmc-mult');
-      if (mulEl) mulEl.textContent = ' x' + mult.toFixed(1);
-
-      const salonEl = _t('hmc-salon');
-      if (salonEl) salonEl.textContent = salon.toFixed(1) + ' C';
-
-      const tarifEl = _t('hmc-tarif');
-      if (tarifEl) {
-        if (isHC) {
-          tarifEl.textContent = 'HEURES CREUSES';
-          tarifEl.setAttribute('fill', 'rgba(0,255,160,1)');
-        } else {
-          tarifEl.textContent = 'HEURES PLEINES';
-          tarifEl.setAttribute('fill', 'rgba(255,160,60,1)');
-        }
-      }
-
-      const solarWEl = _t('hmc-solar-w');
-      if (solarWEl) solarWEl.textContent = Math.round(solar) + 'W';
-      const solarREl = _t('hmc-solar-res');
-      if (solarREl) solarREl.textContent = ' ' + solRes;
+  _updateScroll(noteEnt) {
+    const el = this._el('hmc-scroll-txt');
+    if (!el) return;
+    const note = noteEnt ? noteEnt.state : '';
+    const txt  = note ? ('> ' + note) : '> ...';
+    if (el.textContent !== txt) {
+      el.textContent = txt;
+      this._setScrollDuration(txt);
     }
+  }
 
-    // ── CH2 updates (ha-icon tiles) ──
-    if (this._channel === 2) {
-      const hs = this._hass.states;
-      const _on = id => { const s = hs[id]; return s && s.state === 'on'; };
+  // ── CH1 : terminal Heat Agent (overlay HTML) ──
+  _updateCh1(ctx) {
+    const { plannedVal, biasSrc, ext, mult, salon, solar, solRes, phase, isHC } = ctx;
+    const sign = plannedVal >= 0 ? '+' : '';
 
-      const modeEl = _t('hmc2-mode');
-      if (modeEl) modeEl.textContent = (hs['sensor.ecodan_heatpump_operation_mode']?.state || '---').toUpperCase();
-      const bsEl = _t('hmc2-bstatus');
-      if (bsEl) bsEl.textContent = hs['sensor.heat_pump_bias_status']?.state || '---';
+    this._setText('hmc1-sub',      isHC ? 'HC' : 'HP');
+    this._setText('hmc-phase',     phase);
+    this._setText('hmc-bias',      sign + plannedVal.toFixed(2) + ' C');
+    this._setText('hmc-bias-src',  '[' + biasSrc + ']');
+    this._setText('hmc-ext',       (ext >= 0 ? '+' : '') + ext.toFixed(1) + ' C');
+    this._setText('hmc-mult',      'x' + mult.toFixed(1));
+    this._setText('hmc-salon',     salon.toFixed(1) + ' C');
+    this._setText('hmc-solar-w',   Math.round(solar) + 'W');
+    this._setText('hmc-solar-res', solRes);
 
-      const tiles = [
-        ['hmc2-t-comp',   'binary_sensor.ecodan_heatpump_compressor',    's-on'],
-        ['hmc2-t-boost',  'binary_sensor.ecodan_heatpump_booster_heater', 's-warn'],
-        ['hmc2-t-defrost','binary_sensor.defrost_likely_soon',             's-on'],
-        ['hmc2-t-gel',    'binary_sensor.freeze_risk_expected',            's-alert'],
-        ['hmc2-t-humid',  'binary_sensor.low_humidity_alert',              's-warn'],
-      ];
-      for (const [tid, eid, clsOn] of tiles) {
-        const tile = _t(tid);
-        if (tile) tile.className = 'ch2-item ' + (_on(eid) ? clsOn : 's-off');
-      }
-      const pacTile = _t('hmc2-t-pac');
-      if (pacTile) {
-        const mode = hs['sensor.ecodan_heatpump_operation_mode']?.state || 'Off';
-        pacTile.className = 'ch2-item ' + (mode !== 'Off' ? 's-on' : 's-off');
-      }
+    const tarifEl = this._el('hmc-tarif');
+    if (tarifEl) {
+      tarifEl.textContent = isHC ? 'HEURES CREUSES' : 'HEURES PLEINES';
+      tarifEl.style.color = isHC ? 'rgba(0,255,160,1)' : 'rgba(255,160,60,1)';
     }
+  }
 
-    // ── CH3 updates (météo & tendance) ──
-    if (this._channel === 3) {
-      const now = new Date();
-      const hh = String(now.getHours()).padStart(2,'0');
-      const mm = String(now.getMinutes()).padStart(2,'0');
-      const updEl = _t('hmc3-upd');
-      if (updEl) updEl.textContent = hh + ':' + mm;
+  // ── CH2 : tuiles d'état PAC (ha-icon) ──
+  _updateCh2(ctx) {
+    const { hs } = ctx;
+    const mode = hs[HMC_CFG.mode]?.state || '---';
 
-      const min12 = attrs.meteo_min_12h;
-      const min12El = _t('hmc3-min12');
-      if (min12El) {
-        if (min12 !== null && min12 !== undefined && min12 !== 'none') {
-          const v = parseFloat(min12);
-          min12El.textContent = (v >= 0 ? '+' : '') + v.toFixed(1);
-          min12El.style.color = v <= 0 ? 'rgba(100,180,255,1)' : v <= 5 ? 'rgba(160,235,255,1)' : 'rgba(200,248,255,1)';
-        } else {
-          min12El.textContent = '---';
-        }
-      }
+    this._setText('hmc2-mode',    mode.toUpperCase());
+    this._setText('hmc2-bstatus', hs[HMC_CFG.biasStatus]?.state || '---');
 
-      const trend = attrs.salon_trend_2h;
-      const trendEl = _t('hmc3-trend');
-      const trendUEl = _t('hmc3-trend-u');
-      if (trendEl) {
-        if (trend !== null && trend !== undefined && trend !== 'none') {
-          const t = parseFloat(trend);
-          const arrow = t > 0.05 ? ' ▲' : t < -0.05 ? ' ▼' : ' ─';
-          trendEl.textContent = (t >= 0 ? '+' : '') + t.toFixed(2) + arrow;
-          trendEl.style.color = t > 0.1 ? 'rgba(0,255,160,1)' : t < -0.1 ? 'rgba(255,100,80,1)' : 'rgba(200,248,255,1)';
-        } else {
-          trendEl.textContent = '---';
-        }
-      }
+    for (const t of HMC_CFG.ch2Tiles) {
+      const tile = this._el(t.id);
+      if (tile) tile.className = 'ch2-item ' + (this._isOn(t.entity) ? t.on : 's-off');
+    }
+    const pacTile = this._el('hmc2-t-pac');
+    if (pacTile) pacTile.className = 'ch2-item ' + (mode !== 'Off' && mode !== '---' ? 's-on' : 's-off');
+  }
 
-      const extEl3 = _t('hmc3-ext');
-      if (extEl3) extEl3.textContent = (ext >= 0 ? '+' : '') + ext.toFixed(1);
+  // ── CH3 : météo & tendance ──
+  _updateCh3(ctx) {
+    const { attrs, ext } = ctx;
+    const now = new Date();
+    this._setText('hmc3-upd',
+      String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0'));
 
-      // Prévisions horaires — chargées via WS si pas encore en cache
-      const fcEl = _t('hmc3-fc');
-      if (fcEl) {
-        if (this._forecast.length) {
-          this._renderForecast(fcEl);
-        } else {
-          this._fetchForecast().then(() => this._renderForecast(fcEl));
-        }
+    // MIN 12H — teinte selon le niveau de froid attendu
+    const min12El = this._el('hmc3-min12');
+    if (min12El) {
+      const raw = attrs.meteo_min_12h;
+      if (raw != null && raw !== 'none') {
+        const v = parseFloat(raw);
+        min12El.textContent = (v >= 0 ? '+' : '') + v.toFixed(1);
+        min12El.style.color = v <= 0 ? 'rgba(100,180,255,1)'
+                            : v <= 5 ? 'rgba(160,235,255,1)'
+                                     : 'rgba(200,248,255,1)';
+      } else {
+        min12El.textContent = '---';
       }
     }
 
-    // ── Note scroll (toujours visible) ──
-    const noteEl = _t('hmc-scroll-txt');
-    if (noteEl) {
-      const note = noteEnt ? noteEnt.state : '';
-      const txt = note ? ('> ' + note) : '> ...';
-      if (noteEl.textContent !== txt) {
-        noteEl.textContent = txt;
-        this._setScrollDuration(txt);
+    // SALON dT — tendance 2h avec flèche directionnelle
+    const trendEl = this._el('hmc3-trend');
+    if (trendEl) {
+      const raw = attrs.salon_trend_2h;
+      if (raw != null && raw !== 'none') {
+        const t = parseFloat(raw);
+        const arrow = t > 0.05 ? ' ▲' : t < -0.05 ? ' ▼' : ' ─';
+        trendEl.textContent = (t >= 0 ? '+' : '') + t.toFixed(2) + arrow;
+        trendEl.style.color = t > 0.1  ? 'rgba(0,255,160,1)'
+                            : t < -0.1 ? 'rgba(255,100,80,1)'
+                                       : 'rgba(200,248,255,1)';
+      } else {
+        trendEl.textContent = '---';
       }
+    }
+
+    this._setText('hmc3-ext', (ext >= 0 ? '+' : '') + ext.toFixed(1));
+
+    // Prévisions horaires — chargées via WS si pas encore en cache (30 min)
+    const fcEl = this._el('hmc3-fc');
+    if (fcEl) {
+      if (this._forecast.length) this._renderForecast(fcEl);
+      else this._fetchForecast().then(() => this._renderForecast(fcEl));
+    }
+
+    // Conditions solaires — libellés descriptifs alignés à droite
+    for (const s of HMC_CFG.ch3Solar) {
+      const el = this._el(s.id);
+      if (!el) continue;
+      const on = this._isOn(s.entity);
+      el.textContent  = on ? s.on : s.off;
+      el.style.color  = on ? 'rgba(255,210,40,1)' : 'rgba(80,130,160,0.55)';
     }
   }
 
@@ -917,12 +1266,16 @@ class HeatMonitorCard extends HTMLElement {
     if (this._ac)    { this._ac.abort();                  this._ac = null; }
     if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
     if (this._ro)    { this._ro.disconnect();             this._ro = null; }
+    if (this._shTick) { clearInterval(this._shTick); this._shTick = null; }
+    this._shTimers.forEach(t => clearTimeout(t)); this._shTimers.clear();
+    this._shBusy = false;
   }
 
   connectedCallback() {
     const card = this.shadowRoot?.querySelector('ha-card');
     if (card && this._rendered) {
       this._bindButtons();
+      this._initSilverhand();
       if (window.ResizeObserver && !this._ro) {
         this._ro = new ResizeObserver(() => {
           if (this._rafId) return;
@@ -943,10 +1296,141 @@ class HeatMonitorCard extends HTMLElement {
   getCardSize() { return 4; }
 }
 
+// ─── Éditeur UI ─────────────────────────────────────────────────────────────
+// Re-render intelligent (focus préservé en frappe, écho config-changed ignoré).
+// N'émet QUE les clés qui diffèrent des défauts HMC_THEME → YAML propre.
+class HeatMonitorCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this._config = {};
+    this._hass = null;
+    this._built = false;
+    this._lastEmitted = null;
+    this._lastSeen    = null;
+  }
+
+  setConfig(c) {
+    this._config = { ...(c || {}) };
+    if (!this._built) { this._render(); this._lastSeen = this._hash(this._config); return; }
+    const h = this._hash(this._config);
+    if (h === this._lastEmitted) { this._lastSeen = h; return; }   // écho de notre _dispatch
+    if (h === this._lastSeen) return;                              // déjà affiché
+    if (this._isEditing()) { this._lastSeen = h; return; }         // ne pas voler le focus
+    this._render();
+    this._lastSeen = h;
+  }
+
+  set hass(h) { this._hass = h; if (!this._built) this._render(); }
+  disconnectedCallback() { this.innerHTML = ''; this._built = false; }
+
+  _hash(o) { try { return JSON.stringify(o); } catch { return String(Math.random()); } }
+  _isEditing() {
+    const a = this.querySelector(':focus') || document.activeElement;
+    if (!a || !this.contains(a)) return false;
+    return /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
+  }
+
+  _render() {
+    this._built = true;
+    this.innerHTML = '';
+    this.style.cssText = 'display:block;padding:16px;font-family:var(--primary-font-family,Roboto,sans-serif);';
+
+    const style = document.createElement('style');
+    style.textContent = `
+      .sec { font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px; }
+      .row { display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px; }
+      .row label { font-size:13px;color:var(--primary-text-color);flex:1; }
+      input[type=text],input[type=number] { font-size:12px;padding:5px 8px;border:1px solid var(--divider-color,#ccc);border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#000);outline:none;min-width:150px; }
+      input[type=number] { min-width:90px; }
+      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:-2px 0 8px; }
+    `;
+    this.appendChild(style);
+
+    const c = this._config;
+    const d = HMC_THEME;
+
+    // ── Easter-egg Silverhand
+    this._sec('Easter-egg « Silverhand »');
+    this._hint('Le chat se matérialise aléatoirement en hologramme glitché avant de reprendre sa marche.');
+    this._toggle('silverhand', 'Activer l\'effet', c.silverhand ?? d.silverhand);
+    this._numRow('silverhand_chance', 'Fréquence (proba/tirage)', c.silverhand_chance ?? d.silverhand_chance, '0', '1', '0.01', String(d.silverhand_chance));
+    this._numRow('silverhand_tick', 'Cadence de tirage (s)', c.silverhand_tick ?? d.silverhand_tick, '2', '60', '1', String(d.silverhand_tick));
+
+    // ── Chat
+    this._sec('Chat');
+    this._textRow('cat_image', 'Image (GIF)', c.cat_image ?? '', d.cat_image);
+    this._numRow('walk_dur', 'Rareté de la balade (s/cycle)', c.walk_dur ?? d.walk_dur, '8', '120', '1', String(d.walk_dur));
+    this._hint('Grand = le chat passe rarement (longue pause hors-champ entre deux traversées).');
+
+    // ── Écran CRT
+    this._sec('Écran CRT');
+    this._numRow('crt_blur', 'Flou phosphore (px)', c.crt_blur ?? d.crt_blur, '0', '4', '0.05', String(d.crt_blur));
+    this._numRow('crt_glow', 'Halo cyan (px)',      c.crt_glow ?? d.crt_glow, '0', '20', '0.5', String(d.crt_glow));
+
+    // ── Police
+    this._sec('Police');
+    this._textRow('font',     'Police',            c.font ?? '',     d.font);
+    this._textRow('font_url', 'URL police (CSS)',  c.font_url ?? '', 'https://fonts.googleapis.com/...');
+  }
+
+  _sec(t)  { const e = document.createElement('div'); e.className = 'sec'; e.textContent = t; this.appendChild(e); }
+  _hint(t) { const e = document.createElement('div'); e.className = 'hint'; e.textContent = t; this.appendChild(e); }
+
+  _textRow(key, label, value, placeholder = '') {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('label'); lbl.textContent = label;
+    const inp = document.createElement('input'); inp.type = 'text'; inp.value = value; inp.placeholder = placeholder;
+    inp.addEventListener('change', e => this._set(key, e.target.value || undefined));
+    row.appendChild(lbl); row.appendChild(inp); this.appendChild(row);
+  }
+
+  _numRow(key, label, value, min, max, step, placeholder = '') {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('label'); lbl.textContent = label;
+    const inp = document.createElement('input');
+    inp.type = 'number'; inp.value = value; inp.placeholder = placeholder;
+    if (min  !== undefined) inp.min  = min;
+    if (max  !== undefined) inp.max  = max;
+    if (step !== undefined) inp.step = step;
+    inp.addEventListener('change', e => {
+      const v = e.target.value;
+      this._set(key, v === '' ? undefined : parseFloat(v));
+    });
+    row.appendChild(lbl); row.appendChild(inp); this.appendChild(row);
+  }
+
+  _toggle(key, label, checked) {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('label'); lbl.textContent = label;
+    const cb  = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!checked;
+    cb.style.cssText = 'width:36px;height:20px;cursor:pointer;accent-color:var(--primary-color,#00fff9);flex-shrink:0;';
+    cb.addEventListener('change', e => this._set(key, e.target.checked));
+    row.appendChild(lbl); row.appendChild(cb); this.appendChild(row);
+  }
+
+  // Pose une clé ; supprime celle qui revient à la valeur par défaut → YAML minimal.
+  _set(key, value) {
+    const def = HMC_THEME[key];
+    if (value === undefined || value === '' || value === def) delete this._config[key];
+    else this._config[key] = value;
+    this._dispatch();
+  }
+
+  _dispatch() {
+    const config = { ...this._config };
+    this._lastEmitted = this._hash(config);
+    this.dispatchEvent(new CustomEvent('config-changed', {
+      detail: { config }, bubbles: true, composed: true,
+    }));
+  }
+}
+
+customElements.define('heat-monitor-card-editor', HeatMonitorCardEditor);
 customElements.define('heat-monitor-card', HeatMonitorCard);
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: 'heat-monitor-card',
   name: 'Heat Monitor Card',
   description: 'CRT terminal CB2077 — Heat Agent status',
+  preview: true,
 });

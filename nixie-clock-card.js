@@ -1,4 +1,4 @@
-﻿/*
+/*
  * ============================================================
  *  NixieClockCard — Home Assistant Custom Card
  *  Usage: add to resources as /local/nixie-clock-card.js
@@ -27,6 +27,16 @@
  *
  *    screws: true                # show corner screws (default: true)
  *    label: "SALON"              # text label displayed below the clock
+ *
+ *    # ── GLITCH le chat — apparition fantomatique (coin sup-droit) ──
+ *    glitch: true                # easter-egg on/off (default: true)
+ *    glitch_size: 64             # taille en px (default: 64)
+ *    glitch_right: -26           # décalage droite, négatif = déborde (default: -26)
+ *    glitch_top: -40             # décalage haut, négatif = déborde (default: -40)
+ *    glitch_color: "#00d4ff"     # couleur (default: couleur de glow de la card)
+ *    glitch_opacity: 0.8         # opacité max (default: 0.8)
+ *    glitch_dur: 2400            # durée d'une apparition en ms (default: 2400)
+ *    glitch_gap: 25              # secondes entre apparitions, ×jitter (default: 25)
  * ============================================================
  */
 
@@ -42,6 +52,9 @@
     license: free for non-commercial use, copyright must be preserved
 
  ****************************************************************************/
+
+/* GLITCH le chat — path détaché (viewBox 15 28 666 666 + transforms inline). */
+const NIXIE_GLITCH_PATH = "m0 0v-158.6s0.791-10.141 7.723-10.628c6.933-0.488 8.139 9.543 11.241 9.776s11.982 6.911 13.099 13.453c1.118 6.541-3.822 37.415-1.97 57.793 1.853 20.377 15.221 52.354 15.221 52.354s27.951-18.589 39.401-25.283c11.451-6.694 33.339-16.533 31.966-22.111-1.373-5.577 3.567-21.633 7.272-25.338 3.705-3.704 6.304-11.528 11.488-14.1s12.594-1.336 15.682-3.189c3.087-1.852 4.94-3.088 8.027-2.471 3.088 0.619 12.789 17.982 17.201 18.254s18.85 18.528 23.672 18.044c4.822-0.482 16.554-4.187 27.052-2.953 10.498 1.235 16.29 6.524 16.173 9.438-0.118 2.913-15.438 14.215-15.438 14.215s10.38 5.988 8.527 9.693c-1.852 3.704-24.179 20.346-33.393 24.993-9.214 4.646-23.916 9.143-23.916 9.143l-6.11 6.392s-30.44 24.309-33.528 31.101c-3.087 6.793-6.466 43.228-8.79 49.092-2.325 5.866-28.877 31.8-31.347 37.358-2.47 5.557-20.267 69.25-82.127 91.39-58.662 20.994-120.41 4.939-146.35 6.174-25.935 1.235-58.707 16.767-70.417 22.895s-77.165 67.877-98.16 96.282c-22.159 29.981-27.787 65.455-3.102 81.045 29.071 18.359 23.015 21.522 20.16 26.432-2.855 4.908-13.305 6.925-24.135 3.137-10.83-3.787-34.913-13.667-42.94-39.601-6.997-22.607 0-80.276 60.515-140.79 65.236-65.237 105.59-82.744 106.21-88.302 0.618-5.558-2.47-11.732-2.47-11.732l-0.5-4.766-1.848-6.842 2.348-6.3s-0.617-10.498 2.47-17.908c3.088-7.409 11.968-21.881 11.233-26.378-0.735-4.496-8.763-22.404-6.293-26.726 2.47-4.323 28.405-22.23 31.493-27.787 3.087-5.558 8.645-15.438 12.349-17.908 3.705-2.47 8.538-4.803 9.209-5.566 0.672-0.764 1.098-3.171 1.098-3.171h57.672v5.962s-1.597 2.621-1.752 3.701c-0.154 1.081 0.309 6.175-5.094 8.8-5.403 2.624-24.773 5.597-25.817 6.503s-2.125 1.524-3.669 2.296-6.792 8.491-9.725 10.806c-2.933 2.316-9.454 8.494-9.454 8.494l1.633 1.574s19.862-2.967 43.944-3.43c24.083-0.463 32.654 4.208 36.242 4.034 3.587-0.175 8.527-3.261 10.071-5.578 1.543-2.315 2.933-7.873 4.168-8.953 1.235-1.081 10.96-21.304 12.195-24.083 1.247-2.758 4.026-7.081 6.187-8.316 2.162-1.235 5.413-1.79 5.413-1.79";
 
 class NixieClockCard extends HTMLElement {
 
@@ -240,6 +253,8 @@ class NixieClockCard extends HTMLElement {
             this.shadowRoot.appendChild(card);
             this.elements = this.createElements(this.content);
             requestAnimationFrame(() => this.updateClock());
+
+            this._initGhost(displayWrap);
         }
         
         // Always ensure interval is running (handles reconnection after disconnect)
@@ -311,6 +326,80 @@ class NixieClockCard extends HTMLElement {
         }
     }
 
+    /* ── GLITCH le chat : apparition fantomatique au coin sup-droit du PNG ──────
+       Effet simple : fade in → tient → fade out, avec léger flicker spectral.
+       Pas de RGB-split ni scanlines. Teinté à la couleur de glow de la card.
+       Déclenché aléatoirement, de temps en temps. */
+    _initGhost(anchor) {
+        this._stopGhost();
+        if (!anchor) return;
+        if (matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+        const cfg = this.config || {};
+        if (cfg.glitch === false) return;               // opt-out
+        const size  = cfg.glitch_size  || 64;            // px (déborde franchement de la card)
+        const right = cfg.glitch_right != null ? cfg.glitch_right : -26; // déborde à droite
+        const top   = cfg.glitch_top   != null ? cfg.glitch_top   : -40; // déborde en haut
+        const color = cfg.glitch_color || this.glowBase || '#ff6a00';
+
+        const g = document.createElement('div');
+        g.style.cssText = 'position:absolute;pointer-events:none;z-index:6;opacity:0;'
+            + 'width:' + size + 'px;height:' + size + 'px;'
+            + 'right:' + right + 'px;top:' + top + 'px;color:' + color + ';';
+        g.innerHTML = '<svg viewBox="15 28 666 666" style="width:100%;height:100%;'
+            + 'filter:drop-shadow(0 0 5px currentColor) drop-shadow(0 0 12px currentColor);">'
+            + '<g transform="matrix(1.25 0 0 -1.25 0 1000)"><g transform="matrix(.8765 0 0 .8765 327.75 398.73)">'
+            + '<path fill="currentColor" d="' + NIXIE_GLITCH_PATH + '"/></g></g></svg>';
+        anchor.appendChild(g);
+        this._ghostEl = g;
+        this._ghostTimers = new Set();
+        // 1ère apparition après un délai aléatoire
+        const t = setTimeout(() => this._spawnGhost(), 4000 + Math.random() * 8000);
+        this._ghostTimers.add(t);
+    }
+
+    _spawnGhost() {
+        const g = this._ghostEl;
+        if (!g || !g.isConnected) return;
+        const dur = (this.config && this.config.glitch_dur) || 2400;  // ms d'apparition
+        const opMax = (this.config && this.config.glitch_opacity) || 0.8;
+        const t0 = performance.now();
+        const step = (now) => {
+            if (!g.isConnected) return;
+            const p = (now - t0) / dur;
+            if (p >= 1) {
+                g.style.opacity = 0;
+                // re-planifie la prochaine apparition (espacée + jitter)
+                const gap = ((this.config && this.config.glitch_gap) || 25) * 1000 * (0.6 + Math.random() * 0.9);
+                const t = setTimeout(() => this._spawnGhost(), gap);
+                if (this._ghostTimers) this._ghostTimers.add(t);
+                return;
+            }
+            // enveloppe : matérialise 0-25%, tient 25-70%, se désintègre 70-100%
+            let env;
+            if (p < 0.25) env = p / 0.25;
+            else if (p < 0.70) env = 1;
+            else env = 1 - (p - 0.70) / 0.30;
+            // flicker spectral hors de la phase stable
+            const stable = (p > 0.30 && p < 0.65);
+            const flick = stable ? 1 : (Math.random() < 0.5 ? 0.55 : 1);
+            // très léger flottement vertical
+            const float = Math.sin(p * Math.PI * 6) * 1.2 * (1 - env * 0.4);
+            g.style.opacity = opMax * env * flick;
+            g.style.transform = `translateY(${float}px)`;
+            const id = requestAnimationFrame(step);
+            this._ghostRaf = id;
+        };
+        this._ghostRaf = requestAnimationFrame(step);
+    }
+
+    _stopGhost() {
+        if (this._ghostTimers) this._ghostTimers.forEach(clearTimeout);
+        this._ghostTimers = null;
+        if (this._ghostRaf) { cancelAnimationFrame(this._ghostRaf); this._ghostRaf = null; }
+        if (this._ghostEl) { this._ghostEl.remove(); this._ghostEl = null; }
+    }
+
     connectedCallback() {
         if (this.content && !document.hidden) {
             requestAnimationFrame(() => this.updateClock());
@@ -338,6 +427,7 @@ class NixieClockCard extends HTMLElement {
     }
 
     disconnectedCallback() {
+        this._stopGhost();
         if (this._interval) {
             clearInterval(this._interval);
             this._interval = null;

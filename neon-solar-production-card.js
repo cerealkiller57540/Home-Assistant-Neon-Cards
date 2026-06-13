@@ -242,24 +242,80 @@ WEATHER_ICONS['hurricane']      = WEATHER_ICONS['exceptional'];
 // 24 modules arranged in 4 rows of 6, each split into 2 sub-cells
 // → 48 individually-animatable rectangles for the panel SVG.
 
-const MODULES = [
-  /* Row 1 — y=28 */
-  { x: 36,  y: 28,  w: 53, h: 24 }, { x: 91,  y: 28,  w: 53, h: 24 },
-  { x: 146, y: 28,  w: 53, h: 24 }, { x: 201, y: 28,  w: 53, h: 24 },
-  { x: 256, y: 28,  w: 53, h: 24 }, { x: 311, y: 28,  w: 53, h: 24 },
-  /* Row 2 — y=52 */
-  { x: 33,  y: 52,  w: 54, h: 32 }, { x: 89,  y: 52,  w: 54, h: 32 },
-  { x: 145, y: 52,  w: 54, h: 32 }, { x: 201, y: 52,  w: 54, h: 32 },
-  { x: 257, y: 52,  w: 54, h: 32 }, { x: 313, y: 52,  w: 54, h: 32 },
-  /* Row 3 — y=84 */
-  { x: 30,  y: 84,  w: 55, h: 32 }, { x: 87,  y: 84,  w: 55, h: 32 },
-  { x: 144, y: 84,  w: 55, h: 32 }, { x: 201, y: 84,  w: 55, h: 32 },
-  { x: 258, y: 84,  w: 55, h: 32 }, { x: 315, y: 84,  w: 55, h: 32 },
-  /* Row 4 — y=116 */
-  { x: 24,  y: 116, w: 57, h: 36 }, { x: 83,  y: 116, w: 57, h: 36 },
-  { x: 142, y: 116, w: 57, h: 36 }, { x: 201, y: 116, w: 57, h: 36 },
-  { x: 260, y: 116, w: 57, h: 36 }, { x: 319, y: 116, w: 57, h: 36 },
-];
+// Géométrie v2 — HOMOGRAPHIE : le panneau est une grille unitaire 6×4
+// (u → colonnes, v → profondeur, v=0 avant / v=1 arrière) projetée en vraie
+// perspective. Les colonnes convergent vers le point de fuite et les rangées
+// se compressent vers l'arrière automatiquement (division perspective).
+// Plus aucune coordonnée de cellule codée à la main.
+
+const PANEL_PERSP = 0.11;    // resserrement du bord arrière (0.05 ≈ ancien trapèze)
+const CELL_GAP_U  = 0.003;   // espace inter-colonnes — quasi un trait
+const CELL_GAP_V  = 0.004;   // espace inter-rangées
+const CELL_SUB    = 0.475;   // hauteur d'une sous-cellule (fraction du module)
+
+/* Homographie carré unité → quadrilatère (closed form) */
+function _homography([x0,y0],[x1,y1],[x2,y2],[x3,y3]) {
+  const sx=x0-x1+x2-x3, sy=y0-y1+y2-y3;
+  const dx1=x1-x2, dx2=x3-x2, dy1=y1-y2, dy2=y3-y2;
+  const den=dx1*dy2-dx2*dy1;
+  const g=(sx*dy2-sy*dx2)/den, h=(sy*dx1-sx*dy1)/den;
+  const a=x1-x0+g*x1, b=x3-x0+h*x3, c=x0;
+  const d=y1-y0+g*y1, e=y3-y0+h*y3, f=y0;
+  return (u,v)=>{ const w=g*u+h*v+1; return [(a*u+b*v+c)/w, (d*u+e*v+f)/w]; };
+}
+
+const PANEL_INS = 364 * PANEL_PERSP;
+/* Quadrilatère EXTÉRIEUR du panneau (cadre compris). Tout le reste — surface,
+ * cellules, busbars, lèvre — vit dans le même plan : marges et grille sont
+ * définies en UV puis projetées par LA MÊME homographie, donc le cadre se
+ * compresse avec la distance comme les cellules (épais devant, fin derrière). */
+const PANEL_OF = [[10,160],[390,160],[370-PANEL_INS,20],[30+PANEL_INS,20]];
+const PANEL_M  = _homography(PANEL_OF[0], PANEL_OF[1], PANEL_OF[2], PANEL_OF[3]);
+
+const FRAME_MU = 0.022;   // marge du cadre en u (≈35 mm réels)
+const FRAME_MV = 0.045;   // marge du cadre en v (plan moins profond que large)
+
+const _pfx = n => n.toFixed(1);
+function _pquad(u0,v0,u1,v1) {
+  const A=PANEL_M(u0,v0), B=PANEL_M(u1,v0), C=PANEL_M(u1,v1), D=PANEL_M(u0,v1);
+  return 'M'+_pfx(A[0])+' '+_pfx(A[1])+'L'+_pfx(B[0])+' '+_pfx(B[1])+
+         'L'+_pfx(C[0])+' '+_pfx(C[1])+'L'+_pfx(D[0])+' '+_pfx(D[1])+'Z';
+}
+const PANEL_FRAME   = _pquad(0, 0, 1, 1);
+const PANEL_SURFACE = _pquad(FRAME_MU, FRAME_MV, 1-FRAME_MU, 1-FRAME_MV);
+const PANEL_LIP     = _pquad(0, 0, 1, FRAME_MV*0.5);   // tranche avant éclairée
+
+/* helpers grille : UV de la zone cellules */
+const _gu = f => FRAME_MU + (1-2*FRAME_MU)*f;
+const _gv = f => FRAME_MV + (1-2*FRAME_MV)*f;
+
+/* 48 sous-cellules dans l'ordre data-ci historique : modules en row-major
+ * depuis la rangée ARRIÈRE, sous-cellule haute (pair) puis basse (impair). */
+const PANEL_CELLS = (() => {
+  const out = [];
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 6; c++) {
+      const u0 = _gu(c/6 + CELL_GAP_U), u1 = _gu((c+1)/6 - CELL_GAP_U);
+      const vTop = _gv(1 - r/4 - CELL_GAP_V);   // r=0 = rangée arrière
+      const vBot = _gv(1 - (r+1)/4 + CELL_GAP_V);
+      const vh = vTop - vBot;
+      out.push(_pquad(u0, vTop - vh*CELL_SUB, u1, vTop));   // sous-cellule haute
+      out.push(_pquad(u0, vBot, u1, vBot + vh*CELL_SUB));   // sous-cellule basse
+    }
+  }
+  return out;
+})();
+
+/* Busbars : 2 traits par colonne, projetés dans la perspective */
+const PANEL_BUSBARS = (() => {
+  let s = '';
+  for (let c = 0; c < 6; c++) for (let k = 1; k <= 2; k++) {
+    const u = _gu(c/6 + k/18);
+    const A = PANEL_M(u, _gv(0.02)), B = PANEL_M(u, _gv(0.98));
+    s += `<line x1="${_pfx(A[0])}" y1="${_pfx(A[1])}" x2="${_pfx(B[0])}" y2="${_pfx(B[1])}" stroke="#000" stroke-opacity="0.30" stroke-width="0.6"/>`;
+  }
+  return s;
+})();
 
 // ═══════════════════════════════════════════════════════════════
 //  SECTION 5 — Panel SVG Builder
@@ -267,66 +323,65 @@ const MODULES = [
 
 /**
  * Generate the static SVG skeleton for the solar-panel graphic.
- * Each module is split into two sub-cell <rect>s whose fill/opacity
- * are later updated per-frame in _patchCells().
+ * Cellules en <path data-ci> projetées par homographie — l'API runtime
+ * (_patchCells : attributs fill/opacity + classe .cell-on) est inchangée.
  *
  * @param {string} id   - Unique prefix for SVG element IDs.
  * @param {string} cold - Hex colour used as the "off" cell base.
  * @returns {string} SVG markup string.
  */
 function buildPanelSkeleton(id, cold) {
-  const cells = MODULES.flatMap((m, i) => {
-    const r1h = (m.h * 0.47).toFixed(1);
-    const r2y = (m.y + m.h * 0.47 + m.h * 0.06).toFixed(1);
-    const r2h = (m.h * 0.47).toFixed(1);
-    return [
-      `<rect data-ci="${i * 2}"   x="${m.x}" y="${m.y}"  width="${m.w}" height="${r1h}"
-         rx="1" fill="${cold}" opacity="0.07"
-         style="animation-delay:${(i * 0.07).toFixed(2)}s"/>`,
-      `<rect data-ci="${i * 2 + 1}" x="${m.x}" y="${r2y}" width="${m.w}" height="${r2h}"
-         rx="1" fill="${cold}" opacity="0.07"
-         style="animation-delay:${(i * 0.07 + 0.035).toFixed(2)}s"/>`,
-    ];
+  const cells = PANEL_CELLS.map((d, ci) => {
+    const mod = Math.floor(ci / 2);
+    const delay = (mod * 0.07 + (ci % 2) * 0.035).toFixed(2);
+    return `<path data-ci="${ci}" d="${d}" fill="${cold}" opacity="0.07" style="animation-delay:${delay}s"/>`;
   }).join('\n');
+
+  const [bA, bB] = [PANEL_M(FRAME_MU,1-FRAME_MV), PANEL_M(1-FRAME_MU,1-FRAME_MV)];
+  const [fA, fB] = [PANEL_M(FRAME_MU,FRAME_MV),   PANEL_M(1-FRAME_MU,FRAME_MV)];
 
   return `<svg id="${id}-svg" viewBox="0 0 400 180" width="100%"
     preserveAspectRatio="xMidYMid meet" style="display:block"
     shape-rendering="geometricPrecision">
   <defs>
     <linearGradient id="${id}-bg" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%"   stop-color="#1e1e1e"/>
-      <stop offset="100%" stop-color="#060606"/>
+      <stop offset="0%"   stop-color="#141a24"/>
+      <stop offset="45%"  stop-color="#080b11"/>
+      <stop offset="100%" stop-color="#030407"/>
     </linearGradient>
     <linearGradient id="${id}-glare" x1="0%" y1="0%" x2="90%" y2="100%">
-      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.13"/>
+      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.14"/>
       <stop offset="55%" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
+    <linearGradient id="${id}-shg" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset=".45" stop-color="#cfeaff" stop-opacity=".14"/>
+      <stop offset=".55" stop-color="#ffffff" stop-opacity=".20"/>
+      <stop offset=".65" stop-color="#cfeaff" stop-opacity=".12"/>
+      <stop offset="1"   stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="${id}-clip"><path d="${PANEL_SURFACE}"/></clipPath>
   </defs>
-  <!-- Panel outer frame -->
-  <path d="M10 160 L390 160 L370 20 L30 20 Z" fill="#000"/>
-  <!-- Panel inner surface -->
-  <path d="M18 152 L382 152 L364 28 L36 28 Z" fill="url(#${id}-bg)"/>
-  <!-- Horizontal grid lines -->
-  <g stroke="#181818" stroke-width="1">
-    <line x1="32"  y1="52"  x2="368" y2="52"/>
-    <line x1="26"  y1="84"  x2="374" y2="84"/>
-    <line x1="20"  y1="116" x2="380" y2="116"/>
-  </g>
-  <!-- Vertical grid lines -->
-  <g stroke="#181818" stroke-width="1">
-    <line x1="90"  y1="28" x2="82"  y2="152"/>
-    <line x1="145" y1="28" x2="141" y2="152"/>
-    <line x1="200" y1="28" x2="200" y2="152"/>
-    <line x1="255" y1="28" x2="259" y2="152"/>
-    <line x1="310" y1="28" x2="318" y2="152"/>
-  </g>
+  <!-- Cadre alu — même plan que les cellules (se compresse avec la distance) -->
+  <path d="${PANEL_FRAME}" fill="#04050a"/>
+  <path d="${PANEL_LIP}" fill="#1c2028"/>
+  <!-- Surface vitrée (reflet de ciel) -->
+  <path d="${PANEL_SURFACE}" fill="url(#${id}-bg)"/>
   <!-- Animated cells -->
   <g id="${id}-cells">${cells}</g>
+  <!-- Busbars -->
+  ${PANEL_BUSBARS}
   <!-- Glare overlay -->
-  <path d="M18 152 L382 152 L364 28 L36 28 Z"
-    fill="url(#${id}-glare)" pointer-events="none"/>
+  <path d="${PANEL_SURFACE}" fill="url(#${id}-glare)" pointer-events="none"/>
+  <!-- Sheen animé (balayage de la vitre) -->
+  <g clip-path="url(#${id}-clip)" pointer-events="none">
+    <g class="panel-sheen"><rect x="-20" y="10" width="130" height="160" fill="url(#${id}-shg)" transform="skewX(-18)"/></g>
+  </g>
+  <!-- Liserés spéculaires -->
+  <line x1="${_pfx(bA[0])}" y1="${_pfx(bA[1])}" x2="${_pfx(bB[0])}" y2="${_pfx(bB[1])}" stroke="#9fc8e8" stroke-width="0.7" stroke-opacity="0.5"/>
+  <line x1="${_pfx(fA[0])}" y1="${_pfx(fA[1])}" x2="${_pfx(fB[0])}" y2="${_pfx(fB[1])}" stroke="#ffffff" stroke-width="0.6" stroke-opacity="0.25"/>
   <!-- Night-mode tint overlay (opacity toggled in JS) -->
-  <path id="${id}-night" d="M18 152 L382 152 L364 28 L36 28 Z"
+  <path id="${id}-night" d="${PANEL_SURFACE}"
     fill="#000820" opacity="0" pointer-events="none"/>
 </svg>`;
 }
@@ -1463,6 +1518,15 @@ class NeonSolarCard extends HTMLElement {
       }
       .cell-on {
         animation: ${reduceAnim ? 'none' : `solar-pulse ${dur}s ease-in-out infinite`};
+      }
+      /* ── Balayage lumineux de la vitre ─────────── */
+      @keyframes solar-sheen {
+        0%        { transform: translateX(-160px) }
+        12%, 100% { transform: translateX(560px) }
+      }
+      .panel-sheen {
+        animation: ${reduceAnim ? 'none' : 'solar-sheen 90s ease-in-out infinite'};
+        will-change: transform;
       }
     </style>
 

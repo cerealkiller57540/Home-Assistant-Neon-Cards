@@ -1,5 +1,5 @@
 /**
- * neon-dual-thermo-card v2.0.1
+ * neon-dual-thermo-card v2.2.0
  * Double thermomètre néon pour Home Assistant - Comparaison côte à côte
  *
  * Installation :
@@ -11,13 +11,23 @@
  *   entity_left: sensor.temperature_salon
  *   entity_right: sensor.temperature_chambre
  *
+ * v2.2.0 : easter-egg GLITCH — le chat marcheur se matérialise en hologramme
+ *            Silverhand (RGB-split + scanlines) sur la courbe la plus froide de la
+ *            sparkline ; off par défaut, fréquence/taille/image réglables (éditeur).
+ *            Respecte prefers-reduced-motion, ne spawn pas si onglet caché.
+ * v2.1.0 : capteur indisponible → mercure descendu à la base + désaturé gris,
+ *            anneaux plasma & paroi ternis (lecture immédiate « capteur HS »)
+ *          + saturateHex mémoïsé (moins de recalcul HSL à chaque patch mercure)
+ *          + nettoyage code mort, version unifiée, banner console unique
+ * v2.0.x : glass dome reflet haut-gauche + wall shimmer (paroi externe)
+ *          + per-side overrides (échelle, zones, plasma) + éditeur §22
  * v2.0.0 : header 3 colonnes avec entity_wind (optionnel)
  *          + graph fond vent/pression (entity_bg_pressure optionnel)
  *          + fix jonction tube→bulbe (shimmer continu sans seam)
  *          + suppression rect shine superflu
  */
 
-const VERSION = '2.0.4';
+const VERSION = '2.2.0';
 
 // ═══════════════════════════════════════════════════════
 //  DEFAULTS
@@ -119,6 +129,13 @@ function buildConfig(raw) {
     color_plasma_ring2_right: raw.color_plasma_ring2_right || null,
     plasma_saturation_left:   raw.plasma_saturation_left   ?? null,
     plasma_saturation_right:  raw.plasma_saturation_right  ?? null,
+
+    // Easter-egg GLITCH — chat marcheur qui se matérialise en hologramme Silverhand
+    // sur la courbe la plus froide (extérieur). Off par défaut.
+    glitch_cat:        raw.glitch_cat        ?? false,
+    glitch_cat_chance: clamp(raw.glitch_cat_chance ?? 0.12, 0, 1),  // proba par tick (~6 s)
+    glitch_cat_size:   raw.glitch_cat_size   ?? 26,                 // hauteur px
+    glitch_cat_image:  raw.glitch_cat_image  || '/local/cat-walking-white.gif',
   };
 }
 
@@ -161,8 +178,20 @@ function cssVar(name, fallback) {
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
 // Boost saturation of a hex color by a factor (CPU-only, no SVG filter needed)
+// Mémoïsé : mêmes (hex, factor) reviennent à chaque patch mercure → évite le recalcul HSL.
+const _satCache = new Map();
 function saturateHex(hex, factor) {
   if (factor === 1) return hex;
+  const ck = hex + '|' + factor;
+  const hit = _satCache.get(ck);
+  if (hit !== undefined) return hit;
+  const out = _saturateHexCompute(hex, factor);
+  if (_satCache.size > 256) _satCache.clear();  // garde-fou mémoire
+  _satCache.set(ck, out);
+  return out;
+}
+
+function _saturateHexCompute(hex, factor) {
   const m = hex.match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
   if (!m) return hex;
   let r = parseInt(m[1], 16) / 255, g = parseInt(m[2], 16) / 255, b = parseInt(m[3], 16) / 255;
@@ -517,6 +546,18 @@ function buildBgGraphSVG(histWind, histPressure, primaryColor) {
   return { svg, labels: pressureLabels };
 }
 
+// Constantes géométrie sparkline (partagées avec la couche easter-egg GLITCH)
+const SPARK_W = 640, SPARK_H = 55, SPARK_PAD_Y = 14, SPARK_VBH = SPARK_PAD_Y + SPARK_H + 20;
+
+// Points {x,y} en coords viewBox d'une série, selon hMin/hR communs (même formule que la polyline).
+function sparkPoints(hist, hMin, hR) {
+  const n = Math.max(hist.length - 1, 1);
+  return hist.map((v, i) => ({
+    x: Math.round(i / n * SPARK_W),
+    y: SPARK_PAD_Y + Math.round(SPARK_H - ((v - hMin) / hR) * (SPARK_H - 8) - 4),
+  }));
+}
+
 // ── Dual Sparkline 24h ──────────────────────────────────────────
 function buildDualSparkSVG(histLeft, histRight, colors, id, speed = 1, hours = 24) {
   const hasLeft = histLeft && histLeft.length > 0;
@@ -524,7 +565,7 @@ function buildDualSparkSVG(histLeft, histRight, colors, id, speed = 1, hours = 2
   if (!hasLeft && !hasRight) return '';
   
   const { primary: priLeft, secondary: priRight } = colors;
-  const W = 640, H = 55, PAD_Y = 14;
+  const W = SPARK_W, H = SPARK_H, PAD_Y = SPARK_PAD_Y;
 
   // Compute combined range for both datasets
   let hMin = Infinity, hMax = -Infinity;
@@ -879,6 +920,14 @@ class NeonDualThermoCardEditor extends HTMLElement {
       </div>
       ${this._number('Saturation plasma', 'plasma_saturation', 0.5, 3, 0.1, '1=normal, 2=ultra saturé (défaut: 1.8)')}
 
+      <h3>🐾 Easter-egg GLITCH <span style="font-size:10px;font-weight:400">(chat sur la courbe la plus froide)</span></h3>
+      ${this._toggle('Activer GLITCH', 'glitch_cat', 'Le chat se matérialise en hologramme glitché Silverhand sur la sparkline')}
+      <div class="row2">
+        ${this._number('Fréquence', 'glitch_cat_chance', 0, 1, 0.01, 'Proba par tick (~6 s). 0.12 ≈ 1 apparition/50 s')}
+        ${this._number('Taille (px)', 'glitch_cat_size', 14, 48, 1, 'Hauteur du chat (défaut: 26)')}
+      </div>
+      ${this._input('Image (GIF)', 'glitch_cat_image', 'text', '/local/cat-walking-white.gif', 'Sprite marcheur — défaut: cat-walking-white.gif')}
+
       <h3>Actions Gauche <span style="font-size:10px;font-weight:400">(tap / appui long)</span></h3>
       <div class="row2">
         ${this._input('Tap action', 'tap_action_left', 'text', '{"action":"more-info"}', 'JSON: more-info, navigate, call-service, toggle, none')}
@@ -1041,6 +1090,10 @@ class NeonDualThermoCard extends HTMLElement {
     this._geo = null;
     this._colors = null;
     this._cachedEls = null;
+
+    // Easter-egg GLITCH
+    this._glitchTimer = null;    // tick loop (setTimeout)
+    this._sparkGeo = null;       // { pts:[{x,y}], color, vbW, vbH } du côté froid, pour poser le chat
   }
 
   static getConfigElement() { return document.createElement('neon-dual-thermo-card-editor'); }
@@ -1055,6 +1108,7 @@ class NeonDualThermoCard extends HTMLElement {
   setConfig(raw) {
     // Annuler tout RAF en vol avant rebuild pour éviter les updates fantômes
     if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = 0; }
+    this._stopGlitchLoop();
     this._pendingUpdate = null;
     this._config = buildConfig(raw);
     this._rebuildSideContexts();
@@ -1082,6 +1136,7 @@ class NeonDualThermoCard extends HTMLElement {
       cancelAnimationFrame(this._rafId);
       this._rafId = 0;
     }
+    this._stopGlitchLoop();
     this._pendingUpdate = null;
     this._cachedEls = null;
   }
@@ -1106,6 +1161,7 @@ class NeonDualThermoCard extends HTMLElement {
           });
         }
       }
+      this._startGlitchLoop();   // relance l'easter-egg au retour dans le DOM
     }
   }
 
@@ -1268,6 +1324,7 @@ class NeonDualThermoCard extends HTMLElement {
     if (!this._rendered) {
       this._rendered = true;
       this._renderShell();
+      this._startGlitchLoop();   // easter-egg GLITCH au premier rendu
       changed = true;
     }
 
@@ -1644,10 +1701,65 @@ class NeonDualThermoCard extends HTMLElement {
 
         /* === UNAVAILABLE === */
         .unavailable { opacity: 0.35; filter: grayscale(0.7); }
+        /* Thermo HS : on ternit l'anneau plasma + paroi (le mercure est patché en JS) */
+        .thermo-dead .outline { filter: none; opacity: 0.4 !important; }
+        .thermo-dead .mercury-irradiate { animation: none; }
+        .thermo-dead ellipse { opacity: 0.18 !important; filter: none !important;
+          stroke: #4a5160 !important; }
         .unavailable-blink { animation: unavail-blink 2s ease-in-out infinite; }
         @keyframes unavail-blink {
           0%, 100% { opacity: 1; }
           50%      { opacity: 0.3; }
+        }
+
+        /* === EASTER-EGG GLITCH (Silverhand sur la courbe) === */
+        .zone-spark { position: relative; }
+        .glitch-cat {
+          position: absolute; pointer-events: none; z-index: 5;
+          filter: drop-shadow(0 0 5px var(--gc-glow, #2EE5B6));
+        }
+        .gc-layer {
+          position: absolute; left: 0; top: 0;
+          image-rendering: pixelated; transform-origin: center bottom;
+        }
+        .gc-main { z-index: 3; animation: gc-main 1.7s steps(1) forwards; }
+        .gc-rd {
+          z-index: 2; mix-blend-mode: screen;
+          filter: brightness(1.2) sepia(1) hue-rotate(-50deg) saturate(7);
+          animation: gc-rd 1.7s steps(2) forwards;
+        }
+        .gc-cy {
+          z-index: 2; mix-blend-mode: screen;
+          filter: brightness(1.2) sepia(1) hue-rotate(140deg) saturate(7);
+          animation: gc-cy 1.7s steps(2) forwards;
+        }
+        .gc-scan {
+          z-index: 4; mix-blend-mode: overlay; opacity: 0;
+          background: repeating-linear-gradient(0deg,
+            rgba(0,255,249,0) 0px, rgba(0,255,249,0.18) 1px, rgba(0,255,249,0) 3px);
+          animation: gc-scan 1.7s linear forwards;
+        }
+        @keyframes gc-main {
+          0%{opacity:.15;clip-path:inset(0 0 0 0)} 8%{opacity:.9;clip-path:inset(40% 0 30% 0)}
+          16%{opacity:.5;clip-path:inset(0 0 0 0)} 26%{opacity:.95;clip-path:inset(0 0 60% 0)}
+          40%{opacity:.9} 70%{opacity:.92} 80%{opacity:.7;clip-path:inset(55% 0 0 0)}
+          90%{opacity:.3} 100%{opacity:0}
+        }
+        @keyframes gc-rd {
+          0%,100%{opacity:0;transform:translateX(0)} 10%{opacity:.8;transform:translate(-6px,1px)}
+          26%{opacity:.6;transform:translateX(5px)} 50%{opacity:.7;transform:translateX(-3px)}
+          80%{opacity:.4;transform:translateX(4px)} 92%{opacity:.2}
+        }
+        @keyframes gc-cy {
+          0%,100%{opacity:0;transform:translateX(0)} 10%{opacity:.8;transform:translate(6px,-1px)}
+          26%{opacity:.6;transform:translateX(-5px)} 50%{opacity:.7;transform:translateX(3px)}
+          80%{opacity:.4;transform:translateX(-4px)} 92%{opacity:.2}
+        }
+        @keyframes gc-scan {
+          0%{opacity:0} 12%{opacity:.9} 85%{opacity:.6} 100%{opacity:0;background-position-y:-24px}
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .glitch-cat { display: none !important; }
         }
 
         /* === RESPONSIVE === */
@@ -1776,10 +1888,16 @@ class NeonDualThermoCard extends HTMLElement {
       const topZone = sr.querySelector(`.zone-top-${side}`);
       const thermoZone = sr.querySelector(`.zone-thermo-${side}`);
       const tempVal = side === 'left' ? this._cachedEls.tempValLeft : this._cachedEls.tempValRight;
-      
+
       if (topZone) topZone.classList.toggle('unavailable-blink', unavail);
       if (thermoZone) thermoZone.classList.toggle('unavailable', unavail);
-      if (unavail && tempVal) tempVal.textContent = '--';
+      // #2 : capteur HS → mercure descendu à la base + désaturé (le retour à dispo est
+      // réécrit par le prochain _patchThermoFast).
+      if (thermoZone) thermoZone.classList.toggle('thermo-dead', unavail);
+      if (unavail) {
+        if (tempVal) tempVal.textContent = '--';
+        this._killThermo(side);
+      }
     }
 
     // Update wind value
@@ -1807,6 +1925,26 @@ class NeonDualThermoCard extends HTMLElement {
 
     this._updateSparkline();
     this._updateBgGraph();
+  }
+
+  // #2 : capteur indisponible — mercure ramené à la base + gradient gris, glow coupé.
+  // .thermo-dead (CSS) gère le ternissement plasma/paroi ; ici on traite le liquide SVG.
+  _killThermo(side) {
+    const geo = side === 'left' ? this._geoLeft : this._geoRight;
+    const mercury = side === 'left' ? this._cachedEls.mercuryLeft : this._cachedEls.mercuryRight;
+    if (!mercury) return;
+    const { gradBottom, cy, BR_I } = geo;
+    // Mercure quasi vide : un filet à la base du bulbe
+    const mercTop = gradBottom - 2;
+    mercury.setAttribute('y', mercTop);
+    mercury.setAttribute('height', cy + BR_I - mercTop);
+    mercury.style.setProperty('--merc-glow', 'transparent');
+    const grad = mercury.closest('svg')?.querySelector('[id$="-mercury"]');
+    if (grad) {
+      grad.children[0].setAttribute('stop-color', '#2a2f3a');
+      grad.children[1].setAttribute('stop-color', '#3a4150');
+      grad.children[2].setAttribute('stop-color', '#2a2f3a');
+    }
   }
 
   _patchThermoFast(side, temp, c, colors) {
@@ -1880,9 +2018,6 @@ class NeonDualThermoCard extends HTMLElement {
     const secondaryEntity = side === 'left' ? c.secondary_entity_left : c.secondary_entity_right;
     const secondaryLabel = side === 'left' ? c.secondary_label_left : c.secondary_label_right;
     const secondaryUnit = side === 'left' ? c.secondary_unit_left : c.secondary_unit_right;
-    
-    const prevTemp = side === 'left' ? this._prevTempLeft : this._prevTempRight;
-    const lastTemp = side === 'left' ? this._lastTempLeft : this._lastTempRight;
 
     const parts = [];
     if (humidity !== null) {
@@ -1957,6 +2092,114 @@ class NeonDualThermoCard extends HTMLElement {
     if (zSpark._key === key) return;
     zSpark._key = key;
     zSpark.innerHTML = buildDualSparkSVG(hL, hR, this._resolveColors(), this._svgIdLeft, c.animation_speed, c.history_hours || 24);
+
+    // Mémorise la géométrie de la courbe la plus FROIDE (= extérieur) pour y poser GLITCH.
+    this._computeSparkGeo(hL, hR);
+  }
+
+  // ═══════════════ EASTER-EGG GLITCH (Johnny Silverhand sur la courbe) ═══════════════
+
+  // Calcule les points {x,y} viewBox de la polyline dont la moyenne est la plus basse.
+  _computeSparkGeo(hL, hR) {
+    const colors = this._resolveColors();
+    const hasL = hL && hL.length > 1, hasR = hR && hR.length > 1;
+    if (!hasL && !hasR) { this._sparkGeo = null; return; }
+
+    // Range combiné (identique à buildDualSparkSVG)
+    let hMin = Infinity, hMax = -Infinity, sumL = 0, sumR = 0;
+    if (hasL) for (const v of hL) { if (v < hMin) hMin = v; if (v > hMax) hMax = v; sumL += v; }
+    if (hasR) for (const v of hR) { if (v < hMin) hMin = v; if (v > hMax) hMax = v; sumR += v; }
+    const hRange = Math.max(hMax - hMin, 0.1);
+
+    const avgL = hasL ? sumL / hL.length : Infinity;
+    const avgR = hasR ? sumR / hR.length : Infinity;
+    // Côté le plus froid ; si un seul dispo, on le prend.
+    const useLeft = hasL && (!hasR || avgL <= avgR);
+    const series = useLeft ? hL : hR;
+    const color  = useLeft ? colors.primary : colors.secondary;
+
+    this._sparkGeo = { pts: sparkPoints(series, hMin, hRange), color, vbW: SPARK_W, vbH: SPARK_VBH };
+  }
+
+  // Y (viewBox) de la courbe froide pour un X (viewBox) donné — interpolation linéaire.
+  _curveY(xv) {
+    const pts = this._sparkGeo?.pts;
+    if (!pts || !pts.length) return 0;
+    if (xv <= pts[0].x) return pts[0].y;
+    if (xv >= pts[pts.length - 1].x) return pts[pts.length - 1].y;
+    for (let i = 1; i < pts.length; i++) {
+      if (xv <= pts[i].x) {
+        const a = pts[i - 1], b = pts[i];
+        const t = (xv - a.x) / ((b.x - a.x) || 1);
+        return a.y + (b.y - a.y) * t;
+      }
+    }
+    return pts[pts.length - 1].y;
+  }
+
+  // Boucle de tick : à chaque tick, proba glitch_cat_chance de faire apparaître GLITCH.
+  _startGlitchLoop() {
+    this._stopGlitchLoop();
+    const c = this._config;
+    if (!c.glitch_cat) return;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const tick = () => {
+      // pas de spawn si onglet caché, pas encore de courbe, ou un chat déjà à l'écran
+      if (!document.hidden && this._sparkGeo &&
+          !this._cachedEls?.spark?.querySelector('.glitch-cat') &&
+          Math.random() < c.glitch_cat_chance) {
+        this._spawnGlitchCat();
+      }
+      this._glitchTimer = setTimeout(tick, 6000);
+    };
+    this._glitchTimer = setTimeout(tick, 6000);
+  }
+
+  _stopGlitchLoop() {
+    if (this._glitchTimer) { clearTimeout(this._glitchTimer); this._glitchTimer = null; }
+  }
+
+  // Matérialise GLITCH en hologramme Silverhand à un point aléatoire de la courbe froide.
+  _spawnGlitchCat() {
+    const c = this._config;
+    const spark = this._cachedEls?.spark;
+    const geo = this._sparkGeo;
+    if (!spark || !geo) return;
+    const svgEl = spark.querySelector('svg');
+    if (!svgEl) return;
+
+    const r = svgEl.getBoundingClientRect();
+    if (!r.width) return;
+    const sx = r.width / geo.vbW, sy = r.height / geo.vbH;
+
+    // point aléatoire sur 20%–85% de la courbe (reste visible)
+    const x0 = geo.pts[0].x, x1 = geo.pts[geo.pts.length - 1].x;
+    const xv = x0 + (0.2 + Math.random() * 0.6) * (x1 - x0);
+    const yv = this._curveY(xv);
+    const sizeH = c.glitch_cat_size || 26;
+    const sizeW = Math.round(sizeH * 1.3);   // GIF ratio ≈ 4:3
+    const px = xv * sx, py = yv * sy;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'glitch-cat';
+    wrap.style.left = (px - sizeW * 0.5) + 'px';
+    wrap.style.top  = (py - sizeH * 0.92) + 'px';   // pied collé à la ligne
+    wrap.style.width = sizeW + 'px';
+    wrap.style.height = sizeH + 'px';
+    wrap.style.setProperty('--gc-glow', geo.color);
+
+    // 3 calques (rouge / cyan / principal) + scanlines — le GIF marche pendant le glitch
+    const img = c.glitch_cat_image;
+    for (const cls of ['gc-rd', 'gc-cy', 'gc-main', 'gc-scan']) {
+      const el = document.createElement(cls === 'gc-scan' ? 'div' : 'img');
+      el.className = 'gc-layer ' + cls;
+      el.style.width = sizeW + 'px';
+      el.style.height = sizeH + 'px';
+      if (el.tagName === 'IMG') { el.src = img; el.alt = ''; }
+      wrap.appendChild(el);
+    }
+    spark.appendChild(wrap);
+    setTimeout(() => wrap.remove(), 1800);
   }
 }
 
@@ -1964,9 +2207,10 @@ customElements.define('neon-dual-thermo-card', NeonDualThermoCard);
 
 // Banner
 console.info(
-  '%c NEON-DUAL-THERMO-CARD %c v' + VERSION + ' ',
-  'color:#00E8FF;font-weight:bold;background:#040810;padding:2px 6px;border-radius:3px 0 0 3px',
-  'color:#E946FF;font-weight:bold;background:#040810;padding:2px 6px;border-radius:0 3px 3px 0',
+  '%c 🌡️ NEON-DUAL-THERMO-CARD %c v' + VERSION + ' %c Neo Tokyo ',
+  'color:#00E8FF;font-weight:bold;background:#040810;padding:2px 6px;border-radius:3px 0 0 0',
+  'color:#E946FF;font-weight:bold;background:#040810;padding:2px 6px',
+  'background:#040811;color:#9D4EDD;padding:2px 6px;border-radius:0 3px 3px 0;font-weight:bold',
 );
 
 window.customCards = window.customCards || [];
@@ -1976,9 +2220,3 @@ window.customCards.push({
   description: 'Double thermomètre néon cyberpunk — v2 avec vent + graph fond',
   preview: true,
 });
-
-console.info(
-  '%c 🌡️ neon-dual-thermo-card v2.0.2 %c Neo Tokyo ',
-  'background:#2EE5B6;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
-  'background:#040811;color:#9D4EDD;padding:2px 4px;border-radius:0 3px 3px 0;'
-);

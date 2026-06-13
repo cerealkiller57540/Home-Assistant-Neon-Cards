@@ -2,6 +2,10 @@
  * Neon Climate Card — Neo Tokyo v2
  * @version 1.2.27
  * Nouveautés : couleurs boutons/pill configurables, glitch sur changement temp/humid
+	Ligne 502 — le levier global : brightness(2.0) dans le filtre CSS du canvas. Monte à 2.5–3 pour opacifier tout le flux d'un coup (nappes + volutes + particules), c'est le réglage le plus simple.
+	Ligne 860 — alpha: 0.028 : les nappes volumétriques larges (la masse d'air). Passe à 0.045 pour une nappe plus dense.
+	Ligne 884 — alpha: 0.10 : les volutes fines. 0.15 les rend bien plus présentes.
+	Ligne 1001 — p.a = 0.32 : les particules.
  */
 
 console.log("neon-climate-card.js loaded!");
@@ -40,7 +44,13 @@ class NeonClimateCard extends HTMLElement {
     this._config     = {};
     this._animFrame  = null;
     this._windCtx      = null;
-    this._windStreams   = [];
+    this._windSheets   = [];    // nappes volumétriques pleine largeur
+    this._windWisps    = [];    // volutes fines, 1 par louver
+    this._windParts    = [];    // particules d'air
+    this._windSpd      = 1;     // multiplicateur vitesse (fan_mode)
+    this._windOffscreen = false;
+    this._windIO       = null;  // IntersectionObserver (pause hors écran)
+    this._windLast     = 0;     // cap 30 fps
     this._windT        = 0;
     this._windColor    = null;
     this._windMode     = 'off';
@@ -54,6 +64,7 @@ class NeonClimateCard extends HTMLElement {
   _cleanup() {
     if (this._animFrame)    { cancelAnimationFrame(this._animFrame); this._animFrame = null; }
     if (this._windObserver) { this._windObserver.disconnect(); this._windObserver = null; }
+    if (this._windIO)       { this._windIO.disconnect();       this._windIO = null; }
   }
 
   setConfig(config) {
@@ -492,7 +503,10 @@ class NeonClimateCard extends HTMLElement {
         }
         .wind-canvas { 
           display: block; 
-          filter: blur(3px) contrast(150%) brightness(2.0);
+          /* PAS de contrast() ici : Chrome filtre en alpha prémultiplié et
+           * écrase les traits translucides (invisible PC/Android). saturate
+           * garde le punch néon sans tuer l'alpha. */
+          filter: blur(2.5px) saturate(170%) brightness(1.9);
           mix-blend-mode: screen;
         }
 
@@ -749,6 +763,7 @@ class NeonClimateCard extends HTMLElement {
     const fanCycleBtn = sr.getElementById('fan-cycle-btn');
     if (fanCycleBtn) {
       const hasFan = !!(fanModes && fanModes.length);
+      this._windSpd = ({ quiet:0.45, silence:0.45, low:0.6, min:0.6, medium:1, mid:1, auto:1, high:1.6, max:1.8, turbo:1.8 })[String(fanMode).toLowerCase()] ?? 1;
       fanCycleBtn.style.display = hasFan ? '' : 'none';
       if (hasFan) {
         const FAN_ICO = { off:'⏻', low:'🌬', medium:'💨', high:'🌪', auto:'♾' };
@@ -792,8 +807,7 @@ class NeonClimateCard extends HTMLElement {
   _startWind() {
     const canvas = this.shadowRoot.querySelector('.wind-canvas');
     if (!canvas) return;
-    const dpr = window.devicePixelRatio || 1;
-    const N   = 11;
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);  // cap : assez pour le blur, moitié moins de pixels
 
     const resize = () => {
       const louverElems = this.shadowRoot.querySelectorAll('.louver');
@@ -826,36 +840,66 @@ class NeonClimateCard extends HTMLElement {
       ctx.scale(dpr, dpr);
       this._windCtx = ctx;
 
-      // 1 filament gazeux par louver, ancré sur son centre Y
-      // Au resize : recalculer x/amp/lw depuis LW, préserver phase/speed/alpha
-      louverElems.forEach((louver, i) => {
-        const lr      = louver.getBoundingClientRect();
-        const startY  = Math.max(0, (lr.top - fLRect.top) + lr.height / 2);
-        const prev    = this._windStreams[i];
+      // Placement inchangé : chaque volute est ancrée sur le centre Y de SON
+      // louver (point de départ = premier louver, flux au premier plan).
+      // Au resize : recalcul x/amp/lw depuis LW, préservation phase/speed/alpha.
+      const louverYs = [];
+      louverElems.forEach(louver => {
+        const lr = louver.getBoundingClientRect();
+        louverYs.push(Math.max(0, (lr.top - fLRect.top) + lr.height / 2));
+      });
+      const NL = louverYs.length;
+
+      // Nappes volumétriques — la masse d'air, large comme le louver (ex-streams,
+      // sans pointillés), ancrées sur les premiers louvers.
+      for (let i = 0; i < 3; i++) {
+        const prev = this._windSheets[i];
         if (prev) {
           prev.x      = LX + LW / 2;
-          prev.startY = startY;
-          prev.amp    = LW * (0.08 + (prev._ampR ?? 0.06));
-          prev.lw     = LW * (0.80 + (prev._lwR  ?? 0.25));
+          prev.startY = louverYs[Math.min(i, NL-1)] || 0;
+          prev.amp    = LW * (0.05 + (prev._ampR ?? 0.03));
+          prev.lw     = LW * (0.80 + (prev._lwR  ?? 0.15));
         } else {
-          const ampR = Math.random() * 0.06;
-          const lwR  = Math.random() * 0.30;
-          this._windStreams.push({
-            x:        LX + LW / 2,
-            startY:   startY,
-            phase:    Math.random() * Math.PI * 2,
-            speed:    0.3 + Math.random() * 0.2,
-            amp:      LW * (0.08 + ampR),
-            alpha:    0.04 + Math.random() * 0.04,
-            lw:       LW * (0.80 + lwR),
-            hueShift: (Math.random() - 0.5) * 30,  // ±15° hue shift
-            _ampR:    ampR,
-            _lwR:     lwR,
+          const ampR = Math.random() * 0.03, lwR = Math.random() * 0.25;
+          this._windSheets.push({
+            x: LX + LW/2, startY: louverYs[Math.min(i, NL-1)] || 0,
+            phase: Math.random()*Math.PI*2, speed: 0.28 + Math.random()*0.15,
+            amp: LW*(0.05+ampR), alpha: 0.05 + Math.random()*0.018,
+            lw: LW*(0.80+lwR), hueShift: (Math.random()-0.5)*24,
+            _ampR: ampR, _lwR: lwR,
+          });
+        }
+      }
+      this._windSheets.length = Math.min(3, Math.max(1, NL));
+
+      // Volutes fines — 1 par louver, réparties sur toute la largeur, chacune
+      // partant de son louver (l'air "sort" de chaque lame).
+      louverYs.forEach((startY, i) => {
+        const fx = (i + 0.5) / NL;
+        const prev = this._windWisps[i];
+        if (prev) {
+          prev.x      = LX + fx*LW;
+          prev.fx     = fx;
+          prev.startY = startY;
+          prev.amp    = LW * (0.035 + (prev._ampR ?? 0.025));
+        } else {
+          const ampR = Math.random() * 0.025;
+          this._windWisps.push({
+            x: LX + fx*LW, fx, startY,
+            phase: Math.random()*Math.PI*2, phase2: Math.random()*Math.PI*2,
+            speed: 0.3 + Math.random()*0.22,
+            amp: LW*(0.035+ampR), alpha: 0.16 + Math.random()*0.08,
+            lw: 4 + Math.random()*7, hueShift: (Math.random()-0.5)*30,
+            _ampR: ampR,
           });
         }
       });
-      // Tronquer si moins de louvers qu'avant
-      this._windStreams.length = louverElems.length;
+      this._windWisps.length = NL;
+      this._windLX = LX; this._windLW = LW;
+      this._windTopY = louverYs[0] || 0;
+
+      // Particules d'air (pool fixe, recyclées)
+      if (!this._windParts.length) for (let i = 0; i < 26; i++) this._windParts.push({ y: 1e9 });
     };
 
     setTimeout(resize, 100);
@@ -866,8 +910,19 @@ class NeonClimateCard extends HTMLElement {
       this._windObserver.observe(cardEl || canvas.parentElement);
     }
 
-    const draw = () => {
+    // IntersectionObserver — pause complète quand la card sort de l'écran
+    if (window.IntersectionObserver && !this._windIO) {
+      this._windIO = new IntersectionObserver(entries => {
+        this._windOffscreen = !entries[0].isIntersecting;
+      });
+      this._windIO.observe(canvas);
+    }
+
+    const draw = (now) => {
       this._animFrame = requestAnimationFrame(draw);
+      if (this._windOffscreen) return;                       // hors écran → rien
+      if (now - this._windLast < 33) return;                 // cap 30 fps
+      this._windLast = now;
       const ctx = this._windCtx;
       if (!ctx) return;
       const W = this._windW, H = this._windH, c = this._windColor;
@@ -884,40 +939,88 @@ class NeonClimateCard extends HTMLElement {
           b: Math.round(Math.min(255, Math.max(0, r*(0.213-cos*0.213-sin*0.787) + g*(0.715-cos*0.715+sin*0.715) + b*(0.072+cos*0.928+sin*0.072)))),
         };
       };
+      const _vgrad = (sc, sf, a1, a2) => {
+        const g = ctx.createLinearGradient(0, 0, 0, H);
+        g.addColorStop(Math.max(0, sf - 0.05), `rgba(${sc.r},${sc.g},${sc.b},0)`);
+        g.addColorStop(Math.min(1, sf + 0.12), `rgba(${sc.r},${sc.g},${sc.b},${a1.toFixed(3)})`);
+        g.addColorStop(0.78, `rgba(${sc.r},${sc.g},${sc.b},${a2.toFixed(3)})`);
+        g.addColorStop(1, `rgba(${sc.r},${sc.g},${sc.b},0)`);
+        return g;
+      };
 
-      for (const s of this._windStreams) {
+      const spd  = this._windSpd || 1;
+      const t    = this._windT;
+      const gust = 0.72 + 0.28 * Math.sin(t * 0.35);         // respiration globale
+      ctx.lineCap = 'round';
+
+      // 1) Nappes volumétriques — masse d'air pleine largeur (continues)
+      for (const s of this._windSheets) {
         const travel = H - s.startY;
-        if (travel <= 0) { s.phase -= s.speed * 0.02; continue; }
-
+        if (travel <= 0) { s.phase -= s.speed * 0.004 * spd; continue; }
+        const g  = 0.72 + 0.28 * Math.sin(t * 0.35 + s.phase * 0.8);
         const sc = s.hueShift ? _hueShift(c.r, c.g, c.b, s.hueShift) : c;
-        const startFrac = s.startY / H;
-        const grad = ctx.createLinearGradient(0, 0, 0, H);
-        grad.addColorStop(Math.max(0, startFrac - 0.05), `rgba(${sc.r},${sc.g},${sc.b},0)`);
-        grad.addColorStop(Math.min(1, startFrac + 0.15), `rgba(${sc.r},${sc.g},${sc.b},${s.alpha})`);
-        grad.addColorStop(1, `rgba(${sc.r},${sc.g},${sc.b},0)`);
-
+        ctx.strokeStyle = _vgrad(sc, s.startY / H, s.alpha * 1.2 * g, s.alpha * 0.75 * g);
         ctx.beginPath();
-        ctx.lineWidth  = s.lw;
-        ctx.lineCap    = 'round';
-        ctx.setLineDash([22, 28, 38, 32, 15, 40]);
-        ctx.lineDashOffset = this._windT * 45 * s.speed;
-
-        for (let j = 0; j <= 40; j++) {
-          const frac = j / 40;
-          const y    = s.startY + frac * travel;
-          const turbulence = Math.sin(frac * 3 + s.phase + this._windT * s.speed) * s.amp * frac;
-          const x = s.x + turbulence;
+        ctx.lineWidth = s.lw;
+        for (let j = 0; j <= 30; j++) {
+          const f = j / 30, y = s.startY + f * travel;
+          const x = s.x
+            + Math.sin(f*2.1 + s.phase       + t * s.speed * spd      ) * s.amp * f
+            + Math.sin(f*4.3 + s.phase * 1.6 + t * s.speed * spd * 1.5) * s.amp * 0.3 * f;
           j === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
         }
-
-        ctx.strokeStyle = grad;
         ctx.stroke();
-        ctx.setLineDash([]);
-        s.phase -= s.speed * 0.02;
+        s.phase -= s.speed * 0.004 * spd;
       }
-      this._windT += 0.02;
+
+      // 2) Volutes fines — une par louver, réparties sur la largeur, cône ∝ vitesse
+      for (const s of this._windWisps) {
+        const travel = H - s.startY;
+        if (travel <= 0) { s.phase -= s.speed * 0.004 * spd; continue; }
+        const g  = 0.7 + 0.3 * Math.sin(t * 0.35 + s.phase);
+        const sc = s.hueShift ? _hueShift(c.r, c.g, c.b, s.hueShift) : c;
+        const spread = (s.fx - 0.5) * (this._windLW || 200) * 0.16 * spd;
+        ctx.strokeStyle = _vgrad(sc, s.startY / H, s.alpha * 1.25 * g, s.alpha * 0.8 * g);
+        ctx.beginPath();
+        ctx.lineWidth = s.lw;
+        for (let j = 0; j <= 26; j++) {
+          const f = j / 26, y = s.startY + f * travel;
+          const x = s.x + spread * f
+            + Math.sin(f*2.4 + s.phase  + t * s.speed * spd      ) * s.amp * f
+            + Math.sin(f*5.2 + s.phase2 + t * s.speed * spd * 1.7) * s.amp * 0.35 * f;
+          j === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        s.phase -= s.speed * 0.004 * spd;
+      }
+
+      // 3) Particules d'air — naissent sur toute la bouche, advectées, fade sinus
+      const LX = this._windLX || 0, LW = this._windLW || W, topY = this._windTopY || 0;
+      let live = 0;
+      for (const p of this._windParts) {
+        if (p.y > H) {
+          if (live < 10 + spd * 10 && Math.random() < 0.18) {
+            p.x = LX + Math.random() * LW;
+            p.y = topY + 2;
+            p.v = (0.9 + Math.random()) * spd;
+            p.r = 0.7 + Math.random() * 0.9;
+            p.ph = Math.random() * Math.PI * 2;
+            p.a = 0.45 + Math.random() * 0.30;
+          } else continue;
+        }
+        live++;
+        p.y += p.v;
+        p.x += Math.sin(p.y * 0.09 + p.ph + t * 0.8) * 0.35 + ((p.x - LX) / LW - 0.5) * 0.12 * spd;
+        const fa = p.a * Math.sin(Math.PI * Math.min(1, (p.y - topY) / (H - topY || 1))) * gust;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},${fa.toFixed(3)})`;
+        ctx.fill();
+      }
+
+      this._windT += 0.033;
     };
-    draw();
+    this._animFrame = requestAnimationFrame(draw);
   }
 
   disconnectedCallback() { this._cleanup(); }

@@ -20,6 +20,26 @@ const CP_BG      = "#040614";
 const CP_DIM     = "rgba(255,255,255,0.55)";
 
 /* ═══════════════════════════════════════════════════════════════════════════ *
+ *  GLITCH — mascotte chat qui se promène sur le châssis (validé en preview)   *
+ *  3 calques Silverhand : rouge / cyan / vert plasma. Réglages preview.       *
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+const GLITCH = {
+  src:    '/local/cat-walking-white.gif',
+  size:   22,    // px, hauteur du chat (petit/discret)
+  speed:  9,     // s pour traverser le châssis
+  gap:    12,    // s de pause hors-champ entre deux balades (jitter ×0.6–1.4)
+  top:    0,     // px d'ajustement vertical sur l'arête haute
+  prob:   0.12,  // proba de glitch Silverhand par traversée
+  // Silverhand (valeurs validées preview) :
+  sat:    12,    // saturation des teintes
+  op:     0.85,  // opacité des calques colorés
+  amp:    7,     // px de décalage RGB
+  dim:    0.55,  // baisse du calque blanc au pic (révèle la couleur)
+  dur:    1400,  // ms
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════ *
  *  SVG NAS — 8 bays (2 rows × 4 cols)                                        *
  *  LED centers: y=113.5 (top row), y=132.5 (bottom row)                      *
  *               x=82, 158, 234, 310                                          *
@@ -113,6 +133,7 @@ class NeonNasCard extends HTMLElement {
 
   disconnectedCallback() {
     clearInterval(this._confirmTimer);
+    this._stopGlitch();
   }
 
   getCardSize() { return 3; }
@@ -213,6 +234,7 @@ class NeonNasCard extends HTMLElement {
           --nas-uv: var(--rgb-primary-color, 98,0,234);
           --nas-cy: var(--rgb-accent-color, 0,255,249);
           --nas-err-rgb: var(--rgb-error-color, 255,45,107);
+          --gc-sat: ${(c.glitch && c.glitch.sat) || GLITCH.sat};
           ${hdr.color       ? `--nas-hdr-color: ${hdr.color};`         : ''}
           ${hdr.title_size  ? `--nas-hdr-size: ${hdr.title_size};`     : ''}
           ${hdr.title_shadow? `--nas-hdr-shadow: ${hdr.title_shadow};` : ''}
@@ -280,6 +302,27 @@ class NeonNasCard extends HTMLElement {
           filter: drop-shadow(0 0 1px var(--nas-accent));
         }
         svg.nas { width:100%; height:auto; display:block; }
+
+        /* ── GLITCH le chat ── */
+        .glitch-cat {
+          position:absolute; top:0; left:0;
+          pointer-events:none; will-change:transform;
+          image-rendering:pixelated; z-index:5;
+        }
+        .glitch-cat > img { display:block; width:100%; height:100%; position:relative; z-index:2; }
+        .gc-layer { position:absolute; inset:0; mix-blend-mode:screen; opacity:0; z-index:3; }
+        .gc-layer img { width:100%; height:100%; display:block; }
+        .gc-rd { filter: sepia(1) saturate(var(--gc-sat,12)) hue-rotate(-55deg) brightness(1.15); }
+        .gc-cy { filter: sepia(1) saturate(var(--gc-sat,12)) hue-rotate(150deg) brightness(1.1); }
+        .gc-gn { filter: sepia(1) saturate(var(--gc-sat,12)) hue-rotate(75deg)  brightness(1.15); }
+        .gc-scan {
+          position:absolute; inset:0; mix-blend-mode:overlay; opacity:0; z-index:4;
+          background:repeating-linear-gradient(0deg,
+            rgba(255,255,255,.22) 0 1px, transparent 1px 3px);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .glitch-cat { display:none; }
+        }
 
         /* chassis */
         /* Châssis en plastique noir */
@@ -595,7 +638,146 @@ class NeonNasCard extends HTMLElement {
       dot.style.animationDuration = (1.8 + Math.random() * 2.4).toFixed(2) + 's';
     });
 
+    this._startGlitch();
     this._update();
+  }
+
+  /* ── GLITCH le chat : balade intermittente + Silverhand aléatoire ─────────── */
+
+  // Lit un réglage GLITCH depuis la config (glitch.<key>) avec fallback sur les défauts.
+  _gc(key) {
+    const g = (this._config && this._config.glitch) || {};
+    const v = g[key];
+    return (v === undefined || v === null || v === '') ? GLITCH[key] : v;
+  }
+  _gcOn() {
+    const g = (this._config && this._config.glitch) || {};
+    return g.enabled !== false;   // activé par défaut
+  }
+
+  _startGlitch() {
+    this._stopGlitch();                 // repart propre à chaque (re)render
+    if (!this._gcOn()) return;
+    this._gcWrap = this.shadowRoot.querySelector('.nas-wrap');
+    if (!this._gcWrap) return;
+    this._gcCat = null;
+    this._gcTimers = new Set();
+    this._gcRafs = new Set();
+    const t = setTimeout(() => this._spawnWalk(), 800);  // 1ère balade après un court délai
+    this._gcTimers.add(t);
+  }
+
+  _stopGlitch() {
+    if (this._gcTimers) this._gcTimers.forEach(clearTimeout);
+    if (this._gcRafs)   this._gcRafs.forEach(id => cancelAnimationFrame(id));
+    this._gcTimers = new Set();
+    this._gcRafs = new Set();
+    if (this._gcCat) { this._gcCat.remove(); this._gcCat = null; }
+  }
+
+  _scheduleWalk() {
+    if (!this._gcTimers) return;
+    const gap = this._gc('gap') * 1000 * (0.6 + Math.random() * 0.8);
+    const t = setTimeout(() => this._spawnWalk(), gap);
+    this._gcTimers.add(t);
+  }
+
+  _spawnWalk() {
+    const wrap = this._gcWrap;
+    if (!wrap || !wrap.isConnected) return;
+    const svg = wrap.querySelector('svg.nas');
+    if (!svg) return;
+
+    const w = wrap.clientWidth;
+    const svgH = svg.clientHeight;
+    const size = +this._gc('size');
+    const src  = this._gc('src');
+    const left  = w * (16 / 386);    // entre un peu avant le rack
+    const right = w * (360 / 386);   // sort par la droite
+    const yTop  = svgH * ((89 - 82) / 72);  // arête haute du châssis (viewBox 82..154)
+    const topPx = yTop - size + (+this._gc('top'));
+
+    const dir = Math.random() < 0.5 ? 1 : -1;   // 1 = gauche→droite
+    const startX = dir === 1 ? left - size : right;
+    const endX   = dir === 1 ? right       : left - size;
+
+    const cat = document.createElement('div');
+    cat.className = 'glitch-cat';
+    cat.style.width = size + 'px';
+    cat.style.height = size + 'px';
+    cat.style.transform = `translate(${startX}px,${topPx}px) scaleX(${dir})`;
+    cat.innerHTML = `
+      <img src="${src}" alt="">
+      <div class="gc-layer gc-rd"><img src="${src}" alt=""></div>
+      <div class="gc-layer gc-cy"><img src="${src}" alt=""></div>
+      <div class="gc-layer gc-gn"><img src="${src}" alt=""></div>
+      <div class="gc-scan"></div>`;
+    wrap.appendChild(cat);
+    this._gcCat = cat;
+
+    const dur = (+this._gc('speed')) * 1000;
+    const t0 = performance.now();
+    const willGlitch = Math.random() < (+this._gc('prob'));
+    const glitchAt = 0.35 + Math.random() * 0.35;
+    let glitched = false;
+
+    const frame = (now) => {
+      if (!cat.isConnected) return;
+      const p = (now - t0) / dur;
+      if (p >= 1) {
+        cat.remove();
+        if (this._gcCat === cat) this._gcCat = null;
+        this._scheduleWalk();
+        return;
+      }
+      const x = startX + (endX - startX) * p;
+      const bob = Math.sin(p * Math.PI * 2 * 8) * 0.8;   // démarche
+      cat.style.transform = `translate(${x}px,${topPx + bob}px) scaleX(${dir})`;
+      if (willGlitch && !glitched && p >= glitchAt) { glitched = true; this._doSilverhand(cat); }
+      const id = requestAnimationFrame(frame);
+      this._gcRafs.add(id);
+    };
+    const id = requestAnimationFrame(frame);
+    this._gcRafs.add(id);
+  }
+
+  _doSilverhand(cat) {
+    const main = cat.querySelector(':scope > img');
+    const rd = cat.querySelector('.gc-rd'), cy = cat.querySelector('.gc-cy');
+    const gn = cat.querySelector('.gc-gn'), scan = cat.querySelector('.gc-scan');
+    if (!main) return;
+    const amp = +this._gc('amp'), op = +this._gc('op'), dim = +this._gc('dim');
+    const durMs = +this._gc('dur');
+    const t0 = performance.now();
+    const s = () => (Math.random() < 0.5 ? -1 : 1);
+
+    const step = (now) => {
+      if (!cat.isConnected) return;
+      const p = (now - t0) / durMs;
+      if (p >= 1) {
+        rd.style.opacity = cy.style.opacity = gn.style.opacity = scan.style.opacity = 0;
+        main.style.clipPath = ''; main.style.transform = ''; main.style.opacity = 1;
+        return;
+      }
+      const a = amp * (0.4 + Math.random() * 0.6);
+      rd.style.transform = `translate(${s() * a}px,${s() * a * 0.3}px)`;
+      cy.style.transform = `translate(${s() * a}px,${s() * a * 0.3}px)`;
+      gn.style.transform = `translate(${s() * a * 0.6}px,${s() * a * 0.4}px)`;
+      rd.style.opacity = cy.style.opacity = op * (0.7 + Math.random() * 0.3);
+      gn.style.opacity = op * (0.5 + Math.random() * 0.4);
+      scan.style.opacity = 0.7;
+      scan.style.backgroundPositionY = (Math.random() * 6) + 'px';
+      main.style.opacity = 1 - dim * (0.6 + Math.random() * 0.4);
+      if (Math.random() < 0.45) {
+        const u = Math.floor(Math.random() * 60), b = u + Math.floor(Math.random() * 30);
+        main.style.clipPath = `inset(${u}% 0 ${100 - b}% 0)`;
+      } else main.style.clipPath = '';
+      main.style.transform = `translateX(${s() * amp * 0.3}px)`;
+      const id = requestAnimationFrame(step);
+      this._gcRafs.add(id);
+    };
+    const id = requestAnimationFrame(step);
+    this._gcRafs.add(id);
   }
 
   _confirm(action) {
@@ -768,7 +950,9 @@ class NeonNasCardEditor extends HTMLElement {
       const [obj, subkey] = parts;
       if (!this._config[obj] || typeof this._config[obj] !== 'object') this._config[obj] = {};
       if (isChecked !== undefined) {
-        if (isChecked) this._config[obj][subkey] = true; else delete this._config[obj][subkey];
+        // 'enabled' doit pouvoir stocker false explicitement (sinon retombe sur le défaut activé)
+        if (subkey === 'enabled') this._config[obj][subkey] = isChecked;
+        else if (isChecked) this._config[obj][subkey] = true; else delete this._config[obj][subkey];
       } else if (val === '' || val === null || val === undefined) {
         delete this._config[obj][subkey];
       } else {
@@ -860,8 +1044,16 @@ class NeonNasCardEditor extends HTMLElement {
     </div>`;
   }
 
-  _toggle(label, key, activeColor) {
-    const on = !!this._config[key];
+  _num(label, key, val, ph, min, max, step) {
+    const v = (val === undefined || val === null) ? '' : val;
+    return `<div class="field"><label>${label}</label>
+      <input type="number" data-key="${key}" value="${v}"
+        min="${min}" max="${max}" step="${step}" placeholder="${ph}"/>
+    </div>`;
+  }
+
+  _toggle(label, key, activeColor, stateOverride) {
+    const on = (stateOverride !== undefined) ? stateOverride : !!this._config[key];
     return `<div class="field tog-row">
       <label>${label}</label>
       <label style="position:relative;display:inline-block;width:42px;height:24px;flex-shrink:0;">
@@ -889,6 +1081,7 @@ class NeonNasCardEditor extends HTMLElement {
 
   _render() {
     const c = this._config || {};
+    const g = (c.glitch && typeof c.glitch === 'object') ? c.glitch : {};
     // ensure card_mod_bg defaults to true in UI state
     if (c.card_mod_bg === undefined) c.card_mod_bg = true;
 
@@ -974,6 +1167,35 @@ class NeonNasCardEditor extends HTMLElement {
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="group">
+          <div class="group-title">🐱 GLITCH le chat</div>
+          ${this._toggle('Activer la balade', 'glitch.enabled', CP_OK, (g.enabled !== false))}
+          <div class="field"><label>Image (GIF)</label>
+            <input type="text" data-key="glitch.src" value="${g.src || ''}" placeholder="${GLITCH.src}"/>
+          </div>
+          <div class="row2">
+            ${this._num('Taille (px)', 'glitch.size', g.size, GLITCH.size, 8, 80, 1)}
+            ${this._num('Hauteur / arête (px)', 'glitch.top', g.top, GLITCH.top, -30, 40, 1)}
+          </div>
+          <div class="row2">
+            ${this._num('Vitesse (s / traversée)', 'glitch.speed', g.speed, GLITCH.speed, 2, 30, 0.5)}
+            ${this._num('Pause entre balades (s)', 'glitch.gap', g.gap, GLITCH.gap, 0, 120, 1)}
+          </div>
+          <div class="field"><label>Proba Silverhand (0–1) <span style="color:var(--secondary-text-color)">— défaut ${GLITCH.prob}</span></label>
+            <input type="number" data-key="glitch.prob" value="${g.prob ?? ''}" min="0" max="1" step="0.01" placeholder="${GLITCH.prob}"/>
+          </div>
+          <div class="group-title" style="margin-top:10px">Effet Silverhand</div>
+          <div class="row2">
+            ${this._num('Saturation', 'glitch.sat', g.sat, GLITCH.sat, 1, 30, 1)}
+            ${this._num('Opacité calques (0–1)', 'glitch.op', g.op, GLITCH.op, 0, 1, 0.05)}
+          </div>
+          <div class="row2">
+            ${this._num('Décalage RGB (px)', 'glitch.amp', g.amp, GLITCH.amp, 1, 20, 1)}
+            ${this._num('Baisse du blanc (0–1)', 'glitch.dim', g.dim, GLITCH.dim, 0, 1, 0.05)}
+          </div>
+          ${this._num('Durée du glitch (ms)', 'glitch.dur', g.dur, GLITCH.dur, 300, 4000, 100)}
         </div>
       </div>
     `;

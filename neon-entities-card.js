@@ -2,7 +2,14 @@
  * Neon Entities Card — Neo Tokyo UV
  * Multi-entity: switch, binary_sensor, cover, sensor, number, climate + dividers
  * Header & footer fully configurable
- * @version 1.2.1
+ * Clic sur la valeur d'une entité → ouvre le more-info natif HA
+ * FX opt-in : pulse du liseré actif, flash de la valeur au changement
+ * meta-label (type d'entité) masquable → nom plus lisible sur petit écran
+ * Tailles en cqi (container-query) calées sur la card → OK iPad paysage / colonnes
+ * Éditeur : re-render intelligent (UI↔YAML synchro, focus préservé en frappe)
+ * value_glow : glow « alarm-like » sur valeurs + statuts (actif par défaut)
+ * Boutons cover agrandis (34px, SVG 16px) → cible tactile confortable iPad
+ * @version 1.6.1
  */
 
 console.log('neon-entities-card.js loaded!');
@@ -96,6 +103,10 @@ class NeonEntitiesCard extends HTMLElement {
       color_accent:   config.color_accent   || null,
       name_color:     config.name_color     || null,
       value_color:    config.value_color    || null,
+      pulse_active:    config.pulse_active    ?? true,
+      flash_on_change: config.flash_on_change ?? false,
+      show_label:      config.show_label      ?? false,
+      value_glow:      config.value_glow      ?? true,
     };
     this._build();
   }
@@ -141,7 +152,6 @@ class NeonEntitiesCard extends HTMLElement {
     const nameColorOn  = cfg.name_color  || 'rgba(200,170,255,0.75)';
     const nameColorOff = cfg.name_color  ? cfg.name_color.replace(/[\d.]+\)$/, v => (parseFloat(v)*0.3).toFixed(2)+')') : 'rgba(180,130,255,0.55)';
     const valueColor   = cfg.value_color || 'rgba(var(--nec-cy), 0.75)';
-    const titleSize   = hdr.title_size || 'clamp(7px, 2vw, 9px)';
     const titleFont   = hdr.font       ? `'${hdr.font}', ` : "'Orbitron', ";
 
     const cardBg = cfg.use_theme_card ? `
@@ -198,7 +208,10 @@ class NeonEntitiesCard extends HTMLElement {
         z-index: 0;
       }` : ''}
 
-      .inner { position: relative; z-index: 1; }
+      /* Container global : toutes les tailles cqi du corps se calent sur la
+         largeur de la CARD (et non du viewport) → correct en iPad paysage,
+         colonnes étroites et sections. Le .hdr garde son propre container. */
+      .inner { position: relative; z-index: 1; container-type: inline-size; }
 
       /* ── Header ── */
       .hdr {
@@ -231,9 +244,12 @@ class NeonEntitiesCard extends HTMLElement {
       /* ── Dividers ── */
       .main-div {
         height: 1px;
-        background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--nec-p) 55%, transparent), color-mix(in srgb, var(--nec-a) 25%, transparent), transparent);
+        background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--nec-p) 55%, transparent), color-mix(in srgb, var(--nec-a) 45%, transparent), color-mix(in srgb, var(--nec-p) 55%, transparent), transparent);
+        background-size: 200% 100%;
+        animation: nec-div-flow 7s linear infinite;
         margin: 0 14px;
       }
+      @media (prefers-reduced-motion: reduce) { .main-div { animation: none; } }
       .sect-div {
         height: 1px;
         background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--nec-p) 25%, transparent), color-mix(in srgb, var(--nec-a) 10%, transparent), transparent);
@@ -277,6 +293,37 @@ class NeonEntitiesCard extends HTMLElement {
       border-left: 1px solid #310062;
     }
       .row:hover { background: rgba(var(--nec-uv),0.05) !important; }
+      @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+        .row:hover::after {
+          content: '';
+          position: absolute; top: 0; bottom: 0; width: 60px;
+          background: linear-gradient(100deg, transparent, rgba(var(--nec-cy),0.07), transparent);
+          animation: nec-row-sweep .7s ease-out forwards;
+          pointer-events: none;
+        }
+      }
+      @keyframes nec-row-sweep { from { left: -70px; } to { left: 110%; } }
+      @keyframes nec-div-flow  { from { background-position: 0% 0; } to { background-position: 200% 0; } }
+
+      /* ── FX (1) Pulse du liseré actif — opt-in ── */
+      ${cfg.pulse_active ? `
+      .row.on::before { animation: nec-edge-pulse 2.6s ease-in-out infinite; }
+      @keyframes nec-edge-pulse {
+        0%,100% { opacity: .72; box-shadow: 0 0 8px  #7B2FBE, inset -1px 0 2px #B9F2FF; }
+        50%     { opacity: 1;   box-shadow: 0 0 16px #9D00FF, inset -1px 0 3px #B9F2FF; }
+      }
+      @media (prefers-reduced-motion: reduce) { .row.on::before { animation: none; } }
+      ` : ''}
+
+      /* ── FX (3) Flash de la valeur au changement — opt-in (classe posée en JS) ── */
+      .sensor-val.nec-flash, .num-val.nec-flash { animation: nec-val-flash .55s ease-out; }
+      @keyframes nec-val-flash {
+        0%   { background: rgba(var(--nec-cy),0.55); color: #eafffe;
+               box-shadow: 0 0 14px rgba(var(--nec-cy),0.7); }
+        100% { background: rgba(var(--nec-cy),0.06); color: ${valueColor};
+               box-shadow: none; }
+      }
+      @media (prefers-reduced-motion: reduce) { .nec-flash { animation: none; } }
 
       /* ── Icon ── */
       .ico {
@@ -293,17 +340,23 @@ class NeonEntitiesCard extends HTMLElement {
       /* ── Meta ── */
       .meta { flex: 1; min-width: 0; }
       .meta-label {
-        font-size: clamp(6px, 1.5vw, 7px);
+        font-size: clamp(6px, 1.5cqi, 7px);
         letter-spacing: 1.8px;
         margin-bottom: 1px;
         text-transform: uppercase;
+        ${cfg.show_label ? '' : 'display: none;'}
       }
       .row.on  .meta-label { color: rgba(180,130,255,0.7); }
       .row.off .meta-label { color: rgba(var(--nec-uv),0.4); }
       .meta-name {
-        font-size: clamp(9px, 2.5vw, 11px);
+        font-size: clamp(9px, 2.5cqi, 11px);
+        letter-spacing: 0.8px;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
+      ${cfg.show_label ? '' : `
+      /* Label masqué → le nom prend la place libérée (plus lisible sur petit écran) */
+      .meta-name { font-size: clamp(10px, 2.8cqi, 12.5px); line-height: 1.15; }
+      `}
       .row.on  .meta-name { color: ${nameColorOn}; }
       .row.off .meta-name { color: ${nameColorOff}; }
       .state-label {
@@ -321,21 +374,42 @@ class NeonEntitiesCard extends HTMLElement {
         transition: all .3s;
         -webkit-tap-highlight-color: transparent;
       }
-      .tog.on  { background: color-mix(in srgb, var(--nec-p) 32%, transparent); border: 1px solid color-mix(in srgb, var(--nec-p) 85%, transparent); box-shadow: 0 0 8px color-mix(in srgb, var(--nec-p) 40%, transparent); }
+      .tog.on {
+        background: linear-gradient(90deg,
+          color-mix(in srgb, var(--nec-p) 55%, transparent),
+          color-mix(in srgb, var(--nec-a) 30%, transparent),
+          rgba(157,0,255,0.55),
+          color-mix(in srgb, var(--nec-p) 55%, transparent));
+        background-size: 300% 100%;
+        animation: nec-plasma 3.5s linear infinite;
+        border: 1px solid color-mix(in srgb, var(--nec-p) 85%, transparent);
+        box-shadow: 0 0 8px color-mix(in srgb, var(--nec-p) 40%, transparent);
+      }
+      @keyframes nec-plasma { from { background-position: 0% 0; } to { background-position: 300% 0; } }
+      @media (prefers-reduced-motion: reduce) { .tog.on { animation: none; } }
       .tog.off { background: rgba(var(--nec-uv),0.10); border: 1px solid rgba(var(--nec-uv),0.45); }
       .tog-thumb {
         position: absolute; top: 2px;
         width: 16px; height: 16px; border-radius: 50%;
         transition: all .3s;
+        box-sizing: border-box;
       }
       .tog.on  .tog-thumb { right: 2px; background: linear-gradient(135deg, var(--nec-a), var(--nec-p)); box-shadow: 0 0 8px color-mix(in srgb, var(--nec-p) 90%, transparent); }
-      .tog.off .tog-thumb { left: 2px; background: rgba(130,60,255,0.50); }
+      .tog.on  .tog-thumb::after {
+        content: '';
+        position: absolute; inset: 5px; border-radius: 50%;
+        background: #fff; box-shadow: 0 0 6px #d9fffe; opacity: .9;
+      }
+      .tog.off .tog-thumb { left: 2px; background: transparent; border: 2px solid rgba(130,60,255,0.50); }
       .tog.on  .tog-thumb { transform: translateX(0); }
       .tog.active { transform: scale(0.92); filter: brightness(1.25); }
 
+      /* ── Status fusionné (status_entity) ── */
+      .status-slot { display: flex; align-items: center; flex-shrink: 0; }
+
       /* ── Binary sensor badge ── */
       .badge {
-        font-size: clamp(6.5px, 1.8vw, 8px);
+        font-size: clamp(6.5px, 1.8cqi, 8px);
         padding: 2px 7px; border-radius: 4px;
         letter-spacing: .8px; text-transform: uppercase;
         flex-shrink: 0; white-space: nowrap;
@@ -344,12 +418,16 @@ class NeonEntitiesCard extends HTMLElement {
       .badge.inactive { background: rgba(var(--nec-cy),0.07); color: rgba(var(--nec-cy),0.55);   border: 1px solid rgba(var(--nec-cy),0.20); }
 
       /* ── Cover ── */
-      .cover-wrap { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
-      .pos-pct  { font-size: clamp(8px,2vw,10px); color: rgba(180,130,255,0.65); min-width: 26px; text-align: right; }
-      .pos-bar  { width: 36px; height: 3px; border-radius: 2px; background: rgba(var(--nec-uv),0.15); flex-shrink: 0; }
-      .pos-fill { height: 100%; background: linear-gradient(90deg, var(--nec-p), var(--nec-a)); border-radius: 2px; transition: width .5s; }
+      .cover-wrap { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+      .pos-pct  { font-size: clamp(8px,2cqi,10px); color: rgba(180,130,255,0.65); min-width: 26px; text-align: right; }
+      .pos-bar  { width: 44px; height: 5px; display: flex; gap: 2px; flex-shrink: 0; }
+      .pos-seg  { flex: 1; height: 100%; border-radius: 1px; background: rgba(var(--nec-uv),0.15); transition: background .35s, box-shadow .35s; }
+      .pos-seg.lit {
+        background: linear-gradient(180deg, var(--nec-a), var(--nec-p));
+        box-shadow: 0 0 4px rgba(var(--nec-cy),0.5);
+      }
       .cbtn {
-        width: 22px; height: 22px; border-radius: 5px;
+        width: 34px; height: 34px; border-radius: 7px;
         display: flex; align-items: center; justify-content: center;
         border: 1px solid rgba(var(--nec-uv),0.35);
         background: rgba(var(--nec-uv),0.10);
@@ -358,28 +436,76 @@ class NeonEntitiesCard extends HTMLElement {
       }
       .cbtn:hover  { background: rgba(var(--nec-uv),0.22); box-shadow: 0 0 8px rgba(var(--nec-uv),0.30); }
       .cbtn:active { background: rgba(var(--nec-uv),0.36); }
-      .cbtn svg { width: 10px; height: 10px; stroke: rgba(180,130,255,0.80); filter: drop-shadow(0 0 2px rgba(180,130,255,0.6)); }
+      .cbtn svg { width: 16px; height: 16px; stroke: rgba(180,130,255,0.80); filter: drop-shadow(0 0 2px rgba(180,130,255,0.6)); }
       .row.off .cbtn { border-color: rgba(var(--nec-uv),0.18); background: rgba(var(--nec-uv),0.34); }
       .row.off .cbtn svg { stroke: rgba(130,60,255,0.30); filter: none; }
 
       /* ── Sensor value ── */
       .sensor-val {
-        font-size: clamp(8px, 2vw, 10px);
+        font-size: clamp(8px, 2cqi, 10px);
         color: ${valueColor};
         padding: 2px 7px; border-radius: 4px;
         background: rgba(var(--nec-cy),0.06);
         border: 1px solid rgba(var(--nec-cy),0.18);
         flex-shrink: 0;
-        letter-spacing: .5px;
+        letter-spacing: 0.8px;
         max-width: 110px;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       }
 
+      /* ── More-info (clic sur la valeur) ── */
+      .clickable {
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+        transition: filter .15s, text-shadow .15s;
+      }
+      .clickable:hover {
+        filter: brightness(1.25);
+        text-shadow: 0 0 6px color-mix(in srgb, currentColor, transparent 30%);
+      }
+      .clickable:active { filter: brightness(0.9); }
+
+      /* ── Glow « alarm-like » — opt-in (value_glow) ──
+         Importé de la sonos-alarm-card : valeur + statuts rayonnent. */
+      ${cfg.value_glow ? `
+      /* valeur sensor / number / climate / cover% */
+      .sensor-val, .num-val, .pos-pct {
+        color: #fff;
+        text-shadow: 0 0 12px color-mix(in srgb, var(--nec-p) 80%, transparent),
+                     0 0 24px color-mix(in srgb, var(--nec-a) 45%, transparent);
+      }
+      .sensor-val { background: transparent; border-color: transparent; }
+      /* statut : badge binary_sensor */
+      .badge.inactive {
+        text-shadow: 0 0 8px rgba(var(--nec-cy),0.7), 0 0 16px rgba(var(--nec-cy),0.3);
+        box-shadow: 0 0 10px rgba(var(--nec-cy),0.22);
+      }
+      .badge.active {
+        text-shadow: 0 0 8px rgba(255,80,60,0.9), 0 0 16px rgba(255,40,40,0.4);
+        box-shadow: 0 0 12px rgba(255,60,60,0.32);
+      }
+      /* statut : état texte cover (secondary_info: state) */
+      .state-label {
+        color: #bfeeff;
+        text-shadow: 0 0 8px color-mix(in srgb, var(--nec-p) 70%, transparent),
+                     0 0 16px color-mix(in srgb, var(--nec-a) 30%, transparent);
+      }
+      /* statut : toggle ON rayonne plus fort */
+      .tog.on {
+        box-shadow: 0 0 10px color-mix(in srgb, var(--nec-p) 70%, transparent),
+                    0 0 20px color-mix(in srgb, var(--nec-a) 35%, transparent);
+      }
+      .tog.on .tog-thumb {
+        box-shadow: 0 0 10px color-mix(in srgb, var(--nec-p) 95%, transparent),
+                    0 0 18px color-mix(in srgb, var(--nec-a) 50%, transparent);
+      }
+      ` : ''}
+
       /* ── Number / Climate ── */
       .num-wrap { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
       .num-val {
-        font-size: clamp(9px, 2.5vw, 11px); font-weight: 700;
-        min-width: 36px; text-align: center; letter-spacing: .5px;
+        font-size: clamp(9px, 2.5cqi, 11px); font-weight: 700;
+        min-width: 36px; text-align: center; letter-spacing: 0.8px;
       }
       .num-val.def  { color: rgba(180,130,255,0.85); }
       .num-val.temp { color: rgba(255,180,80,0.85); }
@@ -406,7 +532,7 @@ class NeonEntitiesCard extends HTMLElement {
         margin-top: 2px;
       }
       .footer-text {
-        font-size: clamp(6px, 1.5vw, 7px);
+        font-size: clamp(6px, 1.5cqi, 7px);
         color: rgba(180,130,255,0.28);
         letter-spacing: 1px;
       }
@@ -485,6 +611,16 @@ class NeonEntitiesCard extends HTMLElement {
       const name  = item.name || item.entity || '';
       const icon  = item.icon || DOMAIN_ICONS[domain] || 'mdi:help-circle-outline';
 
+      // status_entity : fusionne une 2e entité (capteur associé) sur la même
+      // ligne — badge si binary_sensor, chip valeur sinon. Ex : switch porte
+      // de garage + binary_sensor FERMÉ/OUVERT.
+      const statusDom = item.status_entity ? item.status_entity.split('.')[0] : '';
+      const statusSlot = item.status_entity
+        ? `<div class="status-slot">${statusDom === 'binary_sensor'
+            ? '<div class="badge inactive"></div>'
+            : '<span class="sensor-val clickable status-val"></span>'}</div>`
+        : '';
+
       row.innerHTML = `
         <div class="ico"><ha-icon icon="${icon}"></ha-icon></div>
         <div class="meta">
@@ -492,8 +628,16 @@ class NeonEntitiesCard extends HTMLElement {
           <div class="meta-name">${name}</div>
           ${item.secondary_info === 'state' ? `<div class="state-label"></div>` : ''}
         </div>
+        ${statusSlot}
         <div class="ctrl"></div>
       `;
+
+      if (item.status_entity) {
+        const sv = row.querySelector('.status-val');
+        if (sv) sv.addEventListener('click', e => { e.stopPropagation(); this._moreInfo(item.status_entity); }, { signal: sig });
+        const sb = row.querySelector('.status-slot .badge');
+        if (sb) { sb.classList.add('clickable'); sb.addEventListener('click', e => { e.stopPropagation(); this._moreInfo(item.status_entity); }, { signal: sig }); }
+      }
 
       this._buildControl(row, item, domain, sig);
       list.appendChild(row);
@@ -557,8 +701,9 @@ class NeonEntitiesCard extends HTMLElement {
 
       case 'binary_sensor': {
         const b = document.createElement('span');
-        b.className = 'badge inactive';
+        b.className = 'badge inactive clickable';
         b.textContent = '—';
+        b.addEventListener('click', e => { e.stopPropagation(); this._moreInfo(item.entity); }, opts);
         ctrl.appendChild(b);
         break;
       }
@@ -567,8 +712,8 @@ class NeonEntitiesCard extends HTMLElement {
         const wrap = document.createElement('div');
         wrap.className = 'cover-wrap';
         wrap.innerHTML = `
-          <span class="pos-pct">—</span>
-          <div class="pos-bar"><div class="pos-fill" style="width:0%"></div></div>
+          <span class="pos-pct clickable">—</span>
+          <div class="pos-bar clickable"><div class="pos-seg"></div><div class="pos-seg"></div><div class="pos-seg"></div><div class="pos-seg"></div><div class="pos-seg"></div></div>
           <div class="cbtn cbtn-open">${SVG.up}</div>
           <div class="cbtn cbtn-stop">${SVG.stop}</div>
           <div class="cbtn cbtn-close">${SVG.down}</div>
@@ -576,13 +721,16 @@ class NeonEntitiesCard extends HTMLElement {
         wrap.querySelector('.cbtn-open' ).addEventListener('click', e => { e.stopPropagation(); this._svc('cover', 'open_cover',  item.entity); }, opts);
         wrap.querySelector('.cbtn-stop' ).addEventListener('click', e => { e.stopPropagation(); this._svc('cover', 'stop_cover',  item.entity); }, opts);
         wrap.querySelector('.cbtn-close').addEventListener('click', e => { e.stopPropagation(); this._svc('cover', 'close_cover', item.entity); }, opts);
+        wrap.querySelector('.pos-pct').addEventListener('click', e => { e.stopPropagation(); this._moreInfo(item.entity); }, opts);
+        wrap.querySelector('.pos-bar').addEventListener('click', e => { e.stopPropagation(); this._moreInfo(item.entity); }, opts);
         ctrl.appendChild(wrap);
         break;
       }
 
       case 'sensor': {
         const v = document.createElement('span');
-        v.className = 'sensor-val'; v.textContent = '—';
+        v.className = 'sensor-val clickable'; v.textContent = '—';
+        v.addEventListener('click', e => { e.stopPropagation(); this._moreInfo(item.entity); }, opts);
         ctrl.appendChild(v);
         break;
       }
@@ -593,11 +741,12 @@ class NeonEntitiesCard extends HTMLElement {
         wrap.className = 'num-wrap';
         wrap.innerHTML = `
           <div class="nbtn nbtn-dec">−</div>
-          <span class="num-val def">—</span>
+          <span class="num-val def clickable">—</span>
           <div class="nbtn nbtn-inc">+</div>
         `;
         wrap.querySelector('.nbtn-dec').addEventListener('click', e => { e.stopPropagation(); this._stepNumber(item.entity, -1); }, opts);
         wrap.querySelector('.nbtn-inc').addEventListener('click', e => { e.stopPropagation(); this._stepNumber(item.entity, +1); }, opts);
+        wrap.querySelector('.num-val').addEventListener('click', e => { e.stopPropagation(); this._moreInfo(item.entity); }, opts);
         ctrl.appendChild(wrap);
         break;
       }
@@ -607,11 +756,12 @@ class NeonEntitiesCard extends HTMLElement {
         wrap.className = 'num-wrap';
         wrap.innerHTML = `
           <div class="nbtn nbtn-dec">−</div>
-          <span class="num-val temp">—</span>
+          <span class="num-val temp clickable">—</span>
           <div class="nbtn nbtn-inc">+</div>
         `;
         wrap.querySelector('.nbtn-dec').addEventListener('click', e => { e.stopPropagation(); this._stepClimate(item.entity, -1); }, opts);
         wrap.querySelector('.nbtn-inc').addEventListener('click', e => { e.stopPropagation(); this._stepClimate(item.entity, +1); }, opts);
+        wrap.querySelector('.num-val').addEventListener('click', e => { e.stopPropagation(); this._moreInfo(item.entity); }, opts);
         ctrl.appendChild(wrap);
         break;
       }
@@ -619,7 +769,8 @@ class NeonEntitiesCard extends HTMLElement {
       default: {
         // Fallback: afficher state brut
         const v = document.createElement('span');
-        v.className = 'sensor-val'; v.textContent = '—';
+        v.className = 'sensor-val clickable'; v.textContent = '—';
+        v.addEventListener('click', e => { e.stopPropagation(); this._moreInfo(item.entity); }, opts);
         ctrl.appendChild(v);
         break;
       }
@@ -661,6 +812,31 @@ class NeonEntitiesCard extends HTMLElement {
       // secondary_info state label
       const sl = row.querySelector('.state-label');
       if (sl) sl.textContent = stateLabel(st.state);
+
+      // status_entity fusionné sur la ligne
+      if (item.status_entity) {
+        const sst = this._hass.states[item.status_entity];
+        const slot = row.querySelector('.status-slot');
+        if (slot && sst) {
+          const sdom = item.status_entity.split('.')[0];
+          if (sdom === 'binary_sensor') {
+            const sb = slot.querySelector('.badge');
+            if (sb) {
+              const son = sst.state === 'on';
+              sb.className = 'badge clickable ' + (son ? 'active' : 'inactive');
+              sb.textContent = binaryLabel(sst.attributes.device_class || '', son);
+            }
+          } else {
+            const sv = slot.querySelector('.status-val');
+            if (sv) {
+              const unit = sst.attributes.unit_of_measurement || '';
+              const raw  = parseFloat(sst.state);
+              const disp = isNaN(raw) ? stateLabel(sst.state) : raw.toFixed(Math.min(item.status_decimal_places ?? 1, 6));
+              this._setVal(sv, disp + (unit ? '\u202F' + unit : ''));
+            }
+          }
+        }
+      }
 
       // icone: config > attribut HA > device_class > domaine
       if (!item.icon) {
@@ -733,7 +909,7 @@ class NeonEntitiesCard extends HTMLElement {
         break;
       }
       case 'binary_sensor': {
-        const b = row.querySelector('.badge');
+        const b = row.querySelector('.ctrl .badge');
         if (!b) return;
         const on = st.state === 'on';
         b.className   = 'badge ' + (on ? 'active' : 'inactive');
@@ -754,16 +930,12 @@ class NeonEntitiesCard extends HTMLElement {
       }
       case 'cover': {
         const pct  = row.querySelector('.pos-pct');
-        const fill = row.querySelector('.pos-fill');
-        if (!pct || !fill) return;
+        const segs = row.querySelectorAll('.pos-seg');
+        if (!pct || !segs.length) return;
         const pos = st.attributes.current_position ?? null;
-        if (pos !== null) {
-          pct.textContent  = pos + '%';
-          fill.style.width = pos + '%';
-        } else {
-          pct.textContent  = stateLabel(st.state).substring(0, 6);
-          fill.style.width = '0%';
-        }
+        const lit = pos !== null ? Math.round(pos / 100 * segs.length) : 0;
+        segs.forEach((sg, k) => sg.classList.toggle('lit', k < lit));
+        pct.textContent = pos !== null ? pos + '%' : stateLabel(st.state).substring(0, 6);
         break;
       }
       case 'sensor': {
@@ -772,7 +944,7 @@ class NeonEntitiesCard extends HTMLElement {
         const unit = st.attributes.unit_of_measurement || '';
         const raw  = parseFloat(st.state);
         const display = isNaN(raw) ? st.state : raw.toFixed(Math.min(item.decimal_places ?? 1, 6));
-        v.textContent = display + (unit ? '\u202F' + unit : '');
+        this._setVal(v, display + (unit ? '\u202F' + unit : ''));
         break;
       }
       case 'number':
@@ -784,7 +956,7 @@ class NeonEntitiesCard extends HTMLElement {
         const step = parseFloat(st.attributes.step) || 1;
         // display with same decimals as step
         const dec  = (step % 1 !== 0) ? String(step).split('.')[1].length : 0;
-        v.textContent = (isNaN(raw) ? '—' : raw.toFixed(dec)) + (unit ? '\u202F' + unit : '');
+        this._setVal(v, (isNaN(raw) ? '—' : raw.toFixed(dec)) + (unit ? '\u202F' + unit : ''));
         break;
       }
       case 'climate': {
@@ -794,14 +966,14 @@ class NeonEntitiesCard extends HTMLElement {
         const unit  = st.attributes.temperature_unit || '°';
         const step  = parseFloat(st.attributes.target_temp_step) || 1;
         const dec   = (step % 1 !== 0) ? String(step).split('.')[1].length : 0;
-        v.textContent = setpt != null ? parseFloat(setpt).toFixed(dec) + unit : '—';
+        this._setVal(v, setpt != null ? parseFloat(setpt).toFixed(dec) + unit : '—');
         break;
       }
       default: {
         const v = row.querySelector('.sensor-val');
         if (!v) return;
         const unit = st.attributes.unit_of_measurement || '';
-        v.textContent = st.state + (unit ? '\u202F' + unit : '');
+        this._setVal(v, st.state + (unit ? '\u202F' + unit : ''));
         break;
       }
     }
@@ -812,6 +984,29 @@ class NeonEntitiesCard extends HTMLElement {
   _svc(domain, service, entityId) {
     if (!this._hass || !entityId) return;
     this._hass.callService(domain, service, { entity_id: entityId });
+  }
+
+  // Ouvre la boîte de dialogue more-info native de HA pour l'entité donnée.
+  _moreInfo(entityId) {
+    if (!entityId) return;
+    this.dispatchEvent(new CustomEvent('hass-more-info', {
+      detail: { entityId },
+      bubbles: true, composed: true,
+    }));
+  }
+
+  // Met à jour le texte d'un élément valeur ; flash néon si la valeur change
+  // réellement (et si flash_on_change est activé). Ignore le 1er rendu (—).
+  _setVal(el, text) {
+    if (!el) return;
+    const prev = el.textContent;
+    if (prev === text) return;
+    el.textContent = text;
+    if (this._config.flash_on_change && prev && prev !== '—') {
+      el.classList.remove('nec-flash');
+      void el.offsetWidth;            // reflow → relance l'animation
+      el.classList.add('nec-flash');
+    }
   }
 
   _stepNumber(entityId, dir) {
@@ -877,6 +1072,9 @@ class NeonEntitiesCard extends HTMLElement {
           if (dec) dec.addEventListener('click', e => { e.stopPropagation(); this._stepClimate(item.entity, -1); }, opts);
           if (inc) inc.addEventListener('click', e => { e.stopPropagation(); this._stepClimate(item.entity, +1); }, opts);
         }
+        // Re-attache le more-info sur les valeurs cliquables (sensor, badge, num-val, cover position…)
+        row.querySelectorAll('.clickable').forEach(el =>
+          el.addEventListener('click', e => { e.stopPropagation(); this._moreInfo(item.entity); }, opts));
       });
     }
     if (this._hass) this._update();
@@ -885,11 +1083,52 @@ class NeonEntitiesCard extends HTMLElement {
 
 // ─── Editor ───────────────────────────────────────────────────────────────────
 class NeonEntitiesCardEditor extends HTMLElement {
-  constructor() { super(); this._config = {}; this._hass = null; this._built = false; }
+  constructor() {
+    super();
+    this._config = {};
+    this._hass = null;
+    this._built = false;
+    this._lastEmitted = null;   // hash de la dernière config émise par l'éditeur (écho)
+    this._lastSeen    = null;   // hash de la dernière config rendue
+  }
 
-  setConfig(c) { this._config = { ...c, entities: c.entities ? [...c.entities] : [] }; if (!this._built) this._render(); }
+  setConfig(c) {
+    this._config = { ...c, entities: c.entities ? [...c.entities] : [] };
+
+    // 1er appel : rendu initial.
+    if (!this._built) { this._render(); this._lastSeen = this._hash(this._config); return; }
+
+    const h = this._hash(this._config);
+
+    // Écho de notre propre _dispatch → le modèle interne est déjà à jour,
+    // re-render inutile (et destructeur du focus). On ignore.
+    if (h === this._lastEmitted) { this._lastSeen = h; return; }
+
+    // Config identique à ce qui est déjà affiché → rien à faire.
+    if (h === this._lastSeen) return;
+
+    // Changement externe réel (chargement YAML, undo, edit d'un autre onglet…).
+    // On ne re-render PAS si l'utilisateur est en train de taper dans un champ
+    // de l'éditeur (sinon perte de focus / curseur). Le modèle reste cohérent ;
+    // l'affichage se resynchronisera au prochain changement externe hors-focus.
+    if (this._isEditing()) { this._lastSeen = h; return; }
+
+    this._render();
+    this._lastSeen = h;
+  }
+
   set hass(h)  { this._hass = h; if (!this._built) this._render(); else this._fillSelects(); }
   disconnectedCallback() { this.innerHTML = ''; this._built = false; }
+
+  // Sérialisation stable pour comparer deux configs (suffisant ici : tailles modestes).
+  _hash(o) { try { return JSON.stringify(o); } catch { return String(Math.random()); } }
+
+  // Vrai si le focus est dans un champ saisissable de l'éditeur.
+  _isEditing() {
+    const a = this.querySelector(':focus') || document.activeElement;
+    if (!a || !this.contains(a)) return false;
+    return /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
+  }
 
   _render() {
     this._built = true;
@@ -923,7 +1162,7 @@ class NeonEntitiesCardEditor extends HTMLElement {
     this._textRow('header.title',      'Titre',       hdr.title      || '', 'ex: Maison');
     this._textRow('header.icon',       'Icône (mdi)', hdr.icon       || '', 'mdi:home');
     this._textRow('header.color',      'Couleur titre', hdr.color    || '', 'rgba(180,130,255,0.55)');
-    this._textRow('header.title_size', 'Taille titre', hdr.title_size|| '', 'clamp(7px,2vw,9px)');
+    this._textRow('header.title_size', 'Taille titre', hdr.title_size|| '', 'clamp(7px,2.6cqi,11px)');
     this._textRow('header.font',       'Police',      hdr.font       || '', 'Orbitron');
     this._textRow('header.title_shadow','Text shadow', hdr.title_shadow|| '', '0 0 8px rgba(0,212,255,0.7)');
 
@@ -965,7 +1204,11 @@ class NeonEntitiesCardEditor extends HTMLElement {
 
     // ── Options
     this._sec('Options');
-    this._toggle('use_theme_card', 'Hériter du card-mod thème', c.use_theme_card ?? false);
+    this._toggle('use_theme_card',  'Hériter du card-mod thème',       c.use_theme_card  ?? false);
+    this._toggle('show_label',      'Afficher le type d\'entité',      c.show_label      ?? false);
+    this._toggle('pulse_active',    'Pulse du liseré actif',           c.pulse_active    ?? true);
+    this._toggle('flash_on_change', 'Flash de la valeur au changement', c.flash_on_change ?? false);
+    this._toggle('value_glow',      'Glow valeurs & statuts (alarm)',  c.value_glow      ?? true);
 
     this._fillSelects();
   }
@@ -998,6 +1241,7 @@ class NeonEntitiesCardEditor extends HTMLElement {
       block.appendChild(del);
 
       this._entityRow(block, i, 'entity',         'Entité *',        item.entity         || '', 'entity');
+      this._entityRow(block, i, 'status_entity',  'Statut associé',  item.status_entity  || '', 'entity', 'binary_sensor.porte_garage');
       this._entityRow(block, i, 'name',            'Nom affiché',     item.name           || '', null, 'friendly name');
       this._entityRow(block, i, 'icon',            'Icône (mdi:...)', item.icon           || '', null, 'mdi:home');
       this._entityRow(block, i, 'label',           'Label (ligne 1)', item.label          || '', null, 'SWITCH');
@@ -1068,7 +1312,8 @@ class NeonEntitiesCardEditor extends HTMLElement {
   }
 
   _setNested(path, value) {
-    // supports: header.title, footer.text, header_enabled, footer_enabled, use_theme_card
+    // supports: header.title, footer.text, header_enabled, footer_enabled,
+    //           use_theme_card, show_label, pulse_active, flash_on_change, value_glow
     if (path === 'header_enabled') {
       this._config.header = { ...(this._config.header || {}), enabled: value };
     } else if (path === 'footer_enabled') {
@@ -1099,8 +1344,12 @@ class NeonEntitiesCardEditor extends HTMLElement {
   }
 
   _dispatch() {
+    const config = { ...this._config };
+    // Mémorise le hash émis : le setConfig d'écho que HA va renvoyer sera
+    // reconnu et n'entraînera pas de re-render destructeur du focus.
+    this._lastEmitted = this._hash(config);
     this.dispatchEvent(new CustomEvent('config-changed', {
-      detail: { config: { ...this._config } },
+      detail: { config },
       bubbles: true, composed: true,
     }));
   }
@@ -1118,10 +1367,10 @@ window.customCards.push({
   preview:     true,
 });
 
-console.info('%c NEON-ENTITIES-CARD %c v1.3.2 ', 'color:#6200EA;font-weight:bold;background:#040816', 'color:#fff;background:#444');
+console.info('%c NEON-ENTITIES-CARD %c v1.6.1 ', 'color:#6200EA;font-weight:bold;background:#040816', 'color:#fff;background:#444');
 
 console.info(
-  '%c 📋 neon-entities-card v1.3.2 %c Neo Tokyo ',
+  '%c 📋 neon-entities-card v1.6.1 %c Neo Tokyo ',
   'background:#6200EA;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#BB86FC;padding:2px 4px;border-radius:0 3px 3px 0;'
 );
