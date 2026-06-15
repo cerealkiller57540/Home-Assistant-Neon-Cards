@@ -9,7 +9,9 @@
  * Éditeur : re-render intelligent (UI↔YAML synchro, focus préservé en frappe)
  * value_glow : glow « alarm-like » sur valeurs + statuts (actif par défaut)
  * Boutons cover agrandis (34px, SVG 16px) → cible tactile confortable iPad
- * @version 1.6.1
+ * Couleurs : variables standard HA (primary-text-color / primary-color),
+ *   thème-agnostique + surcharge UI (name/value/icon/primary/accent)
+ * @version 1.7.0
  */
 
 console.log('neon-entities-card.js loaded!');
@@ -103,6 +105,7 @@ class NeonEntitiesCard extends HTMLElement {
       color_accent:   config.color_accent   || null,
       name_color:     config.name_color     || null,
       value_color:    config.value_color    || null,
+      icon_color:     config.icon_color     || null,
       pulse_active:    config.pulse_active    ?? true,
       flash_on_change: config.flash_on_change ?? false,
       show_label:      config.show_label      ?? false,
@@ -148,10 +151,11 @@ class NeonEntitiesCard extends HTMLElement {
 
     const colorPrimary = cfg.color_primary || 'var(--primary-color, #6200EA)';
     const colorAccent  = cfg.color_accent  || 'var(--accent-color, #00fff9)';
-    const titleColor  = hdr.color      || 'rgba(180,130,255,0.55)';
-    const nameColorOn  = cfg.name_color  || 'rgba(200,170,255,0.75)';
-    const nameColorOff = cfg.name_color  ? cfg.name_color.replace(/[\d.]+\)$/, v => (parseFloat(v)*0.3).toFixed(2)+')') : 'rgba(180,130,255,0.55)';
+    const titleColor  = hdr.color      || 'rgba(var(--rgb-primary-text-color),0.55)';
+    const nameColorOn  = cfg.name_color  || 'rgba(var(--rgb-primary-text-color),0.75)';
+    const nameColorOff = cfg.name_color  ? cfg.name_color.replace(/[\d.]+\)$/, v => (parseFloat(v)*0.3).toFixed(2)+')') : 'rgba(var(--rgb-primary-text-color),0.30)';
     const valueColor   = cfg.value_color || 'rgba(var(--nec-cy), 0.75)';
+    const iconColor    = cfg.icon_color  || colorPrimary;
     const titleFont   = hdr.font       ? `'${hdr.font}', ` : "'Orbitron', ";
 
     const cardBg = cfg.use_theme_card ? `
@@ -184,6 +188,8 @@ class NeonEntitiesCard extends HTMLElement {
         -moz-osx-font-smoothing: grayscale;
         --nec-p:  ${colorPrimary};
         --nec-a:  ${colorAccent};
+        --nec-val: ${valueColor};
+        --nec-ico: ${iconColor};
         --nec-uv: var(--rgb-primary-color, 98,0,234);
         --nec-cy: var(--rgb-accent-color, 0,255,249);
         --nec-bl: var(--rgb-blacklight-color, 180,0,255);
@@ -271,26 +277,26 @@ class NeonEntitiesCard extends HTMLElement {
       top: 5%;
       bottom: 5%;
       width: 3px;
-      /* On utilise le Plasma Ultraviolet (#310062) et le Plasma Void (#9D00FF) */
-      background: linear-gradient(to bottom, 
-        #310062, 
-        #9D00FF 50%, 
-        #120021
+      /* Liseré dérivé de la couleur primaire (sombre → vif → très sombre) */
+      background: linear-gradient(to bottom,
+        color-mix(in srgb, var(--nec-p) 35%, #000),
+        var(--nec-p) 50%,
+        color-mix(in srgb, var(--nec-p) 20%, #000)
       );
       border-radius: 0 3px 3px 0;
-      /* Shadow "Trou Noir" : une lueur violette très sombre (Argon) avec un cœur électrique très fin */
-      box-shadow: 
-        0 0 12px #7B2FBE,                /* Gas Argon pour le rayonnement */
-        inset -1px 0 2px #B9F2FF;        /* Plasma Electric : un liseré de foudre pour la définition */
+      /* Shadow "Trou Noir" : rayonnement primaire + cœur électrique accent */
+      box-shadow:
+        0 0 12px color-mix(in srgb, var(--nec-p) 75%, transparent),       /* rayonnement primaire */
+        inset -1px 0 2px color-mix(in srgb, var(--nec-a) 70%, #fff);      /* liseré de foudre (accent) */
       opacity: 0.9;
-      border-right: 1px solid #7B2FBE;
+      border-right: 1px solid color-mix(in srgb, var(--nec-p) 70%, transparent);
       z-index: 2;
     }
 
     /* On assombrit aussi légèrement le fond de la ligne active pour le contraste */
     .row.on {
       background: rgba(18, 0, 33, 0.4) !important; /* Dark Actinoid en transparence */
-      border-left: 1px solid #310062;
+      border-left: 1px solid color-mix(in srgb, var(--nec-p) 35%, #000);
     }
       .row:hover { background: rgba(var(--nec-uv),0.05) !important; }
       @media (hover: hover) and (prefers-reduced-motion: no-preference) {
@@ -309,8 +315,8 @@ class NeonEntitiesCard extends HTMLElement {
       ${cfg.pulse_active ? `
       .row.on::before { animation: nec-edge-pulse 2.6s ease-in-out infinite; }
       @keyframes nec-edge-pulse {
-        0%,100% { opacity: .72; box-shadow: 0 0 8px  #7B2FBE, inset -1px 0 2px #B9F2FF; }
-        50%     { opacity: 1;   box-shadow: 0 0 16px #9D00FF, inset -1px 0 3px #B9F2FF; }
+        0%,100% { opacity: .72; box-shadow: 0 0 8px  color-mix(in srgb, var(--nec-p) 70%, transparent), inset -1px 0 2px color-mix(in srgb, var(--nec-a) 70%, #fff); }
+        50%     { opacity: 1;   box-shadow: 0 0 16px var(--nec-p),                                        inset -1px 0 3px color-mix(in srgb, var(--nec-a) 70%, #fff); }
       }
       @media (prefers-reduced-motion: reduce) { .row.on::before { animation: none; } }
       ` : ''}
@@ -320,7 +326,7 @@ class NeonEntitiesCard extends HTMLElement {
       @keyframes nec-val-flash {
         0%   { background: rgba(var(--nec-cy),0.55); color: #eafffe;
                box-shadow: 0 0 14px rgba(var(--nec-cy),0.7); }
-        100% { background: rgba(var(--nec-cy),0.06); color: ${valueColor};
+        100% { background: rgba(var(--nec-cy),0.06); color: var(--nec-val);
                box-shadow: none; }
       }
       @media (prefers-reduced-motion: reduce) { .nec-flash { animation: none; } }
@@ -331,11 +337,11 @@ class NeonEntitiesCard extends HTMLElement {
         display: flex; align-items: center; justify-content: center;
         flex-shrink: 0; transition: all .3s;
       }
-      .row.on  .ico { background: rgba(var(--nec-uv),0.18); border: 1px solid rgba(var(--nec-uv),0.40); box-shadow: 0 0 6px rgba(var(--nec-uv),0.25), inset 0 0 4px rgba(var(--nec-uv),0.10); }
-      .row.off .ico { background: rgba(var(--nec-uv),0.05); border: 1px solid rgba(var(--nec-uv),0.15); }
+      .row.on  .ico { background: color-mix(in srgb, var(--nec-ico) 18%, transparent); border: 1px solid color-mix(in srgb, var(--nec-ico) 40%, transparent); box-shadow: 0 0 6px color-mix(in srgb, var(--nec-ico) 25%, transparent), inset 0 0 4px color-mix(in srgb, var(--nec-ico) 10%, transparent); }
+      .row.off .ico { background: color-mix(in srgb, var(--nec-ico) 5%, transparent); border: 1px solid color-mix(in srgb, var(--nec-ico) 15%, transparent); }
       .ico ha-icon { --mdc-icon-size: 14px; transition: color .3s, filter .3s; }
-      .row.on  .ico ha-icon { color: rgba(180,130,255,0.9); filter: drop-shadow(0 0 3px rgba(180,130,255,0.7)) drop-shadow(0 0 6px rgba(180,130,255,0.35)); }
-      .row.off .ico ha-icon { color: rgba(130,60,255,0.30); }
+      .row.on  .ico ha-icon { color: color-mix(in srgb, var(--nec-ico) 90%, transparent); filter: drop-shadow(0 0 3px color-mix(in srgb, var(--nec-ico) 70%, transparent)) drop-shadow(0 0 6px color-mix(in srgb, var(--nec-ico) 35%, transparent)); }
+      .row.off .ico ha-icon { color: color-mix(in srgb, var(--nec-ico) 30%, transparent); }
 
       /* ── Meta ── */
       .meta { flex: 1; min-width: 0; }
@@ -346,7 +352,7 @@ class NeonEntitiesCard extends HTMLElement {
         text-transform: uppercase;
         ${cfg.show_label ? '' : 'display: none;'}
       }
-      .row.on  .meta-label { color: rgba(180,130,255,0.7); }
+      .row.on  .meta-label { color: rgba(var(--rgb-primary-text-color),0.7); }
       .row.off .meta-label { color: rgba(var(--nec-uv),0.4); }
       .meta-name {
         font-size: clamp(9px, 2.5cqi, 11px);
@@ -400,7 +406,7 @@ class NeonEntitiesCard extends HTMLElement {
         position: absolute; inset: 5px; border-radius: 50%;
         background: #fff; box-shadow: 0 0 6px #d9fffe; opacity: .9;
       }
-      .tog.off .tog-thumb { left: 2px; background: transparent; border: 2px solid rgba(130,60,255,0.50); }
+      .tog.off .tog-thumb { left: 2px; background: transparent; border: 2px solid rgba(var(--rgb-primary-color),0.50); }
       .tog.on  .tog-thumb { transform: translateX(0); }
       .tog.active { transform: scale(0.92); filter: brightness(1.25); }
 
@@ -409,7 +415,8 @@ class NeonEntitiesCard extends HTMLElement {
 
       /* ── Binary sensor badge ── */
       .badge {
-        font-size: clamp(6.5px, 1.8cqi, 8px);
+        font-size: clamp(8px, 2cqi, 9.5px);
+        font-weight: 600;
         padding: 2px 7px; border-radius: 4px;
         letter-spacing: .8px; text-transform: uppercase;
         flex-shrink: 0; white-space: nowrap;
@@ -419,7 +426,7 @@ class NeonEntitiesCard extends HTMLElement {
 
       /* ── Cover ── */
       .cover-wrap { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
-      .pos-pct  { font-size: clamp(8px,2cqi,10px); color: rgba(180,130,255,0.65); min-width: 26px; text-align: right; }
+      .pos-pct  { font-size: clamp(10px,2.4cqi,12px); font-weight: 600; color: rgba(var(--rgb-primary-text-color),0.65); min-width: 26px; text-align: right; }
       .pos-bar  { width: 44px; height: 5px; display: flex; gap: 2px; flex-shrink: 0; }
       .pos-seg  { flex: 1; height: 100%; border-radius: 1px; background: rgba(var(--nec-uv),0.15); transition: background .35s, box-shadow .35s; }
       .pos-seg.lit {
@@ -436,13 +443,14 @@ class NeonEntitiesCard extends HTMLElement {
       }
       .cbtn:hover  { background: rgba(var(--nec-uv),0.22); box-shadow: 0 0 8px rgba(var(--nec-uv),0.30); }
       .cbtn:active { background: rgba(var(--nec-uv),0.36); }
-      .cbtn svg { width: 16px; height: 16px; stroke: rgba(180,130,255,0.80); filter: drop-shadow(0 0 2px rgba(180,130,255,0.6)); }
+      .cbtn svg { width: 16px; height: 16px; stroke: rgba(var(--rgb-primary-color),0.80); filter: drop-shadow(0 0 2px rgba(var(--rgb-primary-color),0.6)); }
       .row.off .cbtn { border-color: rgba(var(--nec-uv),0.18); background: rgba(var(--nec-uv),0.34); }
-      .row.off .cbtn svg { stroke: rgba(130,60,255,0.30); filter: none; }
+      .row.off .cbtn svg { stroke: rgba(var(--rgb-primary-color),0.30); filter: none; }
 
       /* ── Sensor value ── */
       .sensor-val {
-        font-size: clamp(8px, 2cqi, 10px);
+        font-size: clamp(10px, 2.4cqi, 12px);
+        font-weight: 600;
         color: ${valueColor};
         padding: 2px 7px; border-radius: 4px;
         background: rgba(var(--nec-cy),0.06);
@@ -470,7 +478,7 @@ class NeonEntitiesCard extends HTMLElement {
       ${cfg.value_glow ? `
       /* valeur sensor / number / climate / cover% */
       .sensor-val, .num-val, .pos-pct {
-        color: #fff;
+        color: var(--nec-val);
         text-shadow: 0 0 12px color-mix(in srgb, var(--nec-p) 80%, transparent),
                      0 0 24px color-mix(in srgb, var(--nec-a) 45%, transparent);
       }
@@ -507,7 +515,7 @@ class NeonEntitiesCard extends HTMLElement {
         font-size: clamp(9px, 2.5cqi, 11px); font-weight: 700;
         min-width: 36px; text-align: center; letter-spacing: 0.8px;
       }
-      .num-val.def  { color: rgba(180,130,255,0.85); }
+      .num-val.def  { color: rgba(var(--rgb-primary-text-color),0.85); }
       .num-val.temp { color: rgba(255,180,80,0.85); }
       .nbtn {
         width: 20px; height: 20px; border-radius: 4px;
@@ -515,10 +523,10 @@ class NeonEntitiesCard extends HTMLElement {
         border: 1px solid rgba(var(--nec-uv),0.35);
         background: rgba(var(--nec-uv),0.10);
         cursor: pointer; font-size: 14px; line-height: 1;
-        color: rgba(180,130,255,0.75);
+        color: rgba(var(--rgb-primary-color),0.75);
         -webkit-tap-highlight-color: transparent;
         transition: background .15s, box-shadow .15s; user-select: none;
-        text-shadow: 0 0 4px rgba(180,130,255,0.6);
+        text-shadow: 0 0 4px rgba(var(--rgb-primary-color),0.6);
       }
       .nbtn:hover  { background: rgba(var(--nec-uv),0.22); box-shadow: 0 0 8px rgba(var(--nec-uv),0.30); }
       .nbtn:active { background: rgba(var(--nec-uv),0.36); }
@@ -533,7 +541,7 @@ class NeonEntitiesCard extends HTMLElement {
       }
       .footer-text {
         font-size: clamp(6px, 1.5cqi, 7px);
-        color: rgba(180,130,255,0.28);
+        color: rgba(var(--rgb-primary-text-color),0.28);
         letter-spacing: 1px;
       }
     `;
@@ -1161,15 +1169,16 @@ class NeonEntitiesCardEditor extends HTMLElement {
     this._toggle('header_enabled', 'Afficher entête', hdr.enabled !== false);
     this._textRow('header.title',      'Titre',       hdr.title      || '', 'ex: Maison');
     this._textRow('header.icon',       'Icône (mdi)', hdr.icon       || '', 'mdi:home');
-    this._textRow('header.color',      'Couleur titre', hdr.color    || '', 'rgba(180,130,255,0.55)');
+    this._textRow('header.color',      'Couleur titre', hdr.color    || '', 'rgba(var(--rgb-primary-text-color),0.55)');
     this._textRow('header.title_size', 'Taille titre', hdr.title_size|| '', 'clamp(7px,2.6cqi,11px)');
     this._textRow('header.font',       'Police',      hdr.font       || '', 'Orbitron');
     this._textRow('header.title_shadow','Text shadow', hdr.title_shadow|| '', '0 0 8px rgba(0,212,255,0.7)');
 
     // ── Apparence
     this._sec('Apparence');
-    this._textRow('name_color',   'Couleur des noms',    c.name_color   || '', 'rgba(200,170,255,0.75)');
+    this._textRow('name_color',   'Couleur des noms',    c.name_color   || '', 'rgba(var(--rgb-primary-text-color),0.75)');
     this._textRow('value_color',  'Couleur des valeurs', c.value_color  || '', 'rgba(0,255,249,0.75)');
+    this._textRow('icon_color',   'Couleur des icônes',  c.icon_color   || '', 'var(--primary-color)');
     this._textRow('color_primary','Couleur primaire',    c.color_primary|| '', '#6200EA');
     this._textRow('color_accent', 'Couleur accent',      c.color_accent || '', '#00fff9');
 
@@ -1367,10 +1376,10 @@ window.customCards.push({
   preview:     true,
 });
 
-console.info('%c NEON-ENTITIES-CARD %c v1.6.1 ', 'color:#6200EA;font-weight:bold;background:#040816', 'color:#fff;background:#444');
+console.info('%c NEON-ENTITIES-CARD %c v1.7.0 ', 'color:#6200EA;font-weight:bold;background:#040816', 'color:#fff;background:#444');
 
 console.info(
-  '%c 📋 neon-entities-card v1.6.1 %c Neo Tokyo ',
+  '%c 📋 neon-entities-card v1.7.0 %c Neo Tokyo ',
   'background:#6200EA;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#BB86FC;padding:2px 4px;border-radius:0 3px 3px 0;'
 );

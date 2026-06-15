@@ -87,7 +87,7 @@
 |------|------|:-------:|-------------|
 | 🏷️ Neon Header Card | `neon-header-card.js` | `1.4.2` | Stylish neon section header |
 | 🏷️ Neon Header Card v2 | `neon-header-card-v2.js` | `2.3` | Advanced header — glow, gradient, scanlines, flicker, glitch effects |
-| 📋 Neon Entities Card | `neon-entities-card.js` | `1.2.1` | Multi-entity card (switch, sensor, cover, climate, number + dividers) |
+| 📋 Neon Entities Card | `neon-entities-card.js` | `1.7.0` | Multi-entity card (switch, sensor, cover, climate, number + dividers) — theme-agnostic colors, per-color UI editor |
 
 ### 🖥️ Network & NAS
 
