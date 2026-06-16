@@ -885,8 +885,12 @@ class NeonSwitchCardEditor extends HTMLElement {
   /* Sync valeurs sans rebuild DOM */
   _syncValues() {
     const c = this._config;
-    const titleInp = this.querySelector('[data-key="header.title"]');
-    if (titleInp && document.activeElement !== titleInp) titleInp.value = (c.header && c.header.title) || '';
+    const hdr = c.header || {};
+    this.querySelectorAll('[data-key^="header."]').forEach(inp => {
+      if (document.activeElement === inp) return;
+      const sub = inp.dataset.key.split('.')[1];
+      inp.value = hdr[sub] || '';
+    });
 
     const labels = c.port_labels || [];
     this.querySelectorAll('.ep-label').forEach(inp => {
@@ -976,6 +980,25 @@ class NeonSwitchCardEditor extends HTMLElement {
             <label>Titre</label>
             <input type="text" class="ep" data-key="header.title" value="${(c.header && c.header.title) || ''}" placeholder="GS108T · ProSafe"/>
           </div>
+          <div class="field">
+            <label>Icône (mdi) — <a href="https://pictogrammers.com/library/mdi/" target="_blank" rel="noopener" style="color:var(--primary-color);font-size:9px;letter-spacing:.05em;text-transform:none">parcourir ↗</a></label>
+            <div class="port-row">
+              <input type="text" class="ep" id="hdr-icon-inp" data-key="header.icon" value="${(c.header && c.header.icon) || ''}" placeholder="mdi:switch" list="nsw-mdi-list" style="flex:1"/>
+              <div class="icon-preview" id="hdr-icon-preview"></div>
+            </div>
+          </div>
+          <div class="field">
+            <label>Couleur titre</label>
+            <input type="text" class="ep" data-key="header.color" value="${(c.header && c.header.color) || ''}" placeholder="défaut thème — ex var(--primary-color)"/>
+          </div>
+          <div class="field">
+            <label>Taille titre</label>
+            <input type="text" class="ep" data-key="header.title_size" value="${(c.header && c.header.title_size) || ''}" placeholder="13px"/>
+          </div>
+          <div class="field">
+            <label>Text-shadow</label>
+            <input type="text" class="ep" data-key="header.title_shadow" value="${(c.header && c.header.title_shadow) || ''}" placeholder="0 0 6px ..."/>
+          </div>
           ${this._toggle('Afficher les stats globales', 'show_stats')}
           ${this._toggle('Hériter du fond card-mod', 'card_mod_bg')}
         </div>
@@ -992,6 +1015,13 @@ class NeonSwitchCardEditor extends HTMLElement {
         else this._set(inp.dataset.key, inp.value);
       });
     });
+    // Preview live de l'icône header (createElement ha-icon, cf CARDS-METHOD.md)
+    const hdrIconInp = this.querySelector('#hdr-icon-inp');
+    if (hdrIconInp) {
+      const upd = () => this._updateHdrIconPreview(hdrIconInp.value);
+      hdrIconInp.addEventListener('input', upd);
+      upd();
+    }
     this.querySelectorAll('.ep-label').forEach(inp => {
       inp.addEventListener('input', () => this._setLabel(+inp.dataset.idx, inp.value));
     });
@@ -1014,6 +1044,18 @@ class NeonSwitchCardEditor extends HTMLElement {
     if (val.match(/^mdi:[a-zA-Z0-9_-]+$/)) {
       const ico = document.createElement('ha-icon');
       ico.setAttribute('icon', val);
+      ico.style.cssText = '--mdc-icon-size:20px';
+      preview.appendChild(ico);
+    }
+  }
+
+  _updateHdrIconPreview(val) {
+    const preview = this.querySelector('#hdr-icon-preview');
+    if (!preview) return;
+    preview.innerHTML = '';
+    if ((val || '').trim().match(/^mdi:[a-zA-Z0-9_-]+$/)) {
+      const ico = document.createElement('ha-icon');
+      ico.setAttribute('icon', val.trim());
       ico.style.cssText = '--mdc-icon-size:20px';
       preview.appendChild(ico);
     }

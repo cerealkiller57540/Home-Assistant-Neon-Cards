@@ -1027,171 +1027,249 @@ class NeonClimateCard extends HTMLElement {
 }
 
 // ─── Editor ───────────────────────────────────────────────────────────────────
+// Template unifié — cf \\192.168.1.60\config\CARDS-EDITOR-TEMPLATE.md
+// N'éditer QUE _schema() ; le reste est canonique et identique sur toutes les cards.
+const NEON_FONTS = [
+  'Orbitron','Rajdhani','Share Tech Mono','Exo 2','Roboto','Montserrat',
+  'Oswald','Bebas Neue','Inter','Poppins','Space Grotesk','Syne',
+  'DM Sans','Playfair Display','Cinzel',
+];
 class NeonClimateCardEditor extends HTMLElement {
-  constructor() { super(); this._config = {}; this._hass = null; this._built = false; }
+  constructor() { super(); this._config = {}; this._hass = null; this._rendered = false; }
 
-  setConfig(config) {
-    // §22 : ne reconstruire le DOM qu'une fois ; sinon sync chirurgical (garde le focus).
-    this._config = { ...config };
-    if (!this._built) this._render();
-    else              this._syncValues();
+  // ── Cycle de vie (NE PAS toucher) ──────────────────────────────────
+  setConfig(c) {
+    this._config = { ...(c || {}) };
+    if (!this._rendered) { this._rendered = true; this._render(); }
+    else this._syncValues();
   }
+  set hass(h) { this._hass = h; this._fillDatalists(); }   // JAMAIS de render ici
+  disconnectedCallback() { this._rendered = false; }
 
-  set hass(hass) {
-    this._hass = hass;
-    if (!this._built) this._render();
-    else              this._fillEntities();
+  // ── Lecture / écriture config (clés imbriquées via ".") ────────────
+  _read(key) {
+    return key.includes('.')
+      ? key.split('.').reduce((o, p) => (o && o[p] !== undefined ? o[p] : undefined), this._config)
+      : this._config[key];
   }
-
-  // §22 : met à jour les champs sans recréer le DOM. Guard activeElement = ne pas
-  // écraser le champ en cours d'édition.
-  _syncValues() {
-    const c = this._config;
-    this.querySelectorAll('[data-key]').forEach(el => {
-      if (el === document.activeElement) return;
-      const k = el.dataset.key;
-      if (el.type === 'checkbox') {
-        el.checked = el.dataset.defaultOn ? (c[k] !== false) : !!c[k];
-      } else {
-        const v = c[k];
-        el.value = (v === undefined || v === null) ? '' : v;
-        if (el._pick) { const h = this._toHex(el.value); if (h) el._pick.value = h; }
+  _set(key, value) {
+    const empty = (value === undefined || value === '' || value === null);
+    if (key.includes('.')) {
+      const parts = key.split('.');
+      let o = this._config;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!o[parts[i]] || typeof o[parts[i]] !== 'object') o[parts[i]] = {};
+        o = o[parts[i]];
       }
+      const last = parts[parts.length - 1];
+      if (empty) delete o[last]; else o[last] = value;
+      const parent = parts.slice(0, -1).reduce((a, k) => a && a[k], this._config);
+      if (parent && typeof parent === 'object' && !Object.keys(parent).length) delete this._config[parts[0]];
+    } else if (empty) { delete this._config[key]; }
+    else { this._config[key] = value; }
+    this.dispatchEvent(new CustomEvent('config-changed',
+      { detail: { config: { ...this._config } }, bubbles: true, composed: true }));
+  }
+
+  // ── Sync in-place (guard focus + clés imbriquées) ──────────────────
+  _syncValues() {
+    const active = this.querySelector(':focus') || document.activeElement;
+    this.querySelectorAll('[data-key]').forEach(el => {
+      if (el === active) return;
+      const v = this._read(el.dataset.key);
+      if (el.type === 'checkbox') el.checked = el.dataset.defaultOn ? (v !== false) : !!v;
+      else { el.value = (v == null ? '' : v); if (el._pick) { const h = this._toHex(el.value); if (h) el._pick.value = h; } }
+    });
+    this._bindIconPreviews(true);
+  }
+
+  // ── Helpers de champ (signatures FIXES) ────────────────────────────
+  _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d); return d; }
+  _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; this.appendChild(d); return d; }
+
+  _text(key, label, ph = '') {
+    const w = this._row(label).wrap;
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.placeholder = ph; inp.dataset.key = key; inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    w.appendChild(inp); return inp;
+  }
+
+  _toggle(key, label, defaultOn = false) {
+    const w = this._row(label).wrap;
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.key = key;
+    if (defaultOn) cb.dataset.defaultOn = '1';
+    const v = this._read(key); cb.checked = defaultOn ? (v !== false) : !!v;
+    cb.style.cssText = 'width:38px;height:20px;cursor:pointer;accent-color:var(--primary-color);flex:none;';
+    cb.addEventListener('change', () => this._set(key, cb.checked));
+    w.appendChild(cb); return cb;
+  }
+
+  _color(key, label, ph = 'ex: var(--primary-color) ou #6200EA') {
+    const w = this._row(label).wrap;
+    const box = document.createElement('div'); box.className = 'color-row';
+    const txt = document.createElement('input'); txt.type = 'text'; txt.placeholder = ph; txt.dataset.key = key; txt.value = this._read(key) ?? '';
+    const pick = document.createElement('input'); pick.type = 'color'; pick.value = this._toHex(txt.value) || '#6200EA';
+    txt._pick = pick;
+    txt.addEventListener('input', () => { this._set(key, txt.value); const h = this._toHex(txt.value); if (h) pick.value = h; });
+    pick.addEventListener('input', () => { txt.value = pick.value; this._set(key, pick.value); });
+    box.appendChild(txt); box.appendChild(pick); w.appendChild(box); return txt;
+  }
+
+  _icon(key, label) {
+    const w = this._row(`${label} — <a href="https://pictogrammers.com/library/mdi/" target="_blank" rel="noopener" class="mdi-link">parcourir ↗</a>`, true).wrap;
+    const box = document.createElement('div'); box.className = 'icon-row';
+    const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = 'mdi:home'; inp.dataset.key = key; inp.value = this._read(key) ?? '';
+    const prev = document.createElement('div'); prev.className = 'icon-preview'; prev.dataset.preview = key;
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    box.appendChild(inp); box.appendChild(prev); w.appendChild(box); return inp;
+  }
+
+  _entity(key, label, prefix = '') {
+    const w = this._row(label).wrap;
+    const inp = document.createElement('input'); inp.type = 'text'; inp.autocomplete = 'off';
+    inp.placeholder = (prefix || 'domain') + '.…'; inp.dataset.key = key; inp.dataset.prefix = prefix;
+    inp.setAttribute('list', `ncc-ent-${(prefix || 'all').replace(/[^a-z]/g, '')}`);
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value.trim()));
+    w.appendChild(inp); return inp;
+  }
+
+  // Liste déroulante. options = [string] ou [{value,label}]. emptyLabel = 1ère option vide (défaut).
+  _select(key, label, options, emptyLabel = null) {
+    const w = this._row(label).wrap;
+    const sel = document.createElement('select'); sel.dataset.key = key;
+    if (emptyLabel !== null) { const o = document.createElement('option'); o.value = ''; o.textContent = emptyLabel; sel.appendChild(o); }
+    options.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = (typeof opt === 'object') ? opt.value : opt;
+      o.textContent = (typeof opt === 'object') ? opt.label : opt;
+      sel.appendChild(o);
+    });
+    sel.value = this._read(key) ?? '';
+    sel.addEventListener('change', () => this._set(key, sel.value));
+    w.appendChild(sel); return sel;
+  }
+
+  // ── Mécanique commune (NE PAS toucher) ─────────────────────────────
+  _row(labelHtml, isHtml = false) {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('label');
+    if (isHtml) lbl.innerHTML = labelHtml; else lbl.textContent = labelHtml;
+    const wrap = document.createElement('div'); wrap.className = 'field-wrap';
+    row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
+    return { row, wrap };
+  }
+
+  _toHex(c) {
+    if (!c) return null;
+    if (/^#[0-9a-f]{6}$/i.test(c)) return c;
+    const m = c.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/i);
+    return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+  }
+
+  _bindIconPreviews(resyncOnly = false) {
+    this.querySelectorAll('.icon-preview[data-preview]').forEach(prev => {
+      const inp = this.querySelector(`input[data-key="${prev.dataset.preview}"]`);
+      const upd = () => {
+        const val = (inp && inp.value || '').trim();
+        prev.innerHTML = '';
+        if (/^mdi:[a-zA-Z0-9_-]+$/.test(val)) {
+          const ico = document.createElement('ha-icon');
+          ico.setAttribute('icon', val); ico.style.cssText = '--mdc-icon-size:20px';
+          prev.appendChild(ico);
+        }
+      };
+      if (!resyncOnly && inp && !inp._previewBound) { inp.addEventListener('input', upd); inp._previewBound = true; }
+      upd();
     });
   }
 
-  disconnectedCallback() { this.innerHTML = ''; this._built = false; }
-
-  _render() {
-    this._built = true;
-    this.innerHTML = '';
-    this.style.cssText = 'display:block;padding:16px;font-family:var(--primary-font-family,Roboto,sans-serif);';
-
-    const style = document.createElement('style');
-    style.textContent = `
-      .sec { font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--primary-color);margin:18px 0 8px; }
-      .row { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px; }
-      .row label { font-size:14px;color:var(--primary-text-color);flex:1; }
-      select, input[type=text] { font-size:13px;padding:6px 8px;border:1px solid var(--divider-color,#ccc);border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#000);outline:none;flex-shrink:0;min-width:165px; }
-      select { cursor:pointer; }
-      .color-row { display:flex;align-items:center;gap:8px; }
-      .color-row input[type=text] { flex:1;min-width:0; }
-      input[type=color] { width:44px;height:30px;padding:2px 3px;border:1px solid var(--divider-color,#ccc);border-radius:6px;cursor:pointer;flex-shrink:0; }
-      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:-4px 0 10px; }
-    `;
-    this.appendChild(style);
-
-    const c = this._config;
-
-    this._sec('Entité principale');
-    this._entityRow('entity',          'Entité climate *',  c.entity          || '', 'climate.');
-    this._text(     'name',            'Nom affiché',       c.name            || '', 'Vide = friendly_name');
-
-    this._sec('Capteurs');
-    this._entityRow('humidity_entity', 'Entité humidité',   c.humidity_entity || '', 'sensor.');
-    this._hint("Facultatif — si vide, utilise current_humidity de l'entité climate");
-
-    this._sec('Couleurs boutons mode');
-    this._colorRow('color_off',  'OFF',      c.color_off  || MODE_DEFAULTS.off);
-    this._colorRow('color_heat', 'HEAT',     c.color_heat || MODE_DEFAULTS.heat);
-    this._colorRow('color_cool', 'COOL',     c.color_cool || MODE_DEFAULTS.cool);
-    this._colorRow('color_dry',  'DRY',      c.color_dry  || MODE_DEFAULTS.dry);
-    this._colorRow('color_fan',  'FAN ONLY', c.color_fan  || MODE_DEFAULTS.fan_only);
-
-    this._colorRow('color_fan_btn', 'FAN (bouton cycle)', c.color_fan_btn || '#00FFAA');
-
-    this._sec('Couleur pill température');
-    this._colorRow('color_pill', 'Pill cible', c.color_pill || PILL_DEFAULT);
-
-    this._sec('Couleur display AC');
-    this._colorRow('color_display', 'Dot-matrix / display', c.color_display || '#00fff9');
-    this._toggle('neon_display_glow', 'Triple neon glow', c.neon_display_glow !== false, true);
-
-    this._sec('Options');
-    this._toggle('show_wind', 'Animation air (désactivable)', c.show_wind !== false, true);
-
-    this._fillEntities();
-  }
-
-  _sec(t)  { const d=document.createElement('div'); d.className='sec'; d.textContent=t; this.appendChild(d); }
-  _hint(t) { const d=document.createElement('div'); d.className='hint'; d.textContent=t; this.appendChild(d); }
-
-  _toggle(key, label, checked, defaultOn=false) {
-    const row=document.createElement('div'); row.className='row';
-    const lbl=document.createElement('label'); lbl.textContent=label;
-    const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=checked; cb.dataset.key=key;
-    if (defaultOn) cb.dataset.defaultOn='1';   // coché tant que la config ne dit pas explicitement false
-    cb.style.cssText='width:38px;height:20px;cursor:pointer;accent-color:var(--primary-color,#03a9f4);';
-    cb.addEventListener('change', e => this._set(key, e.target.checked));
-    row.appendChild(lbl); row.appendChild(cb); this.appendChild(row);
-  }
-
-  _text(key, label, value, placeholder='') {
-    const row=document.createElement('div'); row.className='row';
-    const lbl=document.createElement('label'); lbl.textContent=label;
-    const inp=document.createElement('input'); inp.type='text'; inp.value=value; inp.placeholder=placeholder; inp.dataset.key=key;
-    inp.addEventListener('change', e => this._set(key, e.target.value || undefined));
-    row.appendChild(lbl); row.appendChild(inp); this.appendChild(row);
-  }
-
-  _entityRow(key, label, value, prefix) {
-    // §22 : input + <datalist> par préfixe de domaine (jamais <select> brut).
-    const row=document.createElement('div'); row.className='row';
-    const lbl=document.createElement('label'); lbl.textContent=label;
-    const inp=document.createElement('input');
-    inp.type='text'; inp.value=value||''; inp.autocomplete='off';
-    inp.placeholder=(prefix||'')+'…';
-    inp.dataset.key=key; inp.dataset.prefix=prefix||'';
-    inp.setAttribute('list', 'ncc-ent-'+(prefix||'all').replace(/[^a-z]/g,''));
-    inp.addEventListener('change', e => this._set(key, e.target.value.trim() || undefined));
-    row.appendChild(lbl); row.appendChild(inp); this.appendChild(row);
-  }
-
-  _colorRow(key, label, value) {
-    const row=document.createElement('div'); row.className='row';
-    const lbl=document.createElement('label'); lbl.textContent=label;
-    const wrap=document.createElement('div'); wrap.className='color-row';
-    const txt=document.createElement('input'); txt.type='text'; txt.value=value; txt.placeholder='#rrggbb'; txt.dataset.key=key;
-    const pick=document.createElement('input'); pick.type='color'; pick.value=this._toHex(value)||'#00fff9';
-    txt._pick=pick;   // référence pour resync (cf. _syncValues)
-    txt.addEventListener('change',  e => { const v=e.target.value.trim(); this._set(key,v||undefined); const h=this._toHex(v); if(h) pick.value=h; });
-    pick.addEventListener('input',  e => { txt.value=e.target.value; this._set(key,e.target.value); });
-    wrap.appendChild(txt); wrap.appendChild(pick); row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
-  }
-
-  _fillEntities() {
+  _fillDatalists() {
     if (!this._hass) return;
-    // Un <datalist> par préfixe de domaine, partagé par les inputs de ce préfixe.
-    this.querySelectorAll('input[data-key][list]').forEach(inp => {
-      const prefix=inp.dataset.prefix||'', listId=inp.getAttribute('list');
-      let dl=this.querySelector('#'+listId);
-      if (!dl) { dl=document.createElement('datalist'); dl.id=listId; this.appendChild(dl); }
-      const ids=Object.keys(this._hass.states).filter(e=>e.startsWith(prefix)).sort();
-      if (dl.childElementCount === ids.length) return;   // déjà à jour
-      dl.textContent='';
-      const frag=document.createDocumentFragment();
-      ids.forEach(id => {
-        const o=document.createElement('option'); o.value=id;
-        const fn=this._hass.states[id].attributes?.friendly_name;
-        if (fn && fn!==id) o.label=fn;
-        frag.appendChild(o);
-      });
+    this.querySelectorAll('input[data-prefix]').forEach(inp => {
+      const id = inp.getAttribute('list'); if (!id) return;
+      let dl = this.querySelector('#' + id);
+      if (!dl) { dl = document.createElement('datalist'); dl.id = id; this.appendChild(dl); }
+      const ids = Object.keys(this._hass.states).filter(e => e.startsWith(inp.dataset.prefix || '')).sort();
+      if (dl.childElementCount === ids.length) return;
+      dl.textContent = '';
+      const frag = document.createDocumentFragment();
+      ids.forEach(id2 => { const o = document.createElement('option'); o.value = id2;
+        const fn = this._hass.states[id2].attributes?.friendly_name; if (fn && fn !== id2) o.label = fn; frag.appendChild(o); });
       dl.appendChild(frag);
     });
   }
 
-  _set(key, value) {
-    if (value===undefined||value==='') delete this._config[key];
-    else this._config[key]=value;
-    this.dispatchEvent(new CustomEvent('config-changed',{detail:{config:{...this._config}},bubbles:true,composed:true}));
+  _css() {
+    return `
+      :host { display:block; padding:14px; font-family:var(--primary-font-family,Roboto,sans-serif); }
+      .sec { font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--divider-color); }
+      .sec:first-child { margin-top:0; }
+      .row { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
+      .row label { flex:0 0 160px;font-size:12px;color:var(--secondary-text-color); }
+      .row label .mdi-link { color:var(--primary-color);font-size:9px;text-transform:none;letter-spacing:0; }
+      .field-wrap { flex:1;min-width:0;display:flex; }
+      input[type=text],input[type=number],select { flex:1;width:100%;padding:4px 8px;border:1px solid var(--divider-color);border-radius:4px;background:var(--card-background-color);color:var(--primary-text-color);font-size:12px;outline:none;box-sizing:border-box; }
+      select { cursor:pointer; }
+      input:focus,select:focus { box-shadow:0 0 0 1px var(--primary-color); }
+      .color-row { display:flex;gap:8px;flex:1; }
+      .color-row input[type=text] { flex:1; }
+      .color-row input[type=color] { width:36px;height:28px;flex:none;padding:0;border:none;background:none;border-radius:4px;cursor:pointer; }
+      .icon-row { display:flex;gap:8px;flex:1;align-items:center; }
+      .icon-row input { flex:1; }
+      .icon-preview { width:30px;height:28px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--divider-color);border-radius:4px;color:var(--primary-text-color); }
+      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:-2px 0 6px 168px; }
+    `;
   }
 
-  _toHex(color) {
-    if (!color) return null;
-    if (/^#[0-9a-f]{6}$/i.test(color)) return color;
-    const m=color.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/i);
-    if (m) return '#'+[m[1],m[2],m[3]].map(n=>(+n).toString(16).padStart(2,'0')).join('');
-    return null;
+  _render() {
+    this.innerHTML = '';
+    const st = document.createElement('style'); st.textContent = this._css(); this.appendChild(st);
+    this._schema();
+    this._fillDatalists();
+    this._bindIconPreviews();
+  }
+
+  // ╔════════════════════════════════════════════════════════════════╗
+  // ║  SCHÉMA — LA SEULE PARTIE SPÉCIFIQUE À LA CARD                  ║
+  // ╚════════════════════════════════════════════════════════════════╝
+  _schema() {
+    this._section('En-tête');
+    this._text('header.title', 'Titre', 'ex: Climatisation');
+    this._icon('header.icon', 'Icône (mdi)');
+    this._color('header.color', 'Couleur titre');
+    this._text('header.title_size', 'Taille titre', '16px');
+    this._select('header.font', 'Police', NEON_FONTS, '— thème HA —');
+    this._text('header.subtitle', 'Sous-titre', 'optionnel');
+    this._text('header.badge', 'Badge', 'optionnel');
+    this._text('header.title_shadow', 'Text-shadow', '0 0 6px ...');
+
+    this._section('Entité principale');
+    this._entity('entity', 'Entité climate *', 'climate');
+    this._text('name', 'Nom affiché', 'Vide = friendly_name');
+
+    this._section('Capteurs');
+    this._entity('humidity_entity', 'Entité humidité', 'sensor');
+    this._hint("Facultatif — sinon current_humidity de l'entité climate");
+
+    this._section('Couleurs boutons mode');
+    this._color('color_off', 'OFF');
+    this._color('color_heat', 'HEAT');
+    this._color('color_cool', 'COOL');
+    this._color('color_dry', 'DRY');
+    this._color('color_fan', 'FAN ONLY');
+    this._color('color_fan_btn', 'FAN (bouton cycle)');
+
+    this._section('Couleur pill température');
+    this._color('color_pill', 'Pill cible');
+
+    this._section('Couleur display AC');
+    this._color('color_display', 'Dot-matrix / display');
+    this._toggle('neon_display_glow', 'Triple neon glow', true);
+
+    this._section('Options');
+    this._toggle('show_wind', 'Animation air', true);
   }
 }
 
@@ -1206,10 +1284,10 @@ window.customCards.push({
   preview: true,
 });
 
-console.info('%c NEON-CLIMATE-CARD %c v1.2.0 ','color:#00fff9;font-weight:bold;background:#040816','color:#fff;background:#444');
+console.info('%c NEON-CLIMATE-CARD %c v1.3.0 ','color:#00fff9;font-weight:bold;background:#040816','color:#fff;background:#444');
 
 console.info(
-  '%c ❄️ neon-climate-card v1.2.16 %c Neo Tokyo ',
+  '%c ❄️ neon-climate-card v1.3.0 %c Neo Tokyo ',
   'background:#00D4FF;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#9D4EDD;padding:2px 4px;border-radius:0 3px 3px 0;'
 );

@@ -1073,7 +1073,10 @@ class NeonNasCardEditor extends HTMLElement {
     const c = this._config || {};
     this.querySelectorAll('input[data-key], select[data-key]').forEach(inp => {
       if (document.activeElement === inp) return;
-      const v = c[inp.dataset.key];
+      const k = inp.dataset.key;
+      const v = k.includes('.')
+        ? k.split('.').reduce((o, p) => (o && o[p] !== undefined ? o[p] : undefined), c)
+        : c[k];
       if (inp.type === 'checkbox') inp.checked = !!v;
       else inp.value = (v !== undefined && v !== null) ? v : '';
     });
@@ -1105,6 +1108,9 @@ class NeonNasCardEditor extends HTMLElement {
         .color-row{display:flex;align-items:center;gap:8px}
         .color-row input[type=color]{width:36px;height:36px;padding:2px;border-radius:6px;cursor:pointer;flex-shrink:0;border:none}
         .color-row input[type=text]{flex:1}
+        .icon-row{display:flex;align-items:center;gap:8px}
+        .icon-row input{flex:1}
+        .icon-preview{width:34px;height:34px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:1px solid var(--divider-color,#444);border-radius:6px;color:var(--primary-text-color)}
         .tog-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
         .tog-row label{margin:0}
         .drive-block{border:1px dashed var(--divider-color,#333);border-radius:8px;padding:8px 10px;margin-bottom:8px}
@@ -1116,6 +1122,21 @@ class NeonNasCardEditor extends HTMLElement {
           <div class="group-title">Général</div>
           <div class="field"><label>Titre</label>
             <input type="text" data-key="header.title" value="${(c.header && c.header.title) || ''}" placeholder="Rackstation"/>
+          </div>
+          <div class="field"><label>Icône (mdi) — <a href="https://pictogrammers.com/library/mdi/" target="_blank" rel="noopener" style="color:var(--primary-color);font-size:10px">parcourir MDI ↗</a></label>
+            <div class="icon-row">
+              <input type="text" data-key="header.icon" value="${(c.header && c.header.icon) || ''}" placeholder="mdi:nas"/>
+              <div class="icon-preview" data-preview="header.icon"></div>
+            </div>
+          </div>
+          <div class="field"><label>Couleur titre</label>
+            <input type="text" data-key="header.color" value="${(c.header && c.header.color) || ''}" placeholder="défaut thème — ex var(--primary-color)"/>
+          </div>
+          <div class="field"><label>Taille titre</label>
+            <input type="text" data-key="header.title_size" value="${(c.header && c.header.title_size) || ''}" placeholder="13px"/>
+          </div>
+          <div class="field"><label>Text-shadow</label>
+            <input type="text" data-key="header.title_shadow" value="${(c.header && c.header.title_shadow) || ''}" placeholder="0 0 6px ..."/>
           </div>
           <div class="field"><label>Label volume (footer)</label>
             <input type="text" data-key="volume_label" value="${c.volume_label || ''}" placeholder="Volume 1"/>
@@ -1214,6 +1235,22 @@ class NeonNasCardEditor extends HTMLElement {
     });
     this.querySelectorAll('.ep-alert').forEach(inp => {
       inp.addEventListener('input', () => this._setAlert(+inp.dataset.didx, +inp.dataset.aidx, inp.value));
+    });
+    // Preview live de l'icône (ha-icon via createElement, cf CARDS-METHOD.md — pas de datalist)
+    this.querySelectorAll('.icon-preview[data-preview]').forEach(preview => {
+      const inp = this.querySelector(`input[data-key="${preview.dataset.preview}"]`);
+      const upd = () => {
+        const val = (inp && inp.value || '').trim();
+        preview.innerHTML = '';
+        if (val.match(/^mdi:[a-zA-Z0-9_-]+$/)) {
+          const ico = document.createElement('ha-icon');
+          ico.setAttribute('icon', val);
+          ico.style.cssText = '--mdc-icon-size:20px';
+          preview.appendChild(ico);
+        }
+      };
+      if (inp) inp.addEventListener('input', upd);
+      upd();
     });
   }
 }

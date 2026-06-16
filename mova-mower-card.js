@@ -13872,6 +13872,8 @@ class hv extends HTMLElement {
     return { type: "custom:mova-mower-card", entity: "lawn_mower.mova_1000", header: { title: "Mova 1000", icon: "mdi:robot-mower" } };
   }
 
+  static getConfigElement() { return document.createElement("mova-mower-card-editor"); }
+
   setConfig(f) {
     if (!f || !f.entity) throw new Error("entity is required");
     this._cleanup();
@@ -14260,16 +14262,35 @@ class hv extends HTMLElement {
 
   /* ── Wrapper CSS ────────────────────────────────────────────────────── */
 
+  // Couleur config → triplet RGB attendu par les variables --xenon/etc.
+  // Accepte : "#rrggbb" (converti), "r,g,b" (tel quel), "var(--rgb-x)" (tel quel,
+  // car les vars --rgb-* SONT déjà des triplets). Sinon null (= garde le défaut).
+  _toTriplet(col) {
+    if (!col) return null;
+    col = col.trim();
+    const hx = col.replace('#', '');
+    if (/^[0-9a-fA-F]{6}$/.test(hx)) {
+      return `${parseInt(hx.slice(0,2),16)},${parseInt(hx.slice(2,4),16)},${parseInt(hx.slice(4,6),16)}`;
+    }
+    if (/^\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}$/.test(col)) return col;   // déjà un triplet
+    if (/^var\(/.test(col)) return col;                                  // var(--rgb-*) = triplet
+    return null;
+  }
+
   _wrapperCSS() {
     const h = this._config.header || {};
-    const tc = h.color || "rgba(180,130,255,0.65)";
+    const tc = h.color || "rgba(var(--rgb-primary-text-color), 0.65)";
     const tf = h.font ? `'${h.font}',` : "'Orbitron',";
     const ts = h.title_shadow || "0 0 8px color-mix(in srgb, currentColor, transparent 30%)";
     const cmBg = this._config.card_mod_bg;
     const flowAnim = MWC_IS_LOW_POWER ? "" : "animation:plasma-flow 3s linear infinite,plasma-pulse 2.5s ease-in-out infinite";
+    // Surcharges couleurs des contrôles (DÉMARRER=krypton, PAUSE=helium, BASE=argon, MODE/selects=xenon)
+    const cc = this._config;
+    const ov = (cssVar, key) => { const t = this._toTriplet(cc[key]); return t ? `--${cssVar}:${t};` : ''; };
+    const overrides = ov('krypton','color_start') + ov('helium','color_pause') + ov('xenon','color_mode') + ov('argon','color_accent');
     return `
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&display=swap');
-:host{display:block;contain:layout style;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;--xenon:0,212,255;--argon:157,78,221;--krypton:46,229,182;--helium:255,238,88;--radon:224,17,95;--plasma:var(--rgb-plasma-uv-glow,157,78,221)}
+:host{display:block;contain:layout style;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;--xenon:0,212,255;--argon:157,78,221;--krypton:46,229,182;--helium:255,238,88;--radon:224,17,95;--plasma:var(--rgb-plasma-uv-glow,157,78,221);${overrides}}
 ha-card{contain:layout style paint;box-sizing:border-box;border-radius:var(--ha-card-border-radius,18px);overflow:hidden;position:relative;${cmBg ? "background:var(--ha-card-background,var(--card-background-color,rgba(4,8,22,0.82)))" : "background:rgba(10,6,30,0.82)"};border:1px solid rgba(98,0,234,0.45);box-shadow:0 0 0 1px rgba(180,0,255,0.06),0 8px 32px rgba(0,0,0,0.55),0 0 40px rgba(98,0,234,0.10),inset 0 1px 0 rgba(255,255,255,0.05)}
 ha-card::after{content:'';position:absolute;top:-50px;left:-50px;width:180px;height:180px;background:radial-gradient(circle,rgba(98,0,234,0.16) 0%,transparent 70%);pointer-events:none;z-index:0}
 .mw-inner{position:relative;z-index:1}
@@ -14404,6 +14425,241 @@ ${MWC_IS_LOW_POWER ? `.mw-flowing{animation:none !important}` : ""}
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+ *  EDITOR — template unifié (cf \\192.168.1.60\config\CARDS-EDITOR-TEMPLATE.md)
+ *  N'éditer QUE _schema() ; le reste est canonique et identique partout.
+ * ═══════════════════════════════════════════════════════════════════ */
+const NEON_FONTS = [
+  'Orbitron','Rajdhani','Share Tech Mono','Exo 2','Roboto','Montserrat',
+  'Oswald','Bebas Neue','Inter','Poppins','Space Grotesk','Syne',
+  'DM Sans','Playfair Display','Cinzel',
+];
+class MovaMowerCardEditor extends HTMLElement {
+  constructor() { super(); this._config = {}; this._hass = null; this._rendered = false; }
+
+  setConfig(c) {
+    this._config = { ...(c || {}) };
+    if (!this._rendered) { this._rendered = true; this._render(); }
+    else this._syncValues();
+  }
+  set hass(h) { this._hass = h; this._fillDatalists(); }
+  disconnectedCallback() { this._rendered = false; }
+
+  _read(key) {
+    return key.includes('.')
+      ? key.split('.').reduce((o, p) => (o && o[p] !== undefined ? o[p] : undefined), this._config)
+      : this._config[key];
+  }
+  _set(key, value) {
+    const empty = (value === undefined || value === '' || value === null);
+    if (key.includes('.')) {
+      const parts = key.split('.');
+      let o = this._config;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!o[parts[i]] || typeof o[parts[i]] !== 'object') o[parts[i]] = {};
+        o = o[parts[i]];
+      }
+      const last = parts[parts.length - 1];
+      if (empty) delete o[last]; else o[last] = value;
+      const parent = parts.slice(0, -1).reduce((a, k) => a && a[k], this._config);
+      if (parent && typeof parent === 'object' && !Object.keys(parent).length) delete this._config[parts[0]];
+    } else if (empty) { delete this._config[key]; }
+    else { this._config[key] = value; }
+    this.dispatchEvent(new CustomEvent('config-changed',
+      { detail: { config: { ...this._config } }, bubbles: true, composed: true }));
+  }
+
+  _syncValues() {
+    const active = this.querySelector(':focus') || document.activeElement;
+    this.querySelectorAll('[data-key]').forEach(el => {
+      if (el === active) return;
+      const v = this._read(el.dataset.key);
+      if (el.type === 'checkbox') el.checked = el.dataset.defaultOn ? (v !== false) : !!v;
+      else { el.value = (v == null ? '' : v); if (el._pick) { const h = this._toHex(el.value); if (h) el._pick.value = h; } }
+    });
+    this._bindIconPreviews(true);
+  }
+
+  _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d); return d; }
+  _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; this.appendChild(d); return d; }
+
+  _text(key, label, ph = '') {
+    const w = this._row(label).wrap;
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.placeholder = ph; inp.dataset.key = key; inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    w.appendChild(inp); return inp;
+  }
+
+  _toggle(key, label, defaultOn = false) {
+    const w = this._row(label).wrap;
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.key = key;
+    if (defaultOn) cb.dataset.defaultOn = '1';
+    const v = this._read(key); cb.checked = defaultOn ? (v !== false) : !!v;
+    cb.style.cssText = 'width:38px;height:20px;cursor:pointer;accent-color:var(--primary-color);flex:none;';
+    cb.addEventListener('change', () => this._set(key, cb.checked));
+    w.appendChild(cb); return cb;
+  }
+
+  _color(key, label, ph = 'ex: var(--primary-color) ou #6200EA') {
+    const w = this._row(label).wrap;
+    const box = document.createElement('div'); box.className = 'color-row';
+    const txt = document.createElement('input'); txt.type = 'text'; txt.placeholder = ph; txt.dataset.key = key; txt.value = this._read(key) ?? '';
+    const pick = document.createElement('input'); pick.type = 'color'; pick.value = this._toHex(txt.value) || '#6200EA';
+    txt._pick = pick;
+    txt.addEventListener('input', () => { this._set(key, txt.value); const h = this._toHex(txt.value); if (h) pick.value = h; });
+    pick.addEventListener('input', () => { txt.value = pick.value; this._set(key, pick.value); });
+    box.appendChild(txt); box.appendChild(pick); w.appendChild(box); return txt;
+  }
+
+  _icon(key, label) {
+    const w = this._row(`${label} — <a href="https://pictogrammers.com/library/mdi/" target="_blank" rel="noopener" class="mdi-link">parcourir ↗</a>`, true).wrap;
+    const box = document.createElement('div'); box.className = 'icon-row';
+    const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = 'mdi:robot-mower'; inp.dataset.key = key; inp.value = this._read(key) ?? '';
+    const prev = document.createElement('div'); prev.className = 'icon-preview'; prev.dataset.preview = key;
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    box.appendChild(inp); box.appendChild(prev); w.appendChild(box); return inp;
+  }
+
+  _entity(key, label, prefix = '') {
+    const w = this._row(label).wrap;
+    const inp = document.createElement('input'); inp.type = 'text'; inp.autocomplete = 'off';
+    inp.placeholder = (prefix || 'domain') + '.…'; inp.dataset.key = key; inp.dataset.prefix = prefix;
+    inp.setAttribute('list', `mmc-ent-${(prefix || 'all').replace(/[^a-z]/g, '')}`);
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value.trim()));
+    w.appendChild(inp); return inp;
+  }
+
+  _select(key, label, options, emptyLabel = null) {
+    const w = this._row(label).wrap;
+    const sel = document.createElement('select'); sel.dataset.key = key;
+    if (emptyLabel !== null) { const o = document.createElement('option'); o.value = ''; o.textContent = emptyLabel; sel.appendChild(o); }
+    options.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = (typeof opt === 'object') ? opt.value : opt;
+      o.textContent = (typeof opt === 'object') ? opt.label : opt;
+      sel.appendChild(o);
+    });
+    sel.value = this._read(key) ?? '';
+    sel.addEventListener('change', () => this._set(key, sel.value));
+    w.appendChild(sel); return sel;
+  }
+
+  _row(labelHtml, isHtml = false) {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('label');
+    if (isHtml) lbl.innerHTML = labelHtml; else lbl.textContent = labelHtml;
+    const wrap = document.createElement('div'); wrap.className = 'field-wrap';
+    row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
+    return { row, wrap };
+  }
+
+  _toHex(c) {
+    if (!c) return null;
+    if (/^#[0-9a-f]{6}$/i.test(c)) return c;
+    const m = c.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/i);
+    return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+  }
+
+  _bindIconPreviews(resyncOnly = false) {
+    this.querySelectorAll('.icon-preview[data-preview]').forEach(prev => {
+      const inp = this.querySelector(`input[data-key="${prev.dataset.preview}"]`);
+      const upd = () => {
+        const val = (inp && inp.value || '').trim();
+        prev.innerHTML = '';
+        if (/^mdi:[a-zA-Z0-9_-]+$/.test(val)) {
+          const ico = document.createElement('ha-icon');
+          ico.setAttribute('icon', val); ico.style.cssText = '--mdc-icon-size:20px';
+          prev.appendChild(ico);
+        }
+      };
+      if (!resyncOnly && inp && !inp._previewBound) { inp.addEventListener('input', upd); inp._previewBound = true; }
+      upd();
+    });
+  }
+
+  _fillDatalists() {
+    if (!this._hass) return;
+    this.querySelectorAll('input[data-prefix]').forEach(inp => {
+      const id = inp.getAttribute('list'); if (!id) return;
+      let dl = this.querySelector('#' + id);
+      if (!dl) { dl = document.createElement('datalist'); dl.id = id; this.appendChild(dl); }
+      const ids = Object.keys(this._hass.states).filter(e => e.startsWith(inp.dataset.prefix || '')).sort();
+      if (dl.childElementCount === ids.length) return;
+      dl.textContent = '';
+      const frag = document.createDocumentFragment();
+      ids.forEach(id2 => { const o = document.createElement('option'); o.value = id2;
+        const fn = this._hass.states[id2].attributes?.friendly_name; if (fn && fn !== id2) o.label = fn; frag.appendChild(o); });
+      dl.appendChild(frag);
+    });
+  }
+
+  _css() {
+    return `
+      :host { display:block; padding:14px; font-family:var(--primary-font-family,Roboto,sans-serif); }
+      .sec { font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--divider-color); }
+      .sec:first-child { margin-top:0; }
+      .row { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
+      .row label { flex:0 0 160px;font-size:12px;color:var(--secondary-text-color); }
+      .row label .mdi-link { color:var(--primary-color);font-size:9px;text-transform:none;letter-spacing:0; }
+      .field-wrap { flex:1;min-width:0;display:flex; }
+      input[type=text],input[type=number],select { flex:1;width:100%;padding:4px 8px;border:1px solid var(--divider-color);border-radius:4px;background:var(--card-background-color);color:var(--primary-text-color);font-size:12px;outline:none;box-sizing:border-box; }
+      select { cursor:pointer; }
+      input:focus,select:focus { box-shadow:0 0 0 1px var(--primary-color); }
+      .color-row { display:flex;gap:8px;flex:1; }
+      .color-row input[type=text] { flex:1; }
+      .color-row input[type=color] { width:36px;height:28px;flex:none;padding:0;border:none;background:none;border-radius:4px;cursor:pointer; }
+      .icon-row { display:flex;gap:8px;flex:1;align-items:center; }
+      .icon-row input { flex:1; }
+      .icon-preview { width:30px;height:28px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--divider-color);border-radius:4px;color:var(--primary-text-color); }
+      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:-2px 0 6px 168px; }
+    `;
+  }
+
+  _render() {
+    this.innerHTML = '';
+    const st = document.createElement('style'); st.textContent = this._css(); this.appendChild(st);
+    this._schema();
+    this._fillDatalists();
+    this._bindIconPreviews();
+  }
+
+  // ╔════════════════════════════════════════════════════════════════╗
+  // ║  SCHÉMA — spécifique à la card                                  ║
+  // ╚════════════════════════════════════════════════════════════════╝
+  _schema() {
+    this._section('Tondeuse');
+    this._entity('entity', 'Entité tondeuse *', 'lawn_mower');
+    this._hint('Le reste (capteurs, selects, boutons) est auto-dérivé du slug. Surcharge en YAML si besoin.');
+
+    this._section('En-tête');
+    this._text('header.title', 'Titre', 'ex: Mova 1000');
+    this._icon('header.icon', 'Icône (mdi)');
+    this._color('header.color', 'Couleur titre');
+    this._text('header.title_size', 'Taille titre', '16px');
+    this._select('header.font', 'Police', NEON_FONTS, '— thème HA —');
+    this._text('header.title_shadow', 'Text-shadow');
+
+    this._section('Carte / vue');
+    this._entity('map_entity', 'Caméra carte', 'camera');
+    this._entity('pause_entity', 'Entité pause', 'input_boolean');
+
+    this._section('Couleurs des contrôles');
+    this._hint('Vide = défaut. Accepte #hex, rgb(...) ou var(--rgb-lavande).');
+    this._color('color_start', 'Bouton DÉMARRER (vert)');
+    this._color('color_pause', 'Bouton PAUSE (jaune)');
+    this._color('color_mode',  'Boutons mode (ALL AREA/EDGE…)');
+    this._color('color_accent','Accent violet (BASE + listes + libellés)');
+
+    this._section('Options');
+    this._toggle('card_mod_bg', 'Hériter du fond card-mod', true);
+  }
+}
+if (!customElements.get("mova-mower-card-editor")) {
+  customElements.define("mova-mower-card-editor", MovaMowerCardEditor);
+}
+
 if (!customElements.get("mova-mower-card")) {
   customElements.define("mova-mower-card", hv);
 }
@@ -14412,7 +14668,8 @@ if (!window.customCards.some(c => c.type === "mova-mower-card")) {
   window.customCards.push({
     type: "mova-mower-card",
     name: "Mova Mower Card",
-    description: "Cyberpunk mower card with map, status, controls and maintenance"
+    description: "Cyberpunk mower card with map, status, controls and maintenance",
+    preview: true
   });
 }
 console.info("Mova Mower Card loaded");
