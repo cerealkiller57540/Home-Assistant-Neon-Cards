@@ -913,7 +913,8 @@ WeatherNeonCard.styles = `
     background:rgba(255,255,255,.8); animation:wsnow linear infinite; }
   .wwind-canvas, .wrain-canvas { position:absolute; inset:0; z-index:1; pointer-events:none;
     -webkit-mask:linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%);
-            mask:linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%); }
+            mask:linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%);
+    width:100%; height:100%; }
   .wfx-dust { position:absolute; width:3px; height:3px; border-radius:50%;
     background:#ffe9a8; opacity:.5; animation:wdust ease-in-out infinite; }
   .wfx-ray { position:absolute; top:-30%; left:18%; width:160px; height:300px;
