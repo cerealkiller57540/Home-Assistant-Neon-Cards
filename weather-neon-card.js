@@ -753,6 +753,20 @@ class WeatherNeonCard extends HTMLElement {
       this._startGlitchLife();  // (re)lance la vie de GLITCH sur le nouvel élément
     }
 
+    // limite les effets (vent/pluie/éclair) à la zone HERO : --fx-h = haut du forecast.
+    // Mesuré après layout. Sans forecast → toute la card.
+    requestAnimationFrame(() => {
+      const card = this.shadowRoot.querySelector('ha-card');
+      const fc = this._elInner.querySelector('.wforecast');
+      if (!card) return;
+      if (fc) {
+        const h = Math.round(fc.getBoundingClientRect().top - card.getBoundingClientRect().top);
+        if (h > 0) card.style.setProperty('--fx-h', h + 'px');
+      } else {
+        card.style.removeProperty('--fx-h');
+      }
+    });
+
     // PLUIE (canvas) : niveau selon la condition réelle. Quand le canvas pluie est
     // actif, on ne génère PAS la pluie CSS (évite le doublon) → les spans CSS ne
     // couvrent plus que neige / poussières / annonces de proba.
@@ -911,16 +925,17 @@ WeatherNeonCard.styles = `
     background:linear-gradient(transparent, rgba(125,249,255,.6)); animation:wrain linear infinite; }
   .wfx-snow { position:absolute; top:-8%; width:4px; height:4px; border-radius:50%;
     background:rgba(255,255,255,.8); animation:wsnow linear infinite; }
-  .wwind-canvas, .wrain-canvas { position:absolute; inset:0; z-index:1; pointer-events:none;
+  /* effets limités à la zone hero (au-dessus du divider forecast) via --fx-h */
+  .wwind-canvas, .wrain-canvas { position:absolute; top:0; left:0; z-index:1; pointer-events:none;
     -webkit-mask:linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%);
             mask:linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%);
-    width:100%; height:100%; }
+    width:100%; height:var(--fx-h, 100%); }
   .wfx-dust { position:absolute; width:3px; height:3px; border-radius:50%;
     background:#ffe9a8; opacity:.5; animation:wdust ease-in-out infinite; }
   .wfx-ray { position:absolute; top:-30%; left:18%; width:160px; height:300px;
     background:linear-gradient(180deg, rgba(255,225,100,.18), transparent);
     transform:rotate(18deg); filter:blur(10px); animation:wray 7s ease-in-out infinite; }
-  .wfx-flash { position:absolute; inset:0; opacity:0; mix-blend-mode:screen;
+  .wfx-flash { position:absolute; top:0; left:0; right:0; height:var(--fx-h, 100%); opacity:0; mix-blend-mode:screen;
     background:linear-gradient(180deg, rgba(220,240,255,.9) 0%, rgba(150,200,255,.4) 45%, transparent 80%);
     animation:wflash 8s ease-out infinite; animation-delay:1.5s; }
 
