@@ -18,7 +18,12 @@
  *   reactive_bg    true|false  fond qui change selon la météo (défaut: true)
  */
 
-const VERSION = '2.0.0';
+const VERSION = '2.1.1';
+
+// ── Device detection (cf CARDS-METHOD.md) — allège les effets canvas sur tablette/mobile
+const WNC_IS_IPAD = /iPad/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const WNC_IS_LOW_POWER = WNC_IS_IPAD || /iPhone|Android/.test(navigator.userAgent);
 
 // ═══════════════════════════════════════════════════════
 //  CONFIG
@@ -477,7 +482,7 @@ class WeatherNeonCard extends HTMLElement {
     const fit = () => {
       const r = cv.getBoundingClientRect();
       if (!r.width || !r.height) return false;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = WNC_IS_LOW_POWER ? 1 : Math.min(window.devicePixelRatio || 1, 2);
       if (cv._w !== r.width || cv._h !== r.height) {
         cv.width = r.width * dpr; cv.height = r.height * dpr;
         cv._w = r.width; cv._h = r.height; cv._dpr = dpr;
@@ -512,7 +517,7 @@ class WeatherNeonCard extends HTMLElement {
     const draw = (now) => {
       this._windRAF = requestAnimationFrame(draw);
       if (this._windOff || document.hidden) return;
-      if (now - (this._windLast || 0) < 33) return;     // ~30 fps
+      if (now - (this._windLast || 0) < (WNC_IS_LOW_POWER ? 66 : 33)) return;  // 15 fps tablette, 30 sinon
       this._windLast = now;
       if (!fit()) return;
       const ctx = cv.getContext('2d'), dpr = cv._dpr, W = cv._w, H = cv._h;
@@ -525,7 +530,7 @@ class WeatherNeonCard extends HTMLElement {
       const speed = 0.4 + intensity * 1.4;               // vitesse globale du flux
 
       // 1) NAPPES de brume : bandes horizontales ondulées, gradient doux, dérivent.
-      const nSheets = 2 + Math.round(intensity * 2);     // 2 à 4 nappes
+      const nSheets = WNC_IS_LOW_POWER ? 1 : 2 + Math.round(intensity * 2);  // 1 (tablette) / 2-4
       for (let s = 0; s < nSheets; s++) {
         const sh = this._windSheets[s];
         sh.t += speed * sh.speed;
@@ -552,7 +557,8 @@ class WeatherNeonCard extends HTMLElement {
       }
 
       // 2) PARTICULES portées par le flux (poussières/feuilles) — petites traînées.
-      const nParts = 12 + Math.round(intensity * 26);    // 12 à 38
+      const nParts = WNC_IS_LOW_POWER ? 4 + Math.round(intensity * 6)   // 4-10 tablette
+                                      : 12 + Math.round(intensity * 26); // 12-38 desktop
       ctx.lineCap = 'round';
       ctx.strokeStyle = 'rgba(190,230,255,1)';
       for (let i = 0; i < nParts; i++) {
@@ -588,7 +594,7 @@ class WeatherNeonCard extends HTMLElement {
     const fit = () => {
       const r = cv.getBoundingClientRect();
       if (!r.width || !r.height) return false;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = WNC_IS_LOW_POWER ? 1 : Math.min(window.devicePixelRatio || 1, 2);
       if (cv._w !== r.width || cv._h !== r.height) {
         cv.width = r.width * dpr; cv.height = r.height * dpr;
         cv._w = r.width; cv._h = r.height; cv._dpr = dpr;
@@ -608,7 +614,7 @@ class WeatherNeonCard extends HTMLElement {
     const draw = (now) => {
       this._rainRAF = requestAnimationFrame(draw);
       if (this._rainOff || document.hidden) return;
-      if (now - (this._rainLast || 0) < 33) return;
+      if (now - (this._rainLast || 0) < (WNC_IS_LOW_POWER ? 66 : 33)) return;  // 15 fps tablette
       this._rainLast = now;
       if (!fit()) return;
       const ctx = cv.getContext('2d'), dpr = cv._dpr, W = cv._w, H = cv._h;
@@ -619,7 +625,7 @@ class WeatherNeonCard extends HTMLElement {
       const drops = this._rainDrops, splash = this._rainSplash;
       if (level <= 0) { drops.length = 0; splash.length = 0; return; }
 
-      const target = Math.round(level * 120);               // densité ∝ niveau
+      const target = Math.round(level * (WNC_IS_LOW_POWER ? 35 : 120));  // densité ∝ niveau (très allégée tablette)
       while (drops.length < target) drops.push(newDrop(W, H, drops.length < target / 2));
       if (drops.length > target) drops.length = target;
 
