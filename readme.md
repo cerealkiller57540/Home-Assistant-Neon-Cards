@@ -78,7 +78,7 @@
 
 | Card | File | Version | Description |
 |------|------|:-------:|-------------|
-| 🌦️ Weather Neon Card | `weather-neon-card.js` | `2.1.1` | Animated outline weather icons (15 conditions), forecast, vigilance halo, GLITCH cat, air-quality & pollen pills (Atmo France), canvas FX: wind haze + rain with splashes + lightning flashes (hero-zone, low-power throttling on iPad/mobile) |
+| 🌦️ Weather Neon Card | `weather-neon-card.js` | `2.2.0` | Animated outline weather icons (15 conditions), forecast, vigilance halo, GLITCH cat, air-quality & pollen pills (Atmo France), canvas FX: wind haze + rain with splashes + lightning flashes (hero-zone, low-power throttling on iPad/mobile) |
 
 ### 💡 Lighting & Switches
 

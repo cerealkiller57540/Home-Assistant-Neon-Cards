@@ -18,7 +18,7 @@
  *   reactive_bg    true|false  fond qui change selon la météo (défaut: true)
  */
 
-const VERSION = '2.1.1';
+const VERSION = '2.2.0';
 
 // ── Device detection (cf CARDS-METHOD.md) — allège les effets canvas sur tablette/mobile
 const WNC_IS_IPAD = /iPad/.test(navigator.userAgent) ||
@@ -781,17 +781,23 @@ class WeatherNeonCard extends HTMLElement {
       : cond === 'snowy-rainy' ? 0.4
       : (ex.rainCh >= 40 && this._config.particles) ? ex.rainCh / 100 * 0.4  // annonce forte → bruine
       : 0;
-    this._rainLevel = this._config.particles ? rainLevel : 0;
-    if (this._config.particles) this._startRain();
+    // Effets canvas (vent/pluie/éclair) = OFF sur iPad/mobile (mode minimaliste,
+    // évite la surchauffe). On garde uniquement les particules CSS légères (neige,
+    // poussières) qui ne sollicitent pas le GPU en continu.
+    const fxOn = this._config.particles && !WNC_IS_LOW_POWER;
 
-    // particules CSS (neige/poussières/annonces) — la pluie réelle est gérée par le canvas.
-    // + flash d'éclair (double-coup) ajouté pour lightning ET lightning-rainy.
+    this._rainLevel = fxOn ? rainLevel : 0;
+    if (fxOn) this._startRain();
+
+    // particules CSS (neige/poussières/annonces) + flash d'éclair (si canvas actif).
     if (this._config.particles) {
-      const storm = (cond === 'lightning' || cond === 'lightning-rainy');
-      const cssCond = rainLevel > 0 ? 'cloudy' : cond;   // neutralise la pluie CSS si canvas actif
-      const fxKey = `${cssCond}|${ex.rainCh}|${ex.snowCh}|${rainLevel > 0 ? 'R' : ''}|${storm ? 'S' : ''}`;
+      const storm = fxOn && (cond === 'lightning' || cond === 'lightning-rainy');
+      // pluie neutralisée si gérée par canvas (fxOn) OU sur low power (minimaliste, pas de pluie CSS)
+      const wet = ['rainy', 'pouring', 'lightning-rainy', 'snowy-rainy', 'lightning'].includes(cond);
+      const cssCond = ((fxOn && rainLevel > 0) || (WNC_IS_LOW_POWER && wet)) ? 'cloudy' : cond;
+      const fxKey = `${cssCond}|${ex.rainCh}|${ex.snowCh}|${(fxOn && rainLevel > 0) ? 'R' : ''}|${storm ? 'S' : ''}|${WNC_IS_LOW_POWER ? 'L' : ''}`;
       if (this._fxKey !== fxKey) {
-        let html = particlesHtml(cssCond, rainLevel > 0 ? 0 : ex.rainCh, ex.snowCh);
+        let html = particlesHtml(cssCond, (fxOn && rainLevel > 0) ? 0 : ex.rainCh, ex.snowCh);
         if (storm && !html.includes('wfx-flash')) {
           html = html ? html.replace('</div>', '<span class="wfx-flash"></span></div>')
                       : '<div class="wfx"><span class="wfx-flash"></span></div>';
@@ -800,9 +806,9 @@ class WeatherNeonCard extends HTMLElement {
         this._fxKey = fxKey;
       }
     }
-    // vent (canvas) : force = max(rafale, vent). Le moteur ajuste densité/vitesse à chaud.
+    // vent (canvas) : force = max(rafale, vent). OFF sur low power.
     this._windForce = Math.max(ex.gust || 0, ex.wind || 0);
-    if (this._config.particles) this._startWind();
+    if (fxOn) this._startWind();
     this._elSky.style.background = sky;  // le fond peut changer sans toucher au DOM animé
   }
 
