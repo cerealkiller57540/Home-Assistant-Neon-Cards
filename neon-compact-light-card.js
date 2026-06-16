@@ -15,7 +15,7 @@
  * - Smart contrast calculation for optimal text readability
  * - Cyberpunk visual effects (scanlines, glitch, intense glow, color pulse)
  * 
- * @version 2.0.0
+ * @version 2.1.0
  * @repository https://github.com/YOUR_USERNAME/neon-compact-light-card
  */
 
@@ -1227,268 +1227,303 @@ class NeonCompactLightCard extends HTMLElement {
 //  Visual Editor (Native HTML)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Template unifié — cf \\192.168.1.60\config\CARDS-EDITOR-TEMPLATE.md
+// N'éditer QUE _schema() ; le reste est canonique. Helpers spécifiques à cette
+// card conservés : _toggleVal (toggle→valeur string), _actionSelect (tap actions).
 class NeonCompactLightCardEditor extends HTMLElement {
-  constructor() {
-    super();
-    this._config = {};
-    this._hass = null;
-    this._built = false;
-  }
+  constructor() { super(); this._config = {}; this._hass = null; this._rendered = false; }
 
-  setConfig(config) {
-    // §22 : reconstruire le DOM une seule fois ; ensuite sync chirurgical (garde le focus).
-    this._config = { ...config };
-    if (!this._built) this._render();
+  setConfig(c) {
+    this._config = { ...(c || {}) };
+    if (!this._rendered) { this._rendered = true; this._render(); }
     else this._syncValues();
   }
+  set hass(h) { this._hass = h; this._fillDatalists(); }
+  disconnectedCallback() { this._rendered = false; }
 
-  set hass(hass) {
-    this._hass = hass;
-    if (!this._built) this._render();
-    else this._fillEntityOptions();
+  _read(key) {
+    return key.includes('.')
+      ? key.split('.').reduce((o, p) => (o && o[p] !== undefined ? o[p] : undefined), this._config)
+      : this._config[key];
+  }
+  _set(key, value) {
+    const empty = (value === undefined || value === '' || value === null);
+    if (key.includes('.')) {
+      const parts = key.split('.');
+      let o = this._config;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!o[parts[i]] || typeof o[parts[i]] !== 'object') o[parts[i]] = {};
+        o = o[parts[i]];
+      }
+      const last = parts[parts.length - 1];
+      if (empty) delete o[last]; else o[last] = value;
+      const parent = parts.slice(0, -1).reduce((a, k) => a && a[k], this._config);
+      if (parent && typeof parent === 'object' && !Object.keys(parent).length) delete this._config[parts[0]];
+    } else if (empty) { delete this._config[key]; }
+    else { this._config[key] = value; }
+    this.dispatchEvent(new CustomEvent('config-changed',
+      { detail: { config: { ...this._config } }, bubbles: true, composed: true }));
   }
 
-  disconnectedCallback() { this.innerHTML = ""; this._built = false; }
-
-  // §22 : met à jour les champs sans recréer le DOM. Guard activeElement.
   _syncValues() {
-    const c = this._config;
-    this.querySelectorAll("[data-key]").forEach((el) => {
-      if (el === document.activeElement) return;
-      const k = el.dataset.key;
-      if (el.type === "checkbox") {
-        el.checked = el.dataset.defaultOn ? (c[k] !== false) : (c[k] === true);
-      } else if (el.dataset.num) {
-        const v = c[k];
-        el.value = (v === undefined || v === null) ? "" : String(v);
-      } else {
-        const v = c[k];
-        el.value = (v === undefined || v === null) ? "" : v;
-        if (el._pick) { const h = this._toHex(el.value); if (h) el._pick.value = h; }
+    const active = this.querySelector(':focus') || document.activeElement;
+    this.querySelectorAll('[data-key]').forEach(el => {
+      if (el === active) return;
+      const v = this._read(el.dataset.key);
+      if (el.type === 'checkbox') el.checked = el.dataset.defaultOn ? (v !== false) : (v === true);
+      else {
+        el.value = (v == null ? '' : v);
+        if (el._pick) el._pick.value = this._toHex(el.value) || (el._cssDefault ? this._resolveColor(el._cssDefault) : null) || '#00E8FF';
       }
     });
-    // Action selects : valeur config = { action } → "none" si absent.
-    this.querySelectorAll("select[data-action-key]").forEach((sel) => {
-      if (sel === document.activeElement) return;
-      sel.value = c[sel.dataset.actionKey]?.action || "none";
+    // toggles à valeur string (fill_style=plasma…)
+    this.querySelectorAll('input[data-val-key]').forEach(cb => {
+      if (cb === active) return;
+      cb.checked = this._config[cb.dataset.valKey] === cb.dataset.onValue;
     });
-    // Toggles à valeur string (fill_style=plasma…)
-    this.querySelectorAll("input[data-val-key]").forEach((cb) => {
-      if (cb === document.activeElement) return;
-      cb.checked = c[cb.dataset.valKey] === cb.dataset.onValue;
+    // action selects (valeur config = {action})
+    this.querySelectorAll('select[data-action-key]').forEach(sel => {
+      if (sel === active) return;
+      sel.value = this._config[sel.dataset.actionKey]?.action || 'none';
     });
+    this._bindIconPreviews(true);
+  }
+
+  _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d); return d; }
+  _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; this.appendChild(d); return d; }
+
+  _text(key, label, ph = '') {
+    const w = this._row(label).wrap;
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.placeholder = ph; inp.dataset.key = key; inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    w.appendChild(inp); return inp;
+  }
+
+  _number(key, label, { min, max, step = 1, ph = '' } = {}) {
+    const w = this._row(label).wrap;
+    const inp = document.createElement('input');
+    inp.type = 'number'; if (min != null) inp.min = min; if (max != null) inp.max = max;
+    inp.step = step; inp.placeholder = ph; inp.dataset.key = key; inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => { const n = parseFloat(inp.value); this._set(key, isNaN(n) ? undefined : n); });
+    w.appendChild(inp); return inp;
+  }
+
+  _toggle(key, label, defaultOn = false) {
+    const w = this._row(label).wrap;
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.key = key;
+    if (defaultOn) cb.dataset.defaultOn = '1';
+    const v = this._read(key); cb.checked = defaultOn ? (v !== false) : (v === true);
+    cb.style.cssText = 'width:38px;height:20px;cursor:pointer;accent-color:var(--primary-color);flex:none;';
+    cb.addEventListener('change', () => this._set(key, cb.checked));
+    w.appendChild(cb); return cb;
+  }
+
+  // Toggle qui écrit une valeur string (ex fill_style="plasma") au lieu d'un booléen.
+  _toggleVal(key, label, onValue) {
+    const w = this._row(label).wrap;
+    const cb = document.createElement('input'); cb.type = 'checkbox';
+    cb.dataset.valKey = key; cb.dataset.onValue = onValue;
+    cb.checked = this._config[key] === onValue;
+    cb.style.cssText = 'width:38px;height:20px;cursor:pointer;accent-color:var(--primary-color);flex:none;';
+    cb.addEventListener('change', () => this._set(key, cb.checked ? onValue : undefined));
+    w.appendChild(cb); return cb;
+  }
+
+  // cssDefault = couleur appliquée quand le champ est vide → picker la montre résolue.
+  _color(key, label, cssDefault = null, ph = 'ex: #FF3366 / rgb(var(--rgb-lavande)) / var(--primary-color)') {
+    const w = this._row(label).wrap;
+    const box = document.createElement('div'); box.className = 'color-row';
+    const txt = document.createElement('input'); txt.type = 'text'; txt.placeholder = ph; txt.dataset.key = key; txt.value = this._read(key) ?? '';
+    const pick = document.createElement('input'); pick.type = 'color';
+    txt._pick = pick; txt._cssDefault = cssDefault;
+    const refresh = () => { pick.value = this._toHex(txt.value) || (cssDefault ? this._resolveColor(cssDefault) : null) || '#00E8FF'; };
+    txt.addEventListener('input', () => { this._set(key, txt.value); refresh(); });
+    pick.addEventListener('input', () => { txt.value = pick.value; this._set(key, pick.value); });
+    box.appendChild(txt); box.appendChild(pick); w.appendChild(box); refresh(); return txt;
+  }
+
+  _resolveColor(css) {
+    try {
+      const probe = document.createElement('span');
+      probe.style.cssText = `color:${css};position:absolute;left:-9999px;top:-9999px`;
+      this.appendChild(probe);
+      const rgb = getComputedStyle(probe).color; probe.remove();
+      const m = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
+      return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+    } catch { return null; }
+  }
+
+  _icon(key, label) {
+    const w = this._row(`${label} — <a href="https://pictogrammers.com/library/mdi/" target="_blank" rel="noopener" class="mdi-link">parcourir ↗</a>`, true).wrap;
+    const box = document.createElement('div'); box.className = 'icon-row';
+    const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = 'mdi:lightbulb'; inp.dataset.key = key; inp.value = this._read(key) ?? '';
+    const prev = document.createElement('div'); prev.className = 'icon-preview'; prev.dataset.preview = key;
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    box.appendChild(inp); box.appendChild(prev); w.appendChild(box); return inp;
+  }
+
+  _entity(key, label, prefix = '') {
+    const w = this._row(label).wrap;
+    const inp = document.createElement('input'); inp.type = 'text'; inp.autocomplete = 'off';
+    inp.placeholder = (prefix || 'domain') + '.…'; inp.dataset.key = key; inp.dataset.prefix = prefix;
+    inp.setAttribute('list', `ncl-ent-${(prefix || 'all').replace(/[^a-z]/g, '')}`);
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value.trim()));
+    w.appendChild(inp); return inp;
+  }
+
+  _select(key, label, options, emptyLabel = null) {
+    const w = this._row(label).wrap;
+    const sel = document.createElement('select'); sel.dataset.key = key;
+    if (emptyLabel !== null) { const o = document.createElement('option'); o.value = ''; o.textContent = emptyLabel; sel.appendChild(o); }
+    options.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = (typeof opt === 'object') ? opt.value : opt;
+      o.textContent = (typeof opt === 'object') ? opt.label : opt;
+      sel.appendChild(o);
+    });
+    sel.value = this._read(key) ?? '';
+    sel.addEventListener('change', () => this._set(key, sel.value));
+    w.appendChild(sel); return sel;
+  }
+
+  // Select d'action (valeur config = {action}). options = [{v,l}].
+  _actionSelect(key, label, options) {
+    const w = this._row(label).wrap;
+    const sel = document.createElement('select'); sel.dataset.actionKey = key;
+    options.forEach(({ v, l }) => { const o = document.createElement('option'); o.value = v; o.textContent = l; sel.appendChild(o); });
+    sel.value = this._config[key]?.action || 'none';
+    sel.addEventListener('change', () => { const v = sel.value; this._set(key, (!v || v === 'none') ? undefined : { action: v }); });
+    w.appendChild(sel); return sel;
+  }
+
+  _row(labelHtml, isHtml = false) {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('label');
+    if (isHtml) lbl.innerHTML = labelHtml; else lbl.textContent = labelHtml;
+    const wrap = document.createElement('div'); wrap.className = 'field-wrap';
+    row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
+    return { row, wrap };
+  }
+
+  _toHex(c) {
+    if (!c) return null;
+    if (/^#[0-9a-f]{6}$/i.test(c)) return c;
+    const m = c.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/i);
+    return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+  }
+
+  _bindIconPreviews(resyncOnly = false) {
+    this.querySelectorAll('.icon-preview[data-preview]').forEach(prev => {
+      const inp = this.querySelector(`input[data-key="${prev.dataset.preview}"]`);
+      const upd = () => {
+        const val = (inp && inp.value || '').trim();
+        prev.innerHTML = '';
+        if (/^mdi:[a-zA-Z0-9_-]+$/.test(val)) {
+          const ico = document.createElement('ha-icon');
+          ico.setAttribute('icon', val); ico.style.cssText = '--mdc-icon-size:20px';
+          prev.appendChild(ico);
+        }
+      };
+      if (!resyncOnly && inp && !inp._previewBound) { inp.addEventListener('input', upd); inp._previewBound = true; }
+      upd();
+    });
+  }
+
+  _fillDatalists() {
+    if (!this._hass) return;
+    this.querySelectorAll('input[data-prefix]').forEach(inp => {
+      const id = inp.getAttribute('list'); if (!id) return;
+      let dl = this.querySelector('#' + id);
+      if (!dl) { dl = document.createElement('datalist'); dl.id = id; this.appendChild(dl); }
+      const ids = Object.keys(this._hass.states).filter(e => e.startsWith(inp.dataset.prefix || '')).sort();
+      if (dl.childElementCount === ids.length) return;
+      dl.textContent = '';
+      const frag = document.createDocumentFragment();
+      ids.forEach(id2 => { const o = document.createElement('option'); o.value = id2;
+        const fn = this._hass.states[id2].attributes?.friendly_name; if (fn && fn !== id2) o.label = fn; frag.appendChild(o); });
+      dl.appendChild(frag);
+    });
+  }
+
+  _css() {
+    return `
+      :host { display:block; padding:14px; font-family:var(--primary-font-family,Roboto,sans-serif); }
+      .sec { font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--divider-color); }
+      .sec:first-child { margin-top:0; }
+      .row { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
+      .row label { flex:0 0 160px;font-size:12px;color:var(--secondary-text-color); }
+      .row label .mdi-link { color:var(--primary-color);font-size:9px;text-transform:none;letter-spacing:0; }
+      .field-wrap { flex:1;min-width:0;display:flex; }
+      input[type=text],input[type=number],select { flex:1;width:100%;padding:4px 8px;border:1px solid var(--divider-color);border-radius:4px;background:var(--card-background-color);color:var(--primary-text-color);font-size:12px;outline:none;box-sizing:border-box; }
+      select { cursor:pointer; }
+      input:focus,select:focus { box-shadow:0 0 0 1px var(--primary-color); }
+      .color-row { display:flex;gap:8px;flex:1; }
+      .color-row input[type=text] { flex:1; }
+      .color-row input[type=color] { width:36px;height:28px;flex:none;padding:0;border:none;background:none;border-radius:4px;cursor:pointer; }
+      .icon-row { display:flex;gap:8px;flex:1;align-items:center; }
+      .icon-row input { flex:1; }
+      .icon-preview { width:30px;height:28px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--divider-color);border-radius:4px;color:var(--primary-text-color); }
+      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:-2px 0 6px 168px; }
+    `;
   }
 
   _render() {
-    this._built = true;
-    this.innerHTML = "";
-    this.style.cssText = "display:block;padding:16px;font-family:var(--primary-font-family,Roboto,sans-serif)";
+    this.innerHTML = '';
+    const st = document.createElement('style'); st.textContent = this._css(); this.appendChild(st);
+    this._schema();
+    this._fillDatalists();
+    this._bindIconPreviews();
+  }
 
-    const style = document.createElement("style");
-    style.textContent = `
-      .sec { font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
-             color:var(--primary-color);margin:20px 0 10px; }
-      .row { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px; }
-      .row label { font-size:14px;color:var(--primary-text-color);flex:1; }
-      select, input[type=text] {
-        font-size:13px;padding:6px 8px;
-        border:1px solid var(--divider-color,#ccc);border-radius:6px;
-        background:var(--card-background-color,#fff);color:var(--primary-text-color,#000);
-        outline:none;flex-shrink:0; }
-      select { min-width:165px;cursor:pointer; }
-      input[type=text] { width:165px; }
-      .toggle-row { display:flex;align-items:center;justify-content:space-between;
-                    padding:8px 0;border-bottom:1px solid var(--divider-color,#eee); }
-      .toggle-row:last-child { border-bottom:none; }
-      .toggle-row label { font-size:14px;color:var(--primary-text-color); }
-      .toggle-row input[type=checkbox] { width:38px;height:20px;cursor:pointer;
-                                         accent-color:var(--primary-color,#03a9f4); }
-      .color-row { display:flex;align-items:center;gap:8px; }
-      .color-row input[type=text] { flex:1;min-width:0; }
-      input[type=color] { width:44px;height:30px;padding:2px 3px;
-                          border:1px solid var(--divider-color,#ccc);border-radius:6px;
-                          cursor:pointer;flex-shrink:0; }
-      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:2px 0 10px; }
-    `;
-    this.appendChild(style);
+  // ╔════════════════════════════════════════════════════════════════╗
+  // ║  SCHÉMA — spécifique à la card                                  ║
+  // ╚════════════════════════════════════════════════════════════════╝
+  _schema() {
+    this._section('Entité & icône');
+    this._entity('entity', 'Light Entity *', 'light');
+    this._icon('icon', 'Icône (mdi)');
+    this._text('name', 'Nom affiché', 'Vide = friendly_name');
 
-    const c = this._config;
+    this._section('Effets visuels');
+    this._toggle('glow', 'Glow Effect', true);
+    this._toggle('effect_heartbeat', '✦ Color pulse (when on)', true);
+    this._toggle('effect_intense_glow', '✧ Intense Glow');
+    this._toggle('effect_scanline', '≡ Scanlines');
+    this._toggle('effect_flicker', '↺ Flicker');
+    this._toggle('effect_hover_glitch', '⚡ Glitch on hover');
+    this._toggle('icon_power_animation', '⚙ Icon power animation', true);
+    this._toggle('smart_font_colour', 'Smart Font Color', true);
+    this._number('opacity', 'Opacity (0.2–1)', { min: 0.2, max: 1, step: 0.05, ph: '0.85' });
+    this._number('blur', 'Blur px (0–10)', { min: 0, max: 10, step: 1, ph: '6' });
+    this._number('off_blur', 'Blur OFF px', { min: 0, max: 10, step: 1, ph: 'idem blur' });
 
-    this._sec("Entity & Icon");
-    this._entityPicker("entity", "Light Entity *", c.entity || "");
-    this._iconPicker("icon", "Icon", c.icon || "mdi:lightbulb");
-    this._text("name", "Custom Name", c.name || "", "Leave empty for friendly name");
+    this._section('Neo Tokyo FX');
+    this._toggleVal('fill_style', '🌈 Plasma fill bar', 'plasma');
+    this._toggle('neon_border', '▞ Neon border (UV→cyan)');
+    this._toggle('power_fx', '⚡ Power-down flash');
 
-    this._sec("Visual Effects");
-    this._toggle("glow",                "Glow Effect",                  c.glow                !== false, true);
-    this._toggle("effect_heartbeat",    "✦ Color pulse (when on)",       c.effect_heartbeat    !== false, true);
-    this._toggle("effect_intense_glow", "✧ Intense Glow (triple shadow)", c.effect_intense_glow === true);
-    this._toggle("effect_scanline",     "≡ Scanlines",                  c.effect_scanline     === true);
-    this._toggle("effect_flicker",      "↺ Flicker",                    c.effect_flicker      === true);
-    this._toggle("effect_hover_glitch", "⚡ Glitch on hover",           c.effect_hover_glitch === true);
-    this._toggle("icon_power_animation", "⚙ Icon power animation",     c.icon_power_animation !== false, true);
-    this._toggle("smart_font_colour",   "Smart Font Color (contrast)",  c.smart_font_colour   !== false, true);
-    this._text("opacity", "Opacity (0.2–1)", c.opacity !== undefined ? String(c.opacity) : "0.85", "e.g. 0.8");
-    this._text("blur",    "Blur px (0–10)",  c.blur    !== undefined ? String(c.blur)    : "6", "e.g. 4");
-    this._text("off_blur", "Blur OFF px (0–10)", c.off_blur !== undefined ? String(c.off_blur) : "", "Leave empty to use same blur");
+    this._section('Couleurs (override)');
+    this._hint('Vide = couleur RGB propre de la lampe.');
+    this._color('primary_colour', 'Primary (On)', null, 'défaut : couleur RGB de la lampe — ex #00E8FF');
+    this._color('secondary_colour', 'Secondary (BG)', null, 'défaut : auto — ex rgb(var(--rgb-lavande))');
+    this._color('icon_colour', 'Icon (override)', null, 'défaut : couleur primaire — ex #FF3366');
 
-    this._sec("Neo Tokyo FX");
-    this._toggleVal("fill_style", "🌈 Plasma fill bar", c.fill_style === "plasma", "plasma");
-    this._toggle("neon_border", "▞ Neon border (UV→cyan)", c.neon_border === true);
-    this._toggle("power_fx", "⚡ Power-down flash", c.power_fx === true);
-
-    this._sec("Color Overrides");
-    this._hint("Leave empty to use the light's own RGB color.");
-    this._colorRow("primary_colour",   "Primary Color (On)",   c.primary_colour   || "");
-    this._colorRow("secondary_colour", "Secondary Color (BG)", c.secondary_colour || "");
-    this._colorRow("icon_colour",      "Icon Color (Override)", c.icon_colour      || "");
-
-    this._sec("Chevron Actions");
+    this._section('Chevron Actions');
     const actions = [
-      { v: "hass-more-info", l: "More Info" },
-      { v: "toggle",         l: "Toggle" },
-      { v: "navigate",       l: "Navigate (YAML)" },
-      { v: "url",            l: "Open URL (YAML)" },
-      { v: "call-service",   l: "Call Service (YAML)" },
-      { v: "perform-action", l: "Perform Action (YAML)" },
-      { v: "none",           l: "None" },
+      { v: 'hass-more-info', l: 'More Info' },
+      { v: 'toggle', l: 'Toggle' },
+      { v: 'navigate', l: 'Navigate (YAML)' },
+      { v: 'url', l: 'Open URL (YAML)' },
+      { v: 'call-service', l: 'Call Service (YAML)' },
+      { v: 'perform-action', l: 'Perform Action (YAML)' },
+      { v: 'none', l: 'None' },
     ];
-    this._actionSelect("chevron_action",            "Tap Action",        c.chevron_action?.action            || "hass-more-info", actions);
-    this._actionSelect("chevron_hold_action",       "Hold Action",       c.chevron_hold_action?.action       || "none",           actions);
-    this._actionSelect("chevron_double_tap_action", "Double-Tap Action", c.chevron_double_tap_action?.action || "none",           actions);
-    this._hint("navigate / url / call-service: switch to YAML to add extra params.");
-
-    this._fillEntityOptions();
-  }
-
-  _sec(t)  { const d = document.createElement("div"); d.className = "sec"; d.textContent = t; this.appendChild(d); }
-  _hint(t) { const d = document.createElement("div"); d.className = "hint"; d.textContent = t; this.appendChild(d); }
-
-  _toggle(key, label, checked, defaultOn = false) {
-    const row = document.createElement("div"); row.className = "toggle-row";
-    const lbl = document.createElement("label"); lbl.textContent = label;
-    const cb  = document.createElement("input"); cb.type = "checkbox"; cb.checked = checked; cb.dataset.key = key;
-    if (defaultOn) cb.dataset.defaultOn = "1";   // coché tant que config != false explicite
-    cb.addEventListener("change", (e) => this._set(key, e.target.checked));
-    row.appendChild(lbl); row.appendChild(cb); this.appendChild(row);
-  }
-
-  // Toggle qui écrit une valeur string (ex: fill_style="plasma") au lieu d'un booléen.
-  _toggleVal(key, label, checked, onValue) {
-    const row = document.createElement("div"); row.className = "toggle-row";
-    const lbl = document.createElement("label"); lbl.textContent = label;
-    const cb  = document.createElement("input"); cb.type = "checkbox"; cb.checked = checked;
-    cb.dataset.valKey = key; cb.dataset.onValue = onValue;
-    cb.addEventListener("change", (e) => this._set(key, e.target.checked ? onValue : undefined));
-    row.appendChild(lbl); row.appendChild(cb); this.appendChild(row);
-  }
-
-  _text(key, label, value, placeholder = "") {
-    const row = document.createElement("div"); row.className = "row";
-    const lbl = document.createElement("label"); lbl.textContent = label;
-    const isNum = (key === "opacity" || key === "blur" || key === "off_blur");
-    const inp = document.createElement("input"); inp.type = "text"; inp.value = value; inp.placeholder = placeholder; inp.dataset.key = key;
-    if (isNum) inp.dataset.num = "1";
-    inp.addEventListener("change", (e) => {
-      const v = e.target.value.trim();
-      if (isNum) { const n = parseFloat(v); this._set(key, isNaN(n) ? undefined : n); }
-      else this._set(key, v || undefined);
-    });
-    row.appendChild(lbl); row.appendChild(inp); this.appendChild(row);
-  }
-
-  _iconPicker(key, label, value) {
-    const row = document.createElement("div"); row.className = "row";
-    const lbl = document.createElement("label"); lbl.textContent = label;
-    const wrap = document.createElement("div"); wrap.style.cssText = "display:flex;gap:6px;align-items:center;flex-shrink:0";
-
-    // dropdown of common MDI icons
-    const sel = document.createElement("select"); sel.style.cssText = "min-width:0;flex:1;font-size:13px;padding:6px 8px;border:1px solid var(--divider-color,#ccc);border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#000);cursor:pointer";
-    MDI_ICONS.forEach(icon => {
-      const o = document.createElement("option"); o.value = icon; o.textContent = icon.replace("mdi:", ""); o.selected = (icon === value); sel.appendChild(o);
-    });
-    // free-text fallback (porte la valeur réelle → tag data-key pour _syncValues)
-    const inp = document.createElement("input"); inp.type = "text"; inp.value = value; inp.placeholder = "mdi:custom"; inp.dataset.key = key; inp.style.cssText = "width:130px;font-size:13px;padding:6px 8px;border:1px solid var(--divider-color,#ccc);border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#000)";
-
-    sel.addEventListener("change", (e) => { inp.value = e.target.value; this._set(key, e.target.value); });
-    inp.addEventListener("change", (e) => {
-      const v = e.target.value.trim();
-      // sync dropdown if value matches
-      const match = Array.from(sel.options).find(o => o.value === v);
-      if (match) sel.value = v;
-      this._set(key, v || undefined);
-    });
-    wrap.appendChild(sel); wrap.appendChild(inp); row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
-  }
-
-  _entityPicker(key, label, value) {
-    // §22 : input + <datalist> (jamais <select> brut — inutilisable avec 100+ entités).
-    const row = document.createElement("div"); row.className = "row";
-    const lbl = document.createElement("label"); lbl.textContent = label;
-    const inp = document.createElement("input");
-    inp.type = "text"; inp.value = value || "";
-    inp.placeholder = "light.bedroom";
-    inp.autocomplete = "off";
-    inp.dataset.entityPicker = "1";
-    inp.dataset.key = key;
-    inp.setAttribute("list", "ncl-ent-list");
-    inp.style.cssText = "min-width:0;flex:1;font-size:13px;padding:6px 8px;border:1px solid var(--divider-color,#ccc);border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#000)";
-    inp.addEventListener("change", (e) => this._set(key, e.target.value.trim() || undefined));
-    row.appendChild(lbl); row.appendChild(inp); this.appendChild(row);
-  }
-
-  _fillEntityOptions() {
-    if (!this._hass) return;
-    let dl = this.querySelector("#ncl-ent-list");
-    if (!dl) { dl = document.createElement("datalist"); dl.id = "ncl-ent-list"; this.appendChild(dl); }
-    // Domaine light. uniquement (cette card pilote une lumière).
-    const ids = Object.keys(this._hass.states).filter((e) => e.startsWith("light.")).sort();
-    if (dl.childElementCount === ids.length) return;   // déjà à jour
-    dl.textContent = "";
-    const frag = document.createDocumentFragment();
-    ids.forEach((id) => {
-      const o = document.createElement("option");
-      o.value = id;
-      const fn = this._hass.states[id].attributes?.friendly_name;
-      if (fn && fn !== id) o.label = fn;
-      frag.appendChild(o);
-    });
-    dl.appendChild(frag);
-  }
-
-  _colorRow(key, label, value) {
-    const row = document.createElement("div"); row.className = "row";
-    const lbl = document.createElement("label"); lbl.textContent = label;
-    const wrap = document.createElement("div"); wrap.className = "color-row";
-    const text = document.createElement("input"); text.type = "text"; text.value = value; text.placeholder = "#rrggbb or rgb(…)"; text.dataset.key = key;
-    const pick = document.createElement("input"); pick.type = "color"; pick.value = this._toHex(value) || "#00E8FF";
-    text._pick = pick;   // resync color picker dans _syncValues
-    text.addEventListener("change", (e) => { const v = e.target.value.trim(); this._set(key, v || undefined); const h = this._toHex(v); if (h) pick.value = h; });
-    pick.addEventListener("input",  (e) => { text.value = e.target.value; this._set(key, e.target.value); });
-    wrap.appendChild(text); wrap.appendChild(pick); row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
-  }
-
-  _actionSelect(key, label, value, options) {
-    const row = document.createElement("div"); row.className = "row";
-    const lbl = document.createElement("label"); lbl.textContent = label;
-    const sel = document.createElement("select"); sel.dataset.actionKey = key;
-    options.forEach(({ v, l }) => { const o = document.createElement("option"); o.value = v; o.textContent = l; o.selected = (v === value); sel.appendChild(o); });
-    sel.addEventListener("change", (e) => { const v = e.target.value; if (!v || v === "none") this._set(key, undefined); else this._set(key, { action: v }); });
-    row.appendChild(lbl); row.appendChild(sel); this.appendChild(row);
-  }
-
-  _set(key, value) {
-    if (value === undefined || value === null || value === "") delete this._config[key];
-    else this._config[key] = value;
-    this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config }, bubbles: true, composed: true }));
-  }
-
-  _toHex(color) {
-    if (!color) return null;
-    if (/^#[0-9a-f]{6}$/i.test(color)) return color;
-    const m = color.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/i);
-    if (m) return "#" + [m[1], m[2], m[3]].map((n) => (+n).toString(16).padStart(2, "0")).join("");
-    return null;
+    this._actionSelect('chevron_action', 'Tap Action', actions);
+    this._actionSelect('chevron_hold_action', 'Hold Action', actions);
+    this._actionSelect('chevron_double_tap_action', 'Double-Tap', actions);
+    this._hint('navigate / url / call-service : passer en YAML pour les params.');
   }
 }
 

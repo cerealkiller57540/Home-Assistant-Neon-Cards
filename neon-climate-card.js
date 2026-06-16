@@ -1078,7 +1078,10 @@ class NeonClimateCardEditor extends HTMLElement {
       if (el === active) return;
       const v = this._read(el.dataset.key);
       if (el.type === 'checkbox') el.checked = el.dataset.defaultOn ? (v !== false) : !!v;
-      else { el.value = (v == null ? '' : v); if (el._pick) { const h = this._toHex(el.value); if (h) el._pick.value = h; } }
+      else {
+        el.value = (v == null ? '' : v);
+        if (el._pick) el._pick.value = this._toHex(el.value) || (el._cssDefault ? this._resolveColor(el._cssDefault) : null) || '#6200EA';
+      }
     });
     this._bindIconPreviews(true);
   }
@@ -1105,15 +1108,28 @@ class NeonClimateCardEditor extends HTMLElement {
     w.appendChild(cb); return cb;
   }
 
-  _color(key, label, ph = 'ex: var(--primary-color) ou #6200EA') {
+  // cssDefault = couleur appliquée quand le champ est vide → picker la montre résolue.
+  _color(key, label, cssDefault = null, ph = 'ex: #FF3366 / rgb(var(--rgb-lavande)) / var(--primary-color)') {
     const w = this._row(label).wrap;
     const box = document.createElement('div'); box.className = 'color-row';
     const txt = document.createElement('input'); txt.type = 'text'; txt.placeholder = ph; txt.dataset.key = key; txt.value = this._read(key) ?? '';
-    const pick = document.createElement('input'); pick.type = 'color'; pick.value = this._toHex(txt.value) || '#6200EA';
-    txt._pick = pick;
-    txt.addEventListener('input', () => { this._set(key, txt.value); const h = this._toHex(txt.value); if (h) pick.value = h; });
+    const pick = document.createElement('input'); pick.type = 'color';
+    txt._pick = pick; txt._cssDefault = cssDefault;
+    const refresh = () => { pick.value = this._toHex(txt.value) || (cssDefault ? this._resolveColor(cssDefault) : null) || '#6200EA'; };
+    txt.addEventListener('input', () => { this._set(key, txt.value); refresh(); });
     pick.addEventListener('input', () => { txt.value = pick.value; this._set(key, pick.value); });
-    box.appendChild(txt); box.appendChild(pick); w.appendChild(box); return txt;
+    box.appendChild(txt); box.appendChild(pick); w.appendChild(box); refresh(); return txt;
+  }
+
+  _resolveColor(css) {
+    try {
+      const probe = document.createElement('span');
+      probe.style.cssText = `color:${css};position:absolute;left:-9999px;top:-9999px`;
+      this.appendChild(probe);
+      const rgb = getComputedStyle(probe).color; probe.remove();
+      const m = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
+      return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+    } catch { return null; }
   }
 
   _icon(key, label) {
@@ -1238,7 +1254,7 @@ class NeonClimateCardEditor extends HTMLElement {
     this._section('En-tête');
     this._text('header.title', 'Titre', 'ex: Climatisation');
     this._icon('header.icon', 'Icône (mdi)');
-    this._color('header.color', 'Couleur titre');
+    this._color('header.color', 'Couleur titre', 'rgba(var(--rgb-primary-text-color),0.55)', 'défaut : texte primaire — ex rgb(var(--rgb-lavande))');
     this._text('header.title_size', 'Taille titre', '16px');
     this._select('header.font', 'Police', NEON_FONTS, '— thème HA —');
     this._text('header.subtitle', 'Sous-titre', 'optionnel');
@@ -1254,18 +1270,18 @@ class NeonClimateCardEditor extends HTMLElement {
     this._hint("Facultatif — sinon current_humidity de l'entité climate");
 
     this._section('Couleurs boutons mode');
-    this._color('color_off', 'OFF');
-    this._color('color_heat', 'HEAT');
-    this._color('color_cool', 'COOL');
-    this._color('color_dry', 'DRY');
-    this._color('color_fan', 'FAN ONLY');
-    this._color('color_fan_btn', 'FAN (bouton cycle)');
+    this._color('color_off', 'OFF', MODE_DEFAULTS.off);
+    this._color('color_heat', 'HEAT', MODE_DEFAULTS.heat);
+    this._color('color_cool', 'COOL', MODE_DEFAULTS.cool);
+    this._color('color_dry', 'DRY', MODE_DEFAULTS.dry);
+    this._color('color_fan', 'FAN ONLY', MODE_DEFAULTS.fan_only);
+    this._color('color_fan_btn', 'FAN (bouton cycle)', '#00FFAA');
 
     this._section('Couleur pill température');
-    this._color('color_pill', 'Pill cible');
+    this._color('color_pill', 'Pill cible', PILL_DEFAULT);
 
     this._section('Couleur display AC');
-    this._color('color_display', 'Dot-matrix / display');
+    this._color('color_display', 'Dot-matrix / display', '#00fff9');
     this._toggle('neon_display_glow', 'Triple neon glow', true);
 
     this._section('Options');

@@ -84,7 +84,7 @@
 
 | Card | File | Version | Description |
 |------|------|:-------:|-------------|
-| 💡 Neon Compact Light Card | `neon-compact-light-card.js` | `2.0.0` | Compact light toggle with cyberpunk flicker, Zigbee/WiFi adaptive timing |
+| 💡 Neon Compact Light Card | `neon-compact-light-card.js` | `2.1.0` | Compact light toggle with cyberpunk flicker, Zigbee/WiFi adaptive timing, unified UI editor |
 | 🔌 Neon Switch Card | `neon-switch-card.js` | `1.6` | Network switch port monitor with Neo Tokyo palette |
 
 ### 🏠 Dashboard & Layout
@@ -93,7 +93,7 @@
 |------|------|:-------:|-------------|
 | 🏷️ Neon Header Card | `neon-header-card.js` | `1.4.2` | Stylish neon section header |
 | 🏷️ Neon Header Card v2 | `neon-header-card-v2.js` | `2.3` | Advanced header — glow, gradient, scanlines, flicker, glitch effects |
-| 📋 Neon Entities Card | `neon-entities-card.js` | `1.7.0` | Multi-entity card (switch, sensor, cover, climate, number + dividers) — theme-agnostic colors, per-color UI editor |
+| 📋 Neon Entities Card | `neon-entities-card.js` | `1.8.0` | Multi-entity card (switch, sensor, cover, climate, number + dividers) — theme-agnostic colors, unified UI editor with per-entity icon preview |
 
 ### 🖥️ Network & NAS
 

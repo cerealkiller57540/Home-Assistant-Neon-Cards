@@ -14475,7 +14475,10 @@ class MovaMowerCardEditor extends HTMLElement {
       if (el === active) return;
       const v = this._read(el.dataset.key);
       if (el.type === 'checkbox') el.checked = el.dataset.defaultOn ? (v !== false) : !!v;
-      else { el.value = (v == null ? '' : v); if (el._pick) { const h = this._toHex(el.value); if (h) el._pick.value = h; } }
+      else {
+        el.value = (v == null ? '' : v);
+        if (el._pick) el._pick.value = this._toHex(el.value) || (el._cssDefault ? this._resolveColor(el._cssDefault) : null) || '#6200EA';
+      }
     });
     this._bindIconPreviews(true);
   }
@@ -14501,15 +14504,28 @@ class MovaMowerCardEditor extends HTMLElement {
     w.appendChild(cb); return cb;
   }
 
-  _color(key, label, ph = 'ex: var(--primary-color) ou #6200EA') {
+  // cssDefault = couleur appliquée quand le champ est vide → picker la montre résolue.
+  _color(key, label, cssDefault = null, ph = 'ex: #FF3366 / rgb(var(--rgb-lavande)) / var(--primary-color)') {
     const w = this._row(label).wrap;
     const box = document.createElement('div'); box.className = 'color-row';
     const txt = document.createElement('input'); txt.type = 'text'; txt.placeholder = ph; txt.dataset.key = key; txt.value = this._read(key) ?? '';
-    const pick = document.createElement('input'); pick.type = 'color'; pick.value = this._toHex(txt.value) || '#6200EA';
-    txt._pick = pick;
-    txt.addEventListener('input', () => { this._set(key, txt.value); const h = this._toHex(txt.value); if (h) pick.value = h; });
+    const pick = document.createElement('input'); pick.type = 'color';
+    txt._pick = pick; txt._cssDefault = cssDefault;
+    const refresh = () => { pick.value = this._toHex(txt.value) || (cssDefault ? this._resolveColor(cssDefault) : null) || '#6200EA'; };
+    txt.addEventListener('input', () => { this._set(key, txt.value); refresh(); });
     pick.addEventListener('input', () => { txt.value = pick.value; this._set(key, pick.value); });
-    box.appendChild(txt); box.appendChild(pick); w.appendChild(box); return txt;
+    box.appendChild(txt); box.appendChild(pick); w.appendChild(box); refresh(); return txt;
+  }
+
+  _resolveColor(css) {
+    try {
+      const probe = document.createElement('span');
+      probe.style.cssText = `color:${css};position:absolute;left:-9999px;top:-9999px`;
+      this.appendChild(probe);
+      const rgb = getComputedStyle(probe).color; probe.remove();
+      const m = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
+      return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+    } catch { return null; }
   }
 
   _icon(key, label) {
@@ -14636,7 +14652,7 @@ class MovaMowerCardEditor extends HTMLElement {
     this._section('En-tête');
     this._text('header.title', 'Titre', 'ex: Mova 1000');
     this._icon('header.icon', 'Icône (mdi)');
-    this._color('header.color', 'Couleur titre');
+    this._color('header.color', 'Couleur titre', 'rgba(var(--rgb-primary-text-color),0.65)', 'défaut : texte primaire — ex rgb(var(--rgb-lavande))');
     this._text('header.title_size', 'Taille titre', '16px');
     this._select('header.font', 'Police', NEON_FONTS, '— thème HA —');
     this._text('header.title_shadow', 'Text-shadow');
@@ -14647,10 +14663,10 @@ class MovaMowerCardEditor extends HTMLElement {
 
     this._section('Couleurs des contrôles');
     this._hint('Vide = défaut. Accepte #hex, rgb(...) ou var(--rgb-lavande).');
-    this._color('color_start', 'Bouton DÉMARRER (vert)');
-    this._color('color_pause', 'Bouton PAUSE (jaune)');
-    this._color('color_mode',  'Boutons mode (ALL AREA/EDGE…)');
-    this._color('color_accent','Accent violet (BASE + listes + libellés)');
+    this._color('color_start', 'Bouton DÉMARRER (vert)',           'rgb(46,229,182)',  'défaut vert — ex #2EE5B6 / rgb(var(--rgb-lavande))');
+    this._color('color_pause', 'Bouton PAUSE (jaune)',             'rgb(255,238,88)',  'défaut jaune — ex #FFEE58');
+    this._color('color_mode',  'Boutons mode (ALL AREA/EDGE…)',    'rgb(0,212,255)',   'défaut cyan — ex #00D4FF');
+    this._color('color_accent','Accent violet (BASE + listes…)',   'rgb(157,78,221)',  'défaut violet — ex var(--primary-color)');
 
     this._section('Options');
     this._toggle('card_mod_bg', 'Hériter du fond card-mod', true);

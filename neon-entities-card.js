@@ -11,7 +11,7 @@
  * Boutons cover agrandis (34px, SVG 16px) → cible tactile confortable iPad
  * Couleurs : variables standard HA (primary-text-color / primary-color),
  *   thème-agnostique + surcharge UI (name/value/icon/primary/accent)
- * @version 1.7.0
+ * @version 1.8.0
  */
 
 console.log('neon-entities-card.js loaded!');
@@ -1090,277 +1090,326 @@ class NeonEntitiesCard extends HTMLElement {
 }
 
 // ─── Editor ───────────────────────────────────────────────────────────────────
+// Template unifié — STRATÉGIE B (liste dynamique) — cf CARDS-EDITOR-TEMPLATE.md.
+// Cycle de vie B (hash/_lastEmitted/_isEditing) car la liste d'entités est
+// add/remove. Réutilise les helpers de champ du template (icône+preview, couleur
+// libre, dimensions). Champs statiques via data-key + _set ; champs des blocs
+// entité via _entField (index → _setEnt).
+const NEON_FONTS = [
+  'Orbitron','Rajdhani','Share Tech Mono','Exo 2','Roboto','Montserrat',
+  'Oswald','Bebas Neue','Inter','Poppins','Space Grotesk','Syne',
+  'DM Sans','Playfair Display','Cinzel',
+];
 class NeonEntitiesCardEditor extends HTMLElement {
   constructor() {
     super();
     this._config = {};
     this._hass = null;
     this._built = false;
-    this._lastEmitted = null;   // hash de la dernière config émise par l'éditeur (écho)
-    this._lastSeen    = null;   // hash de la dernière config rendue
+    this._lastEmitted = null;
+    this._lastSeen    = null;
   }
 
   setConfig(c) {
     this._config = { ...c, entities: c.entities ? [...c.entities] : [] };
-
-    // 1er appel : rendu initial.
     if (!this._built) { this._render(); this._lastSeen = this._hash(this._config); return; }
-
     const h = this._hash(this._config);
-
-    // Écho de notre propre _dispatch → le modèle interne est déjà à jour,
-    // re-render inutile (et destructeur du focus). On ignore.
-    if (h === this._lastEmitted) { this._lastSeen = h; return; }
-
-    // Config identique à ce qui est déjà affiché → rien à faire.
-    if (h === this._lastSeen) return;
-
-    // Changement externe réel (chargement YAML, undo, edit d'un autre onglet…).
-    // On ne re-render PAS si l'utilisateur est en train de taper dans un champ
-    // de l'éditeur (sinon perte de focus / curseur). Le modèle reste cohérent ;
-    // l'affichage se resynchronisera au prochain changement externe hors-focus.
-    if (this._isEditing()) { this._lastSeen = h; return; }
-
-    this._render();
-    this._lastSeen = h;
+    if (h === this._lastEmitted) { this._lastSeen = h; return; }   // notre propre écho
+    if (h === this._lastSeen) return;                              // déjà affiché
+    if (this._isEditing()) { this._lastSeen = h; return; }         // frappe en cours
+    this._render(); this._lastSeen = h;                            // changement externe
   }
 
-  set hass(h)  { this._hass = h; if (!this._built) this._render(); else this._fillSelects(); }
+  set hass(h) { this._hass = h; if (!this._built) this._render(); else this._fillDatalists(); }
   disconnectedCallback() { this.innerHTML = ''; this._built = false; }
 
-  // Sérialisation stable pour comparer deux configs (suffisant ici : tailles modestes).
   _hash(o) { try { return JSON.stringify(o); } catch { return String(Math.random()); } }
-
-  // Vrai si le focus est dans un champ saisissable de l'éditeur.
   _isEditing() {
     const a = this.querySelector(':focus') || document.activeElement;
-    if (!a || !this.contains(a)) return false;
-    return /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
+    return !!a && this.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
+  }
+
+  // ── Écriture config (champs statiques racine OU header.x/footer.x imbriqués) ──
+  _read(key) {
+    return key.includes('.')
+      ? key.split('.').reduce((o, p) => (o && o[p] !== undefined ? o[p] : undefined), this._config)
+      : this._config[key];
+  }
+  _set(key, value) {
+    const empty = (value === undefined || value === '' || value === null);
+    if (key.includes('.')) {
+      const parts = key.split('.');
+      let o = this._config;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!o[parts[i]] || typeof o[parts[i]] !== 'object') o[parts[i]] = {};
+        o = o[parts[i]];
+      }
+      const last = parts[parts.length - 1];
+      if (empty) delete o[last]; else o[last] = value;
+    } else if (empty) { delete this._config[key]; }
+    else { this._config[key] = value; }
+    this._dispatch();
+  }
+  // toggles enabled (header/footer) : stockent false explicite, pas de suppression.
+  _setFlag(parent, value) { this._config[parent] = { ...(this._config[parent] || {}), enabled: value }; this._dispatch(); }
+
+  _dispatch() {
+    const config = { ...this._config };
+    this._lastEmitted = this._hash(config);
+    this.dispatchEvent(new CustomEvent('config-changed', { detail: { config }, bubbles: true, composed: true }));
+  }
+
+  // ── Helpers de champ (template) ──────────────────────────────────────────────
+  _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d); return d; }
+  _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; this.appendChild(d); return d; }
+
+  _text(key, label, ph = '') {
+    const w = this._row(label).wrap;
+    const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = ph; inp.value = this._read(key) ?? '';
+    inp.addEventListener('change', () => this._set(key, inp.value || undefined));
+    w.appendChild(inp); return inp;
+  }
+
+  // cssDefault = couleur CSS appliquée par la card quand le champ est vide (peut
+  // être une variable). Si le champ est vide, le picker affiche cette couleur RÉSOLUE
+  // (getComputedStyle), sans rien écrire dans le YAML.
+  _color(key, label, cssDefault = null, ph = 'ex: #FF3366 / rgb(var(--rgb-lavande)) / var(--primary-color)') {
+    const w = this._row(label).wrap;
+    const box = document.createElement('div'); box.className = 'color-row';
+    const txt = document.createElement('input'); txt.type = 'text'; txt.placeholder = ph; txt.value = this._read(key) ?? '';
+    const pick = document.createElement('input'); pick.type = 'color';
+    const refresh = () => {
+      const explicit = this._toHex(txt.value);
+      pick.value = explicit || (cssDefault ? this._resolveColor(cssDefault) : null) || '#6200EA';
+    };
+    txt.addEventListener('change', () => { this._set(key, txt.value || undefined); refresh(); });
+    pick.addEventListener('input', () => { txt.value = pick.value; this._set(key, pick.value); });
+    box.appendChild(txt); box.appendChild(pick); w.appendChild(box);
+    refresh();
+    return txt;
+  }
+
+  // Résout une couleur CSS (hex, rgb, ou var(--…)) en #rrggbb via un témoin appliqué
+  // sur la CARD réelle (pour que les variables du thème/card soient dans le scope).
+  _resolveColor(css) {
+    try {
+      const probe = document.createElement('span');
+      probe.style.cssText = `color:${css};position:absolute;left:-9999px;top:-9999px`;
+      this.appendChild(probe);                       // dans l'éditeur → scope thème HA
+      const rgb = getComputedStyle(probe).color;     // "rgb(r, g, b)" / "rgba(...)"
+      probe.remove();
+      const m = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
+      return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+    } catch { return null; }
+  }
+
+  _toggle(key, label, defaultOn = false, parent = null) {
+    const w = this._row(label).wrap;
+    const cb = document.createElement('input'); cb.type = 'checkbox';
+    const v = parent ? (this._config[parent]?.enabled) : this._read(key);
+    cb.checked = defaultOn ? (v !== false) : !!v;
+    cb.style.cssText = 'width:38px;height:20px;cursor:pointer;accent-color:var(--primary-color);flex:none;';
+    cb.addEventListener('change', () => parent ? this._setFlag(parent, cb.checked) : this._set(key, cb.checked));
+    w.appendChild(cb); return cb;
+  }
+
+  _select(key, label, options, emptyLabel = null) {
+    const w = this._row(label).wrap;
+    const sel = document.createElement('select');
+    if (emptyLabel !== null) { const o = document.createElement('option'); o.value = ''; o.textContent = emptyLabel; sel.appendChild(o); }
+    options.forEach(opt => { const o = document.createElement('option'); o.value = opt; o.textContent = opt; sel.appendChild(o); });
+    sel.value = this._read(key) ?? '';
+    sel.addEventListener('change', () => this._set(key, sel.value || undefined));
+    w.appendChild(sel); return sel;
+  }
+
+  _row(labelHtml, isHtml = false) {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('label');
+    if (isHtml) lbl.innerHTML = labelHtml; else lbl.textContent = labelHtml;
+    const wrap = document.createElement('div'); wrap.className = 'field-wrap';
+    row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
+    return { row, wrap };
+  }
+
+  _toHex(c) {
+    if (!c) return null;
+    if (/^#[0-9a-f]{6}$/i.test(c)) return c;
+    const m = c.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/i);
+    return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+  }
+
+  // ── Champs DANS un bloc entité (index → _setEnt) ─────────────────────────────
+  _entField(parent, idx, field, label, value, { entity = false, ph = '' } = {}) {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('label'); lbl.textContent = label;
+    const wrap = document.createElement('div'); wrap.className = 'field-wrap';
+    const inp = document.createElement('input'); inp.type = 'text'; inp.value = value ?? '';
+    if (entity) { inp.setAttribute('list', 'neon-ent-list'); inp.autocomplete = 'off'; }
+    inp.placeholder = ph;
+    inp.addEventListener('change', () => this._setEnt(idx, field, inp.value || undefined));
+    wrap.appendChild(inp); row.appendChild(lbl); row.appendChild(wrap); parent.appendChild(row);
+    return inp;
+  }
+
+  // Champ ICÔNE d'un bloc entité : input + lien MDI + preview live (clé indexée).
+  _entIcon(parent, idx, value) {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('label'); lbl.innerHTML = `Icône — <a href="https://pictogrammers.com/library/mdi/" target="_blank" rel="noopener" class="mdi-link">↗</a>`;
+    const wrap = document.createElement('div'); wrap.className = 'field-wrap';
+    const box = document.createElement('div'); box.className = 'icon-row';
+    const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = 'mdi:home'; inp.value = value ?? '';
+    const prev = document.createElement('div'); prev.className = 'icon-preview';
+    const upd = () => {
+      const val = inp.value.trim(); prev.innerHTML = '';
+      if (/^mdi:[a-zA-Z0-9_-]+$/.test(val)) {
+        const ico = document.createElement('ha-icon'); ico.setAttribute('icon', val); ico.style.cssText = '--mdc-icon-size:20px'; prev.appendChild(ico);
+      }
+    };
+    inp.addEventListener('input', upd);
+    inp.addEventListener('change', () => this._setEnt(idx, 'icon', inp.value || undefined));
+    box.appendChild(inp); box.appendChild(prev); wrap.appendChild(box); row.appendChild(lbl); row.appendChild(wrap); parent.appendChild(row);
+    upd();
+  }
+
+  _fillDatalists() {
+    if (!this._hass) return;
+    let dl = this.querySelector('#neon-ent-list');
+    if (!dl) { dl = document.createElement('datalist'); dl.id = 'neon-ent-list'; this.appendChild(dl); }
+    const ids = Object.keys(this._hass.states).sort();
+    if (dl.childElementCount === ids.length) return;
+    dl.textContent = '';
+    const frag = document.createDocumentFragment();
+    ids.forEach(id => { const o = document.createElement('option'); o.value = id;
+      const fn = this._hass.states[id].attributes?.friendly_name; if (fn && fn !== id) o.label = fn; frag.appendChild(o); });
+    dl.appendChild(frag);
+  }
+
+  _css() {
+    return `
+      :host { display:block; padding:14px; font-family:var(--primary-font-family,Roboto,sans-serif); }
+      .sec { font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--divider-color); }
+      .sec:first-child { margin-top:0; }
+      .row { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
+      .row label { flex:0 0 150px;font-size:12px;color:var(--secondary-text-color); }
+      .row label .mdi-link { color:var(--primary-color);font-size:9px;text-transform:none;letter-spacing:0; }
+      .field-wrap { flex:1;min-width:0;display:flex; }
+      input[type=text],select { flex:1;width:100%;padding:4px 8px;border:1px solid var(--divider-color);border-radius:4px;background:var(--card-background-color);color:var(--primary-text-color);font-size:12px;outline:none;box-sizing:border-box; }
+      select { cursor:pointer; }
+      input:focus,select:focus { box-shadow:0 0 0 1px var(--primary-color); }
+      .color-row { display:flex;gap:8px;flex:1; }
+      .color-row input[type=text] { flex:1; }
+      .color-row input[type=color] { width:36px;height:28px;flex:none;padding:0;border:none;background:none;border-radius:4px;cursor:pointer; }
+      .icon-row { display:flex;gap:8px;flex:1;align-items:center; }
+      .icon-row input { flex:1; }
+      .icon-preview { width:30px;height:28px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--divider-color);border-radius:4px;color:var(--primary-text-color); }
+      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:-2px 0 8px; }
+      .block { border:1px solid var(--divider-color);border-radius:8px;padding:10px 12px;margin-bottom:8px;position:relative; }
+      .block-title { font-size:11px;font-weight:700;text-transform:uppercase;color:var(--secondary-text-color);margin-bottom:8px; }
+      .del-btn { position:absolute;top:8px;right:8px;background:none;border:none;color:var(--error-color,#e53935);cursor:pointer;font-size:18px;padding:0;line-height:1; }
+      .add-btn { font-size:12px;padding:6px 12px;border:1px dashed var(--primary-color);border-radius:6px;cursor:pointer;background:none;color:var(--primary-color);margin-right:6px;margin-top:4px; }
+      .divider-block { border:1px dashed var(--divider-color);border-radius:6px;padding:6px 12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;color:var(--secondary-text-color);font-size:12px; }
+    `;
   }
 
   _render() {
     this._built = true;
     this.innerHTML = '';
-    this.style.cssText = 'display:block;padding:16px;font-family:var(--primary-font-family,Roboto,sans-serif);';
+    const st = document.createElement('style'); st.textContent = this._css(); this.appendChild(st);
+    this._schema();
+    this._fillDatalists();
+  }
 
-    const style = document.createElement('style');
-    style.textContent = `
-      .sec { font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px; }
-      .row { display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px; }
-      .row label { font-size:13px;color:var(--primary-text-color);flex:1; }
-      input[type=text],select { font-size:12px;padding:5px 8px;border:1px solid var(--divider-color,#ccc);border-radius:6px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#000);outline:none; }
-      select { cursor:pointer; min-width:140px; }
-      input[type=text] { min-width:130px; }
-      input[type=color] { width:38px;height:28px;padding:0;border-radius:4px;cursor:pointer; }
-      .block { border:1px solid var(--divider-color,#eee);border-radius:8px;padding:10px 12px;margin-bottom:8px;position:relative; }
-      .block-title { font-size:11px;font-weight:700;text-transform:uppercase;color:var(--secondary-text-color);margin-bottom:8px; }
-      .del-btn { position:absolute;top:8px;right:8px;background:none;border:none;color:var(--error-color,#e53935);cursor:pointer;font-size:18px;padding:0;line-height:1; }
-      .add-btn { font-size:12px;padding:6px 12px;border:1px dashed var(--primary-color);border-radius:6px;cursor:pointer;background:none;color:var(--primary-color);margin-right:6px;margin-top:4px; }
-      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:-2px 0 6px; }
-      .divider-block { border:1px dashed var(--divider-color,#ccc);border-radius:6px;padding:6px 12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;color:var(--secondary-text-color);font-size:12px; }
-    `;
-    this.appendChild(style);
+  // ╔════════════════════════════════════════════════════════════════╗
+  // ║  SCHÉMA                                                          ║
+  // ╚════════════════════════════════════════════════════════════════╝
+  _schema() {
+    this._section('En-tête');
+    this._toggle(null, 'Afficher en-tête', true, 'header');
+    this._text('header.title', 'Titre', 'ex: Maison');
+    this._icon('header.icon', 'Icône (mdi)');
+    this._color('header.color', 'Couleur titre', 'rgba(var(--rgb-primary-text-color),0.55)', 'défaut : texte primaire — ex rgb(var(--rgb-lavande))');
+    this._text('header.title_size', 'Taille titre', 'clamp(7px,2.6cqi,11px)');
+    this._select('header.font', 'Police', NEON_FONTS, '— thème HA —');
+    this._text('header.title_shadow', 'Text-shadow');
 
-    const c = this._config;
+    this._section('Apparence');
+    this._color('name_color', 'Couleur des noms',     'rgba(var(--rgb-primary-text-color),0.75)', 'défaut : texte primaire — ex rgb(var(--rgb-lavande))');
+    this._color('value_color', 'Couleur des valeurs', 'rgba(var(--rgb-accent-color),0.75)',       'défaut : accent — ex #00fff9');
+    this._color('icon_color', 'Couleur des icônes',   'var(--primary-color)',                     'défaut : couleur primaire — ex var(--primary-color)');
+    this._color('color_primary', 'Couleur primaire',  'var(--primary-color)',                     'ex: #6200EA / var(--primary-color)');
+    this._color('color_accent', 'Couleur accent',     'var(--accent-color)',                      'ex: #00fff9 / var(--accent-color)');
 
-    // ── Header
-    this._sec('Entête');
-    const hdr = c.header || {};
-    this._toggle('header_enabled', 'Afficher entête', hdr.enabled !== false);
-    this._textRow('header.title',      'Titre',       hdr.title      || '', 'ex: Maison');
-    this._textRow('header.icon',       'Icône (mdi)', hdr.icon       || '', 'mdi:home');
-    this._textRow('header.color',      'Couleur titre', hdr.color    || '', 'rgba(var(--rgb-primary-text-color),0.55)');
-    this._textRow('header.title_size', 'Taille titre', hdr.title_size|| '', 'clamp(7px,2.6cqi,11px)');
-    this._textRow('header.font',       'Police',      hdr.font       || '', 'Orbitron');
-    this._textRow('header.title_shadow','Text shadow', hdr.title_shadow|| '', '0 0 8px rgba(0,212,255,0.7)');
+    this._section('Pied de page');
+    this._toggle(null, 'Afficher pied', true, 'footer');
+    this._text('footer.text', 'Texte', 'MAISON · NEO ENTITIES CARD');
 
-    // ── Apparence
-    this._sec('Apparence');
-    this._textRow('name_color',   'Couleur des noms',    c.name_color   || '', 'rgba(var(--rgb-primary-text-color),0.75)');
-    this._textRow('value_color',  'Couleur des valeurs', c.value_color  || '', 'rgba(0,255,249,0.75)');
-    this._textRow('icon_color',   'Couleur des icônes',  c.icon_color   || '', 'var(--primary-color)');
-    this._textRow('color_primary','Couleur primaire',    c.color_primary|| '', '#6200EA');
-    this._textRow('color_accent', 'Couleur accent',      c.color_accent || '', '#00fff9');
-
-    // ── Footer
-    this._sec('Pied de page');
-    const ftr = c.footer || {};
-    this._toggle('footer_enabled', 'Afficher pied', ftr.enabled !== false);
-    this._textRow('footer.text', 'Texte', ftr.text || '', 'MAISON · NEO ENTITIES CARD');
-
-    // ── Entities
-    this._sec('Entités');
-    this._hint('Entités et séparateurs dans l\'ordre souhaité.');
+    this._section('Entités');
+    this._hint("Entités et séparateurs dans l'ordre souhaité.");
     this._renderEntityBlocks();
+    const addEnt = document.createElement('button'); addEnt.className = 'add-btn'; addEnt.textContent = '+ Entité';
+    addEnt.addEventListener('click', () => { this._config.entities.push({ entity: '' }); this._dispatch(); this._render(); });
+    const addDiv = document.createElement('button'); addDiv.className = 'add-btn'; addDiv.textContent = '+ Séparateur';
+    addDiv.addEventListener('click', () => { this._config.entities.push({ type: 'divider' }); this._dispatch(); this._render(); });
+    this.appendChild(addEnt); this.appendChild(addDiv);
 
-    // Boutons ajout
-    const addEnt = document.createElement('button');
-    addEnt.className = 'add-btn';
-    addEnt.textContent = '+ Entité';
-    addEnt.addEventListener('click', () => {
-      this._config.entities.push({ entity: '' });
-      this._dispatch(); this._render();
-    });
-    const addDiv = document.createElement('button');
-    addDiv.className = 'add-btn';
-    addDiv.textContent = '+ Séparateur';
-    addDiv.addEventListener('click', () => {
-      this._config.entities.push({ type: 'divider' });
-      this._dispatch(); this._render();
-    });
-    this.appendChild(addEnt);
-    this.appendChild(addDiv);
+    this._section('Options');
+    this._toggle('use_theme_card', 'Hériter du card-mod thème');
+    this._toggle('show_label', "Afficher le type d'entité");
+    this._toggle('pulse_active', 'Pulse du liseré actif', true);
+    this._toggle('flash_on_change', 'Flash de la valeur au changement');
+    this._toggle('value_glow', 'Glow valeurs & statuts', true);
+  }
 
-    // ── Options
-    this._sec('Options');
-    this._toggle('use_theme_card',  'Hériter du card-mod thème',       c.use_theme_card  ?? false);
-    this._toggle('show_label',      'Afficher le type d\'entité',      c.show_label      ?? false);
-    this._toggle('pulse_active',    'Pulse du liseré actif',           c.pulse_active    ?? true);
-    this._toggle('flash_on_change', 'Flash de la valeur au changement', c.flash_on_change ?? false);
-    this._toggle('value_glow',      'Glow valeurs & statuts (alarm)',  c.value_glow      ?? true);
-
-    this._fillSelects();
+  // Champ icône statique (header) — même rendu que _entIcon mais via _set.
+  _icon(key, label) {
+    const w = this._row(`${label} — <a href="https://pictogrammers.com/library/mdi/" target="_blank" rel="noopener" class="mdi-link">parcourir ↗</a>`, true).wrap;
+    const box = document.createElement('div'); box.className = 'icon-row';
+    const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = 'mdi:home'; inp.value = this._read(key) ?? '';
+    const prev = document.createElement('div'); prev.className = 'icon-preview';
+    const upd = () => { const val = inp.value.trim(); prev.innerHTML = ''; if (/^mdi:[a-zA-Z0-9_-]+$/.test(val)) { const ico = document.createElement('ha-icon'); ico.setAttribute('icon', val); ico.style.cssText = '--mdc-icon-size:20px'; prev.appendChild(ico); } };
+    inp.addEventListener('input', upd);
+    inp.addEventListener('change', () => this._set(key, inp.value || undefined));
+    box.appendChild(inp); box.appendChild(prev); w.appendChild(box); upd();
   }
 
   _renderEntityBlocks() {
     const ents = this._config.entities || [];
     ents.forEach((item, i) => {
       if (item.type === 'divider') {
-        const div = document.createElement('div');
-        div.className = 'divider-block';
+        const div = document.createElement('div'); div.className = 'divider-block';
         div.innerHTML = `<span>— Séparateur —</span>`;
-        const del = document.createElement('button');
-        del.className = 'del-btn'; del.innerHTML = '×';
+        const del = document.createElement('button'); del.className = 'del-btn'; del.innerHTML = '×';
         del.addEventListener('click', () => { this._config.entities.splice(i, 1); this._dispatch(); this._render(); });
-        div.appendChild(del);
-        this.appendChild(div);
-        return;
+        div.appendChild(del); this.appendChild(div); return;
       }
-
-      const block = document.createElement('div');
-      block.className = 'block';
-      const title = document.createElement('div');
-      title.className = 'block-title';
-      title.textContent = `Entité ${i + 1}`;
+      const block = document.createElement('div'); block.className = 'block';
+      const title = document.createElement('div'); title.className = 'block-title'; title.textContent = `Entité ${i + 1}`;
       block.appendChild(title);
-
-      const del = document.createElement('button');
-      del.className = 'del-btn'; del.innerHTML = '×';
+      const del = document.createElement('button'); del.className = 'del-btn'; del.innerHTML = '×';
       del.addEventListener('click', () => { this._config.entities.splice(i, 1); this._dispatch(); this._render(); });
       block.appendChild(del);
 
-      this._entityRow(block, i, 'entity',         'Entité *',        item.entity         || '', 'entity');
-      this._entityRow(block, i, 'status_entity',  'Statut associé',  item.status_entity  || '', 'entity', 'binary_sensor.porte_garage');
-      this._entityRow(block, i, 'name',            'Nom affiché',     item.name           || '', null, 'friendly name');
-      this._entityRow(block, i, 'icon',            'Icône (mdi:...)', item.icon           || '', null, 'mdi:home');
-      this._entityRow(block, i, 'label',           'Label (ligne 1)', item.label          || '', null, 'SWITCH');
-      this._entityRow(block, i, 'secondary_info',  'Info secondaire', item.secondary_info || '', null, 'state ou vide');
-      this._entityRow(block, i, 'decimal_places',  'Décimales',       item.decimal_places ?? '', null, '1');
+      this._entField(block, i, 'entity',        'Entité *',       item.entity,        { entity: true, ph: 'domain.objet' });
+      this._entField(block, i, 'status_entity', 'Statut associé', item.status_entity, { entity: true, ph: 'binary_sensor.porte_garage' });
+      this._entField(block, i, 'name',          'Nom affiché',    item.name,          { ph: 'friendly name' });
+      this._entIcon (block, i, item.icon);
+      this._entField(block, i, 'label',         'Label (ligne 1)',item.label,         { ph: 'SWITCH' });
+      this._entField(block, i, 'secondary_info','Info secondaire',item.secondary_info,{ ph: 'state ou vide' });
+      this._entField(block, i, 'decimal_places','Décimales',      item.decimal_places,{ ph: '1' });
 
       this.appendChild(block);
     });
   }
 
-  _entityRow(parent, idx, field, label, value, prefix, placeholder='') {
-    const row  = document.createElement('div'); row.className = 'row';
-    const lbl  = document.createElement('label'); lbl.textContent = label;
-    const inp  = document.createElement('input');
-    inp.type = 'text'; inp.value = value;
-    if (prefix === 'entity') {
-      // Autocomplétion HTML native via <datalist> partagé (filtrage par le navigateur,
-      // saisie libre toujours possible).
-      inp.setAttribute('list', 'neon-ent-list');
-      inp.placeholder = placeholder || 'domain.objet';
-      inp.autocomplete = 'off';
-    } else {
-      inp.placeholder = placeholder;
-    }
-    inp.addEventListener('change', e => this._setEnt(idx, field, e.target.value || undefined));
-    row.appendChild(lbl); row.appendChild(inp);
-    parent.appendChild(row);
-  }
-
-  _sec(t)  { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d); }
-  _hint(t) { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; this.appendChild(d); }
-
-  _textRow(key, label, value, placeholder='') {
-    const row = document.createElement('div'); row.className = 'row';
-    const lbl = document.createElement('label'); lbl.textContent = label;
-    const inp = document.createElement('input'); inp.type = 'text'; inp.value = value; inp.placeholder = placeholder;
-    inp.addEventListener('change', e => this._setNested(key, e.target.value || undefined));
-    row.appendChild(lbl); row.appendChild(inp); this.appendChild(row);
-  }
-
-  _toggle(key, label, checked) {
-    const row = document.createElement('div'); row.className = 'row';
-    const lbl = document.createElement('label'); lbl.textContent = label;
-    const cb  = document.createElement('input'); cb.type = 'checkbox'; cb.checked = !!checked;
-    cb.style.cssText = 'width:36px;height:20px;cursor:pointer;accent-color:var(--primary-color,#6200EA);flex-shrink:0;';
-    cb.addEventListener('change', e => this._setNested(key, e.target.checked));
-    row.appendChild(lbl); row.appendChild(cb); this.appendChild(row);
-  }
-
-  _fillSelects() {
-    if (!this._hass) return;
-    // (Re)construit le <datalist> partagé alimentant l'autocomplétion des champs entité.
-    let dl = this.querySelector('#neon-ent-list');
-    if (!dl) { dl = document.createElement('datalist'); dl.id = 'neon-ent-list'; this.appendChild(dl); }
-    const ids = Object.keys(this._hass.states).sort();
-    // Skip si déjà à jour (évite de reconstruire à chaque tick hass).
-    if (dl.childElementCount === ids.length) return;
-    dl.textContent = '';
-    const frag = document.createDocumentFragment();
-    ids.forEach(id => {
-      const o = document.createElement('option');
-      o.value = id;
-      const fn = this._hass.states[id].attributes?.friendly_name;
-      if (fn && fn !== id) o.label = fn;   // affiché en complément de l'id dans la liste
-      frag.appendChild(o);
-    });
-    dl.appendChild(frag);
-  }
-
-  _setNested(path, value) {
-    // supports: header.title, footer.text, header_enabled, footer_enabled,
-    //           use_theme_card, show_label, pulse_active, flash_on_change, value_glow
-    if (path === 'header_enabled') {
-      this._config.header = { ...(this._config.header || {}), enabled: value };
-    } else if (path === 'footer_enabled') {
-      this._config.footer = { ...(this._config.footer || {}), enabled: value };
-    } else if (path.startsWith('header.')) {
-      const k = path.replace('header.', '');
-      this._config.header = { ...(this._config.header || {}), [k]: value };
-    } else if (path.startsWith('footer.')) {
-      const k = path.replace('footer.', '');
-      this._config.footer = { ...(this._config.footer || {}), [k]: value };
-    } else {
-      if (value === undefined || value === '') delete this._config[path];
-      else this._config[path] = value;
-    }
-    this._dispatch();
-  }
-
   _setEnt(idx, field, value) {
-    const ents  = [...(this._config.entities || [])];
+    const ents = [...(this._config.entities || [])];
     let v = value;
-    if (field === 'decimal_places' && v !== undefined) {
-      const n = parseInt(v); v = isNaN(n) ? undefined : n;
-    }
-    ents[idx]   = { ...(ents[idx] || {}), [field]: v };
+    if (field === 'decimal_places' && v !== undefined) { const n = parseInt(v); v = isNaN(n) ? undefined : n; }
+    ents[idx] = { ...(ents[idx] || {}), [field]: v };
     if (v === undefined) delete ents[idx][field];
     this._config = { ...this._config, entities: ents };
     this._dispatch();
-  }
-
-  _dispatch() {
-    const config = { ...this._config };
-    // Mémorise le hash émis : le setConfig d'écho que HA va renvoyer sera
-    // reconnu et n'entraînera pas de re-render destructeur du focus.
-    this._lastEmitted = this._hash(config);
-    this.dispatchEvent(new CustomEvent('config-changed', {
-      detail: { config },
-      bubbles: true, composed: true,
-    }));
   }
 }
 
@@ -1376,10 +1425,10 @@ window.customCards.push({
   preview:     true,
 });
 
-console.info('%c NEON-ENTITIES-CARD %c v1.7.0 ', 'color:#6200EA;font-weight:bold;background:#040816', 'color:#fff;background:#444');
+console.info('%c NEON-ENTITIES-CARD %c v1.8.0 ', 'color:#6200EA;font-weight:bold;background:#040816', 'color:#fff;background:#444');
 
 console.info(
-  '%c 📋 neon-entities-card v1.7.0 %c Neo Tokyo ',
+  '%c 📋 neon-entities-card v1.8.0 %c Neo Tokyo ',
   'background:#6200EA;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#BB86FC;padding:2px 4px;border-radius:0 3px 3px 0;'
 );
