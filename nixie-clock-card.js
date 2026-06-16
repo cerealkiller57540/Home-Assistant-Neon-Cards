@@ -1,4 +1,4 @@
-/*
+﻿/*
  * ============================================================
  *  NixieClockCard — Home Assistant Custom Card
  *  Usage: add to resources as /local/nixie-clock-card.js
@@ -101,7 +101,11 @@ class NixieClockCard extends HTMLElement {
         this.glowBase   = config.glow_color  || palette.base;
         this.glowSoft   = config.glow_soft   || palette.soft;
         this.glowCold   = config.glow_cold   || null;
-        this.caseColor  = config.case_color  || '#0d0d0d';
+        // case_color NON défini → le fond suit le thème (var --ha-card-background).
+        // Défini → override. caseColor garde une vraie couleur pour les vis/screws
+        // (qui ne peuvent pas prendre une var CSS éventuellement vide).
+        this.caseColorSet = config.case_color !== undefined;
+        this.caseColor    = config.case_color || '#0d0d0d';
         this.caseBorder = config.case_border || (colorKey === 'orange' ? '#3a2810' : '#1a1a2a');
         this.screwColor = config.screw_color || this.caseBorder;
         this.cardLabel  = config.label !== undefined ? config.label : '';
@@ -147,6 +151,9 @@ class NixieClockCard extends HTMLElement {
             const glowCold  = this.glowCold;
             const caseColor = this.caseColor;
             const caseBorder= this.caseBorder;
+            // Applique un alpha à une couleur via color-mix → accepte aussi les var(--…)
+            // (l'ancien code concaténait un alpha hex "+'dd'", qui cassait avec une variable).
+            const mix = (col, pct) => 'color-mix(in srgb, ' + col + ' ' + pct + '%, transparent)';
             
             // Restart interval when tab becomes visible
             if (!this._handleVisibility) {
@@ -167,16 +174,20 @@ class NixieClockCard extends HTMLElement {
                 window.addEventListener('focus', this._handleVisibility);
             }
 
-            const coldShadow = glowCold ? ', 0 0 80px 25px ' + glowCold + '22' : '';
+            const coldShadow = glowCold ? ', 0 0 80px 25px ' + mix(glowCold, 13) : '';
 
-            card.style.background    = caseColor;
+            // Fond : si case_color non défini → suit le thème (comme le border-radius
+            // plus bas). Sinon, override explicite avec la couleur fournie.
+            card.style.background    = this.caseColorSet
+                ? caseColor
+                : 'var(--ha-card-background, var(--card-background-color, ' + caseColor + '))';
             card.style.border        = '2px solid ' + caseBorder;
             const themeRadius = getComputedStyle(this).getPropertyValue('--ha-card-border-radius').trim();
             card.style.borderRadius  = themeRadius || '12px';
             card.style.boxShadow     = 'inset 0 1px 0 rgba(255,255,255,0.04),'
                 + 'inset 0 -2px 4px rgba(0,0,0,0.7),'
-                + '0 0 18px 4px ' + glowBase + '44,'
-                + '0 0 45px 10px ' + glowSoft + '22'
+                + '0 0 18px 4px ' + mix(glowBase, 27) + ','
+                + '0 0 45px 10px ' + mix(glowSoft, 13)
                 + coldShadow;
             card.style.padding       = '22px 18px 6px';
             card.style.textAlign     = 'center';
@@ -189,12 +200,12 @@ class NixieClockCard extends HTMLElement {
             // accents latéraux
             const accentL = document.createElement('div');
             accentL.style.cssText = 'position:absolute;left:0;top:20%;height:60%;width:2px;border-radius:1px;'
-                + 'background:linear-gradient(to bottom,transparent,' + glowBase + '66,transparent);';
+                + 'background:linear-gradient(to bottom,transparent,' + mix(glowBase, 40) + ',transparent);';
             card.appendChild(accentL);
 
             const accentR = document.createElement('div');
             accentR.style.cssText = 'position:absolute;right:0;top:20%;height:60%;width:2px;border-radius:1px;'
-                + 'background:linear-gradient(to bottom,transparent,' + glowSoft + '55,transparent);';
+                + 'background:linear-gradient(to bottom,transparent,' + mix(glowSoft, 33) + ',transparent);';
             card.appendChild(accentR);
 
             // label gravé
@@ -202,18 +213,18 @@ class NixieClockCard extends HTMLElement {
                 const lbl = document.createElement('div');
                 lbl.textContent = this.cardLabel;
                 // text-shadow laser : couches serrées sans diffusion, pas de blur large
-                const lblShadow = '0 0 1px ' + glowBase + 'ff,'
-                    + '0 0 3px ' + glowBase + 'cc,'
-                    + '0 0 6px ' + glowBase + '88,'
+                const lblShadow = '0 0 1px ' + glowBase + ','
+                    + '0 0 3px ' + mix(glowBase, 80) + ','
+                    + '0 0 6px ' + mix(glowBase, 53) + ','
                     + '0 1px 0 rgba(0,0,0,0.8)';
                 lbl.style.cssText = 'position:absolute;top:5px;left:50%;transform:translateX(-50%);'
                     + 'font-size:10px;letter-spacing:5px;text-transform:uppercase;white-space:nowrap;'
                     + "font-family:'Segoe UI',sans-serif;font-weight:bold;"
-                    + 'color:' + glowBase + 'dd;'
+                    + 'color:' + mix(glowBase, 87) + ';'
                     + 'text-shadow:' + lblShadow + ';'
                     + '-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;'
                     + 'text-rendering:optimizeLegibility;'
-                    + 'border-bottom:1px solid ' + glowBase + '33;padding-bottom:2px;';
+                    + 'border-bottom:1px solid ' + mix(glowBase, 20) + ';padding-bottom:2px;';
                 card.appendChild(lbl);
             }
 
@@ -244,7 +255,7 @@ class NixieClockCard extends HTMLElement {
             const displayWrap = document.createElement('div');
             displayWrap.style.display    = 'inline-block';
             displayWrap.style.position   = 'relative';
-            displayWrap.style.boxShadow  = '0 0 10px 2px ' + glowBase + '66, 0 0 28px 6px ' + glowSoft + '33';
+            displayWrap.style.boxShadow  = '0 0 10px 2px ' + mix(glowBase, 40) + ', 0 0 28px 6px ' + mix(glowSoft, 20);
             displayWrap.style.borderRadius = '3px';
             this.displayWrap = displayWrap;
             displayWrap.appendChild(this.content);

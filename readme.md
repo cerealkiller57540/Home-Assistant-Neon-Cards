@@ -74,6 +74,12 @@
 | 🔥 Heat Pump Card | `heat-pump-card.js` | — | PAC/heat pump card (Ecodan Neo Tokyo edition) with UI editor |
 | 📈 Heat Monitor Card | `heat-monitor-card.js` | `1.17` | CRT-style heat pump monitor with scrolling notes |
 
+### 🌦️ Weather & Environment
+
+| Card | File | Version | Description |
+|------|------|:-------:|-------------|
+| 🌦️ Weather Neon Card | `weather-neon-card.js` | `1.8.0` | Animated outline weather icons (15 conditions), forecast, vigilance halo, GLITCH cat, air-quality & pollen pills (Atmo France) with J+1 trend |
+
 ### 💡 Lighting & Switches
 
 | Card | File | Version | Description |
