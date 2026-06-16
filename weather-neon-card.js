@@ -18,7 +18,7 @@
  *   reactive_bg    true|false  fond qui change selon la météo (défaut: true)
  */
 
-const VERSION = '1.8.0';
+const VERSION = '2.0.0';
 
 // ═══════════════════════════════════════════════════════
 //  CONFIG
@@ -273,8 +273,8 @@ const _rainSpans = (n, op = 1) => [...Array(n)].map((_, i) =>
 const _snowSpans = (n, op = 1) => [...Array(n)].map((_, i) =>
   `<span class="wfx-snow" style="left:${(i * 6.3) % 100}%;animation-delay:${(i % 8) * 0.3}s;animation-duration:${3 + (i % 4)}s;opacity:${op}"></span>`).join('');
 
-// Particules atmosphériques. cond = condition météo ; rainCh/snowCh = probabilités (0-100)
-// → même par temps SEC, si la proba est élevée, on fait tomber quelques gouttes/flocons "d'annonce".
+// Particules atmosphériques (pluie/neige/poussières). Le VENT est géré séparément
+// par un canvas animé (cf _startWind/_drawWind), pas en CSS ici.
 function particlesHtml(cond, rainCh = 0, snowCh = 0) {
   // 1) condition pluvieuse RÉELLE → pluie pleine
   if (['rainy', 'pouring', 'lightning-rainy', 'snowy-rainy'].includes(cond)) {
@@ -284,23 +284,15 @@ function particlesHtml(cond, rainCh = 0, snowCh = 0) {
   if (['snowy', 'hail'].includes(cond)) {
     return `<div class="wfx">${_snowSpans(16)}</div>`;
   }
-  // 3) condition sèche MAIS proba élevée → "annonce" : densité ∝ proba, gouttes/flocons légers
-  if (snowCh >= 30) {
-    const n = Math.round(snowCh / 100 * 14);
-    return `<div class="wfx">${_snowSpans(n, 0.55)}</div>`;
-  }
-  if (rainCh >= 30) {
-    const n = Math.round(rainCh / 100 * 14);
-    return `<div class="wfx">${_rainSpans(n, 0.5)}</div>`;
-  }
+  // 3) condition sèche MAIS proba élevée → "annonce"
+  if (snowCh >= 30) return `<div class="wfx">${_snowSpans(Math.round(snowCh / 100 * 14), 0.55)}</div>`;
+  if (rainCh >= 30) return `<div class="wfx">${_rainSpans(Math.round(rainCh / 100 * 14), 0.5)}</div>`;
   // 4) beau temps → rayon doux + poussières dorées
   if (['sunny'].includes(cond)) {
     return `<div class="wfx"><span class="wfx-ray"></span>${[...Array(12)].map((_, i) =>
       `<span class="wfx-dust" style="left:${(i * 8.3) % 100}%;top:${(i * 37) % 100}%;animation-delay:${i * 0.2}s;animation-duration:${3 + (i % 4)}s"></span>`).join('')}</div>`;
   }
-  if (['lightning'].includes(cond)) {
-    return `<div class="wfx"><span class="wfx-flash"></span></div>`;
-  }
+  if (['lightning'].includes(cond)) return '<div class="wfx"><span class="wfx-flash"></span></div>';
   return '';
 }
 
@@ -425,12 +417,16 @@ class WeatherNeonCard extends HTMLElement {
       <style>${WeatherNeonCard.styles}</style>
       <ha-card>
         <div class="wsky"></div>
+        <canvas class="wwind-canvas"></canvas>
+        <canvas class="wrain-canvas"></canvas>
         <div class="wfxlayer"></div>
         ${this._config.neon_fx ? '<div class="wscan"></div>' : ''}
         <div class="winner"></div>
       </ha-card>`;
     this._elSky = this.shadowRoot.querySelector('.wsky');
     this._elFx = this.shadowRoot.querySelector('.wfxlayer');
+    this._elWind = this.shadowRoot.querySelector('.wwind-canvas');
+    this._elRain = this.shadowRoot.querySelector('.wrain-canvas');
     this._elInner = this.shadowRoot.querySelector('.winner');
     this._built = true;
 
@@ -460,6 +456,192 @@ class WeatherNeonCard extends HTMLElement {
   disconnectedCallback() {
     if (this._ro) { this._ro.disconnect(); this._ro = null; }
     if (this._glitchTimer) { clearTimeout(this._glitchTimer); this._glitchTimer = null; }
+    if (this._windRAF) { cancelAnimationFrame(this._windRAF); this._windRAF = null; }
+    if (this._windIO) { this._windIO.disconnect(); this._windIO = null; }
+    if (this._rainRAF) { cancelAnimationFrame(this._rainRAF); this._rainRAF = null; }
+    if (this._rainIO) { this._rainIO.disconnect(); this._rainIO = null; }
+  }
+
+  // ── VENT : nappes de brume soufflée (voiles ondulants semi-transparents qui
+  //    dérivent) + particules portées par le flux. Inspiré du flux d'air de la
+  //    climate-card. Cap 30 fps, pause hors écran. Densité/vitesse ∝ this._windForce
+  //    (km/h), ajusté à chaud. Rien sous ~12 km/h.
+  _startWind() {
+    const cv = this._elWind;
+    if (!cv) return;
+
+    if (window.IntersectionObserver && !this._windIO) {
+      this._windIO = new IntersectionObserver(es => { this._windOff = !es[0].isIntersecting; });
+      this._windIO.observe(cv);
+    }
+    const fit = () => {
+      const r = cv.getBoundingClientRect();
+      if (!r.width || !r.height) return false;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      if (cv._w !== r.width || cv._h !== r.height) {
+        cv.width = r.width * dpr; cv.height = r.height * dpr;
+        cv._w = r.width; cv._h = r.height; cv._dpr = dpr;
+      }
+      return true;
+    };
+    fit();
+
+    // pools créés une fois
+    if (!this._windSheets) {
+      this._windSheets = [...Array(4)].map((_, i) => ({
+        t: Math.random() * 1000, y: 0.18 + i * 0.21, speed: 0.5 + Math.random() * 0.5,
+        amp: 6 + Math.random() * 10, len: 0.5 + Math.random() * 0.4, thick: 16 + Math.random() * 22,
+      }));
+      this._windParts = [...Array(40)].map(() => ({ reset: true }));
+    }
+    if (this._windRAF) return;
+
+    const W0 = () => cv._w, H0 = () => cv._h;
+    const resetPart = (p, W, H, atEdge) => {
+      p.x = atEdge ? -8 - Math.random() * 40 : Math.random() * W;
+      p.y = Math.random() * H;
+      p.r = 0.7 + Math.random() * 1.8;
+      p.sp = 0.5 + Math.random() * 0.9;             // facteur de vitesse perso
+      p.amp = 4 + Math.random() * 12;
+      p.freq = 0.5 + Math.random() * 1.3;
+      p.ph = Math.random() * Math.PI * 2;
+      p.a = 0.25 + Math.random() * 0.4;
+      p.reset = false;
+    };
+
+    const draw = (now) => {
+      this._windRAF = requestAnimationFrame(draw);
+      if (this._windOff || document.hidden) return;
+      if (now - (this._windLast || 0) < 33) return;     // ~30 fps
+      this._windLast = now;
+      if (!fit()) return;
+      const ctx = cv.getContext('2d'), dpr = cv._dpr, W = cv._w, H = cv._h;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+
+      const force = this._windForce || 0;
+      if (force < 12) return;                            // calme → rien
+      const intensity = Math.min((force - 12) / 38, 1);  // 0→1
+      const speed = 0.4 + intensity * 1.4;               // vitesse globale du flux
+
+      // 1) NAPPES de brume : bandes horizontales ondulées, gradient doux, dérivent.
+      const nSheets = 2 + Math.round(intensity * 2);     // 2 à 4 nappes
+      for (let s = 0; s < nSheets; s++) {
+        const sh = this._windSheets[s];
+        sh.t += speed * sh.speed;
+        const cy = sh.y * H;
+        const grad = ctx.createLinearGradient(0, cy - sh.thick, 0, cy + sh.thick);
+        grad.addColorStop(0, 'rgba(150,210,255,0)');
+        grad.addColorStop(0.5, `rgba(170,225,255,${(0.05 + intensity * 0.07).toFixed(3)})`);
+        grad.addColorStop(1, 'rgba(150,210,255,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(-20, cy);
+        const seg = 10;
+        for (let i = 0; i <= seg; i++) {
+          const x = -20 + (W + 40) * (i / seg);
+          const y = cy + Math.sin(sh.t * 0.04 + i * sh.len) * sh.amp;
+          ctx.lineTo(x, y);
+        }
+        for (let i = seg; i >= 0; i--) {
+          const x = -20 + (W + 40) * (i / seg);
+          const y = cy + Math.sin(sh.t * 0.04 + i * sh.len) * sh.amp + sh.thick;
+          ctx.lineTo(x, y);
+        }
+        ctx.closePath(); ctx.fill();
+      }
+
+      // 2) PARTICULES portées par le flux (poussières/feuilles) — petites traînées.
+      const nParts = 12 + Math.round(intensity * 26);    // 12 à 38
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(190,230,255,1)';
+      for (let i = 0; i < nParts; i++) {
+        const p = this._windParts[i];
+        if (p.reset || p.x === undefined) resetPart(p, W, H, true);
+        const vx = speed * 2.4 * p.sp;
+        p.x += vx;
+        p.ph += 0.04 * p.freq;
+        const yy = p.y + Math.sin(p.ph) * p.amp;
+        ctx.globalAlpha = p.a * (0.5 + intensity * 0.5);
+        ctx.lineWidth = p.r;
+        ctx.beginPath();
+        ctx.moveTo(p.x, yy);
+        ctx.lineTo(p.x - vx * 2.2, yy + Math.sin(p.ph - 0.3) * 1.5);
+        ctx.stroke();
+        if (p.x > W + 12) resetPart(p, W, H, true);
+      }
+      ctx.globalAlpha = 1;
+    };
+    this._windRAF = requestAnimationFrame(draw);
+  }
+
+  // ── PLUIE : canvas de gouttes en biais + cercles d'impact (rebonds au sol).
+  //    Adapté du code pluie trouvé par Chris (vanilla, sans les bonshommes).
+  //    this._rainLevel = 0 (sec) à 1 (pouring). Cap 30 fps, pause hors écran.
+  _startRain() {
+    const cv = this._elRain;
+    if (!cv) return;
+    if (window.IntersectionObserver && !this._rainIO) {
+      this._rainIO = new IntersectionObserver(es => { this._rainOff = !es[0].isIntersecting; });
+      this._rainIO.observe(cv);
+    }
+    const fit = () => {
+      const r = cv.getBoundingClientRect();
+      if (!r.width || !r.height) return false;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      if (cv._w !== r.width || cv._h !== r.height) {
+        cv.width = r.width * dpr; cv.height = r.height * dpr;
+        cv._w = r.width; cv._h = r.height; cv._dpr = dpr;
+      }
+      return true;
+    };
+    fit();
+    if (!this._rainDrops) { this._rainDrops = []; this._rainSplash = []; }
+    if (this._rainRAF) return;
+
+    const newDrop = (W, H, init) => {
+      const sc = 0.3 + Math.random() * 0.7;                 // échelle (profondeur)
+      return { x: Math.random() * (W + 80) - 40, y: init ? Math.random() * H : -20,
+        len: 8 + sc * 14, vx: 1.2 + sc * 1.5, vy: 7 + sc * 9, sc, a: 0.25 + sc * 0.45 };
+    };
+
+    const draw = (now) => {
+      this._rainRAF = requestAnimationFrame(draw);
+      if (this._rainOff || document.hidden) return;
+      if (now - (this._rainLast || 0) < 33) return;
+      this._rainLast = now;
+      if (!fit()) return;
+      const ctx = cv.getContext('2d'), dpr = cv._dpr, W = cv._w, H = cv._h;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+
+      const level = this._rainLevel || 0;
+      const drops = this._rainDrops, splash = this._rainSplash;
+      if (level <= 0) { drops.length = 0; splash.length = 0; return; }
+
+      const target = Math.round(level * 120);               // densité ∝ niveau
+      while (drops.length < target) drops.push(newDrop(W, H, drops.length < target / 2));
+      if (drops.length > target) drops.length = target;
+
+      ctx.lineCap = 'round';
+      for (let i = 0; i < drops.length; i++) {
+        const d = drops[i]; d.x += d.vx; d.y += d.vy;
+        ctx.globalAlpha = d.a; ctx.strokeStyle = 'rgba(170,230,255,.9)'; ctx.lineWidth = 0.6 + d.sc * 1.2;
+        ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - d.vx * 1.6, d.y - d.len); ctx.stroke();
+        if (d.y > H) {                                       // impact → cercle d'éclaboussure
+          splash.push({ x: d.x, y: H - 1, r: 1, max: 4 + d.sc * 7, a: 0.5 * d.sc + 0.2 });
+          Object.assign(d, newDrop(W, H, false));
+        }
+      }
+      for (let i = splash.length - 1; i >= 0; i--) {
+        const s = splash[i]; s.r += 0.7; s.a *= 0.9;
+        ctx.globalAlpha = s.a; ctx.strokeStyle = 'rgba(190,235,255,.8)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, Math.PI, Math.PI * 2); ctx.stroke();
+        if (s.r > s.max || s.a < 0.03) splash.splice(i, 1);
+      }
+      ctx.globalAlpha = 1;
+    };
+    this._rainRAF = requestAnimationFrame(draw);
   }
 
   _render() {
@@ -571,15 +753,36 @@ class WeatherNeonCard extends HTMLElement {
       this._startGlitchLife();  // (re)lance la vie de GLITCH sur le nouvel élément
     }
 
-    // particules atmosphériques selon condition + probabilités (clé = cond|rain|snow,
-    // on ne réinjecte que si ça change → pas de redémarrage inutile des chutes).
+    // PLUIE (canvas) : niveau selon la condition réelle. Quand le canvas pluie est
+    // actif, on ne génère PAS la pluie CSS (évite le doublon) → les spans CSS ne
+    // couvrent plus que neige / poussières / annonces de proba.
+    const rainLevel = cond === 'pouring' ? 1
+      : ['rainy', 'lightning-rainy'].includes(cond) ? 0.6
+      : cond === 'snowy-rainy' ? 0.4
+      : (ex.rainCh >= 40 && this._config.particles) ? ex.rainCh / 100 * 0.4  // annonce forte → bruine
+      : 0;
+    this._rainLevel = this._config.particles ? rainLevel : 0;
+    if (this._config.particles) this._startRain();
+
+    // particules CSS (neige/poussières/annonces) — la pluie réelle est gérée par le canvas.
+    // + flash d'éclair (double-coup) ajouté pour lightning ET lightning-rainy.
     if (this._config.particles) {
-      const fxKey = `${cond}|${ex.rainCh}|${ex.snowCh}`;
+      const storm = (cond === 'lightning' || cond === 'lightning-rainy');
+      const cssCond = rainLevel > 0 ? 'cloudy' : cond;   // neutralise la pluie CSS si canvas actif
+      const fxKey = `${cssCond}|${ex.rainCh}|${ex.snowCh}|${rainLevel > 0 ? 'R' : ''}|${storm ? 'S' : ''}`;
       if (this._fxKey !== fxKey) {
-        this._elFx.innerHTML = particlesHtml(cond, ex.rainCh, ex.snowCh);
+        let html = particlesHtml(cssCond, rainLevel > 0 ? 0 : ex.rainCh, ex.snowCh);
+        if (storm && !html.includes('wfx-flash')) {
+          html = html ? html.replace('</div>', '<span class="wfx-flash"></span></div>')
+                      : '<div class="wfx"><span class="wfx-flash"></span></div>';
+        }
+        this._elFx.innerHTML = html;
         this._fxKey = fxKey;
       }
     }
+    // vent (canvas) : force = max(rafale, vent). Le moteur ajuste densité/vitesse à chaud.
+    this._windForce = Math.max(ex.gust || 0, ex.wind || 0);
+    if (this._config.particles) this._startWind();
     this._elSky.style.background = sky;  // le fond peut changer sans toucher au DOM animé
   }
 
@@ -708,13 +911,17 @@ WeatherNeonCard.styles = `
     background:linear-gradient(transparent, rgba(125,249,255,.6)); animation:wrain linear infinite; }
   .wfx-snow { position:absolute; top:-8%; width:4px; height:4px; border-radius:50%;
     background:rgba(255,255,255,.8); animation:wsnow linear infinite; }
+  .wwind-canvas, .wrain-canvas { position:absolute; inset:0; z-index:1; pointer-events:none;
+    -webkit-mask:linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%);
+            mask:linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%); }
   .wfx-dust { position:absolute; width:3px; height:3px; border-radius:50%;
     background:#ffe9a8; opacity:.5; animation:wdust ease-in-out infinite; }
   .wfx-ray { position:absolute; top:-30%; left:18%; width:160px; height:300px;
     background:linear-gradient(180deg, rgba(255,225,100,.18), transparent);
     transform:rotate(18deg); filter:blur(10px); animation:wray 7s ease-in-out infinite; }
-  .wfx-flash { position:absolute; inset:0; background:rgba(255,241,150,.5); opacity:0;
-    animation:wflash 5s steps(1) infinite; }
+  .wfx-flash { position:absolute; inset:0; opacity:0; mix-blend-mode:screen;
+    background:linear-gradient(180deg, rgba(220,240,255,.9) 0%, rgba(150,200,255,.4) 45%, transparent 80%);
+    animation:wflash 8s ease-out infinite; animation-delay:1.5s; }
 
   /* ─── SCANLINES NÉON (Neo Tokyo) ─── */
   .wscan { position:absolute; inset:0; z-index:3; pointer-events:none; mix-blend-mode:overlay;
@@ -762,7 +969,16 @@ WeatherNeonCard.styles = `
   @keyframes wsnow { to { transform:translateY(240px) translateX(14px); } }
   @keyframes wdust { 0%,100%{transform:translateY(0);opacity:.4} 50%{transform:translateY(-12px);opacity:.85} }
   @keyframes wray { 0%,100%{transform:rotate(18deg) scaleY(1);opacity:.8} 50%{transform:rotate(14deg) scaleY(1.1);opacity:1} }
-  @keyframes wflash { 0%,93%,100%{opacity:0} 94%{opacity:.5} 95%{opacity:0} 96%{opacity:.35} }
+  /* éclair : double-coup irrégulier (inspiré du flash CSS trouvé par Chris) */
+  @keyframes wflash {
+    0%,90%   { opacity:0; }
+    91%      { opacity:.7; }   /* premier éclat */
+    92%      { opacity:.15; }
+    93%      { opacity:1; }     /* re-coup plus fort */
+    95%      { opacity:.3; }
+    97%      { opacity:.85; }   /* dernier sursaut */
+    100%     { opacity:0; }
+  }
   @keyframes wscanmove { to { background-position:0 220px; } }
   @keyframes wtglitch { 0%,92%,100%{transform:translate(0)} 93%{transform:translate(-2px,1px)} 95%{transform:translate(2px,-1px)} 97%{transform:translate(-1px,0)} }
   @keyframes wcatr { 0%,80%{transform:translate(0)} 85%{transform:translate(-4px,1px)} 91%{transform:translate(3px,-1px)} 97%{transform:translate(-2px,0)} }
