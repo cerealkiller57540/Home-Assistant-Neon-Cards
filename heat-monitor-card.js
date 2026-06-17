@@ -940,6 +940,7 @@ class HeatMonitorCard extends HTMLElement {
     this._initSilverhand();
 
     if (window.ResizeObserver) {
+      if (this._ro) this._ro.disconnect();   // défense : ne jamais empiler un observer si _render est rappelé
       this._ro = new ResizeObserver(() => {
         if (this._rafId) return;
         this._rafId = requestAnimationFrame(() => {

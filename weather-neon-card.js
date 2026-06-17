@@ -18,7 +18,7 @@
  *   reactive_bg    true|false  fond qui change selon la météo (défaut: true)
  */
 
-const VERSION = '2.2.0';
+const VERSION = '2.3.0';
 
 // ── Device detection (cf CARDS-METHOD.md) — allège les effets canvas sur tablette/mobile
 const WNC_IS_IPAD = /iPad/.test(navigator.userAgent) ||
@@ -480,12 +480,18 @@ class WeatherNeonCard extends HTMLElement {
       this._windIO.observe(cv);
     }
     const fit = () => {
-      const r = cv.getBoundingClientRect();
-      if (!r.width || !r.height) return false;
+      // mesure du canvas ; fallback sur ha-card si le canvas n'a pas encore de taille
+      // (--fx-h pas posé / layout pas prêt → évitait le rendu de façon aléatoire).
+      let w = cv.getBoundingClientRect().width, h = cv.getBoundingClientRect().height;
+      if (!w || !h) {
+        const card = this.shadowRoot.querySelector('ha-card');
+        if (card) { w = w || card.offsetWidth; h = h || card.offsetHeight; }
+      }
+      if (!w || !h) return false;
       const dpr = WNC_IS_LOW_POWER ? 1 : Math.min(window.devicePixelRatio || 1, 2);
-      if (cv._w !== r.width || cv._h !== r.height) {
-        cv.width = r.width * dpr; cv.height = r.height * dpr;
-        cv._w = r.width; cv._h = r.height; cv._dpr = dpr;
+      if (cv._w !== w || cv._h !== h) {
+        cv.width = w * dpr; cv.height = h * dpr;
+        cv._w = w; cv._h = h; cv._dpr = dpr;
       }
       return true;
     };
@@ -592,12 +598,16 @@ class WeatherNeonCard extends HTMLElement {
       this._rainIO.observe(cv);
     }
     const fit = () => {
-      const r = cv.getBoundingClientRect();
-      if (!r.width || !r.height) return false;
+      let w = cv.getBoundingClientRect().width, h = cv.getBoundingClientRect().height;
+      if (!w || !h) {
+        const card = this.shadowRoot.querySelector('ha-card');
+        if (card) { w = w || card.offsetWidth; h = h || card.offsetHeight; }
+      }
+      if (!w || !h) return false;
       const dpr = WNC_IS_LOW_POWER ? 1 : Math.min(window.devicePixelRatio || 1, 2);
-      if (cv._w !== r.width || cv._h !== r.height) {
-        cv.width = r.width * dpr; cv.height = r.height * dpr;
-        cv._w = r.width; cv._h = r.height; cv._dpr = dpr;
+      if (cv._w !== w || cv._h !== h) {
+        cv.width = w * dpr; cv.height = h * dpr;
+        cv._w = w; cv._h = h; cv._dpr = dpr;
       }
       return true;
     };
@@ -656,6 +666,21 @@ class WeatherNeonCard extends HTMLElement {
 
     const st = this._hass.states[this._config.entity];
     if (!st) { this._elInner.innerHTML = `<div style="padding:16px">Entité introuvable : ${this._config.entity}</div>`; return; }
+
+    // Dirty-check : HA pousse `set hass` plusieurs fois/seconde. On ne re-render que
+    // si un état PERTINENT a changé (sinon : centaines de recalculs/RAF inutiles =
+    // CPU/mémoire qui s'envolent). Snapshot léger des entités qui affectent le rendu.
+    const S = this._hass.states;
+    const base = entityBase(this._config.entity);
+    const watch = [this._config.entity, this._config.alert_entity, this._config.sun_entity,
+      this._config.air_entity, this._config.air_entity_next, this._config.pollen_entity, this._config.pollen_entity_next,
+      `sensor.${base}_wind_speed`, `sensor.${base}_wind_gust`, `sensor.${base}_rain_chance`, `sensor.${base}_snow_chance`,
+      this._config.wind_entity, this._config.rain_chance_entity, this._config.snow_chance_entity];
+    let snap = '';
+    for (const e of watch) { const s = e && S[e]; if (s) snap += e + '=' + s.state + ';'; }
+    snap += '|fc=' + (this._forecast ? this._forecast.length : 0) + ':' + (this._fcTs || 0);
+    if (snap === this._renderSnap) return;   // rien de pertinent n'a changé → skip
+    this._renderSnap = snap;
 
     const cond = st.state;
     const a = st.attributes;
@@ -752,26 +777,25 @@ class WeatherNeonCard extends HTMLElement {
       <div class="wstats">${stats}${atmoHtml}</div>
       ${fc.length ? `<div class="wforecast">${glitchBand}${fcHtml}</div>` : ''}`;
 
-    // ne réécrit (et donc ne redémarre les animations SVG) QUE si le contenu a changé
+    // ne réécrit (et donc ne redémarre les animations SVG) QUE si le contenu a changé.
+    // Le calcul de --fx-h (mesure layout, dans un RAF) est DANS ce bloc → uniquement
+    // quand le DOM change, pas à chaque tick hass (évitait un RAF/tick = fuite/gaspillage).
     if (inner !== this._lastHtml) {
       this._elInner.innerHTML = inner;
       this._lastHtml = inner;
       this._startGlitchLife();  // (re)lance la vie de GLITCH sur le nouvel élément
+      requestAnimationFrame(() => {
+        const card = this.shadowRoot.querySelector('ha-card');
+        const fc = this._elInner.querySelector('.wforecast');
+        if (!card) return;
+        if (fc) {
+          const h = Math.round(fc.getBoundingClientRect().top - card.getBoundingClientRect().top);
+          if (h > 0) card.style.setProperty('--fx-h', h + 'px');
+        } else {
+          card.style.removeProperty('--fx-h');
+        }
+      });
     }
-
-    // limite les effets (vent/pluie/éclair) à la zone HERO : --fx-h = haut du forecast.
-    // Mesuré après layout. Sans forecast → toute la card.
-    requestAnimationFrame(() => {
-      const card = this.shadowRoot.querySelector('ha-card');
-      const fc = this._elInner.querySelector('.wforecast');
-      if (!card) return;
-      if (fc) {
-        const h = Math.round(fc.getBoundingClientRect().top - card.getBoundingClientRect().top);
-        if (h > 0) card.style.setProperty('--fx-h', h + 'px');
-      } else {
-        card.style.removeProperty('--fx-h');
-      }
-    });
 
     // PLUIE (canvas) : niveau selon la condition réelle. Quand le canvas pluie est
     // actif, on ne génère PAS la pluie CSS (évite le doublon) → les spans CSS ne

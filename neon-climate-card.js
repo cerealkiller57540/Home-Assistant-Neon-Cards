@@ -301,6 +301,16 @@ class NeonClimateCard extends HTMLElement {
         }
         .mode-btn, .fan-btn { animation: flicker var(--flicker-dur,6s) var(--flicker-delay,0s) infinite; }
 
+        /* LOW_POWER : coupe le flicker (animation décorative en boucle) sur mobile/iPad
+           — évite la sollicitation GPU continue (cf CARDS-METHOD.md). */
+        @media (max-width: 767px),
+               (min-width: 768px) and (min-height: 1000px) and (hover: none) and (pointer: coarse) {
+          .mode-btn, .fan-btn { animation: none !important; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .mode-btn, .fan-btn { animation: none !important; }
+        }
+
         /* pill — couleurs via JS inline style */
         .temp-pill {
           width: 100%;
