@@ -22,6 +22,12 @@
 console.log("neon-compact-light-card.js loaded!");
 const _LEFT_OFFSET = 66; // private constant — was _LEFT_OFFSET (global pollution)
 
+// Device detection (cf weather/header-v2) — userAgent fiable en paysage. Force
+// le flicker OFF sur iPad/mobile (la @media min-height:1000px ratait en paysage).
+const NCL_IS_IPAD = /iPad/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const NCL_IS_LOW_POWER = NCL_IS_IPAD || /iPhone|iPad|iPod|Android|Mobile|HomeAssistant/i.test(navigator.userAgent);
+
 const MDI_ICONS = [
   'mdi:lightbulb', 'mdi:lightbulb-outline', 'mdi:lamp', 'mdi:floor-lamp',
   'mdi:ceiling-light', 'mdi:chandelier', 'mdi:led-strip', 'mdi:led-strip-variant',
@@ -644,7 +650,7 @@ class NeonCompactLightCard extends HTMLElement {
       // effects
       effect_heartbeat:   config.effect_heartbeat   !== false,
       effect_scanline:    config.effect_scanline     === true,
-      effect_flicker:     config.effect_flicker      === true,
+      effect_flicker:     config.effect_flicker === true && !NCL_IS_LOW_POWER,  // OFF sur iPad/mobile
       effect_hover_glitch: config.effect_hover_glitch === true,
       effect_intense_glow: config.effect_intense_glow === true,
       icon_power_animation: config.icon_power_animation !== false,

@@ -231,6 +231,7 @@ const CARD_VERSION = '2.0.1';
 // Device detection — auto-enable debounce on low-power tablets
 const IS_IPAD = /iPad/.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IS_LOW_POWER = IS_IPAD || /iPhone|iPad|iPod|Android|Mobile|HomeAssistant/i.test(navigator.userAgent);
 
 // ============================================================================
 // THEME MANAGEMENT
@@ -1921,10 +1922,10 @@ function parseDualConfig(config) {
     gauge_size: config.gauge_size || 200,
     inner_gauge_size: config.inner_gauge_size || null,
     update_interval: config.update_interval || 1000,
-    power_save_mode: config.power_save_mode || false,
+    power_save_mode: config.power_save_mode ?? IS_LOW_POWER,   // auto ON sur iPad/mobile (override possible: false en YAML)
     debounce_updates: config.debounce_updates ?? IS_IPAD,
     hide_shadows: config.hide_shadows || false,
-    kiosk_mode: config.kiosk_mode || false,
+    kiosk_mode: config.kiosk_mode ?? IS_LOW_POWER,             // auto ON sur iPad/mobile (override possible)
 
     gauges: config.gauges.map(gaugeConfig => ({
       ...gaugeConfig,

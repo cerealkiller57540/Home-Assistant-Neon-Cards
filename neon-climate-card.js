@@ -10,6 +10,12 @@
 
 console.log("neon-climate-card.js loaded!");
 
+// Device detection (cf weather-neon-card / CARDS-METHOD.md) — userAgent fiable en
+// portrait ET paysage, contrairement aux @media largeur/hauteur. Pose .low-power sur le host.
+const NCC_IS_IPAD = /iPad/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const NCC_IS_LOW_POWER = NCC_IS_IPAD || /iPhone|iPad|iPod|Android|Mobile|HomeAssistant/i.test(navigator.userAgent);
+
 if (!document.getElementById('neon-climate-font')) {
   const l = document.createElement('link');
   l.id = 'neon-climate-font'; l.rel = 'stylesheet';
@@ -69,6 +75,9 @@ class NeonClimateCard extends HTMLElement {
 
   setConfig(config) {
     if (!config.entity) throw new Error("neon-climate-card: 'entity' requis");
+    // classe low-power posée ici (PAS dans le constructor : interdit de toucher
+    // aux attributs/classes du host au constructor → NotSupportedError).
+    if (NCC_IS_LOW_POWER) this.classList.add('low-power');
     this._cleanup();
     this._config = {
       entity:          config.entity,
@@ -301,12 +310,10 @@ class NeonClimateCard extends HTMLElement {
         }
         .mode-btn, .fan-btn { animation: flicker var(--flicker-dur,6s) var(--flicker-delay,0s) infinite; }
 
-        /* LOW_POWER : coupe le flicker (animation décorative en boucle) sur mobile/iPad
-           — évite la sollicitation GPU continue (cf CARDS-METHOD.md). */
-        @media (max-width: 767px),
-               (min-width: 768px) and (min-height: 1000px) and (hover: none) and (pointer: coarse) {
-          .mode-btn, .fan-btn { animation: none !important; }
-        }
+        /* LOW_POWER : coupe le flicker (animation décorative en boucle) sur iPad/mobile.
+           Via classe .low-power posée en JS (userAgent) — fiable en paysage, contrairement
+           aux @media largeur/hauteur. + garde reduced-motion. */
+        :host(.low-power) .mode-btn, :host(.low-power) .fan-btn { animation: none !important; }
         @media (prefers-reduced-motion: reduce) {
           .mode-btn, .fan-btn { animation: none !important; }
         }

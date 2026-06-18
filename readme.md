@@ -69,7 +69,7 @@
 | Card | File | Version | Description |
 |------|------|:-------:|-------------|
 | 🌡️ Neon Thermo Card | `neon-thermo-card.js` | `1.4.0` | Temperature & humidity with neon styling |
-| 🌡️🌡️ Neon Dual Thermo Card | `neon-dual-thermo-card.js` | `2.0.0` | Two temperature sensors side by side |
+| 🌡️🌡️ Neon Dual Thermo Card | `neon-dual-thermo-card.js` | `2.3.0` | Two temperature sensors side by side |
 | ❄️ Neon Climate Card | `neon-climate-card.js` | `1.3.0` | Full climate control with Neo Tokyo UV palette, wind animations, unified UI editor (header + colors, CSS-variable friendly) |
 | 🔥 Heat Pump Card | `heat-pump-card.js` | — | PAC/heat pump card (Ecodan Neo Tokyo edition) with UI editor |
 | 📈 Heat Monitor Card | `heat-monitor-card.js` | `1.17` | CRT-style heat pump monitor with scrolling notes |
@@ -78,7 +78,7 @@
 
 | Card | File | Version | Description |
 |------|------|:-------:|-------------|
-| 🌦️ Weather Neon Card | `weather-neon-card.js` | `2.2.0` | Animated outline weather icons (15 conditions), forecast, vigilance halo, GLITCH cat, air-quality & pollen pills (Atmo France), canvas FX: wind haze + rain with splashes + lightning flashes (hero-zone, low-power throttling on iPad/mobile) |
+| 🌦️ Weather Neon Card | `weather-neon-card.js` | `2.4.1` | Animated outline weather icons (15 conditions), forecast, vigilance halo, GLITCH cat, air-quality & pollen pills (Atmo France), canvas FX: wind haze + rain with splashes + lightning flashes (hero-zone, low-power throttling on iPad/mobile) |
 
 ### 💡 Lighting & Switches
 

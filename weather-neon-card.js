@@ -18,12 +18,12 @@
  *   reactive_bg    true|false  fond qui change selon la météo (défaut: true)
  */
 
-const VERSION = '2.3.0';
+const VERSION = '2.4.1';
 
 // ── Device detection (cf CARDS-METHOD.md) — allège les effets canvas sur tablette/mobile
 const WNC_IS_IPAD = /iPad/.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const WNC_IS_LOW_POWER = WNC_IS_IPAD || /iPhone|Android/.test(navigator.userAgent);
+const WNC_IS_LOW_POWER = WNC_IS_IPAD || /iPhone|iPad|iPod|Android|Mobile|HomeAssistant/i.test(navigator.userAgent);
 
 // ═══════════════════════════════════════════════════════
 //  CONFIG
@@ -227,10 +227,17 @@ const ICONS = {
 };
 // couleur du kanji par famille
 const KANJI_COL = { sunny: '#ffcf4d', partlycloudy: '#ffcf4d', lightning: '#c9a0ff', 'lightning-rainy': '#c9a0ff', 'windy-variant': '#c9a0ff', exceptional: '#c9a0ff' };
+// Retire les animations SVG SMIL (<animate>, <animateTransform>, <animateMotion>) —
+// le CSS animation:none ne les coupe PAS. Sur iPad/mobile → icônes figées (statiques).
+function _stripSmil(svg) {
+  return svg.replace(/<animate(Transform|Motion)?\b[^>]*\/>/g, '')
+            .replace(/<animate(Transform|Motion)?\b[^>]*>[\s\S]*?<\/animate(Transform|Motion)?>/g, '');
+}
 function iconSvg(condition, size, haloColor, withKanji = true) {
   const fn = ICONS[condition] || ICONS['cloudy'];
   const k = withKanji ? kanji(condition, KANJI_COL[condition] || '#7df9ff') : '';
-  return svgWrap(fn() + k, size, haloColor);
+  const out = svgWrap(fn() + k, size, haloColor);
+  return WNC_IS_LOW_POWER ? _stripSmil(out) : out;   // iPad/mobile : icônes statiques
 }
 
 // ═══════════════════════════════════════════════════════
@@ -381,6 +388,10 @@ class WeatherNeonCard extends HTMLElement {
     this._forecast = null;
     this._fcKey = null;
     this._lastHtml = null;
+    // iPad/mobile : classe low-power → coupe scanline/glitch + fige les SVG animés
+    // (en + des canvas déjà off). Posé ici, PAS au constructor (NotSupportedError).
+    // Indépendant des options neon_fx/glitch → n'affecte QUE l'iPad, jamais le PC.
+    if (WNC_IS_LOW_POWER) this.classList.add('low-power');
   }
 
   set hass(hass) {
@@ -979,6 +990,14 @@ WeatherNeonCard.styles = `
   .wscan { position:absolute; inset:0; z-index:3; pointer-events:none; mix-blend-mode:overlay;
     background:repeating-linear-gradient(0deg, rgba(0,229,255,.08) 0px, rgba(0,229,255,.08) 1px, transparent 2px, transparent 4px);
     animation:wscanmove 9s linear infinite; }
+
+  /* ─── iPad/mobile (.low-power) : coupe TOUT ce qui anime en continu ───
+     Posé via JS (WNC_IS_LOW_POWER) → n'affecte que l'iPad, jamais le PC.
+     Les canvas vent/pluie sont déjà OFF ; ici on coupe scanline + glitch +
+     toutes les animations CSS résiduelles (drift nuages, sweep, etc.). */
+  :host(.low-power) .wscan { display:none; }
+  :host(.low-power) .wcatband { display:none; }   /* GLITCH off */
+  :host(.low-power) * { animation:none !important; }
   /* glitch : superpose le split RGB AU glow multi-couches dual-thermo (au lieu de l'écraser) */
   .wtemp-glitch { text-shadow:
       0 0 3px rgba(255,255,255,.9),

@@ -1,5 +1,13 @@
 /* ── storey-battery-card v13 — proportions réelles, flux d'énergie, cap art slot ── */
 (()=>{
+// Device detection — iPad/mobile : coupe les anims (SMIL + CSS) pour soulager le GPU.
+const SBC_IS_IPAD = /iPad/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const SBC_IS_LOW_POWER = SBC_IS_IPAD || /iPhone|iPad|iPod|Android|Mobile|HomeAssistant/i.test(navigator.userAgent);
+// Retire les animations SVG SMIL (le CSS animation:none ne les coupe pas).
+const _sbcStripSmil = (svg) => svg
+  .replace(/<animate(Transform|Motion)?\b[^>]*\/>/g, '')
+  .replace(/<animate(Transform|Motion)?\b[^>]*>[\s\S]*?<\/animate(Transform|Motion)?>/g, '');
 /**
  * ┌──────────────────────────────────────────────────────────────────────────┐
  * │  storey-battery-card.js  v13.0                                          │
@@ -786,6 +794,7 @@ class StoreyBatteryCard extends HTMLElement {
     this._config = c;
     this._prevKey = null;
     this._dom = null;
+    if (SBC_IS_LOW_POWER) this.classList.add('low-power');  // coupe les anims sur iPad/mobile
     this._scheduleRender();
   }
 
@@ -1061,6 +1070,8 @@ class StoreyBatteryCard extends HTMLElement {
         .svg-body { padding:12px 14px 16px }
         .dp { transition:opacity .1s; contain:layout style }
         .dp:active { opacity:.7 }
+        /* iPad/mobile : coupe toutes les anims CSS (SMIL déjà strippé en JS) */
+        :host(.low-power) * { animation:none !important; }
         @keyframes led-breathe { 0%,100%{opacity:.25} 60%{opacity:.55} 82%,88%{opacity:1} 94%{opacity:.8} }
         @keyframes sb-flow { from { stroke-dashoffset:0 } to { stroke-dashoffset:var(--o1) } }
         .cmt { animation:sb-flow 3.2s linear infinite; animation-delay:var(--dl,0s) }
@@ -1212,8 +1223,8 @@ class StoreyBatteryCard extends HTMLElement {
         hi.style.setProperty('filter', iconFilter);
       }
     }
-    d.bat.innerHTML = batSVG;
-    d.glow.innerHTML = glowSVG;
+    d.bat.innerHTML = SBC_IS_LOW_POWER ? _sbcStripSmil(batSVG) : batSVG;
+    d.glow.innerHTML = SBC_IS_LOW_POWER ? _sbcStripSmil(glowSVG) : glowSVG;
     // Centrage vertical de la pile : on decale le WRAPPER (.stack-grp) qui contient
     // batterie + glow. NB: .glow-grp a un transform:translateZ(0) CSS qui ecrase
     // l'attribut transform SVG -> impossible de decaler le glow directement, d'ou le wrapper.
@@ -1222,7 +1233,7 @@ class StoreyBatteryCard extends HTMLElement {
     else                 d.stack.removeAttribute('transform');
     if (hasDots) {
       d.panels.setAttribute('transform', `translate(${DOTS_X},4)`);
-      d.panels.innerHTML = panelsSVG;
+      d.panels.innerHTML = SBC_IS_LOW_POWER ? _sbcStripSmil(panelsSVG) : panelsSVG;
     } else {
       d.panels.removeAttribute('transform');
       d.panels.innerHTML = '';

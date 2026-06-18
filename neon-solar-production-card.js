@@ -30,7 +30,7 @@ const VERSION = '2.1.0';
 // Detect iPad (including 8th gen and older) and low-power devices
 const IS_IPAD = /iPad/.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const IS_LOW_POWER = IS_IPAD || /iPhone|Android/.test(navigator.userAgent);
+const IS_LOW_POWER = IS_IPAD || /iPhone|iPad|iPod|Android|Mobile|HomeAssistant/i.test(navigator.userAgent);
 // Merges user-supplied YAML with sensible defaults.
 // Every key is documented; `null` means "inherit from HA theme".
 
@@ -1525,8 +1525,10 @@ class NeonSolarCard extends HTMLElement {
         12%, 100% { transform: translateX(560px) }
       }
       .panel-sheen {
-        animation: ${reduceAnim ? 'none' : 'solar-sheen 90s ease-in-out infinite'};
-        will-change: transform;
+        /* balayage de la vitre : OFF sur iPad/mobile quoi qu'il arrive (priorité device
+           sur l'option config — dashboard YAML non modifiable via l'éditeur). */
+        animation: ${(reduceAnim || IS_LOW_POWER) ? 'none' : 'solar-sheen 90s ease-in-out infinite'};
+        ${(reduceAnim || IS_LOW_POWER) ? '' : 'will-change: transform;'}
       }
     </style>
 

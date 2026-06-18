@@ -27,7 +27,13 @@
  *          + suppression rect shine superflu
  */
 
-const VERSION = '2.2.0';
+const VERSION = '2.3.0';
+
+// Device detection — iPad/mobile : modère les anneaux plasma (rotation ralentie +
+// glow allégé) pour soulager le GPU. Détection userAgent (fiable en paysage).
+const NDT_IS_IPAD = /iPad/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const NDT_IS_LOW_POWER = NDT_IS_IPAD || /iPhone|iPad|iPod|Android|Mobile|HomeAssistant/i.test(navigator.userAgent);
 
 // ═══════════════════════════════════════════════════════
 //  DEFAULTS
@@ -335,7 +341,9 @@ function buildThermoSkeleton(c, color, id, geo, sideCtx) {
     svgH, pr1, pr2, ticks, range,
   } = geo;
   const s  = c.animation_speed ?? 1;
-  const d1 = (2.5 / s).toFixed(1), d2 = (3.5 / s).toFixed(1);
+  // iPad/mobile : rotation des anneaux ×3 plus lente (moins de frames de recalcul du glow).
+  const _sp = NDT_IS_LOW_POWER ? s / 3 : s;
+  const d1 = (2.5 / _sp).toFixed(1), d2 = (3.5 / _sp).toFixed(1);
   const d3 = (6 / s).toFixed(1);
 
   return `<svg viewBox="0 0 ${vbW} ${svgH}" width="100%" preserveAspectRatio="xMidYMid meet"
@@ -415,12 +423,12 @@ function buildThermoSkeleton(c, color, id, geo, sideCtx) {
       fill="none" opacity="0.2" shape-rendering="auto"/>
     <g>
       <ellipse rx="${pr1}" ry="${pr2}" fill="none" stroke="${plasmaRing1}" stroke-width="1.8" opacity="0.9"
-        filter="url(#${id}-ring-glow)">
+        ${NDT_IS_LOW_POWER ? '' : `filter="url(#${id}-ring-glow)"`}>
         <animateTransform attributeName="transform" type="rotate" from="0" to="360"
           dur="${d1}s" repeatCount="indefinite"/>
       </ellipse>
       <ellipse rx="${pr2}" ry="${pr1}" fill="none" stroke="${plasmaRing2}" stroke-width="1.8" opacity="0.85"
-        filter="url(#${id}-ring-glow)">
+        ${NDT_IS_LOW_POWER ? '' : `filter="url(#${id}-ring-glow)"`}>
         <animateTransform attributeName="transform" type="rotate" from="360" to="0"
           dur="${d2}s" repeatCount="indefinite"/>
       </ellipse>
