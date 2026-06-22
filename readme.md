@@ -6,7 +6,7 @@
 
 [![hacs][hacs-badge]][hacs-url]
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)][license-url]
-[![Cards](https://img.shields.io/badge/cards-22-00fff9.svg)](#-cards-included)
+[![Cards](https://img.shields.io/badge/cards-24-00fff9.svg)](#-cards-included)
 [![Theme](https://img.shields.io/badge/theme-Neo%20Tokyo-ff10f0.svg)](#-themes)
 
 *Glowing SVG effects · Neon animations · Full theme inheritance · UI editors*
@@ -60,7 +60,7 @@
 | Card | File | Version | Description |
 |------|------|:-------:|-------------|
 | 🔋 Neon Battery Card | `neon-battery-card.js` | `3.0.1` | EV battery gauge with HC/Solar/Charge controls and side info panels |
-| 🏭 Storey Battery Card | `storey-battery-card.js` | `10.0` | Isometric 3D battery for Sunology/modular storage systems |
+| 🏭 Storey Battery Card | `storey-battery-card.js` | `14` | Isometric 3D battery for Sunology/modular storage systems — electric inter-module seam (crackle + sparks) |
 | ☀️ Neon Solar Production Card | `neon-solar-production-card.js` | — | Real-time solar panel production monitor |
 | 📊 Neon Dual Gauge Card | `neon-dual-gauge-card.js` | `2.0.0` | Dual concentric LED ring gauges with cyberpunk glow and theme inheritance |
 
@@ -78,21 +78,21 @@
 
 | Card | File | Version | Description |
 |------|------|:-------:|-------------|
-| 🌦️ Weather Neon Card | `weather-neon-card.js` | `2.4.1` | Animated outline weather icons (15 conditions), forecast, vigilance halo, GLITCH cat, air-quality & pollen pills (Atmo France), canvas FX: wind haze + rain with splashes + lightning flashes (hero-zone, low-power throttling on iPad/mobile) |
+| 🌦️ Weather Neon Card | `weather-neon-card.js` | `2.11.0` | Animated outline weather icons (15 conditions), forecast, vigilance halo, GLITCH cat, air-quality & pollen pills (Atmo France), canvas FX: wind haze + rain with splashes + lightning flashes, frost crystals & parallax snow (hero-zone, low-power throttling on iPad/mobile) |
 
 ### 💡 Lighting & Switches
 
 | Card | File | Version | Description |
 |------|------|:-------:|-------------|
 | 💡 Neon Compact Light Card | `neon-compact-light-card.js` | `2.1.0` | Compact light toggle with cyberpunk flicker, Zigbee/WiFi adaptive timing, unified UI editor |
-| 🔌 Neon Switch Card | `neon-switch-card.js` | `1.6` | Network switch port monitor with Neo Tokyo palette |
+| 🔌 Neon Switch Card | `neon-switch-card.js` | `1.7` | Network switch port monitor with Neo Tokyo palette |
 
 ### 🏠 Dashboard & Layout
 
 | Card | File | Version | Description |
 |------|------|:-------:|-------------|
 | 🏷️ Neon Header Card | `neon-header-card.js` | `1.4.2` | Stylish neon section header |
-| 🏷️ Neon Header Card v2 | `neon-header-card-v2.js` | `2.3` | Advanced header — glow, gradient, scanlines, flicker, glitch effects |
+| 🏷️ Neon Header Card v2 | `neon-header-card-v2.js` | `2.5` | Advanced header — glow, gradient, scanlines, flicker, glitch effects, templated subtitle engine (`{% set %}`, arithmetic, ternaries) |
 | 📋 Neon Entities Card | `neon-entities-card.js` | `1.8.0` | Multi-entity card (switch, sensor, cover, climate, number + dividers) — theme-agnostic colors, unified UI editor with per-entity icon preview |
 
 ### 🖥️ Network & NAS
@@ -100,6 +100,8 @@
 | Card | File | Version | Description |
 |------|------|:-------:|-------------|
 | 🖥️ Neon NAS Card | `neon-nas-card.js` | `1.9` | Synology NAS monitor (RS + RX410) with LED bay status |
+| 🖥️ Neon NAS Card v2 | `neon-nas-card-v2.js` | `2.0` | Synology NAS monitor — v2 with SNMP RAID status badge, themable header, UI editor |
+| 🐧 Linux Terminal Card | `linux-terminal-card.js` | `1.7` | Sci-fi CRT terminal for a remote Linux host — CPU/GPU/RAM/temp/updates/network + GLITCH cat, alert framing, UI editor |
 
 ### 🚗 Vehicles
 
