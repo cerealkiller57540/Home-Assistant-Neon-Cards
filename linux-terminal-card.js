@@ -130,11 +130,13 @@ class LinuxTerminalCard extends HTMLElement {
     const c = this._config, hdr = c.header || {};
     const cardModBg = c.card_mod_bg !== false;
 
+    // couleur titre résolue une fois (pattern neon-entities-card) : défaut = var de thème
+    const hdrColor = hdr.color || 'rgba(var(--rgb-primary-text-color),0.55)';
     this.shadowRoot.innerHTML = `
       <style>${STYLES}
         ha-card{
           ${cardModBg ? '' : `background:${c.color_bg || '#0c0818'};`}
-          ${hdr.color       ? `--ltc-hdr-color:${hdr.color};`         : ''}
+          --ltc-hdr-color:${hdrColor};
           ${hdr.title_size  ? `--ltc-hdr-size:${hdr.title_size};`     : ''}
           ${hdr.title_shadow? `--ltc-hdr-shadow:${hdr.title_shadow};` : ''}
         }
@@ -315,9 +317,9 @@ const STYLES = `
   .hdr{ display:flex; align-items:center; gap:9px; padding-bottom:9px; margin-bottom:10px; position:relative; }
   .hdr::after{ content:''; position:absolute; bottom:0; left:0; right:0; height:1px;
     background:linear-gradient(90deg, transparent, rgba(var(--ltc-uv),.55) 20%, rgba(var(--ltc-cy),.3) 50%, rgba(var(--ltc-uv),.55) 80%, transparent); }
-  .hdr-icon{ --mdc-icon-size:20px; color:var(--ltc-hdr-color, #b482ff); filter:drop-shadow(0 0 5px rgba(var(--ltc-uv),.8)); flex-shrink:0; }
+  .hdr-icon{ --mdc-icon-size:20px; color:var(--ltc-hdr-color); filter:drop-shadow(0 0 5px color-mix(in srgb, var(--ltc-hdr-color), transparent 20%)); flex-shrink:0; }
   .hdr-title{ flex:1; font-family:'Orbitron',sans-serif; font-size:var(--ltc-hdr-size,18px); letter-spacing:.05em;
-    text-transform:uppercase; color:var(--ltc-hdr-color,#b482ff); text-shadow:var(--ltc-hdr-shadow,0 0 8px rgba(var(--ltc-uv),.7)); }
+    text-transform:uppercase; color:var(--ltc-hdr-color); text-shadow:var(--ltc-hdr-shadow,0 0 8px color-mix(in srgb, var(--ltc-hdr-color), transparent 30%)); }
   .hdr-pill{ font-size:11px; line-height:1; }
   .hdr-pill.on{ color:rgb(var(--ltc-grn)); filter:drop-shadow(0 0 5px rgb(var(--ltc-grn))); animation:ltc-blink 2.4s infinite; }
   .hdr-pill.crit{ color:rgb(var(--ltc-red)); filter:drop-shadow(0 0 6px rgb(var(--ltc-red))); animation:ltc-blink .6s infinite; }
@@ -450,6 +452,8 @@ class LinuxTerminalCardEditor extends HTMLElement {
       if (document.activeElement === inp) return;
       const parts = inp.dataset.key.split('.');
       const v = parts.length === 2 ? (c[parts[0]] || {})[parts[1]] : c[inp.dataset.key];
+      // picker natif : n'accepte que du #hex (ignore var(...) / vide → garde sa valeur)
+      if (inp.type === 'color'){ const hx = this._hexColor(v); if (hx) inp.value = hx; return; }
       inp.value = (v != null) ? v : '';
     });
   }
@@ -468,6 +472,22 @@ class LinuxTerminalCardEditor extends HTMLElement {
     return `<div class="field"><label>${label}</label>
       <input data-key="${key}" value="${this._val(key)}" list="${lid}" placeholder="${ph || 'sensor.…'}" autocomplete="off"/>
       <datalist id="${lid}"></datalist></div>`;
+  }
+  // couleur — picker natif + champ texte côte à côte (pattern heat-pump-card)
+  _hexColor(v){
+    if (!v) return '';
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) return v;
+    const m = String(v).match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (!m) return '';
+    return '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('');
+  }
+  _color(label, key, ph){
+    const v = this._val(key);
+    return `<div class="field"><label>${label}</label>
+      <div class="color-row">
+        <input type="color" data-key="${key}" value="${this._hexColor(v) || ph || '#b482ff'}" class="color-swatch"/>
+        <input type="text" data-key="${key}" value="${v}" placeholder="${ph || '#b482ff'}" autocomplete="off" class="color-text"/>
+      </div></div>`;
   }
   // icône MDI — input + lien "parcourir MDI" + preview live (pattern neon-header-card-v2)
   _icon(label, key, ph){
@@ -492,14 +512,22 @@ class LinuxTerminalCardEditor extends HTMLElement {
         .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
         .icon-row{display:flex;gap:8px;align-items:center}
         .icon-row .icon-input{flex:1}
+        .color-row{display:flex;gap:8px;align-items:center}
+        .color-row .color-swatch{width:42px;height:34px;flex-shrink:0;padding:2px;cursor:pointer}
+        .color-row .color-text{flex:1}
         .icon-preview{width:34px;height:34px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
           border:1px solid var(--divider-color,#333);border-radius:7px;color:var(--primary-text-color)}
       </style>
       <div class="grid">
         <div class="group"><div class="group-title">Général</div>
+          ${this._text('Hôte (prompt)', 'host', 'chris@latitude')}
+        </div>
+        <div class="group"><div class="group-title">En-tête</div>
           ${this._text('Titre', 'header.title', 'Latitude 5420')}
           ${this._icon('Icône', 'header.icon', 'mdi:laptop')}
-          ${this._text('Hôte (prompt)', 'host', 'chris@latitude')}
+          ${this._color('Couleur', 'header.color', '#b482ff')}
+          ${this._text('Taille titre', 'header.title_size', '18px')}
+          ${this._text('Ombre titre (text-shadow)', 'header.title_shadow', '0 0 8px ...')}
         </div>
         <div class="group"><div class="group-title">Système / OS (reporter MQTT)</div>
           ${this._entity('OS', 'os_entity')}
@@ -530,7 +558,16 @@ class LinuxTerminalCardEditor extends HTMLElement {
         </div>
       </div>`;
     this.querySelectorAll('input[data-key]').forEach(inp =>
-      inp.addEventListener('input', () => this._set(inp.dataset.key, inp.value.trim())));
+      inp.addEventListener('input', () => {
+        const val = inp.value.trim();
+        this._set(inp.dataset.key, val);
+        // synchronise les inputs jumeaux (picker couleur ↔ champ texte sur la même clé)
+        this.querySelectorAll(`input[data-key="${inp.dataset.key}"]`).forEach(t => {
+          if (t === t.ownerDocument.activeElement || t === inp) return;
+          if (t.type === 'color'){ const hx = this._hexColor(val); if (hx) t.value = hx; }
+          else t.value = val;
+        });
+      }));
     this._refreshLists();
     this._bindIconPreviews();
   }
@@ -569,7 +606,7 @@ window.customCards.push({
   preview: true,
 });
 
-console.info('%c 🐧 linux-terminal-card v1.2 %c GLITCH ',
+console.info('%c 🐧 linux-terminal-card v1.7 %c GLITCH ',
   'background:#6200EA;color:#fff;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#4AF2A1;padding:2px 4px;border-radius:0 3px 3px 0;');
 

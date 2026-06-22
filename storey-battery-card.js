@@ -1,4 +1,4 @@
-/* ── storey-battery-card v13 — proportions réelles, flux d'énergie, cap art slot ── */
+/* ── storey-battery-card v14 — joint inter-module électrique (crépitement + sparks) ── */
 (()=>{
 // Device detection — iPad/mobile : coupe les anims (SMIL + CSS) pour soulager le GPU.
 const SBC_IS_IPAD = /iPad/.test(navigator.userAgent) ||
@@ -727,18 +727,14 @@ function _stackContent(m, withHandle, withGrille, catCol) {
   return s;
 }
 
-/* ── GLOW v13 — flux d'énergie Neo Tokyo ──────────────────────────────────
- * Par joint inter-module : halo qui déborde sur le module du dessous (spill),
- * liseré respirant, et comète à trois épaisseurs (large translucide / médium /
- * cœur clair) qui parcourt le contour. Cascade temporelle entre les joints :
- * descend en charge, remonte en décharge. Aucun filtre SVG ni drop-shadow
- * (iOS-safe) : le bloom est obtenu par superposition de strokes.
- * gC1 = couleur large/spill, gC2 = couleur cœur. */
+/* ── GLOW v14 — joint inter-module ÉLECTRIQUE ──────────────────────────────
+ * La comète qui circulait est abandonnée. Le joint est désormais un LISERÉ NÉON
+ * ALLUMÉ EN PERMANENCE (base statique, mémoïsée dans _batCache), par-dessus
+ * lequel une couche animée (crépitement réparti + sparks zigzag) est redessinée
+ * en RAF par la card (_drawElec). Aucun filtre SVG ni drop-shadow (iOS-safe) :
+ * bloom par superposition de strokes. gC1 = couleur large/spill, gC2 = cœur. */
 function _glowContent(modules, gC1, gC2, isCharging) {
   if (modules <= 0) return '';
-  const cl = SEAM_LEN*0.26;                        // longueur de la comète
-  const dash = cl.toFixed(1)+' '+(SEAM_LEN-cl).toFixed(1);
-  const o1 = (isCharging ? -SEAM_LEN : SEAM_LEN).toFixed(1);
   const gid = 'gsp'+(isCharging?1:0);
   let s = '<defs><linearGradient id="'+gid+'" x1="0" y1="0" x2="0" y2="1">' +
     '<stop offset="0" stop-color="'+gC1+'" stop-opacity="0.22"/>' +
@@ -746,13 +742,90 @@ function _glowContent(modules, gC1, gC2, isCharging) {
     '</linearGradient></defs>';
   for (let i = 0; i < modules; i++) {
     const h = CAPH + UNITH + i*MODH;
-    const ph = isCharging ? i : (modules-1-i);     // ordre de la cascade
-    const sty = '--dl:'+(ph*0.5-20).toFixed(2)+'s;--o1:'+o1+';stroke-dasharray:'+dash;
+    // spill qui déborde sur le module du dessous + base allumée (halo + cœur + respiration)
     s += '<path d="'+_side(SIL_M, h, h+7)+'" fill="url(#'+gid+')"/>';
-    s += '<path class="led-seg" d="'+_seam(SIL_M, h)+'" fill="none" stroke="'+gC1+'" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round" opacity="0.3"/>';
-    s += '<path class="cmt" style="'+sty+'" d="'+_seam(SIL_M, h)+'" fill="none" stroke="'+gC1+'" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" opacity="0.16"/>';
-    s += '<path class="cmt" style="'+sty+'" d="'+_seam(SIL_M, h)+'" fill="none" stroke="'+gC1+'" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.45"/>';
-    s += '<path class="cmt" style="'+sty+'" d="'+_seam(SIL_M, h)+'" fill="none" stroke="'+gC2+'" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.95"/>';
+    s += '<path d="'+_seam(SIL_M, h)+'" fill="none" stroke="'+gC1+'" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity="0.14"/>';
+    s += '<path class="led-seg" d="'+_seam(SIL_M, h)+'" fill="none" stroke="'+gC2+'" stroke-width="0.55" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>';
+  }
+  return s;
+}
+
+/* ── Couche ÉLECTRIQUE animée (crépitement + sparks) ───────────────────────
+ * Validée en preview. Redessinée à chaque frame par _drawElec (paths variables
+ * → ne peut PAS être mémoïsée). Coupée en idle / low-power / reduced-motion.   */
+function _sbcHash(x){ const n = Math.sin(x*12.9898)*43758.5453; return n - Math.floor(n); }
+// borne une valeur de config numérique, avec défaut si absente/invalide
+function clampNum(v, lo, hi, def){ const n = parseFloat(v); return isNaN(n) ? def : Math.min(hi, Math.max(lo, n)); }
+
+// points équidistants le long de TOUT le joint + normale + abscisse curviligne
+function _seamSamples(h, step) {
+  const a = SIL_M.near.map(i => [SIL_M.pr[i][0], SIL_M.pr[i][1]+h]);
+  const out = [{ x:a[0][0], y:a[0][1], s:0, nx:0, ny:0 }];
+  let acc = 0;
+  for (let k = 1; k < a.length; k++) {
+    const x1=a[k-1][0], y1=a[k-1][1], x2=a[k][0], y2=a[k][1];
+    const dx=x2-x1, dy=y2-y1, len=Math.hypot(dx,dy)||1e-6;
+    const nx=-dy/len, ny=dx/len;
+    const seg = Math.max(1, Math.round(len/step));
+    for (let j=1;j<=seg;j++){ const t=j/seg; acc+=len/seg; out.push({ x:x1+dx*t, y:y1+dy*t, s:acc, nx, ny }); }
+  }
+  return out;
+}
+// petit zigzag LOCAL accroché au liseré autour du point ic
+function _localBolt(samp, ic, span, amp, seed) {
+  const i0=Math.max(0,ic-span), i1=Math.min(samp.length-1,ic+span);
+  let d='';
+  for (let i=i0;i<=i1;i++){
+    const p=samp[i];
+    const edge = 1 - Math.abs(i-ic)/(span+1);     // 0 aux bouts → 1 au centre
+    const off = (_sbcHash(i*3.7+seed)-0.5)*2*amp*edge;
+    d += (i===i0?'M':'L') + (p.x+p.nx*off).toFixed(2) + ' ' + (p.y+p.ny*off).toFixed(2);
+  }
+  return d;
+}
+// génère le SVG d'UNE frame de l'effet électrique sur tous les joints
+function _elecLayer(modules, gc1, gc2, now, crackle, rate, ampMax) {
+  let s = '';
+  const flickT = Math.floor(now/(crackle*1000));
+  const STEP = 2.2;
+  for (let i=0;i<modules;i++){
+    const h = CAPH + UNITH + i*MODH;
+    const samp = _seamSamples(h, STEP);
+    const total = samp[samp.length-1].s;
+    // 1) crépitement réparti (surbrillance par tronçons, PAR-DESSUS la base)
+    const CHUNK = 11;
+    for (let a=0;a<samp.length-1;a+=CHUNK){
+      const b=Math.min(samp.length-1,a+CHUNK), mid=(a+b)/2;
+      const r=_sbcHash(flickT*1.7 + i*53.1 + Math.floor(mid));
+      if (r<0.42) continue;
+      const op=0.45+r*0.55, w=0.6+r*0.8;
+      let d='M'+samp[a].x.toFixed(2)+' '+samp[a].y.toFixed(2);
+      for (let q=a+1;q<=b;q++) d+='L'+samp[q].x.toFixed(2)+' '+samp[q].y.toFixed(2);
+      s += '<path d="'+d+'" fill="none" stroke="'+gc1+'" stroke-width="'+(w*3).toFixed(2)+'" stroke-linecap="round" opacity="'+(op*0.16).toFixed(2)+'"/>';
+      s += '<path d="'+d+'" fill="none" stroke="'+gc1+'" stroke-width="'+w.toFixed(2)+'" stroke-linecap="round" opacity="'+op.toFixed(2)+'"/>';
+    }
+    // 2) sparks zigzag répartis sur toute la longueur
+    const period = 1000/rate;
+    const nSlots = Math.max(2, Math.round(total/26));
+    for (let sl=0;sl<nSlots;sl++){
+      const slotSeed=i*97.3+sl*13.1;
+      const phase=(now + _sbcHash(slotSeed)*period*4) % period;
+      if (phase>=200) continue;
+      const k=phase/200, life=1-k;
+      const gen=Math.floor((now + _sbcHash(slotSeed)*period*4)/period);
+      const seed=slotSeed+gen*7.3;
+      const frac=0.05+0.9*_sbcHash(seed*1.31);
+      let ic=0; const target=frac*total;
+      while (ic<samp.length-1 && samp[ic].s<target) ic++;
+      const span=4+Math.floor(_sbcHash(seed*2.7)*4);
+      const amp=ampMax*(0.5+0.5*life);
+      const bp=_localBolt(samp,ic,span,amp,seed);
+      s += '<path d="'+bp+'" fill="none" stroke="'+gc1+'" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" opacity="'+(0.20*life).toFixed(2)+'"/>';
+      s += '<path d="'+bp+'" fill="none" stroke="'+gc1+'" stroke-width="1.0" stroke-linecap="round" stroke-linejoin="round" opacity="'+(0.6*life).toFixed(2)+'"/>';
+      s += '<path d="'+bp+'" fill="none" stroke="'+gc2+'" stroke-width="0.45" stroke-linecap="round" stroke-linejoin="round" opacity="'+(0.95*life).toFixed(2)+'"/>';
+      const p=samp[ic];
+      s += '<circle cx="'+p.x.toFixed(2)+'" cy="'+p.y.toFixed(2)+'" r="'+(1.8*life+0.3).toFixed(2)+'" fill="'+gc1+'" opacity="'+(0.5*life).toFixed(2)+'"/>';
+    }
   }
   return s;
 }
@@ -805,6 +878,15 @@ class StoreyBatteryCard extends HTMLElement {
 
   disconnectedCallback() {
     if (this._raf) { cancelAnimationFrame(this._raf); this._raf = null; }
+    this._stopElec();
+  }
+
+  // Rattachement au DOM (ex: sortie de l'éditeur, où HA détache puis ré-attache la
+  // card). disconnectedCallback a coupé le RAF ; aucun nouvel état HA n'arrive donc
+  // _renderIfChanged skipperait (même _buildKey) → l'effet restait figé jusqu'au F5.
+  // On relance la boucle si un effet était actif au dernier render.
+  connectedCallback() {
+    if (this._elec && this._dom?.elec) this._startElec();
   }
 
   _scheduleRender() {
@@ -830,7 +912,7 @@ class StoreyBatteryCard extends HTMLElement {
     const pwKey = pw !== null
       ? (Math.abs(pw) <= thr ? 0 : Math.round(pw / 10) * 10)
       : null;
-    return `${m}|${soc!==null?Math.round(soc):null}|${pwKey}|${msv}|${mods}|${this._config.color_accent||''}|${this._config.color_bg||''}|${this._config.glow_enabled||''}|${this._config.cyberpunk_mode||''}|${this._config.neon_glow||''}|${this._config.card_mod_bg||''}|${thr}|${this._config.soc_full_threshold||97}|${this._config.show_handle===false?0:1}|${this._config.show_grille===false?0:1}|${this._config.glitch_cat===false?0:1}|${this._config.glitch_color||''}|${JSON.stringify(this._config.header||{})}`;
+    return `${m}|${soc!==null?Math.round(soc):null}|${pwKey}|${msv}|${mods}|${this._config.color_accent||''}|${this._config.color_bg||''}|${this._config.glow_enabled||''}|${this._config.cyberpunk_mode||''}|${this._config.neon_glow||''}|${this._config.card_mod_bg||''}|${thr}|${this._config.soc_full_threshold||97}|${this._config.show_handle===false?0:1}|${this._config.show_grille===false?0:1}|${this._config.glitch_cat===false?0:1}|${this._config.glitch_color||''}|${this._config.elec_crackle??''}|${this._config.elec_spark_rate??''}|${this._config.elec_spark_amp??''}|${this._config.elec_color_charge||''}|${this._config.elec_color_discharge||''}|${JSON.stringify(this._config.header||{})}`;
   }
 
   _modules() {
@@ -933,20 +1015,35 @@ class StoreyBatteryCard extends HTMLElement {
     /* ── Glow layer ────────────────────────────────────────────────────── */
 
     let glowSVG = '';
+    // couleur charge/décharge : défaut dynamique (logique card), chaque sens surchargé
+    // INDÉPENDAMMENT par l'UI si la couleur correspondante est fournie.
+    const gcDefault = cyberpunk ? (isCharging?CP_CHARGE:CP_DISCHARGE) : (isCharging?'#ffd000':'#4D7CFF');
+    const gcOverride = isCharging ? this._config.elec_color_charge : this._config.elec_color_discharge;
+    const gc1 = gcOverride || gcDefault;
+    const gc2 = cyberpunk ? (isCharging?'#d9fffe':'#fbd4ff') : (isCharging?'#fff3b0':'#d6e4ff');
     if (this._config.glow_enabled) {
-      const glowKey = 'glow_'+modules+'_'+(isIdle?'idle':(isCharging?1:0))+'_'+(cyberpunk?'cp':'std');
+      const cKey = (this._config.elec_color_charge||'')+'/'+(this._config.elec_color_discharge||'');
+      const glowKey = 'glow_'+modules+'_'+(isIdle?'idle':(isCharging?1:0))+'_'+(cyberpunk?'cp':'std')+'_'+cKey;
       if (_batCache.has(glowKey)) {
         glowSVG = _batCache.get(glowKey);
       } else if (isIdle) {
         glowSVG = _glowIdle(modules, cyberpunk ? '#6200EA' : '#9aa6c8');
         _batCache.set(glowKey, glowSVG);
       } else {
-        const gc1 = cyberpunk ? (isCharging?CP_CHARGE:CP_DISCHARGE) : (isCharging?'#ffd000':'#4D7CFF');
-        const gc2 = cyberpunk ? (isCharging?'#d9fffe':'#fbd4ff')    : (isCharging?'#fff3b0':'#d6e4ff');
-        glowSVG = _glowContent(modules, gc1, gc2, isCharging);
+        glowSVG = _glowContent(modules, gc1, gc2, isCharging);   // base allumée (statique)
         _batCache.set(glowKey, glowSVG);
       }
     }
+
+    /* ── Couche électrique (crépitement + sparks), animée en RAF ──────────── */
+    const elecActive = !!this._config.glow_enabled && !isIdle
+      && !SBC_IS_LOW_POWER && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this._elec = elecActive ? {
+      modules, gc1, gc2,
+      crackle: clampNum(this._config.elec_crackle, 0.04, 0.4, 0.13),
+      rate:    clampNum(this._config.elec_spark_rate, 0.3, 4, 1.6),
+      amp:     clampNum(this._config.elec_spark_amp, 1, 9, 4),
+    } : null;
 
     /* ── Side dot-matrix panels ────────────────────────────────────────── */
 
@@ -1040,7 +1137,7 @@ class StoreyBatteryCard extends HTMLElement {
         .brand-row { display:flex; align-items:center; gap:8px }
         .brand {
           font-size: var(--sbc-title-size, 24px); letter-spacing: clamp(1px, 0.5cqi, 3px);
-          color: var(--sbc-title-color, var(--sbc-accent));
+          color: var(--sbc-title-color, rgba(var(--rgb-primary-text-color),0.55));
           font-family: var(--sbc-title-font, inherit);
           line-height:1; text-transform:uppercase;
           text-shadow: var(--sbc-title-shadow, 0 0 30px var(--sbc-glow));
@@ -1146,6 +1243,7 @@ class StoreyBatteryCard extends HTMLElement {
             <g class="stack-grp">
               <g class="bat-grp" style="filter:drop-shadow(3px 6px 14px rgba(0,0,0,.22))"></g>
               <g class="glow-grp"></g>
+              <g class="elec-grp"></g>
             </g>
             <g class="panels-grp"></g>
           </svg>
@@ -1182,6 +1280,7 @@ class StoreyBatteryCard extends HTMLElement {
         stack:  root.querySelector('.stack-grp'),
         bat:    root.querySelector('.bat-grp'),
         glow:   root.querySelector('.glow-grp'),
+        elec:   root.querySelector('.elec-grp'),
         panels: root.querySelector('.panels-grp'),
         pills:  root.querySelector('.pills-row'),
       };
@@ -1239,6 +1338,28 @@ class StoreyBatteryCard extends HTMLElement {
       d.panels.innerHTML = '';
     }
     d.pills.innerHTML = pillHTML;
+
+    // couche électrique : (re)lance la boucle si active, sinon la coupe + vide le calque
+    if (this._elec) this._startElec();
+    else { this._stopElec(); if (d.elec) d.elec.innerHTML = ''; }
+  }
+
+  // Boucle RAF qui redessine UNIQUEMENT le calque .elec-grp (crépitement + sparks).
+  // ~30 fps. La carrosserie + la base allumée (mémoïsées) ne sont pas retouchées.
+  _startElec() {
+    if (this._elecRAF) return;
+    const draw = (now) => {
+      this._elecRAF = requestAnimationFrame(draw);
+      if (document.hidden || !this._elec || !this._dom?.elec) return;
+      if (now - (this._elecLast||0) < 33) return;
+      this._elecLast = now;
+      const e = this._elec;
+      this._dom.elec.innerHTML = _elecLayer(e.modules, e.gc1, e.gc2, now, e.crackle, e.rate, e.amp);
+    };
+    this._elecRAF = requestAnimationFrame(draw);
+  }
+  _stopElec() {
+    if (this._elecRAF) { cancelAnimationFrame(this._elecRAF); this._elecRAF = null; }
   }
 
   getCardSize() { return 3+this._modules(); }
@@ -1405,6 +1526,32 @@ class StoreyBatteryCardEditor extends HTMLElement {
           ${this._toggle('Inherit card-mod background','card_mod_bg',DEF_ACCENT)}
         </div>
         <div class="group">
+          <div class="group-title">Electric arc</div>
+          <div class="field"><label>Crackle speed &mdash; <span class="rngv" data-for="elec_crackle">${(c.elec_crackle ?? 0.13)}</span></label>
+            <input type="range" class="rng" data-key="elec_crackle" min="0.04" max="0.4" step="0.01" value="${c.elec_crackle ?? 0.13}"/>
+          </div>
+          <div class="field"><label>Spark rate (bursts/s) &mdash; <span class="rngv" data-for="elec_spark_rate">${(c.elec_spark_rate ?? 1.6)}</span></label>
+            <input type="range" class="rng" data-key="elec_spark_rate" min="0.3" max="4" step="0.1" value="${c.elec_spark_rate ?? 1.6}"/>
+          </div>
+          <div class="field"><label>Spark amplitude &mdash; <span class="rngv" data-for="elec_spark_amp">${(c.elec_spark_amp ?? 4)}</span></label>
+            <input type="range" class="rng" data-key="elec_spark_amp" min="1" max="9" step="0.5" value="${c.elec_spark_amp ?? 4}"/>
+          </div>
+          <div class="row2">
+            <div class="field"><label>Charge color (default: theme)</label>
+              <div class="color-row">
+                <input type="color" data-key="elec_color_charge" value="${c.elec_color_charge||'#ffd000'}"/>
+                <input type="text"  data-key="elec_color_charge" value="${c.elec_color_charge||''}" placeholder="auto"/>
+              </div>
+            </div>
+            <div class="field"><label>Discharge color (default: theme)</label>
+              <div class="color-row">
+                <input type="color" data-key="elec_color_discharge" value="${c.elec_color_discharge||'#4D7CFF'}"/>
+                <input type="text"  data-key="elec_color_discharge" value="${c.elec_color_discharge||''}" placeholder="auto"/>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="group">
           <div class="group-title">Cyberpunk</div>
           ${this._toggle('Neo Tokyo Mode','cyberpunk_mode',CP_PRIMARY)}
           ${this._toggle('Neon Glow','neon_glow',CP_ACCENT)}
@@ -1448,6 +1595,14 @@ class StoreyBatteryCardEditor extends HTMLElement {
         this._set(el.dataset.key, el.value);
       }, {passive:true});
     });
+    this.querySelectorAll('input.rng[data-key]').forEach(el => {
+      el.addEventListener('input', e => {
+        e.stopPropagation();
+        const lbl = this.querySelector(`.rngv[data-for="${el.dataset.key}"]`);
+        if (lbl) lbl.textContent = el.value;
+        this._set(el.dataset.key, el.value);
+      }, {passive:true});
+    });
     this.querySelectorAll('select[data-key],input[type=checkbox][data-key]').forEach(el => {
       el.addEventListener('change', e => {
         e.stopPropagation();
@@ -1476,7 +1631,7 @@ window.customCards.push({
 })();
 
 console.info(
-  '%c 🔋 storey-battery-card v13.0 %c Neo Tokyo ',
+  '%c 🔋 storey-battery-card v14.0 %c Neo Tokyo ',
   'background:#FFD700;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#FF6A00;padding:2px 4px;border-radius:0 3px 3px 0;'
 );

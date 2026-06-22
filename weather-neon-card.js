@@ -18,7 +18,7 @@
  *   reactive_bg    true|false  fond qui change selon la météo (défaut: true)
  */
 
-const VERSION = '2.4.1';
+const VERSION = '2.11.0';
 
 // ── Device detection (cf CARDS-METHOD.md) — allège les effets canvas sur tablette/mobile
 const WNC_IS_IPAD = /iPad/.test(navigator.userAgent) ||
@@ -40,6 +40,8 @@ function buildConfig(raw) {
     show_aside:    raw.show_aside    ?? true,  // colonne droite (lever/coucher/rafales)
     glitch:        raw.glitch        ?? true,  // GLITCH le chat réactif à la météo
     particles:     raw.particles     ?? true,  // particules atmosphériques (pluie/neige/soleil)
+    frost:         raw.frost         ?? true,  // cristaux de givre quand temp ≤ frost_below
+    frost_below:   raw.frost_below   ?? 3,     // seuil °C de déclenchement du givre
     neon_fx:       raw.neon_fx       ?? true,  // scanlines + temp glitchée (Neo Tokyo)
     // sensors externes (Météo-France expose vent/probas séparément de l'entité weather).
     // Si non fournis → auto-détectés depuis le préfixe de l'entité (cf _extra()).
@@ -282,8 +284,28 @@ function glitchHtml(cond, mainColor = '#4AF2A1') {
 // générateurs de particules réutilisables (n = nombre, opacité optionnelle pour les "annonces")
 const _rainSpans = (n, op = 1) => [...Array(n)].map((_, i) =>
   `<span class="wfx-rain" style="left:${(i * 6.3) % 100}%;animation-delay:${(i % 7) * 0.13}s;animation-duration:${0.7 + (i % 4) * 0.18}s;opacity:${op}"></span>`).join('');
-const _snowSpans = (n, op = 1) => [...Array(n)].map((_, i) =>
-  `<span class="wfx-snow" style="left:${(i * 6.3) % 100}%;animation-delay:${(i % 8) * 0.3}s;animation-duration:${3 + (i % 4)}s;opacity:${op}"></span>`).join('');
+// NEIGE PARALLAXE (technique radial-gradient trouvée par Chris) : on génère UNE tuile
+// carrée de N flocons figés (radial-gradients empilés), puis 3 calques .wsnowfield
+// /:before/:after la font défiler à 3 vitesses+blurs+opacités → effet de profondeur.
+// Bien plus léger que des dizaines de spans : 3 éléments, juste background-position animé.
+const SNOW_W = 600;  // taille de la tuile (px) — = distance de défilement d'une boucle
+const _snowGrad = (density) => {
+  const g = [];
+  for (let i = 0; i < density; i++) {
+    const v = Math.floor(Math.random() * 4) + 2;                 // rayon du flocon (2–5 px)
+    const a = (Math.floor(Math.random() * 5) * 0.1 + 0.5).toFixed(2); // alpha 0.5–0.9
+    const x = Math.floor(Math.random() * (SNOW_W - v * 2)) + v;
+    const y = Math.floor(Math.random() * (SNOW_W - v * 2)) + v;
+    g.push(`radial-gradient(${v}px ${v}px at ${x}px ${y}px, rgba(255,255,255,${a}) 50%, rgba(0,0,0,0))`);
+  }
+  return g.join(',');
+};
+// Renvoie le bloc neige parallaxe. La densité est calée sur l'ancien "n" (×4 ≈ même
+// rendu visuel, vu qu'un seul calque portait n flocons et qu'ici on en a 3 superposés).
+const _snowField = (n, op = 1) => {
+  const grad = _snowGrad(Math.max(18, n * 3));
+  return `<div class="wsnowfield" style="--snow-grad:${grad};opacity:${op}"></div>`;
+};
 
 // Particules atmosphériques (pluie/neige/poussières). Le VENT est géré séparément
 // par un canvas animé (cf _startWind/_drawWind), pas en CSS ici.
@@ -292,12 +314,12 @@ function particlesHtml(cond, rainCh = 0, snowCh = 0) {
   if (['rainy', 'pouring', 'lightning-rainy', 'snowy-rainy'].includes(cond)) {
     return `<div class="wfx">${_rainSpans(cond === 'pouring' ? 28 : 16)}</div>`;
   }
-  // 2) condition neigeuse RÉELLE → neige pleine
+  // 2) condition neigeuse RÉELLE → neige parallaxe pleine
   if (['snowy', 'hail'].includes(cond)) {
-    return `<div class="wfx">${_snowSpans(16)}</div>`;
+    return `<div class="wfx">${_snowField(16)}</div>`;
   }
   // 3) condition sèche MAIS proba élevée → "annonce"
-  if (snowCh >= 30) return `<div class="wfx">${_snowSpans(Math.round(snowCh / 100 * 14), 0.55)}</div>`;
+  if (snowCh >= 30) return `<div class="wfx">${_snowField(Math.round(snowCh / 100 * 14), 0.55)}</div>`;
   if (rainCh >= 30) return `<div class="wfx">${_rainSpans(Math.round(rainCh / 100 * 14), 0.5)}</div>`;
   // 4) beau temps → rayon doux + poussières dorées
   if (['sunny'].includes(cond)) {
@@ -432,18 +454,36 @@ class WeatherNeonCard extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>${WeatherNeonCard.styles}</style>
       <ha-card>
+        <svg class="wheat-defs" width="0" height="0" aria-hidden="true">
+          <defs>
+            <filter id="wheat-haze" x="-20%" y="-20%" width="140%" height="140%">
+              <feTurbulence type="fractalNoise" baseFrequency="0.018 0.04"
+                numOctaves="2" seed="7" stitchTiles="stitch" result="wheat-noise"/>
+              <feDisplacementMap in="SourceGraphic" in2="wheat-noise"
+                scale="6" xChannelSelector="R" yChannelSelector="G"/>
+            </filter>
+          </defs>
+        </svg>
         <div class="wsky"></div>
+        <canvas class="wfog-canvas"></canvas>
         <canvas class="wwind-canvas"></canvas>
         <canvas class="wrain-canvas"></canvas>
+        <canvas class="wfrost-canvas"></canvas>
         <div class="wfxlayer"></div>
         ${this._config.neon_fx ? '<div class="wscan"></div>' : ''}
         <div class="winner"></div>
       </ha-card>`;
     this._elSky = this.shadowRoot.querySelector('.wsky');
     this._elFx = this.shadowRoot.querySelector('.wfxlayer');
+    this._elFog = this.shadowRoot.querySelector('.wfog-canvas');
     this._elWind = this.shadowRoot.querySelector('.wwind-canvas');
     this._elRain = this.shadowRoot.querySelector('.wrain-canvas');
+    this._elFrost = this.shadowRoot.querySelector('.wfrost-canvas');
     this._elInner = this.shadowRoot.querySelector('.winner');
+    this._heatTurb = this.shadowRoot.querySelector('#wheat-haze feTurbulence');
+    this._heatDisp = this.shadowRoot.querySelector('#wheat-haze feDisplacementMap');
+    // scale réduit sur low-power (Companion/iPad) : ondulation plus discrète + moins de GPU.
+    if (this._heatDisp) this._heatDisp.setAttribute('scale', WNC_IS_LOW_POWER ? 4 : 6);
     this._built = true;
 
     // Délégation de clic → more-info HA (pastilles Atmo + température). Posé 1x.
@@ -476,6 +516,11 @@ class WeatherNeonCard extends HTMLElement {
     if (this._windIO) { this._windIO.disconnect(); this._windIO = null; }
     if (this._rainRAF) { cancelAnimationFrame(this._rainRAF); this._rainRAF = null; }
     if (this._rainIO) { this._rainIO.disconnect(); this._rainIO = null; }
+    if (this._frostRAF) { cancelAnimationFrame(this._frostRAF); this._frostRAF = null; }
+    this._frostOn = false; this._frostSegs = null;  // forcera la re-croissance à la reconnexion
+    if (this._fogRAF) { cancelAnimationFrame(this._fogRAF); this._fogRAF = null; }
+    if (this._fogIO) { this._fogIO.disconnect(); this._fogIO = null; }
+    if (this._heatRAF) { cancelAnimationFrame(this._heatRAF); this._heatRAF = null; }
   }
 
   // ── VENT : nappes de brume soufflée (voiles ondulants semi-transparents qui
@@ -671,6 +716,189 @@ class WeatherNeonCard extends HTMLElement {
     this._rainRAF = requestAnimationFrame(draw);
   }
 
+  // ── BROUILLARD : nappes floues (blobs radial-gradient gris) qui dérivent lentement et
+  //    se réinjectent par le bord opposé (principe du code trouvé par Chris, mais en
+  //    Canvas2D : pas de blur(40px) CSS coûteux). this._fogLevel = 0 (sec) → 1 (fog plein).
+  //    Cap fps + pause hors écran. Allégé sur low-power (moins de blobs).
+  _startFog() {
+    const cv = this._elFog;
+    if (!cv) return;
+    if (window.IntersectionObserver && !this._fogIO) {
+      this._fogIO = new IntersectionObserver(es => { this._fogOff = !es[0].isIntersecting; });
+      this._fogIO.observe(cv);
+    }
+    const fit = () => {
+      let w = cv.getBoundingClientRect().width, h = cv.getBoundingClientRect().height;
+      if (!w || !h) {
+        const card = this.shadowRoot.querySelector('ha-card');
+        if (card) { w = w || card.offsetWidth; h = h || card.offsetHeight; }
+      }
+      if (!w || !h) return false;
+      const dpr = WNC_IS_LOW_POWER ? 1 : Math.min(window.devicePixelRatio || 1, 2);
+      if (cv._w !== w || cv._h !== h) {
+        cv.width = w * dpr; cv.height = h * dpr; cv._w = w; cv._h = h; cv._dpr = dpr;
+      }
+      return true;
+    };
+    fit();
+    if (this._fogRAF) return;
+
+    const draw = (now) => {
+      this._fogRAF = requestAnimationFrame(draw);
+      if (this._fogOff || document.hidden) return;
+      if (now - (this._fogLast || 0) < (WNC_IS_LOW_POWER ? 66 : 40)) return;  // ~15/25 fps (lent OK)
+      this._fogLast = now;
+      if (!fit()) return;
+      const ctx = cv.getContext('2d'), dpr = cv._dpr, W = cv._w, H = cv._h;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+
+      const level = this._fogLevel || 0;
+      if (level <= 0) { this._fogBlobs = null; return; }
+
+      // pool de blobs créé une fois (positions/tailles/vitesses variées → dérive douce)
+      const n = WNC_IS_LOW_POWER ? 5 : 9;
+      if (!this._fogBlobs || this._fogBlobs.length !== n) {
+        this._fogBlobs = [...Array(n)].map(() => ({
+          x: Math.random() * W,
+          y: Math.random() * H,
+          r: (0.22 + Math.random() * 0.3) * Math.min(W, H) + 60,   // rayon du blob
+          v: 0.15 + Math.random() * 0.45,                          // vitesse de dérive (px/frame)
+        }));
+      }
+      const alpha = (0.18 + level * 0.22);   // densité globale ∝ niveau
+      for (const b of this._fogBlobs) {
+        b.x -= b.v;
+        if (b.x + b.r < 0) { b.x = W + b.r; b.y = Math.random() * H; }  // réinjection bord gauche→droite
+        const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+        g.addColorStop(0, `rgba(179,184,187,${alpha.toFixed(3)})`);     // #b3b8bb (ta couleur)
+        g.addColorStop(1, 'rgba(179,184,187,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+      }
+    };
+    this._fogRAF = requestAnimationFrame(draw);
+  }
+
+  // ── GIVRE : cristaux fractals (dendrites) qui poussent depuis les 4 coins vers le
+  //    centre quand temp ≤ frost_below. Dessin ONE-SHOT animé : la croissance dure ~2,5 s
+  //    (facteur grow 0→1) puis on s'ARRÊTE (pas de RAF continu → idéal low-power/Companion).
+  //    L'arbre de branches est généré une fois (récursif, seedé) et figé tant que la
+  //    condition gel tient ; on ne le régénère qu'au passage sec→gel (cf _frostOn).
+  _startFrost() {
+    const cv = this._elFrost;
+    if (!cv) return;
+    const fit = () => {
+      let w = cv.getBoundingClientRect().width, h = cv.getBoundingClientRect().height;
+      if (!w || !h) {
+        const card = this.shadowRoot.querySelector('ha-card');
+        if (card) { w = w || card.offsetWidth; h = h || card.offsetHeight; }
+      }
+      if (!w || !h) return false;
+      const dpr = WNC_IS_LOW_POWER ? 1 : Math.min(window.devicePixelRatio || 1, 2);
+      if (cv._w !== w || cv._h !== h) {
+        cv.width = w * dpr; cv.height = h * dpr; cv._w = w; cv._h = h; cv._dpr = dpr;
+      }
+      return true;
+    };
+    if (!fit()) {                               // layout pas prêt → re-tente au prochain frame
+      requestAnimationFrame(() => this._startFrost());
+      return;
+    }
+    const W = cv._w, H = cv._h;
+
+    // 1) Génère l'arbre de dendrites une fois (segments {x1,y1,x2,y2,depth,t0,t1}).
+    //    t0/t1 = fenêtre temporelle [0..1] de croissance du segment (les enfants
+    //    poussent après le parent → effet de ramification progressive).
+    if (!this._frostSegs || this._frostSegW !== W || this._frostSegH !== H) {
+      const segs = [];
+      const grow = (x, y, ang, len, depth, t0, span) => {
+        if (depth <= 0 || len < 5) return;
+        const x2 = x + Math.cos(ang) * len, y2 = y + Math.sin(ang) * len;
+        const t1 = Math.min(1, t0 + span);
+        segs.push({ x1: x, y1: y, x2, y2, depth, t0, t1 });
+        // épines latérales courtes le long de la branche (look cristal)
+        const spikes = 2 + Math.floor(Math.random() * 2);
+        for (let s = 1; s <= spikes; s++) {
+          const f = s / (spikes + 1);
+          const sx = x + (x2 - x) * f, sy = y + (y2 - y) * f;
+          const sa = ang + (s % 2 ? 1 : -1) * (0.7 + Math.random() * 0.5);
+          const st0 = t0 + span * f;
+          grow(sx, sy, sa, len * 0.45, depth - 1, st0, span * 0.6);
+        }
+        // continuation de la branche principale (légèrement déviée)
+        grow(x2, y2, ang + (Math.random() - 0.5) * 0.5, len * 0.78, depth - 1, t1 - span * 0.2, span * 0.9);
+      };
+      const reach = Math.min(W, H) * (WNC_IS_LOW_POWER ? 0.34 : 0.42);  // un peu moins ample sur mobile
+      const depth = WNC_IS_LOW_POWER ? 4 : 5;
+      // 4 coins, chacun pousse vers le centre (diagonale) avec un petit éventail
+      [[0, 0, 0.25 * Math.PI], [W, 0, 0.75 * Math.PI], [0, H, -0.25 * Math.PI], [W, H, -0.75 * Math.PI]]
+        .forEach(([cx, cy, base]) => {
+          for (let b = -1; b <= 1; b++) grow(cx, cy, base + b * 0.42, reach, depth, 0, 0.5);
+        });
+      this._frostSegs = segs; this._frostSegW = W; this._frostSegH = H;
+    }
+
+    // 2) Anime la croissance (grow 0→1 sur ~2,5 s) puis fige.
+    if (this._frostRAF) cancelAnimationFrame(this._frostRAF);
+    const dpr = cv._dpr, segs = this._frostSegs;
+    const DUR = 2500, start = performance.now();
+    const render = (now) => {
+      const k = Math.min(1, (now - start) / DUR);
+      const e = 1 - Math.pow(1 - k, 3);                 // ease-out cubic
+      const ctx = cv.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cv._w, cv._h);
+      ctx.lineCap = 'round';
+      ctx.shadowColor = 'rgba(180,230,255,.9)'; ctx.shadowBlur = WNC_IS_LOW_POWER ? 0 : 4;
+      for (const s of segs) {
+        if (e <= s.t0) continue;
+        const f = Math.min(1, (e - s.t0) / Math.max(0.001, s.t1 - s.t0));  // avancée du segment
+        const x2 = s.x1 + (s.x2 - s.x1) * f, y2 = s.y1 + (s.y2 - s.y1) * f;
+        ctx.globalAlpha = (0.25 + s.depth * 0.12) * Math.min(1, e * 1.4);
+        ctx.lineWidth = 0.5 + s.depth * 0.45;
+        ctx.strokeStyle = 'rgba(214,240,255,.85)';
+        ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(x2, y2); ctx.stroke();
+      }
+      ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+      if (k < 1) this._frostRAF = requestAnimationFrame(render);
+      else this._frostRAF = null;                       // fini → on laisse le givre figé
+    };
+    this._frostRAF = requestAnimationFrame(render);
+  }
+
+  // Efface le givre (transition gel→sec)
+  _clearFrost() {
+    if (this._frostRAF) { cancelAnimationFrame(this._frostRAF); this._frostRAF = null; }
+    const cv = this._elFrost;
+    if (cv && cv._w) cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+  }
+
+  // ── HEAT-HAZE (canicule) : fait dériver la turbulence du filtre SVG appliqué à
+  //    l'icône hero → ondulation continue type "air chaud" (validé en preview).
+  //    On module baseFrequency (montée de chaleur) + on fait glisser seed. Cap 30 fps,
+  //    pause si onglet caché. Pas de canvas → léger. Déjà off en low-power (cf heatOn).
+  _startHeat() {
+    if (this._heatRAF || !this._heatTurb) return;
+    const BASE = 0.018;                          // baseFrequency horizontale (= preview)
+    const minDt = WNC_IS_LOW_POWER ? 66 : 33;    // 15 fps Companion / 30 fps PC
+    const start = performance.now();
+    const draw = (now) => {
+      this._heatRAF = requestAnimationFrame(draw);
+      if (document.hidden) return;
+      if (now - (this._heatLast || 0) < minDt) return;
+      this._heatLast = now;
+      const t = (now - start) / 1000;
+      const fy = BASE * (2 + Math.sin(t * 0.6) * 0.4);  // fréquence verticale modulée
+      this._heatTurb.setAttribute('baseFrequency', `${BASE.toFixed(4)} ${fy.toFixed(4)}`);
+      this._heatTurb.setAttribute('seed', 7 + (Math.floor(t * 8) % 50));
+    };
+    this._heatRAF = requestAnimationFrame(draw);
+  }
+  _stopHeat() {
+    if (this._heatRAF) { cancelAnimationFrame(this._heatRAF); this._heatRAF = null; }
+  }
+
   _render() {
     if (!this._hass || !this._config) return;
     if (!this._built) this._build();
@@ -689,6 +917,9 @@ class WeatherNeonCard extends HTMLElement {
       this._config.wind_entity, this._config.rain_chance_entity, this._config.snow_chance_entity];
     let snap = '';
     for (const e of watch) { const s = e && S[e]; if (s) snap += e + '=' + s.state + ';'; }
+    // température = attribut (pas l'état) → l'ajouter au snapshot, sinon le givre (seuil
+    // sur la temp) ne se déclencherait pas quand seule la temp change.
+    snap += '|t=' + (S[this._config.entity]?.attributes?.temperature ?? '');
     snap += '|fc=' + (this._forecast ? this._forecast.length : 0) + ':' + (this._fcTs || 0);
     if (snap === this._renderSnap) return;   // rien de pertinent n'a changé → skip
     this._renderSnap = snap;
@@ -710,6 +941,12 @@ class WeatherNeonCard extends HTMLElement {
       ? computeVigilance(this._hass.states[this._config.alert_entity])
       : null;
     const haloColor = vigi ? vigi.color : null;
+
+    // CANICULE → heat-haze sur la hero zone (icône). Déclenché par la vigilance MF
+    // "Canicule" ≥ Jaune (présente dans vigi.risks). Actif aussi sur Companion en
+    // version allégée (15 fps + scale réduit, cf _startHeat) : filtre SVG sur 1 petit
+    // élément, RAF léger → pas un canvas en boucle, n'est pas la source de chauffe.
+    const heatOn = !!vigi && vigi.risks.includes('Canicule');
 
     // forecast
     const fc = (this._forecast || []).slice(0, this._config.forecast_count);
@@ -816,17 +1053,17 @@ class WeatherNeonCard extends HTMLElement {
       : cond === 'snowy-rainy' ? 0.4
       : (ex.rainCh >= 40 && this._config.particles) ? ex.rainCh / 100 * 0.4  // annonce forte → bruine
       : 0;
-    // Effets canvas (vent/pluie/éclair) = OFF sur iPad/mobile (mode minimaliste,
-    // évite la surchauffe). On garde uniquement les particules CSS légères (neige,
-    // poussières) qui ne sollicitent pas le GPU en continu.
-    const fxOn = this._config.particles && !WNC_IS_LOW_POWER;
+    // Effets canvas (vent/pluie/éclair) actifs partout, y compris HA Companion.
+    // En low-power les canvas tournent en version ALLÉGÉE (15 fps, densité réduite :
+    // cf _startRain/_startWind) → "un minimum d'animation météo" sans surchauffer.
+    const fxOn = this._config.particles;
 
     this._rainLevel = fxOn ? rainLevel : 0;
     if (fxOn) this._startRain();
 
     // particules CSS (neige/poussières/annonces) + flash d'éclair (si canvas actif).
     if (this._config.particles) {
-      const storm = fxOn && (cond === 'lightning' || cond === 'lightning-rainy');
+      const storm = (cond === 'lightning' || cond === 'lightning-rainy');
       // pluie neutralisée si gérée par canvas (fxOn) OU sur low power (minimaliste, pas de pluie CSS)
       const wet = ['rainy', 'pouring', 'lightning-rainy', 'snowy-rainy', 'lightning'].includes(cond);
       const cssCond = ((fxOn && rainLevel > 0) || (WNC_IS_LOW_POWER && wet)) ? 'cloudy' : cond;
@@ -841,9 +1078,26 @@ class WeatherNeonCard extends HTMLElement {
         this._fxKey = fxKey;
       }
     }
-    // vent (canvas) : force = max(rafale, vent). OFF sur low power.
+    // vent (canvas) : force = max(rafale, vent).
     this._windForce = Math.max(ex.gust || 0, ex.wind || 0);
     if (fxOn) this._startWind();
+
+    // BROUILLARD (canvas) : nappes floues qui dérivent quand condition = fog.
+    this._fogLevel = (fxOn && cond === 'fog') ? 1 : 0;
+    if (fxOn && cond === 'fog') this._startFog();
+
+    // GIVRE (canvas) : cristaux quand temp ≤ frost_below. One-shot animé : on ne (re)lance
+    // la croissance qu'au PASSAGE sec→gel (_frostOn), sinon chaque tick rejouerait l'anim.
+    const frostNow = this._config.frost && this._config.particles
+      && Number.isFinite(temp) && temp <= this._config.frost_below;
+    if (frostNow && !this._frostOn) { this._frostOn = true; this._startFrost(); }
+    else if (!frostNow && this._frostOn) { this._frostOn = false; this._clearFrost(); }
+
+    // CANICULE : heat-haze sur l'icône hero (au-dessus du divider). La classe pose le
+    // filter SVG sur .wicon ; l'anim JS fait dériver la turbulence (= la chaleur monte).
+    this._elInner.classList.toggle('wheat-on', heatOn);
+    if (heatOn) this._startHeat(); else this._stopHeat();
+
     this._elSky.style.background = sky;  // le fond peut changer sans toucher au DOM animé
   }
 
@@ -927,6 +1181,10 @@ WeatherNeonCard.styles = `
   .wtemp small { font-size:.5em; vertical-align:super; margin-left:2px; opacity:.85; font-weight:500; }
   .wnow { flex:1; min-width:0; position:relative; }
   .wicon .wico { filter:drop-shadow(0 0 10px rgba(0,229,255,.25)); }
+  /* CANICULE : heat-haze sur l'icône hero (au-dessus du divider). Le filtre SVG
+     (#wheat-haze) distord l'icône ; la turbulence dérive via JS (_startHeat).
+     N'affecte QUE l'icône → la température et le texte restent nets. */
+  .winner.wheat-on .wicon { filter:url(#wheat-haze); will-change:filter; }
   .wcond { font-size:15px; opacity:.92; }
   .waside { flex:none; display:flex; flex-direction:column; gap:8px; align-items:flex-end;
     font-size:11.5px; opacity:.92; }
@@ -970,13 +1228,27 @@ WeatherNeonCard.styles = `
   .wfx { position:absolute; inset:0; }
   .wfx-rain { position:absolute; top:-12%; width:1.5px; height:16px;
     background:linear-gradient(transparent, rgba(125,249,255,.6)); animation:wrain linear infinite; }
-  .wfx-snow { position:absolute; top:-8%; width:4px; height:4px; border-radius:50%;
-    background:rgba(255,255,255,.8); animation:wsnow linear infinite; }
+  /* NEIGE PARALLAXE : la tuile de radial-gradients (--snow-grad, posée inline) défile en
+     background-position. 3 calques (élément + :before + :after) à 3 vitesses/blurs/opacités
+     → profondeur. Limitée à la zone hero via --fx-h, comme les canvas. */
+  .wsnowfield, .wsnowfield::before, .wsnowfield::after {
+    content:""; position:absolute; top:0; left:0; right:0; height:var(--fx-h, 100%);
+    background-image:var(--snow-grad); background-repeat:repeat;
+    background-size:600px 600px; animation:wsnowfall 3s linear infinite; }
+  .wsnowfield::after  { opacity:.4;  filter:blur(3px);   animation-duration:6s; margin-left:-200px; }
+  .wsnowfield::before { opacity:.65; filter:blur(1.5px); animation-duration:9s; margin-left:-300px; }
   /* effets limités à la zone hero (au-dessus du divider forecast) via --fx-h */
   .wwind-canvas, .wrain-canvas { position:absolute; top:0; left:0; z-index:1; pointer-events:none;
     -webkit-mask:linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%);
             mask:linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%);
     width:100%; height:var(--fx-h, 100%); }
+  /* brouillard : nappes floues, couvre toute la card, au-dessus du fond mais sous le
+     contenu (.winner z-index:2) → ne masque jamais le texte/la température. */
+  .wfog-canvas { position:absolute; top:0; left:0; z-index:1; pointer-events:none;
+    width:100%; height:100%; }
+  /* givre : couvre toute la card (cristaux des 4 coins), au-dessus des particules. */
+  .wfrost-canvas { position:absolute; top:0; left:0; z-index:2; pointer-events:none;
+    width:100%; height:100%; }
   .wfx-dust { position:absolute; width:3px; height:3px; border-radius:50%;
     background:#ffe9a8; opacity:.5; animation:wdust ease-in-out infinite; }
   .wfx-ray { position:absolute; top:-30%; left:18%; width:160px; height:300px;
@@ -998,6 +1270,16 @@ WeatherNeonCard.styles = `
   :host(.low-power) .wscan { display:none; }
   :host(.low-power) .wcatband { display:none; }   /* GLITCH off */
   :host(.low-power) * { animation:none !important; }
+  /* …MAIS on garde le minimum d'animation météo voulu sur Companion :
+     flash d'orage (1 élément, anim opacité) + pluie/neige CSS de secours. */
+  :host(.low-power) .wfx-flash { animation:wflash 8s ease-out infinite !important; animation-delay:1.5s !important; }
+  /* pluie CSS de secours : on réactive le NOM de l'anim (durée/delay restent pilotés
+     par les styles inline de chaque span → variété conservée). */
+  :host(.low-power) .wfx-rain  { animation-name:wrain !important; }
+  /* neige parallaxe : réactiver les 3 calques (le wildcard * touche aussi ::before/::after). */
+  :host(.low-power) .wsnowfield          { animation:wsnowfall 3s linear infinite !important; }
+  :host(.low-power) .wsnowfield::after   { animation:wsnowfall 6s linear infinite !important; }
+  :host(.low-power) .wsnowfield::before  { animation:wsnowfall 9s linear infinite !important; }
   /* glitch : superpose le split RGB AU glow multi-couches dual-thermo (au lieu de l'écraser) */
   .wtemp-glitch { text-shadow:
       0 0 3px rgba(255,255,255,.9),
@@ -1037,7 +1319,8 @@ WeatherNeonCard.styles = `
   @keyframes wdrift { 0%,100%{transform:translateX(0)} 50%{transform:translateX(4px)} }
   @keyframes wfall { 0%{transform:translateY(-6px);opacity:0} 30%{opacity:1} 100%{transform:translateY(12px);opacity:0} }
   @keyframes wrain { to { transform:translateY(260px); } }
-  @keyframes wsnow { to { transform:translateY(240px) translateX(14px); } }
+  /* neige parallaxe : la tuile (600px) défile d'une hauteur complète → boucle invisible */
+  @keyframes wsnowfall { to { background-position-y:600px; } }
   @keyframes wdust { 0%,100%{transform:translateY(0);opacity:.4} 50%{transform:translateY(-12px);opacity:.85} }
   @keyframes wray { 0%,100%{transform:rotate(18deg) scaleY(1);opacity:.8} 50%{transform:rotate(14deg) scaleY(1.1);opacity:1} }
   /* éclair : double-coup irrégulier (inspiré du flash CSS trouvé par Chris) */

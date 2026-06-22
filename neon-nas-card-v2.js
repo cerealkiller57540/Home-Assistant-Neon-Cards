@@ -43,6 +43,18 @@ const GLITCH = {
   dur:    1400,  // ms
 };
 
+/* v2 : dots de statut par défaut (façade gauche) — appliqués si la config n'en définit pas. */
+const DEFAULT_STATUS_DOTS = [
+  { label: 'ETH0',  entity: 'binary_sensor.rackstation_snmp_eth0_connecte',         type: 'on_ok' },
+  { label: 'ETH1',  entity: 'binary_sensor.rackstation_snmp_eth1_connecte',         type: 'on_ok' },
+  { label: 'UPS',   entity: 'binary_sensor.rackstation_snmp_onduleur_sur_batterie', type: 'problem' },
+  { label: 'RAID',  entity: 'binary_sensor.rackstation_snmp_raid_defaut',           type: 'problem' },
+  { label: 'RX410', entity: 'binary_sensor.rackstation_snmp_rx410_connectee',       type: 'on_ok' },
+  { label: 'SYS',   entity: 'sensor.rackstation_snmp_statut_systeme',               type: 'normal' },
+  { label: 'FAN-S', entity: 'sensor.rackstation_snmp_ventilo_systeme',              type: 'normal' },
+  { label: 'FAN-C', entity: 'sensor.rackstation_snmp_ventilo_cpu',                  type: 'normal' },
+];
+
 /* ═══════════════════════════════════════════════════════════════════════════ *
  *  SVG NAS — 8 bays (2 rows × 4 cols)                                        *
  *  LED centers: y=113.5 (top row), y=132.5 (bottom row)                      *
@@ -86,9 +98,11 @@ function _chassis() {
 
     <!-- Grilles ventilation bays 2-3-4 (row top) -->
     ${_grille(142, 94)}${_grille(194, 94)}${_grille(270, 94)}
-    <!-- Perforations bay 1 top (façade gauche) -->
-    ${[43,55,72,78,84,90,96,102,108,114].map(x => `<rect class="nas-dot" x="${x}" y="96" width="2" height="2" style="animation-duration: ${(Math.random() * 0.2 + 0.05).toFixed(2)}s; 
-           animation-delay: ${Math.random().toFixed(2)}s;"/>`).join('')}
+    <!-- Perforations bay 1 top (façade gauche) — v2 : les 8 premières = dots de statut, 2 dernières = déco -->
+    ${[43,55,72,78,84,90,96,102,108,114].map((x, i) => i < 8
+      ? `<rect class="nas-dot stat stat-off" data-stat="${i}" x="${x}" y="96" width="2" height="2"/>`
+      : `<rect class="nas-dot" x="${x}" y="96" width="2" height="2" style="animation-duration: ${(Math.random() * 0.2 + 0.05).toFixed(2)}s; animation-delay: ${Math.random().toFixed(2)}s;"/>`
+    ).join('')}
 
     <!-- Bay frames (2 rows × 4 cols, skip col1 top which is the système panel) -->
     ${_bay(42,105)}${_bay(118,105)}${_bay(194,105)}${_bay(270,105)}
@@ -127,6 +141,10 @@ class NeonNasCard extends HTMLElement {
     clearInterval(this._confirmTimer);
     if (NAS_IS_LOW_POWER) this.classList.add('low-power');  // coupe glow header animé + flicker rapide sur iPad/mobile
     this._config = { card_mod_bg: true, ...c };
+    // v2 : si la config (ancienne) ne définit pas les dots de statut, on applique les défauts.
+    if (!Array.isArray(this._config.status_dots) || this._config.status_dots.length === 0) {
+      this._config.status_dots = DEFAULT_STATUS_DOTS;
+    }
     this._built = false;
   }
 
@@ -142,7 +160,7 @@ class NeonNasCard extends HTMLElement {
   }
 
   getCardSize() { return 3; }
-  static getConfigElement() { return document.createElement('neon-nas-card-editor'); }
+  static getConfigElement() { return document.createElement('neon-nas-card-v2-editor'); }
   static getStubConfig() {
     return {
       title: 'Rackstation',
@@ -151,7 +169,7 @@ class NeonNasCard extends HTMLElement {
       used_entity:  'sensor.rackstation_volume_1_espace_utilise',
       used_pct_entity: 'sensor.rackstation_volume_1_volume_utilise',
       temp_entity:  'sensor.rackstation_temperature',
-      health_entity:'sensor.rackstation_volume_1_etat',
+      health_entity:'sensor.rackstation_snmp_statut_raid',
       drives: [
         'sensor.rackstation_drive_1_rx410_1_etat',
         'sensor.rackstation_drive_2_rx410_1_etat',
@@ -171,6 +189,18 @@ class NeonNasCard extends HTMLElement {
         ['binary_sensor.rackstation_drive_2_depassement_du_nombre_maximal_de_secteurs_defectueux','binary_sensor.rackstation_drive_2_en_dessous_de_la_duree_de_vie_restante_minimale'],
         ['binary_sensor.rackstation_drive_3_depassement_du_nombre_maximal_de_secteurs_defectueux','binary_sensor.rackstation_drive_3_en_dessous_de_la_duree_de_vie_restante_minimale'],
         ['binary_sensor.rackstation_drive_4_depassement_du_nombre_maximal_de_secteurs_defectueux','binary_sensor.rackstation_drive_4_en_dessous_de_la_duree_de_vie_restante_minimale'],
+      ],
+      // v2 : 8 dots de statut sur la façade gauche (ex-perforations).
+      // type définit la logique OK/ERR ; on_battery/raid_fault sont des binary "problème".
+      status_dots: [
+        { label: 'ETH0',  entity: 'binary_sensor.rackstation_snmp_eth0_connecte',      type: 'on_ok' },
+        { label: 'ETH1',  entity: 'binary_sensor.rackstation_snmp_eth1_connecte',      type: 'on_ok' },
+        { label: 'UPS',   entity: 'binary_sensor.rackstation_snmp_onduleur_sur_batterie', type: 'problem' },
+        { label: 'RAID',  entity: 'binary_sensor.rackstation_snmp_raid_defaut',        type: 'problem' },
+        { label: 'RX410', entity: 'binary_sensor.rackstation_snmp_rx410_connectee',    type: 'on_ok' },
+        { label: 'SYS',   entity: 'sensor.rackstation_snmp_statut_systeme',            type: 'normal' },
+        { label: 'FAN-S', entity: 'sensor.rackstation_snmp_ventilo_systeme',           type: 'normal' },
+        { label: 'FAN-C', entity: 'sensor.rackstation_snmp_ventilo_cpu',               type: 'normal' },
       ],
     };
   }
@@ -196,6 +226,22 @@ class NeonNasCard extends HTMLElement {
     if (v === 'unavailable' || v === 'unknown') return 'unavail';
     if (v.includes('normal') || v.includes('ok') || v.includes('healthy') || v.includes('bon')) return 'ok';
     return 'warn';
+  }
+
+  // v2 : statut d'un dot → 'ok' | 'err' | 'off' (off = indispo)
+  _statusDot(i) {
+    const d = (this._config.status_dots || [])[i];
+    if (!d || !d.entity) return 'off';
+    const e = this._ent(d.entity);
+    if (!e) return 'off';
+    const v = String(e.v).toLowerCase();
+    if (v === 'unavailable' || v === 'unknown' || v === 'none' || v === '') return 'off';
+    switch (d.type) {
+      case 'on_ok':   return v === 'on' ? 'ok' : 'err';      // connecté = on
+      case 'problem': return v === 'on' ? 'err' : 'ok';      // binary problème : on = défaut
+      case 'normal':  return v.includes('normal') ? 'ok' : 'err';
+      default:        return v === 'on' || v.includes('normal') ? 'ok' : 'err';
+    }
   }
 
   _fmtBytes(v, attrs) {
@@ -247,8 +293,8 @@ class NeonNasCard extends HTMLElement {
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500&display=swap');
 
         @keyframes hdr-glow {
-          0%,100% { text-shadow: 0 0 6px var(--nas-hdr-color, var(--nas-accent)), 0 0 12px rgba(var(--nas-cy),.4); }
-          50%      { text-shadow: 0 0 10px var(--nas-hdr-color, var(--nas-accent)), 0 0 22px rgba(var(--nas-cy),.7); }
+          0%,100% { text-shadow: 0 0 6px var(--nas-hdr-color, rgba(var(--rgb-primary-text-color),0.55)), 0 0 12px rgba(var(--nas-cy),.4); }
+          50%      { text-shadow: 0 0 10px var(--nas-hdr-color, rgba(var(--rgb-primary-text-color),0.55)), 0 0 22px rgba(var(--nas-cy),.7); }
         }
 
         .hdr {
@@ -270,8 +316,8 @@ class NeonNasCard extends HTMLElement {
         .hdr .ico {
           display: inline-flex; align-items: center;
           width:18px; height:18px;
-          color: var(--nas-hdr-color, var(--nas-accent));
-          filter: drop-shadow(0 0 4px var(--nas-hdr-color, var(--nas-accent)));
+          color: var(--nas-hdr-color, rgba(var(--rgb-primary-text-color),0.55));
+          filter: drop-shadow(0 0 4px var(--nas-hdr-color, rgba(var(--rgb-primary-text-color),0.55)));
           flex-shrink: 0;
           --mdc-icon-size: 18px;
         }
@@ -281,8 +327,8 @@ class NeonNasCard extends HTMLElement {
           font-size: var(--nas-hdr-size, 13px);
           letter-spacing: clamp(1px, 0.5cqi, 3px);
           text-transform: uppercase;
-          color: var(--nas-hdr-color, var(--nas-accent));
-          text-shadow: var(--nas-hdr-shadow, 0 0 6px var(--nas-hdr-color, var(--nas-accent)));
+          color: var(--nas-hdr-color, rgba(var(--rgb-primary-text-color),0.55));
+          text-shadow: var(--nas-hdr-shadow, 0 0 6px var(--nas-hdr-color, rgba(var(--rgb-primary-text-color),0.55)));
           animation: hdr-glow 3s ease-in-out infinite;
         }
         .hdr-badges {
@@ -352,6 +398,25 @@ class NeonNasCard extends HTMLElement {
           0%, 100% { opacity: 0.1; }
           50% { opacity: 0.4; } 
         }
+        /* v2 : flicker des DISQUES — même rythme rapide mais pleine intensité couleur */
+        @keyframes hdd-flicker-bright {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.45; }
+        }
+
+        /* v2 : .nas-dot pilotés = dots de statut. Vert néon FIXE (#00FFAA, comme v1),
+           indépendant de led_ok_color (qui peut être bleu). Glow net via drop-shadow. */
+        .nas-dot.stat { animation: none; cursor: pointer; stroke-width: 0; }
+        .nas-dot.stat.stat-ok  {
+          fill: #00FFAA; opacity: 1;
+          filter: drop-shadow(0 0 2px #00FFAA) drop-shadow(0 0 4px #00FFAA);
+        }
+        .nas-dot.stat.stat-err {
+          fill: var(--nas-err); opacity: 1;
+          filter: drop-shadow(0 0 2px var(--nas-err)) drop-shadow(0 0 4px var(--nas-err));
+          animation: pulse .7s infinite;
+        }
+        .nas-dot.stat.stat-off { fill: #3a4250; opacity: .35; filter: none; }
         .nas-grille { fill:#131619; }
         .nas-bay-frame { fill:#1e2228; }
         /* Profondeur des baies de disques */
@@ -373,9 +438,10 @@ class NeonNasCard extends HTMLElement {
           transition: all 0.3s ease;
           filter: blur(0.2px);
         }
-        .drive-led.ok   .dot { fill: var(--nas-ok);   filter: url(#led-glow-nas); animation: flicker 2.4s infinite; }
-        .drive-led.warn .dot { fill: var(--nas-warn); filter: url(#led-glow-nas); animation: pulse 1.2s infinite; }
-        .drive-led.err  .dot { fill: var(--nas-err);  filter: url(#led-glow-nas); animation: pulse .7s infinite; }
+        /* v2 : les disques reçoivent le hdd-flicker rapide aléatoire (pleine intensité) */
+        .drive-led.ok   .dot { fill: var(--nas-ok);   filter: url(#led-glow-nas); animation: hdd-flicker-bright 0.1s infinite; }
+        .drive-led.warn .dot { fill: var(--nas-warn); filter: url(#led-glow-nas); animation: hdd-flicker-bright 0.1s infinite; }
+        .drive-led.err  .dot { fill: var(--nas-err);  filter: url(#led-glow-nas); animation: hdd-flicker-bright 0.1s infinite; }
         .drive-led.unavail .dot { fill:#3a4250; filter:none; }
 
         @keyframes flicker {
@@ -395,12 +461,24 @@ class NeonNasCard extends HTMLElement {
         /* footer stats */
         .stats {
           display:grid;
-          grid-template-columns: auto 1fr auto auto;
+          /* 3 colonnes : donut | volume | bloc actions. minmax(0,1fr) sinon la
+             piste volume garde min-width:auto et déborde sur les boutons (iPad). */
+          grid-template-columns: auto minmax(0, 1fr) auto;
           align-items:center;
           gap:8px;
           margin-top:6px;
           padding-top: 8px;
           position: relative;
+          /* container query : permet d'empiler les boutons quand la card est étroite */
+          container-type: inline-size;
+          container-name: nasstats;
+        }
+        /* bloc actions : côte à côte par défaut */
+        .acts { display:flex; gap:8px; flex-shrink:0; }
+        /* card étroite (iPad paysage multi-colonnes) → boutons l'un sous l'autre */
+        @container nasstats (max-width: 360px) {
+          .acts { flex-direction: column; gap:6px; }
+          .acts .btn-action { width:100%; justify-content:center; }
         }
         .stats::before {
           content: '';
@@ -441,10 +519,14 @@ class NeonNasCard extends HTMLElement {
         }
         .vol {
           display:flex; flex-direction:column; gap:3px; min-width:0;
+          /* container-type pour que le clamp(...cqi...) de .line1 suive la
+             largeur réelle de la cellule (étroite sur iPad paysage) */
+          container-type: inline-size;
         }
         .vol .line1 {
-          font-size:15px; font-weight:500; color: var(--nas-accent);
+          font-size: clamp(12px, 4.2cqi, 15px); font-weight:500; color: var(--nas-accent);
           font-variant-numeric: tabular-nums;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
           mix-blend-mode: screen;
           text-shadow: 0 0 8px var(--nas-accent);
         }
@@ -547,10 +629,11 @@ class NeonNasCard extends HTMLElement {
         }
         .nas-wrap { position:relative; }
 
-        /* iPad/mobile : on GARDE les LED de statut disque (info utile, pulse lent OK)
-           mais on coupe le coûteux : glow header animé + flicker rapide (.nas-dot, repaint 10 fps). */
+        /* iPad/mobile : on GARDE les LED de statut disque (info utile, pulse lent OK).
+           v2 : les dots de statut (:not(.stat) exclu) restent lumineux ; les perforations
+           déco gardent un flicker plus SOFT (ralenti) au lieu d'être figées. */
         :host(.low-power) .hdr-title { animation: none; }
-        :host(.low-power) .nas-dot { animation: none !important; opacity: 0.1; }
+        :host(.low-power) .nas-dot:not(.stat) { animation: hdd-flicker 0.6s infinite !important; opacity: 1; }
       </style>
       <ha-card>
         <div class="hdr" id="hdr">
@@ -609,16 +692,18 @@ class NeonNasCard extends HTMLElement {
             <div class="line1"><span id="used">—</span> <span class="tot">/ <span id="total">—</span></span></div>
             <div class="line2" id="volLabel"></div>
           </div>
-          <button class="btn-action btn-reboot" id="btn-reboot">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
-            </svg>Reboot
-          </button>
-          <button class="btn-action btn-shutdown" id="btn-shutdown">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>
-            </svg>Shutdown
-          </button>
+          <div class="acts">
+            <button class="btn-action btn-reboot" id="btn-reboot">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+              </svg>Reboot
+            </button>
+            <button class="btn-action btn-shutdown" id="btn-shutdown">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>
+              </svg>Shutdown
+            </button>
+          </div>
         </div>
       </ha-card>
     `;
@@ -629,6 +714,13 @@ class NeonNasCard extends HTMLElement {
         const i = +el.dataset.idx;
         const id = (this._config.drives || [])[i];
         this._moreInfo(id);
+      });
+    });
+    // v2 : clic sur un dot de statut → more-info de son entité
+    this.shadowRoot.querySelectorAll('.nas-dot.stat').forEach(el => {
+      el.addEventListener('click', () => {
+        const d = (this._config.status_dots || [])[+el.dataset.stat];
+        if (d) this._moreInfo(d.entity);
       });
     });
     this.shadowRoot.getElementById('donut').addEventListener('click',
@@ -642,10 +734,11 @@ class NeonNasCard extends HTMLElement {
     this.shadowRoot.getElementById('btn-shutdown').addEventListener('click',
       () => this._confirm('shutdown'));
 
-    // random flicker timing per LED — delay négatif = démarre en milieu de cycle
+    // v2 : hdd-flicker rapide aléatoire par disque (comme les perforations) —
+    // durée courte 0.05–0.25s + delay désynchronisé, sinon le flicker est invisible.
     this.shadowRoot.querySelectorAll('.drive-led .dot').forEach(dot => {
-      dot.style.animationDelay    = (-Math.random() * 4).toFixed(2) + 's';
-      dot.style.animationDuration = (1.8 + Math.random() * 2.4).toFixed(2) + 's';
+      dot.style.animationDelay    = (Math.random()).toFixed(2) + 's';
+      dot.style.animationDuration = (Math.random() * 0.2 + 0.05).toFixed(2) + 's';
     });
 
     this._startGlitch();
@@ -855,6 +948,13 @@ class NeonNasCard extends HTMLElement {
       el.classList.add(this._driveStatus(i));
     });
 
+    // v2 : dots de statut (ex-perforations façade gauche)
+    this.shadowRoot.querySelectorAll('.nas-dot.stat').forEach(el => {
+      const i = +el.dataset.stat;
+      el.classList.remove('stat-ok','stat-err','stat-off');
+      el.classList.add('stat-' + this._statusDot(i));
+    });
+
     // health
     const h = this._ent(c.health_entity);
     const healthEl  = this.shadowRoot.getElementById('health');
@@ -864,6 +964,11 @@ class NeonNasCard extends HTMLElement {
       let cls = 'unavail', lbl = h.v;
       if (v === 'unavailable' || v === 'unknown') { cls = 'unavail'; lbl = '—'; }
       else if (v.includes('normal') || v.includes('ok') || v.includes('healthy')) { cls = 'ok'; lbl = 'Normal'; }
+      // états RAID SNMP « en cours » → warn (jaune) : scrubbing, resync, rebuild, expand
+      else if (v.includes('scrub')) { cls = 'warn'; lbl = 'Scrubbing'; }
+      else if (v.includes('rebuild') || v.includes('resync') || v.includes('sync')) { cls = 'warn'; lbl = 'Rebuild'; }
+      else if (v.includes('expand') || v.includes('migrat')) { cls = 'warn'; lbl = 'Expanding'; }
+      else if (v.includes('degraded')) { cls = 'warn'; lbl = 'Degraded'; }
       else if (v.includes('warn') || v.includes('attention')) { cls = 'warn'; lbl = 'Warning'; }
       else if (v.includes('crash') || v.includes('fail') || v.includes('danger')) { cls = 'err'; lbl = 'Critical'; }
       else { cls = 'ok'; lbl = h.v; }
@@ -1269,20 +1374,20 @@ class NeonNasCardEditor extends HTMLElement {
  *  REGISTER                                                                  *
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-if (!customElements.get('neon-nas-card'))
-  customElements.define('neon-nas-card', NeonNasCard);
-if (!customElements.get('neon-nas-card-editor'))
-  customElements.define('neon-nas-card-editor', NeonNasCardEditor);
+if (!customElements.get('neon-nas-card-v2'))
+  customElements.define('neon-nas-card-v2', NeonNasCard);
+if (!customElements.get('neon-nas-card-v2-editor'))
+  customElements.define('neon-nas-card-v2-editor', NeonNasCardEditor);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
-  type: 'neon-nas-card',
-  name: 'Neon NAS Card',
-  description: 'Synology Rackstation — 8 bays (RS + RX410) with drive LEDs & volume donut',
+  type: 'neon-nas-card-v2',
+  name: 'Neon NAS Card v2',
+  description: 'Synology Rackstation — disques en hdd-flicker + 8 dots de statut SNMP (façade)',
   preview: true,
 });
 
-console.info('%c NEON-NAS-CARD %c v1.5 ',
+console.info('%c NEON-NAS-CARD %c v2.0 ',
   'background:#00fff9;color:#040614;font-weight:700;',
   'background:#B400FF;color:#fff;');
 

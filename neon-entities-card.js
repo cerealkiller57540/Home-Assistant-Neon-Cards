@@ -27,7 +27,9 @@ if (!document.getElementById('neon-entities-font')) {
 const ENT_IS_IPAD    = /iPad/.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const ENT_IS_ANDROID = /Android/.test(navigator.userAgent);
-const ENT_IS_LOW_POWER = ENT_IS_IPAD || navigator.hardwareConcurrency <= 4;
+// inclut l'app HA Companion (userAgent ≠ Safari) + low CPU. Coût des anims × nb d'entités.
+const ENT_IS_LOW_POWER = ENT_IS_IPAD || navigator.hardwareConcurrency <= 4
+  || /iPhone|iPad|iPod|Android|Mobile|HomeAssistant/i.test(navigator.userAgent);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -96,6 +98,7 @@ class NeonEntitiesCard extends HTMLElement {
   }
 
   setConfig(config) {
+    if (ENT_IS_LOW_POWER) this.classList.add('low-power');  // coupe le décoratif en boucle (×nb entités) sur iPad/mobile
     this._config = {
       entities:       config.entities       || [],
       header:         config.header         !== undefined ? config.header : {},
@@ -544,6 +547,14 @@ class NeonEntitiesCard extends HTMLElement {
         color: rgba(var(--rgb-primary-text-color),0.28);
         letter-spacing: 1px;
       }
+
+      /* iPad/mobile : coût des anims × nb d'entités. On COUPE le décoratif en boucle
+         (divider qui coule, plasma du toggle, pulse du liseré, sweep au survol) mais
+         on GARDE le liseré actif affiché (fixe) + les couleurs/glow statiques. */
+      :host(.low-power) .main-div { animation: none; }
+      :host(.low-power) .tog.on { animation: none; }
+      :host(.low-power) .row.on::before { animation: none; }
+      :host(.low-power) .row:hover::after { display: none; }
     `;
   }
 

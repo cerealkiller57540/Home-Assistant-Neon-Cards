@@ -647,13 +647,14 @@ class NeonCompactLightCard extends HTMLElement {
       smart_font_colour: config.smart_font_colour !== false,
       text_colour: config.text_colour || null,
 
-      // effects
-      effect_heartbeat:   config.effect_heartbeat   !== false,
-      effect_scanline:    config.effect_scanline     === true,
-      effect_flicker:     config.effect_flicker === true && !NCL_IS_LOW_POWER,  // OFF sur iPad/mobile
+      // effects — sur iPad/mobile : OFF les anims en boucle (heartbeat/flicker, on
+      // par défaut → coût × nb de lampes). Garde le reste (icône, couleurs, statique).
+      effect_heartbeat:   config.effect_heartbeat   !== false && !NCL_IS_LOW_POWER,
+      effect_scanline:    config.effect_scanline     === true && !NCL_IS_LOW_POWER,
+      effect_flicker:     config.effect_flicker === true && !NCL_IS_LOW_POWER,
       effect_hover_glitch: config.effect_hover_glitch === true,
       effect_intense_glow: config.effect_intense_glow === true,
-      icon_power_animation: config.icon_power_animation !== false,
+      icon_power_animation: config.icon_power_animation !== false && !NCL_IS_LOW_POWER,
     };
     if (config.off_colours) {
       if (typeof config.off_colours !== "object" || (config.off_colours.light === undefined && config.off_colours.background === undefined)) {

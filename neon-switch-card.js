@@ -4,7 +4,7 @@
 /* ── Device detection (MD §1) ───────────────────────────────────────────── */
 const NSW_IS_IPAD      = /iPad/.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const NSW_IS_LOW_POWER = NSW_IS_IPAD || /iPhone|Android/.test(navigator.userAgent);
+const NSW_IS_LOW_POWER = NSW_IS_IPAD || /iPhone|iPad|iPod|Android|Mobile|HomeAssistant/i.test(navigator.userAgent);
 
 /* ── Orbitron — une seule fois dans <head> ───────────────────────────────── */
 if (!document.getElementById('neon-switch-font')) {
@@ -188,8 +188,8 @@ const STYLES = `
     50%      { opacity: 0.45; }
   }
   @keyframes hdr-glow {
-    0%,100% { text-shadow: 0 0 6px var(--sw-hdr-color, var(--sw-accent)), 0 0 12px rgba(var(--sw-cy),.4); }
-    50%      { text-shadow: 0 0 10px var(--sw-hdr-color, var(--sw-accent)), 0 0 22px rgba(var(--sw-cy),.7); }
+    0%,100% { text-shadow: 0 0 6px var(--sw-hdr-color, rgba(var(--rgb-primary-text-color),0.55)), 0 0 12px rgba(var(--sw-cy),.4); }
+    50%      { text-shadow: 0 0 10px var(--sw-hdr-color, rgba(var(--rgb-primary-text-color),0.55)), 0 0 22px rgba(var(--sw-cy),.7); }
   }
   @keyframes fade-in {
     from { opacity: 0; transform: translateY(4px); }
@@ -221,7 +221,10 @@ const STYLES = `
   .led-r-act { animation: hdd-flicker var(--act-dur, 0.5s) step-end infinite; will-change: opacity; }
 
   ${NSW_IS_LOW_POWER ? `
-  .led-l-gig, .led-l-100, .led-l-10 { animation: pulse-led 3s ease-in-out infinite; }
+  /* iPad/mobile : on GARDE les LED qui respirent (l'âme de la card) mais ralenties,
+     et on coupe le coûteux : flicker d'activité rapide (repaint 10 fps) + glow header animé. */
+  .led-l-gig, .led-l-100, .led-l-10 { animation: pulse-led 4s ease-in-out infinite; }
+  .led-r-act { animation: none; }       /* flicker rapide = le vrai gouffre GPU */
   .hdr-title { animation: none; }
   .port-num.on { animation: none; }
   ` : ''}
@@ -244,8 +247,8 @@ const STYLES = `
   .hdr-icon {
     display: inline-flex; align-items: center;
     width: 18px; height: 18px; --mdc-icon-size: 18px;
-    color: var(--sw-hdr-color, var(--sw-accent));
-    filter: drop-shadow(0 0 4px var(--sw-hdr-color, var(--sw-accent)));
+    color: var(--sw-hdr-color, rgba(var(--rgb-primary-text-color),0.55));
+    filter: drop-shadow(0 0 4px var(--sw-hdr-color, rgba(var(--rgb-primary-text-color),0.55)));
     flex-shrink: 0;
   }
   .hdr-title {
@@ -253,8 +256,8 @@ const STYLES = `
     font-size: var(--sw-hdr-size, 13px);
 	letter-spacing: clamp(1px, 0.5cqi, 3px);
     text-transform: uppercase;
-    color: var(--sw-hdr-color, var(--sw-accent));
-    text-shadow: var(--sw-hdr-shadow, 0 0 6px var(--sw-hdr-color, var(--sw-accent)));
+    color: var(--sw-hdr-color, rgba(var(--rgb-primary-text-color),0.55));
+    text-shadow: var(--sw-hdr-shadow, 0 0 6px var(--sw-hdr-color, rgba(var(--rgb-primary-text-color),0.55)));
     animation: hdr-glow 3s ease-in-out infinite;
   }
 
