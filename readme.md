@@ -92,7 +92,7 @@
 | Card | File | Version | Description |
 |------|------|:-------:|-------------|
 | 🏷️ Neon Header Card | `neon-header-card.js` | `1.4.2` | Stylish neon section header |
-| 🏷️ Neon Header Card v2 | `neon-header-card-v2.js` | `2.5` | Advanced header — glow, gradient, scanlines, flicker, glitch effects, templated subtitle engine (`{% set %}`, arithmetic, ternaries) |
+| 🏷️ Neon Header Card v2 | `neon-header-card-v2.js` | `2.6` | Advanced header with a built-in Jinja-like template engine — build fully data-driven, animated HTML headers right in YAML. Supports `{% set %}`, `{% if/elif/else %}`, `and/or/not`, `in`, arithmetic, ternaries, filters, concatenation, + 20 reusable neon `@keyframes`. See the [demo](#-header-card-v2--template-engine) |
 | 📋 Neon Entities Card | `neon-entities-card.js` | `1.8.0` | Multi-entity card (switch, sensor, cover, climate, number + dividers) — theme-agnostic colors, unified UI editor with per-entity icon preview |
 
 ### 🖥️ Network & NAS
@@ -118,6 +118,63 @@
 | 🎵 Onkyo Card | `onkyo-card.js` | — | AV receiver control with input selection |
 | 🔔 Sonos Alarm Card | `sonos-alarm-card.js` | `1.0.0` | Glassmorphism Sonos alarm manager |
 | 🕐 Nixie Clock Card | `nixie-clock-card.js` | — | Retro nixie tube clock with configurable tube colors |
+
+---
+
+## 🧩 Header Card v2 — template engine
+
+`neon-header-card-v2` is more than a title bar: its `subtitle.text` is rendered by a small
+**Jinja-like engine that runs in the browser** (no Home Assistant server round-trip). That means
+you can build **fully data-driven, animated HTML headers straight from YAML** — gauges, status
+panels, live monitoring widgets — without writing a single custom JS card.
+
+https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards/raw/main/assets/neon-headers-demo.mp4
+
+*Three live headers built only with YAML templates: a Raspberry Pi "reactor" (RAM core that
+pulses with load), a Pi-hole "DNS filter stream", and a fiber uplink — all animated, all
+driven by real entity states.*
+
+**What the engine supports**
+
+| Feature | Example |
+|---------|---------|
+| States / attributes | `{{ states('sensor.x') }}` · `is_state('x','on')` · `state_attr('weather.home','temperature')` |
+| Variables | `{% set deg = states('sensor.x')|float * 3.6 %}` |
+| Conditionals | `{% if cpu>85 %}…{% elif cpu>60 %}…{% else %}…{% endif %}` |
+| Boolean logic | `and` · `or` · `not` |
+| Membership | `{{ x in ['a','b'] }}` · `not in` |
+| Ternary (nestable) | `{{ 'R' if v>85 else 'A' if v>60 else 'V' }}` |
+| Arithmetic | `+ - * / ( )` |
+| Filters | `\| round(n) float int upper lower title default thousands` |
+| Concatenation | `{{ 'val=' ~ count }}` |
+
+**Reusable neon `@keyframes`** (use via inline `animation:` in your template):
+`nhv2-flicker`, `nhv2-core-pulse`, `nhv2-core-glow`, `nhv2-ring-spin`, `nhv2-data-flow`,
+`nhv2-thermo-wave`, `nhv2-shimmer`, `nhv2-stream-x`, `nhv2-pulse-travel`, `nhv2-fiber-glow`, … (20 total).
+
+**Example — a RAM gauge that turns amber/red under load:**
+
+```yaml
+type: custom:neon-header-card-v2
+mode: both
+title:
+  text: RASPBERRY_PI
+  icon: mdi:raspberry-pi
+  glow: true
+subtitle:
+  text: >-
+    {% set ram = states('sensor.pi_ram')|float(0) %}
+    {% set c = '#FF2D6B' if ram>85 else '#FFB800' if ram>70 else '#39FF9E' %}
+    <div style="color:{{c}}; font-weight:900; text-shadow:0 0 8px {{c}};">
+      RAM {{ ram|round(0)|int }}%
+    </div>
+```
+
+> ⚠️ **Sanitized output** — only `DIV/SPAN/B/STRONG/I/EM/U/SMALL/MARK/CODE/BR/HA-ICON`
+> tags and `style`/`class` attributes are kept. Inline styles may use any gradient,
+> `box-shadow`, `clip-path`, `mask`, `filter`, `mix-blend-mode` or `animation`, but
+> `url()`, `@import`, `expression()`, `javascript:` are stripped.
+> For smooth animation, animate `transform`/`opacity` (GPU) and avoid `left/top/width/height`.
 
 ---
 

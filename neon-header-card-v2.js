@@ -1,4 +1,4 @@
-/* ── neon-header-card-v2 v2.5 ── */
+/* ── neon-header-card-v2 v2.6 ── */
 /**
  * neon-header-card-v2
  *
@@ -52,9 +52,54 @@
  *     tap_action: none
  *     navigation_path: null
  *     font_family: null
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ *  TEMPLATE ENGINE (subtitle.text / title.text)
+ * ─────────────────────────────────────────────────────────────────────────
+ *  A small built-in Jinja-like engine renders the text (NOT full Home
+ *  Assistant Jinja — it runs client-side, no server round-trip). Supported:
+ *
+ *   - States:        {{ states('sensor.x') }}  is_state('x','on')
+ *                    state_attr('weather.home','temperature')
+ *   - Variables:     {% set deg = states('sensor.x')|float * 3.6 %}  then {{ deg }}
+ *   - Arithmetic:    + - * / ( )      e.g. {{ (val/1000000)|round(1) }}
+ *   - Comparisons:   == != > < >= <=
+ *   - Boolean logic: and  or  not     e.g. {% if a>1 and not down %}…{% endif %}
+ *   - Membership:    in / not in      e.g. {{ x in ['a','b'] }}
+ *   - Ternary:       A if COND else B  (nestable)
+ *   - Conditionals:  {% if C %}…{% elif C %}…{% else %}…{% endif %}
+ *   - Concatenation: ~                 e.g. {{ 'val=' ~ count }}
+ *   - Filters:       | round(n) float int upper lower title default thousands
+ *
+ *  The output HTML is sanitized: only DIV/SPAN/B/STRONG/I/EM/U/SMALL/MARK/
+ *  CODE/BR/HA-ICON tags and style/class attributes survive. Forbidden in
+ *  inline styles: url(), @import, expression(), javascript:, behavior, binding
+ *  → so conic/linear/radial-gradient, box-shadow, clip-path, mask (without
+ *  url), filter, mix-blend-mode and animation are all allowed.
+ *
+ *  Reusable @keyframes (use via inline `animation:`):
+ *   nhv2-flicker, nhv2-scan-scroll, nhv2-scan-flicker, nhv2-card-glitch,
+ *   nhv2-icon-glitch, nhv2-text-glitch, nhv2-core-pulse, nhv2-core-glow,
+ *   nhv2-ring-spin, nhv2-ring-spin-rev, nhv2-data-flow, nhv2-thermo-wave,
+ *   nhv2-cell-charge, nhv2-shimmer, nhv2-stream-x, nhv2-stream-x-rev,
+ *   nhv2-filter-scan, nhv2-filter-glow, nhv2-block-flash, nhv2-pulse-travel,
+ *   nhv2-pulse-travel-rev, nhv2-fiber-glow
+ *
+ *  Performance: animate transform/opacity only (GPU-composited) — avoid
+ *  left/top/width/height (reflow) and prefer them to box-shadow/background-
+ *  position (repaint). The subtitle DOM is only rebuilt when its rendered
+ *  HTML actually changes, so long-running animations don't restart on every
+ *  hass update.
+ *
+ *  Example data-driven header (RAM gauge that turns amber/red under load):
+ *   subtitle:
+ *     text: >-
+ *       {% set ram = states('sensor.pi_ram')|float(0) %}
+ *       {% set c = '#FF2D6B' if ram>85 else '#FFB800' if ram>70 else '#39FF9E' %}
+ *       <div style="color:{{c}}; text-shadow:0 0 8px {{c}};">RAM {{ ram|round(0)|int }}%</div>
  */
 
-const NHV2_VERSION = '2.2';
+const NHV2_VERSION = '2.6';
 
 // ── Device detection — préfixé NHV2_ ────────────────────────────
 const NHV2_IS_IPAD = /iPad/.test(navigator.userAgent) ||
@@ -106,6 +151,9 @@ function nhv2ParseTemplate(hass, text, vars) {
       } catch(e) { vars[name] = ''; }
       return '';
     });
+    // ── {% if COND %}...{% elif COND %}...{% else %}...{% endif %} (après les set, du plus
+    //    interne au plus externe via boucle sur les if sans if imbriqué). ──
+    text = nhv2ResolveIfBlocks(text, hass, vars);
   }
   if (!text.includes('{{')) return text.trim();
 
@@ -120,17 +168,57 @@ function nhv2ParseTemplate(hass, text, vars) {
   });
 }
 
-// Sépare "expr | f1 | f2(arg)" → { expr, filters:"| f1 | f2(arg)" } sans couper les | internes
+// Résout les blocs {% if %}/{% elif %}/{% else %}/{% endif %} en remplaçant chaque bloc par
+// la branche dont la condition est vraie (ou ''). Traite du plus INTERNE au plus externe :
+// la regex ne matche qu'un if SANS autre {% if %} dedans, et on boucle jusqu'à épuisement.
+function nhv2ResolveIfBlocks(text, hass, vars) {
+  if (!text.includes('{% if') && !text.includes('{%if')) return text;
+  const reInner = /\{\%\s*if\s+([\s\S]+?)\s*\%\}((?:(?!\{\%\s*if\s)[\s\S])*?)\{\%\s*endif\s*\%\}/;
+  let guard = 0;
+  while (reInner.test(text) && guard++ < 50) {
+    text = text.replace(reInner, (m, firstCond, body) => {
+      // découper body en branches sur les {% elif %} / {% else %} de CE bloc (pas d'if interne ici)
+      const parts = body.split(/\{\%\s*(elif\s+[\s\S]+?|else)\s*\%\}/);
+      // parts = [body0, kw1, body1, kw2, body2, ...] ; kw = "elif COND" | "else"
+      const branches = [{ cond: firstCond, content: parts[0] }];
+      for (let i = 1; i < parts.length; i += 2) {
+        const kw = parts[i].trim();
+        const content = parts[i + 1] || '';
+        if (kw === 'else') branches.push({ cond: null, content });
+        else branches.push({ cond: kw.replace(/^elif\s+/, ''), content });
+      }
+      for (const br of branches) {
+        if (br.cond === null) return br.content; // else
+        try { if (nhv2Truthy(nhv2Eval(br.cond, hass, vars))) return br.content; } catch(e) {}
+      }
+      return '';
+    });
+  }
+  return text;
+}
+
+// Sépare "expr | f1 | f2(arg)" → { expr, filters:"| f1 | f2(arg)" } sans couper les | internes.
+// IMPORTANT : si l'expression contient un opérateur de niveau 0 (ternaire if/else, and/or, ~,
+// comparaison), les "|" appartiennent à des SOUS-expressions et sont gérés par nhv2Eval lui-même
+// → on ne coupe PAS ici (sinon "'a' if x|int>1 else 'b'" serait charcuté). On ne sépare le filtre
+// que pour une expression "simple" (atome + filtres), ex "states(x)|int|round(1)".
 function nhv2SplitFilters(s) {
-  let depth = 0, inStr = '';
+  let depth = 0, inStr = '', pipeIdx = -1, hasOp = false;
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
     if (inStr) { if (c === inStr) inStr = ''; continue; }
     if (c === '"' || c === "'") { inStr = c; continue; }
-    if (c === '(' ) depth++;
-    else if (c === ')') depth--;
-    else if (c === '|' && depth === 0) return { expr: s.slice(0, i).trim(), filters: s.slice(i) };
+    if (c === '(' ) { depth++; continue; }
+    if (c === ')') { depth--; continue; }
+    if (depth !== 0) continue;
+    if (c === '|' && pipeIdx < 0) pipeIdx = i;           // 1er pipe de niveau 0
+    else if (c === '~') hasOp = true;                     // concat
+    else if (c === '<' || c === '>' || c === '=' || c === '!') hasOp = true; // comparaison
+    else if (s.substr(i, 4) === ' if ' || s.substr(i, 6) === ' else ' ||
+             s.substr(i, 5) === ' and ' || s.substr(i, 4) === ' or ') hasOp = true; // logique/ternaire
   }
+  // pipe présent ET aucun opérateur de niveau 0 → c'est un vrai filtre global
+  if (pipeIdx >= 0 && !hasOp) return { expr: s.slice(0, pipeIdx).trim(), filters: s.slice(pipeIdx) };
   return { expr: s.trim(), filters: '' };
 }
 
@@ -148,10 +236,48 @@ function nhv2Eval(expr, hass, vars) {
       : nhv2Eval(tern.f, hass, vars);
   }
 
-  // comparaisons de niveau 0
+  // logique booléenne niveau 0 : "or" puis "and" (or moins prioritaire). 'not' géré dans l'atome.
+  // Évalué AVANT les comparaisons pour que "a > 1 and b < 2" se découpe en deux comparaisons.
+  const orSplit = nhv2SplitLogic(expr, 'or');
+  if (orSplit) {
+    return (nhv2Truthy(nhv2Eval(orSplit.a, hass, vars)) || nhv2Truthy(nhv2Eval(orSplit.b, hass, vars))) ? 1 : 0;
+  }
+  const andSplit = nhv2SplitLogic(expr, 'and');
+  if (andSplit) {
+    return (nhv2Truthy(nhv2Eval(andSplit.a, hass, vars)) && nhv2Truthy(nhv2Eval(andSplit.b, hass, vars))) ? 1 : 0;
+  }
+  // négation : "not <expr>"
+  if (/^not\s+/.test(expr)) {
+    return nhv2Truthy(nhv2Eval(expr.replace(/^not\s+/, ''), hass, vars)) ? 0 : 1;
+  }
+
+  // appartenance : "<val> in [a,b,c]" / "<val> not in [a,b,c]" (niveau 0, hors quotes)
+  {
+    const inM = nhv2SplitIn(expr);
+    if (inM) {
+      const val = String(nhv2Eval(inM.val, hass, vars));
+      // parser la liste [..] : éléments littéraux (chaînes quotées ou nombres)
+      const items = inM.list.replace(/^\[|\]$/g, '').split(',').map(x => {
+        x = x.trim();
+        return (/^['"][\s\S]*['"]$/.test(x)) ? x.slice(1, -1) : x;
+      });
+      const found = items.includes(val);
+      return (inM.neg ? !found : found) ? 1 : 0;
+    }
+  }
+
+  // comparaisons de niveau 0 — applique les filtres ( |int etc.) présents dans CHAQUE membre
+  // (sinon "states(x)|int > 10" ne convertit pas le membre gauche). Fait ici, pas plus haut,
+  // pour ne pas casser le découpage ternaire/logique qui peut contenir des | dans ses branches.
   const cmp = nhv2SplitCompare(expr);
   if (cmp) {
-    const a = nhv2Eval(cmp.a, hass, vars), b = nhv2Eval(cmp.b, hass, vars);
+    const evalSide = (side) => {
+      const sf = nhv2SplitFilters(side.trim());
+      let v = nhv2Eval(sf.expr, hass, vars);
+      if (sf.filters) v = nhv2ApplyFilters(v == null ? '' : String(v), sf.filters);
+      return v;
+    };
+    const a = evalSide(cmp.a), b = evalSide(cmp.b);
     const na = parseFloat(a), nb = parseFloat(b);
     const num = !isNaN(na) && !isNaN(nb);
     switch (cmp.op) {
@@ -161,6 +287,22 @@ function nhv2Eval(expr, hass, vars) {
       case '<':  return na <  nb ? 1 : 0;
       case '>=': return na >= nb ? 1 : 0;
       case '<=': return na <= nb ? 1 : 0;
+    }
+  }
+
+  // concaténation Jinja "~" au niveau 0 (string concat). Découpe sur le 1er ~ hors parenthèses/quotes.
+  {
+    let depth = 0, inStr = '';
+    for (let i = 0; i < expr.length; i++) {
+      const c = expr[i];
+      if (inStr) { if (c === inStr) inStr = ''; continue; }
+      if (c === '"' || c === "'") { inStr = c; continue; }
+      if (c === '(') depth++; else if (c === ')') depth--;
+      else if (c === '~' && depth === 0) {
+        const a = nhv2Eval(expr.slice(0, i), hass, vars);
+        const b = nhv2Eval(expr.slice(i + 1), hass, vars);
+        return (a == null ? '' : String(a)) + (b == null ? '' : String(b));
+      }
     }
   }
 
@@ -218,6 +360,39 @@ function nhv2SplitTernary(s) {
   }
   if (ifIdx >= 0 && elseIdx > ifIdx)
     return { t: s.slice(0, ifIdx).trim(), cond: s.slice(ifIdx + 4, elseIdx).trim(), f: s.slice(elseIdx + 6).trim() };
+  return null;
+}
+
+// découpe sur le DERNIER " and "/" or " au niveau 0 (assoc. gauche). op = 'and' | 'or'.
+// Ne matche pas un mot qui CONTIENT and/or (ex: "android") grâce aux espaces requis.
+function nhv2SplitLogic(s, op) {
+  const tok = ' ' + op + ' ';
+  let depth = 0, inStr = '', idx = -1;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) { if (c === inStr) inStr = ''; continue; }
+    if (c === '"' || c === "'") { inStr = c; continue; }
+    if (c === '(') depth++; else if (c === ')') depth--;
+    else if (depth === 0 && s.substr(i, tok.length) === tok) idx = i; // dernier = assoc gauche
+  }
+  if (idx >= 0) return { a: s.slice(0, idx).trim(), b: s.slice(idx + tok.length).trim() };
+  return null;
+}
+
+// détecte "<val> in [..]" ou "<val> not in [..]" au niveau 0 → { val, list, neg }
+function nhv2SplitIn(s) {
+  let depth = 0, inStr = '';
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inStr) { if (c === inStr) inStr = ''; continue; }
+    if (c === '"' || c === "'") { inStr = c; continue; }
+    if (c === '(' || c === '[') depth++;
+    else if (c === ')' || c === ']') depth--;
+    else if (depth === 0) {
+      if (s.substr(i, 8) === ' not in ') return { val: s.slice(0, i).trim(), list: s.slice(i + 8).trim(), neg: true };
+      if (s.substr(i, 4) === ' in ')    return { val: s.slice(0, i).trim(), list: s.slice(i + 4).trim(), neg: false };
+    }
+  }
   return null;
 }
 
@@ -978,7 +1153,12 @@ class NeonHeaderCardV2 extends HTMLElement {
     }
     if (mode === 'subtitle' || mode === 'both') {
       const el = this.shadowRoot.querySelector('.nhv2-subtitle');
-      if (el) el.innerHTML = nhv2SanitizeSubtitle(nhv2ParseTemplate(this._hass, c.subtitle.text) || '');
+      if (el) {
+        const html = nhv2SanitizeSubtitle(nhv2ParseTemplate(this._hass, c.subtitle.text) || '');
+        // ne réécrire que si le HTML a changé → sinon innerHTML= détruirait le DOM
+        // et RELANCERAIT toutes les animations CSS à 0% (saccade des headers animés)
+        if (el.innerHTML !== html) el.innerHTML = html;
+      }
     }
   }
 
@@ -1150,6 +1330,88 @@ class NeonHeaderCardV2 extends HTMLElement {
           25% { transform:translate(-4px,0) translateZ(0); text-shadow:4px 0 rgba(var(--nhv2-cy),1),-4px 0 rgba(var(--nhv2-er),1); }
           50% { transform:translate(4px,0) translateZ(0);  text-shadow:-4px 0 rgba(var(--nhv2-bl),1),4px 0 rgba(var(--nhv2-er),1); }
           75% { transform:translate(-3px,0) translateZ(0); text-shadow:3px 0 rgba(var(--nhv2-bl),1),0 0 15px rgba(var(--nhv2-cy),0.8); }
+        }
+
+        /* ── Keyframes "réacteur" (headers monitoring type Pi) ── */
+        @keyframes nhv2-core-pulse {
+          0%,100% { transform:scale(1) translateZ(0); filter:brightness(1); }
+          50%     { transform:scale(1.04) translateZ(0); filter:brightness(1.25); }
+        }
+        /* glow qui respire SANS transform (pas de conflit géométrique avec les rotations) */
+        @keyframes nhv2-core-glow {
+          0%,100% { filter:brightness(0.96); }
+          50%     { filter:brightness(1.18); }
+        }
+        @keyframes nhv2-ring-spin {
+          from { transform:rotate(0deg) translateZ(0); }
+          to   { transform:rotate(360deg) translateZ(0); }
+        }
+        @keyframes nhv2-ring-spin-rev {
+          from { transform:rotate(360deg) translateZ(0); }
+          to   { transform:rotate(0deg) translateZ(0); }
+        }
+        @keyframes nhv2-data-flow {
+          from { transform:translateY(0) translateZ(0); }
+          to   { transform:translateY(-50%) translateZ(0); }
+        }
+        /* GPU pur : pulse via opacity seul (le glow box-shadow reste STATIQUE en inline) */
+        @keyframes nhv2-thermo-wave {
+          0%,100% { opacity:0.8; }
+          50%     { opacity:1; }
+        }
+        @keyframes nhv2-cell-charge {
+          0%,100% { opacity:0.75; }
+          50%     { opacity:1; }
+        }
+        /* GPU pur : la bande brillante (width:60%) traverse via transform */
+        @keyframes nhv2-shimmer {
+          from { transform:translateX(-180%) translateZ(0); }
+          to   { transform:translateX(280%) translateZ(0); }
+        }
+        /* ── Keyframes "flux de données" (headers type Pi-hole / filtre DNS) ── */
+        @keyframes nhv2-stream-x {
+          from { transform:translateX(-50%) translateZ(0); }
+          to   { transform:translateX(0) translateZ(0); }
+        }
+        @keyframes nhv2-stream-x-rev {
+          from { transform:translateX(0) translateZ(0); }
+          to   { transform:translateX(-50%) translateZ(0); }
+        }
+        /* impulsion qui parcourt une fibre — GPU pur (transform au lieu de left).
+           L'impulsion est posée à left:0 dans une piste overflow:hidden width:100%,
+           et on la translate de -110% (hors champ gauche) à +1100% (hors champ droit).
+           Les % de translateX se réfèrent à la largeur de l'élément (petit), d'où les
+           grandes valeurs pour couvrir toute la piste quelle que soit sa largeur. */
+        @keyframes nhv2-pulse-travel {
+          0%   { transform:translateX(-110%) translateZ(0); opacity:0; }
+          8%   { opacity:1; }
+          92%  { opacity:1; }
+          100% { transform:translateX(1100%) translateZ(0); opacity:0; }
+        }
+        @keyframes nhv2-pulse-travel-rev {
+          0%   { transform:translateX(1100%) translateZ(0); opacity:0; }
+          8%   { opacity:1; }
+          92%  { opacity:1; }
+          100% { transform:translateX(-110%) translateZ(0); opacity:0; }
+        }
+        @keyframes nhv2-fiber-glow {
+          0%,100% { opacity:0.5; }
+          50%     { opacity:0.85; }
+        }
+        @keyframes nhv2-filter-scan {
+          0%,100% { transform:translateY(-50%) translateZ(0); opacity:0; }
+          12%     { opacity:0.9; }
+          50%     { transform:translateY(50%) translateZ(0); opacity:0.9; }
+          88%     { opacity:0.9; }
+        }
+        /* GPU pur : pulse via opacity seul (le glow box-shadow reste STATIQUE en inline) */
+        @keyframes nhv2-filter-glow {
+          0%,100% { opacity:0.65; }
+          50%     { opacity:1; }
+        }
+        @keyframes nhv2-block-flash {
+          0%,100% { opacity:0.35; transform:scale(1) translateZ(0); }
+          50%     { opacity:1;    transform:scale(1.25) translateZ(0); }
         }
 
         .nhv2-wrap, .nhv2-wrap *, .nhv2-icon-wrap, .nhv2-text-wrap, .nhv2-title, .nhv2-subtitle {
@@ -1361,7 +1623,7 @@ console.info(
 );
 
 console.info(
-  '%c 🏠 neon-header-card-v2 v2.5 %c Neo Tokyo ',
+  '%c 🏠 neon-header-card-v2 v' + NHV2_VERSION + ' %c Neo Tokyo ',
   'background:#1E90FF;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#00D4FF;padding:2px 4px;border-radius:0 3px 3px 0;'
 );
