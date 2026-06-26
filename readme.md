@@ -92,7 +92,7 @@
 | Card | File | Version | Description |
 |------|------|:-------:|-------------|
 | 🏷️ Neon Header Card | `neon-header-card.js` | `1.4.2` | Stylish neon section header |
-| 🏷️ Neon Header Card v2 | `neon-header-card-v2.js` | `2.6` | Advanced header with a built-in Jinja-like template engine — build fully data-driven, animated HTML headers right in YAML. Supports `{% set %}`, `{% if/elif/else %}`, `and/or/not`, `in`, arithmetic, ternaries, filters, concatenation, + 20 reusable neon `@keyframes`. See the [demo](#-header-card-v2--template-engine) |
+| 🏷️ Neon Header Card v2 | `neon-header-card-v2.js` | `2.7` | Advanced header with a built-in Jinja-like template engine — build fully data-driven, animated HTML headers right in YAML. Supports `{% set %}`, `{% if/elif/else %}`, `and/or/not`, `in`, arithmetic, ternaries, filters, concatenation, + 20 reusable neon `@keyframes`, + inline SVG (sanitized) for charts/maps. See the [demo](#-header-card-v2--template-engine) |
 | 📋 Neon Entities Card | `neon-entities-card.js` | `1.8.0` | Multi-entity card (switch, sensor, cover, climate, number + dividers) — theme-agnostic colors, unified UI editor with per-entity icon preview |
 
 ### 🖥️ Network & NAS

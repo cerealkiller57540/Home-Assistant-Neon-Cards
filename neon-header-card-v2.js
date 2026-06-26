@@ -1,4 +1,4 @@
-/* ── neon-header-card-v2 v2.6 ── */
+/* ── neon-header-card-v2 v2.7 ── */
 /**
  * neon-header-card-v2
  *
@@ -99,7 +99,7 @@
  *       <div style="color:{{c}}; text-shadow:0 0 8px {{c}};">RAM {{ ram|round(0)|int }}%</div>
  */
 
-const NHV2_VERSION = '2.6';
+const NHV2_VERSION = '2.7';
 
 // ── Device detection — préfixé NHV2_ ────────────────────────────
 const NHV2_IS_IPAD = /iPad/.test(navigator.userAgent) ||
@@ -491,6 +491,17 @@ function nhv2ApplyFilters(val, filterStr) {
 // ── Subtitle HTML sanitizer ──────────────────────────────────────
 const NHV2_ALLOWED_TAGS = new Set(['BR','B','STRONG','I','EM','U','SMALL','MARK','CODE','SPAN','DIV','HA-ICON']);
 const NHV2_ALLOWED_ATTRS = new Set(['style','class']);
+// SVG : balises géométriques/présentation autorisées (pas de script/foreignObject/image/use)
+// tagName des éléments SVG est en minuscules (≠ HTML majuscules) → on teste les deux casses.
+const NHV2_ALLOWED_SVG_TAGS = new Set(['svg','g','path','polyline','polygon','line','circle','ellipse','rect','text','tspan','defs','lineargradient','radialgradient','stop','image','clippath']);
+const NHV2_ALLOWED_SVG_ATTRS = new Set([
+  'd','points','x','y','x1','y1','x2','y2','cx','cy','r','rx','ry','width','height',
+  'viewbox','preserveaspectratio','transform','fill','fill-opacity','stroke','stroke-width',
+  'stroke-opacity','stroke-linecap','stroke-linejoin','stroke-dasharray','stroke-dashoffset',
+  'opacity','font-size','font-family','text-anchor','offset','stop-color','stop-opacity',
+  'gradientunits','vector-effect','style','class','dominant-baseline','href','xlink:href','clip-path','id']);
+// href SVG : autoriser uniquement des chemins locaux /local/... ou /www/... (PAS javascript:/data:/http)
+const NHV2_SAFE_HREF_RE = /^\/(local|www|api)\//i;
 const NHV2_UNSAFE_STYLE_RE = /expression\s*\(|javascript\s*:|url\s*\(|@import|behavior\s*:|binding\s*:|moz-binding/i;
 
 function nhv2SanitizeStyle(styleStr) {
@@ -510,11 +521,30 @@ function nhv2SanitizeSubtitle(raw) {
   const nodes = [];
   while (walker.nextNode()) nodes.push(walker.currentNode);
   nodes.forEach(el => {
-    if (!NHV2_ALLOWED_TAGS.has(el.tagName)) { el.replaceWith(document.createTextNode(el.textContent||'')); return; }
+    const tnLower = el.tagName.toLowerCase();
+    const isSvg = NHV2_ALLOWED_SVG_TAGS.has(tnLower);
+    if (!NHV2_ALLOWED_TAGS.has(el.tagName) && !isSvg) { el.replaceWith(document.createTextNode(el.textContent||'')); return; }
     if (el.tagName === 'HA-ICON') {
       const icon = el.getAttribute('icon')||'';
       if (!icon.match(/^mdi:[a-zA-Z0-9_-]+$/)) { el.replaceWith(document.createTextNode('')); return; }
       [...el.attributes].forEach(a => { if (a.name !== 'icon') el.removeAttribute(a.name); });
+      return;
+    }
+    // SVG : liste blanche d'attributs géométriques/présentation (insensible à la casse)
+    if (isSvg) {
+      [...el.attributes].forEach(a => {
+        const an = a.name.toLowerCase();
+        if (an.startsWith('on')) { el.removeAttribute(a.name); return; }  // pas d'event handler
+        if (!NHV2_ALLOWED_SVG_ATTRS.has(an)) { el.removeAttribute(a.name); return; }
+        // href (image SVG) : seulement des chemins locaux sûrs (pas javascript:/data:/http externe)
+        if (an === 'href' || an === 'xlink:href') {
+          if (!NHV2_SAFE_HREF_RE.test(a.value.trim())) { el.removeAttribute(a.name); return; }
+        }
+        if (a.name === 'style') {
+          const safe = nhv2SanitizeStyle(a.value);
+          if (safe) el.setAttribute('style', safe); else el.removeAttribute('style');
+        }
+      });
       return;
     }
     [...el.attributes].forEach(a => {
@@ -1377,22 +1407,21 @@ class NeonHeaderCardV2 extends HTMLElement {
           from { transform:translateX(0) translateZ(0); }
           to   { transform:translateX(-50%) translateZ(0); }
         }
-        /* impulsion qui parcourt une fibre — GPU pur (transform au lieu de left).
-           L'impulsion est posée à left:0 dans une piste overflow:hidden width:100%,
-           et on la translate de -110% (hors champ gauche) à +1100% (hors champ droit).
-           Les % de translateX se réfèrent à la largeur de l'élément (petit), d'où les
-           grandes valeurs pour couvrir toute la piste quelle que soit sa largeur. */
+        /* impulsion qui parcourt TOUTE la fibre, d'un bord a l'autre.
+           On anime left (relatif a la LARGEUR DE LA PISTE) et non transform
+           (relatif a la largeur de l'IMPULSION, ~14-22px -> trajet trop court qui
+           s'arretait au milieu). De -10% (hors champ gauche) a 100% (sort a droite). */
         @keyframes nhv2-pulse-travel {
-          0%   { transform:translateX(-110%) translateZ(0); opacity:0; }
+          0%   { left:-10%; opacity:0; }
           8%   { opacity:1; }
           92%  { opacity:1; }
-          100% { transform:translateX(1100%) translateZ(0); opacity:0; }
+          100% { left:100%; opacity:0; }
         }
         @keyframes nhv2-pulse-travel-rev {
-          0%   { transform:translateX(1100%) translateZ(0); opacity:0; }
+          0%   { left:100%; opacity:0; }
           8%   { opacity:1; }
           92%  { opacity:1; }
-          100% { transform:translateX(-110%) translateZ(0); opacity:0; }
+          100% { left:-10%; opacity:0; }
         }
         @keyframes nhv2-fiber-glow {
           0%,100% { opacity:0.5; }
@@ -1413,6 +1442,28 @@ class NeonHeaderCardV2 extends HTMLElement {
           0%,100% { opacity:0.35; transform:scale(1) translateZ(0); }
           50%     { opacity:1;    transform:scale(1.25) translateZ(0); }
         }
+        @keyframes nhv2-pew-flow {
+          /* fait "couler" le dash le long du path (pew-pew map) sans déplacer le path */
+          from { stroke-dashoffset: 3080; }
+          to   { stroke-dashoffset: 0; }
+        }
+        @keyframes nhv2-blip-pulse {
+          /* pulse d'un blip SVG via opacity SEULEMENT (pas de scale -> le cercle ne se déplace pas) */
+          0%,100% { opacity: 0.4; }
+          50%     { opacity: 1; }
+        }
+
+        /* scrollbar néon pour les zones scrollables injectées dans le subtitle
+           (ex: Wall of Shame). Le sanitizer interdit <style> inline -> on la stylise ici. */
+        .nhv2-subtitle .shame-scroll::-webkit-scrollbar { width: 6px; }
+        .nhv2-subtitle .shame-scroll::-webkit-scrollbar-track {
+          background: rgba(0,0,0,0.25); border-radius: 3px;
+        }
+        .nhv2-subtitle .shame-scroll::-webkit-scrollbar-thumb {
+          background: linear-gradient(180deg, #FF2D6B, #B400FF);
+          border-radius: 3px; box-shadow: 0 0 5px #FF2D6B88;
+        }
+        .nhv2-subtitle .shame-scroll::-webkit-scrollbar-thumb:hover { background: #FF2D6B; }
 
         .nhv2-wrap, .nhv2-wrap *, .nhv2-icon-wrap, .nhv2-text-wrap, .nhv2-title, .nhv2-subtitle {
           box-sizing: border-box; margin: 0; padding: 0;
@@ -1446,16 +1497,47 @@ class NeonHeaderCardV2 extends HTMLElement {
         ` : ''}
 
         .nhv2-wrap {
+          ${(mode === 'both' && hasIcon && !iconTop && !iconRight) ? `
+          /* mode both : grid [icône][titre] sur ligne 1, subtitle ligne 2 PLEINE LARGEUR (découplé de l'icône) */
+          display: grid;
+          grid-template-columns: auto 1fr;
+          align-items: center;
+          column-gap: 10px;
+          ` : `
           display: flex;
           flex-direction: ${flexDir};
           align-items: ${alignV};
           justify-content: ${alignH};
           gap: ${iconTop ? '6px' : '10px'};
+          `}
           padding: ${sh.padding};
           ${mode === 'both' ? 'padding-bottom: 12px; margin-bottom: 0;' : ''}
           position: relative;
           overflow: visible;
         }
+        ${(mode === 'both' && hasIcon && !iconTop && !iconRight) ? `
+          .nhv2-wrap > .nhv2-icon-wrap { grid-column: 1; grid-row: 1; }
+          .nhv2-wrap > .nhv2-text-wrap { display: contents; }
+          .nhv2-text-wrap > .nhv2-title { grid-column: 2; grid-row: 1; align-self: center; }
+          /* subtitle : 2e ligne, pleine largeur, séparée du header par le DIVIDER exact des cards Entities */
+          .nhv2-text-wrap > .nhv2-subtitle {
+            grid-column: 1 / -1; grid-row: 2; width: 100%;
+            margin-top: 8px; padding-top: 10px; position: relative;
+          }
+          /* divider HA Entities : div 1px, background-color var(--entities-divider-color, var(--divider-color)) */
+          .nhv2-text-wrap > .nhv2-subtitle::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0;
+            height: 1px;
+            background-color: var(--entities-divider-color, var(--divider-color));
+          }
+          /* scanline confiné à la zone HEADER (ligne 1) uniquement, jamais sur le subtitle */
+          ${t.scanline ? `
+          .nhv2-wrap > .nhv2-scanlines {
+            grid-column: 1 / -1; grid-row: 1; inset: auto;
+            position: absolute; top: 0; left: 0; right: 0; bottom: auto;
+            height: 100%; pointer-events: none; z-index: 2;
+          }` : ''}
+        ` : ''}
 
         .nhv2-icon-wrap {
           display: ${hasIcon ? 'flex' : 'none'};
