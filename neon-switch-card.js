@@ -828,240 +828,315 @@ class NeonSwitchCard extends HTMLElement {
   }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
- *  EDITOR — render une seule fois, update valeurs sans rebuild
- * ═══════════════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════
+ *  EDITOR — template unifié (cf CARDS-EDITOR-TEMPLATE.md)
+ *  N'éditer QUE _schema() ; le reste est canonique et identique partout.
+ * ═══════════════════════════════════════════════════════════════════ */
+const NSW_FONTS = [
+  'Orbitron','Rajdhani','Share Tech Mono','Exo 2','Roboto','Montserrat',
+  'Oswald','Bebas Neue','Inter','Poppins','Space Grotesk','Syne',
+  'DM Sans','Playfair Display','Cinzel',
+];
+const NSW_MDI_SUGGESTIONS = [
+  'mdi:desktop-tower','mdi:desktop-classic','mdi:laptop','mdi:server','mdi:server-network',
+  'mdi:nas','mdi:router-network','mdi:router-network-wireless','mdi:router','mdi:wifi',
+  'mdi:television','mdi:printer','mdi:printer-wireless','mdi:camera','mdi:cctv',
+  'mdi:phone-voip','mdi:phone','mdi:speaker','mdi:gamepad-variant','mdi:raspberry-pi',
+  'mdi:home-automation','mdi:home-assistant','mdi:hub','mdi:network-strength-4',
+  'mdi:ethernet','mdi:ethernet-cable','mdi:switch','mdi:lan','mdi:lan-connect',
+  'mdi:solar-panel','mdi:solar-panel-large','mdi:battery-charging','mdi:car',
+  'mdi:car-electric','mdi:synology-nas','mdi:harddisk','mdi:database',
+];
 class NeonSwitchCardEditor extends HTMLElement {
+  constructor() { super(); this._config = {}; this._hass = null; this._rendered = false; }
 
+  // ── Cycle de vie (NE PAS toucher) ──────────────────────────────────
   setConfig(c) {
-    this._config = {
-      title:       'GS108T · ProSafe',
-      show_stats:  false,
-      card_mod_bg: true,
-      port_labels: [],
-      port_icons:  [],
-      ...(c || {}),
-    };
-    /* Render une seule fois — ensuite on patch les valeurs */
+    this._config = { ...(c || {}) };
     if (!this._rendered) { this._rendered = true; this._render(); }
     else this._syncValues();
   }
+  set hass(h) { this._hass = h; this._fillDatalists(); }   // JAMAIS de render ici
+  disconnectedCallback() { this._rendered = false; }
 
-  set hass(h) { this._hass = h; }
-
-  _fire() {
-    this.dispatchEvent(new CustomEvent('config-changed', {
-      detail: { config: this._config }, bubbles: true, composed: true,
-    }));
+  // ── Lecture / écriture config (clés imbriquées via ".") ────────────
+  _read(key) {
+    return key.includes('.')
+      ? key.split('.').reduce((o, p) => (o && o[p] !== undefined ? o[p] : undefined), this._config)
+      : this._config[key];
+  }
+  _set(key, value) {
+    const empty = (value === undefined || value === '' || value === null);
+    if (key.includes('.')) {
+      const parts = key.split('.');
+      let o = this._config;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!o[parts[i]] || typeof o[parts[i]] !== 'object') o[parts[i]] = {};
+        o = o[parts[i]];
+      }
+      const last = parts[parts.length - 1];
+      if (empty) delete o[last]; else o[last] = value;
+      const parent = parts.slice(0, -1).reduce((a, k) => a && a[k], this._config);
+      if (parent && typeof parent === 'object' && !Object.keys(parent).length) delete this._config[parts[0]];
+    } else if (empty) { delete this._config[key]; }
+    else { this._config[key] = value; }
+    this.dispatchEvent(new CustomEvent('config-changed',
+      { detail: { config: { ...this._config } }, bubbles: true, composed: true }));
   }
 
-  _set(key, val, isChecked) {
-    const parts = key.split('.');
-    if (parts.length === 2) {
-      const [obj, subkey] = parts;
-      if (!this._config[obj] || typeof this._config[obj] !== 'object') this._config[obj] = {};
-      if (isChecked !== undefined) { this._config[obj][subkey] = isChecked; }
-      else if (val === '' || val === null) { delete this._config[obj][subkey]; }
-      else { this._config[obj][subkey] = val; }
-    } else {
-      if (isChecked !== undefined) { this._config[key] = isChecked; }
-      else if (val === '' || val === null) { delete this._config[key]; }
-      else { this._config[key] = val; }
-    }
-    this._fire();
+  // Tableaux à index fixe (port_labels[i] / port_icons[i]) — clé "port_labels.3"
+  _setArr(arrKey, i, value) {
+    const arr = [...(this._config[arrKey] || Array(8).fill(''))];
+    arr[i] = value || '';
+    this._config[arrKey] = arr;
+    this.dispatchEvent(new CustomEvent('config-changed',
+      { detail: { config: { ...this._config } }, bubbles: true, composed: true }));
   }
 
-  _setLabel(i, val) {
-    const arr = [...(this._config.port_labels || Array(8).fill(''))];
-    arr[i] = val;
-    this._config.port_labels = arr;
-    this._fire();
-  }
-
-  _setIcon(i, val) {
-    const arr = [...(this._config.port_icons || Array(8).fill(''))];
-    arr[i] = val || '';
-    this._config.port_icons = arr;
-    this._fire();
-  }
-
-  /* Sync valeurs sans rebuild DOM */
+  // ── Sync in-place (guard focus + clés imbriquées) ──────────────────
   _syncValues() {
-    const c = this._config;
-    const hdr = c.header || {};
-    this.querySelectorAll('[data-key^="header."]').forEach(inp => {
-      if (document.activeElement === inp) return;
-      const sub = inp.dataset.key.split('.')[1];
-      inp.value = hdr[sub] || '';
-    });
-
-    const labels = c.port_labels || [];
-    this.querySelectorAll('.ep-label').forEach(inp => {
-      if (document.activeElement !== inp) inp.value = labels[+inp.dataset.idx] || '';
-    });
-    const icons = c.port_icons || [];
-    this.querySelectorAll('.ep-icon').forEach(inp => {
-      if (document.activeElement !== inp) {
-        inp.value = icons[+inp.dataset.idx] || '';
-        this._updateIconPreview(inp);
+    const active = this.querySelector(':focus') || document.activeElement;
+    this.querySelectorAll('[data-key]').forEach(el => {
+      if (el === active) return;
+      const v = this._read(el.dataset.key);
+      if (el.type === 'checkbox') el.checked = el.dataset.defaultOn ? (v !== false) : !!v;
+      else {
+        el.value = (v == null ? '' : v);
+        if (el._pick) el._pick.value = this._toHex(el.value) || (el._cssDefault ? this._resolveColor(el._cssDefault) : null) || '#6200EA';
       }
     });
+    const labels = this._config.port_labels || [];
+    const icons  = this._config.port_icons  || [];
+    this.querySelectorAll('[data-arr]').forEach(el => {
+      if (el === active) return;
+      const i = +el.dataset.idx;
+      el.value = (el.dataset.arr === 'port_labels' ? labels[i] : icons[i]) || '';
+    });
+    this._bindIconPreviews(true);
   }
 
-  _toggle(label, key) {
-    const on = !!this._config[key];
-    return `<div class="field tog-row">
-      <label>${label}</label>
-      <label style="position:relative;display:inline-block;width:42px;height:24px;flex-shrink:0;">
-        <input type="checkbox" data-key="${key}" ${on ? 'checked' : ''}
-          style="opacity:0;width:0;height:0;position:absolute;"/>
-        <span style="position:absolute;inset:0;border-radius:99px;cursor:pointer;transition:background .2s;
-          background:${on ? CP_ACCENT : 'rgba(255,255,255,0.12)'};">
-          <span style="position:absolute;top:3px;border-radius:50%;width:18px;height:18px;transition:left .2s;
-            left:${on ? '21px' : '3px'};background:${on ? '#1a1a1a' : 'rgba(255,255,255,0.6)'};">
-          </span>
-        </span>
-      </label>
-    </div>`;
+  // ── Helpers de champ (signatures FIXES — ne pas réinventer) ────────
+  _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d); return d; }
+  _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; this.appendChild(d); return d; }
+
+  _text(key, label, ph = '') {
+    const row = this._row(label);
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.placeholder = ph; inp.dataset.key = key;
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    row.wrap.appendChild(inp); return inp;
   }
 
-  _render() {
-    const c      = this._config || {};
-    const labels = c.port_labels || Array(8).fill('');
-    const icons  = c.port_icons  || Array(8).fill('');
-
-    let portsHTML = '';
-    for (let i = 0; i < 8; i++) {
-      portsHTML += `
-        <div class="field">
-          <label>Port ${i + 1}</label>
-          <div class="port-row">
-            <div class="icon-preview" data-idx="${i}"></div>
-            <input type="text" class="ep ep-icon" data-idx="${i}"
-              value="${icons[i] || ''}" placeholder="mdi:desktop-tower" list="nsw-mdi-list"/>
-            <input type="text" class="ep ep-label" data-idx="${i}"
-              value="${labels[i] || ''}" placeholder="label"/>
-          </div>
-        </div>`;
-    }
-    const MDI_SUGGESTIONS = [
-      'mdi:desktop-tower','mdi:desktop-classic','mdi:laptop','mdi:server','mdi:server-network',
-      'mdi:nas','mdi:router-network','mdi:router-network-wireless','mdi:router','mdi:wifi',
-      'mdi:television','mdi:printer','mdi:printer-wireless','mdi:camera','mdi:cctv',
-      'mdi:phone-voip','mdi:phone','mdi:speaker','mdi:gamepad-variant','mdi:raspberry-pi',
-      'mdi:home-automation','mdi:home-assistant','mdi:hub','mdi:network-strength-4',
-      'mdi:ethernet','mdi:ethernet-cable','mdi:switch','mdi:lan','mdi:lan-connect',
-      'mdi:solar-panel','mdi:solar-panel-large','mdi:battery-charging','mdi:car',
-      'mdi:car-electric','mdi:synology-nas','mdi:harddisk','mdi:database',
-    ];
-
-    this.innerHTML = `
-      <style>
-        *{box-sizing:border-box;font-family:-apple-system,sans-serif}
-        .grid{display:flex;flex-direction:column;gap:10px;padding:14px 0}
-        .group{border:1px solid var(--divider-color,#333);border-radius:10px;padding:12px}
-        .group-title{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--secondary-text-color);margin-bottom:10px}
-        .field{display:flex;flex-direction:column;gap:3px;margin-bottom:8px}
-        .field:last-child{margin-bottom:0}
-        label{font-size:12px;color:var(--secondary-text-color)}
-        input[type=text]{padding:8px 10px;border:1px solid var(--divider-color,#333);border-radius:7px;
-          background:var(--card-background-color);color:var(--primary-text-color);font-size:13px;width:100%}
-        input.ep{border-color:var(--primary-color,#777)}
-        input.ep:focus{outline:none;box-shadow:0 0 0 1px var(--primary-color)}
-        .tog-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
-        .tog-row label{margin:0;font-size:12px;color:var(--secondary-text-color)}
-        .port-row{display:flex;gap:6px;align-items:center}
-        .port-row .ep-icon{width:140px;flex-shrink:0}
-        .port-row .ep-label{flex:1;min-width:0}
-        .icon-preview{width:32px;height:32px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
-          border:1px solid var(--divider-color,#444);border-radius:6px;color:var(--primary-text-color)}
-      </style>
-      <div class="grid">
-        <div class="group">
-          <div class="group-title">Général</div>
-          <div class="field">
-            <label>Titre</label>
-            <input type="text" class="ep" data-key="header.title" value="${(c.header && c.header.title) || ''}" placeholder="GS108T · ProSafe"/>
-          </div>
-          <div class="field">
-            <label>Icône (mdi) — <a href="https://pictogrammers.com/library/mdi/" target="_blank" rel="noopener" style="color:var(--primary-color);font-size:9px;letter-spacing:.05em;text-transform:none">parcourir ↗</a></label>
-            <div class="port-row">
-              <input type="text" class="ep" id="hdr-icon-inp" data-key="header.icon" value="${(c.header && c.header.icon) || ''}" placeholder="mdi:switch" list="nsw-mdi-list" style="flex:1"/>
-              <div class="icon-preview" id="hdr-icon-preview"></div>
-            </div>
-          </div>
-          <div class="field">
-            <label>Couleur titre</label>
-            <input type="text" class="ep" data-key="header.color" value="${(c.header && c.header.color) || ''}" placeholder="défaut thème — ex var(--primary-color)"/>
-          </div>
-          <div class="field">
-            <label>Taille titre</label>
-            <input type="text" class="ep" data-key="header.title_size" value="${(c.header && c.header.title_size) || ''}" placeholder="13px"/>
-          </div>
-          <div class="field">
-            <label>Text-shadow</label>
-            <input type="text" class="ep" data-key="header.title_shadow" value="${(c.header && c.header.title_shadow) || ''}" placeholder="0 0 6px ..."/>
-          </div>
-          ${this._toggle('Afficher les stats globales', 'show_stats')}
-          ${this._toggle('Hériter du fond card-mod', 'card_mod_bg')}
-        </div>
-        <div class="group">
-          <div class="group-title">Ports — <a href="https://pictogrammers.com/library/mdi/" target="_blank" rel="noopener" style="color:var(--primary-color);font-size:9px;letter-spacing:.05em;text-transform:none">parcourir MDI ↗</a></div>
-          ${portsHTML}
-        </div>
-      </div>
-      <datalist id="nsw-mdi-list">${MDI_SUGGESTIONS.map(v => `<option value="${v}">`).join('')}</datalist>`;
-
-    this.querySelectorAll('input[data-key]').forEach(inp => {
-      inp.addEventListener(inp.type === 'checkbox' ? 'change' : 'input', () => {
-        if (inp.type === 'checkbox') this._set(inp.dataset.key, null, inp.checked);
-        else this._set(inp.dataset.key, inp.value);
-      });
-    });
-    // Preview live de l'icône header (createElement ha-icon, cf CARDS-METHOD.md)
-    const hdrIconInp = this.querySelector('#hdr-icon-inp');
-    if (hdrIconInp) {
-      const upd = () => this._updateHdrIconPreview(hdrIconInp.value);
-      hdrIconInp.addEventListener('input', upd);
-      upd();
-    }
-    this.querySelectorAll('.ep-label').forEach(inp => {
-      inp.addEventListener('input', () => this._setLabel(+inp.dataset.idx, inp.value));
-    });
-    this.querySelectorAll('.ep-icon').forEach(inp => {
-      inp.addEventListener('focus', () => { inp._saved = inp.value; inp.value = ''; });
-      inp.addEventListener('blur',  () => { if (!inp.value) { inp.value = inp._saved || ''; this._updateIconPreview(inp); } });
-      inp.addEventListener('input', () => {
-        this._setIcon(+inp.dataset.idx, inp.value);
-        this._updateIconPreview(inp);
-      });
-      this._updateIconPreview(inp);
-    });
+  _toggle(key, label, defaultOn = false) {
+    const row = this._row(label);
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.key = key;
+    if (defaultOn) cb.dataset.defaultOn = '1';
+    const v = this._read(key);
+    cb.checked = defaultOn ? (v !== false) : !!v;
+    cb.style.cssText = 'width:38px;height:20px;cursor:pointer;accent-color:var(--primary-color);flex:none;';
+    cb.addEventListener('change', () => this._set(key, cb.checked));
+    row.wrap.appendChild(cb); return cb;
   }
 
-  _updateIconPreview(inp) {
-    const preview = this.querySelector(`.icon-preview[data-idx="${inp.dataset.idx}"]`);
-    if (!preview) return;
+  _color(key, label, cssDefault = null, ph = 'ex: #FF3366 / rgb(var(--rgb-lavande)) / var(--primary-color)') {
+    const row = this._row(label);
+    const box = document.createElement('div'); box.className = 'color-row';
+    const txt = document.createElement('input'); txt.type = 'text'; txt.placeholder = ph; txt.dataset.key = key;
+    txt.value = this._read(key) ?? '';
+    const pick = document.createElement('input'); pick.type = 'color';
+    txt._pick = pick; txt._cssDefault = cssDefault;
+    const refresh = () => { pick.value = this._toHex(txt.value) || (cssDefault ? this._resolveColor(cssDefault) : null) || '#6200EA'; };
+    txt.addEventListener('input', () => { this._set(key, txt.value); refresh(); });
+    pick.addEventListener('input', () => { txt.value = pick.value; this._set(key, pick.value); });
+    box.appendChild(txt); box.appendChild(pick); row.wrap.appendChild(box); refresh(); return txt;
+  }
+
+  _resolveColor(css) {
+    try {
+      const probe = document.createElement('span');
+      probe.style.cssText = `color:${css};position:absolute;left:-9999px;top:-9999px`;
+      this.appendChild(probe);
+      const rgb = getComputedStyle(probe).color; probe.remove();
+      const m = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
+      return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+    } catch { return null; }
+  }
+
+  _icon(key, label) {
+    const row = this._row(`${label} — <a href="https://pictogrammers.com/library/mdi/" target="_blank" rel="noopener" class="mdi-link">parcourir ↗</a>`, true);
+    const box = document.createElement('div'); box.className = 'icon-row';
+    const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = 'mdi:home'; inp.dataset.key = key;
+    inp.setAttribute('list', 'nsw-mdi-list');
+    inp.value = this._read(key) ?? '';
+    const prev = document.createElement('div'); prev.className = 'icon-preview'; prev.dataset.preview = key;
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    box.appendChild(inp); box.appendChild(prev); row.wrap.appendChild(box); return inp;
+  }
+
+  // Icône de port : même esprit que _icon mais indexée dans un tableau (pas de data-key simple).
+  _portIcon(i) {
+    const row = this._row(`Port ${i + 1}`);
+    const box = document.createElement('div'); box.className = 'port-row';
+    const prev = document.createElement('div'); prev.className = 'icon-preview'; prev.dataset.portPreview = i;
+    const inpIcon = document.createElement('input'); inpIcon.type = 'text'; inpIcon.className = 'ep-icon';
+    inpIcon.placeholder = 'mdi:desktop-tower'; inpIcon.setAttribute('list', 'nsw-mdi-list');
+    inpIcon.dataset.arr = 'port_icons'; inpIcon.dataset.idx = i;
+    inpIcon.value = (this._config.port_icons || [])[i] || '';
+    const inpLabel = document.createElement('input'); inpLabel.type = 'text'; inpLabel.className = 'ep-label';
+    inpLabel.placeholder = 'label'; inpLabel.dataset.arr = 'port_labels'; inpLabel.dataset.idx = i;
+    inpLabel.value = (this._config.port_labels || [])[i] || '';
+    inpIcon.addEventListener('input', () => { this._setArr('port_icons', i, inpIcon.value); this._updatePortIconPreview(i); });
+    inpLabel.addEventListener('input', () => this._setArr('port_labels', i, inpLabel.value));
+    box.appendChild(prev); box.appendChild(inpIcon); box.appendChild(inpLabel); row.wrap.appendChild(box);
+  }
+
+  _updatePortIconPreview(i) {
+    const preview = this.querySelector(`.icon-preview[data-port-preview="${i}"]`);
+    const inp = this.querySelector(`input[data-arr="port_icons"][data-idx="${i}"]`);
+    if (!preview || !inp) return;
     const val = inp.value.trim();
     preview.innerHTML = '';
-    if (val.match(/^mdi:[a-zA-Z0-9_-]+$/)) {
+    if (/^mdi:[a-zA-Z0-9_-]+$/.test(val)) {
       const ico = document.createElement('ha-icon');
-      ico.setAttribute('icon', val);
-      ico.style.cssText = '--mdc-icon-size:20px';
+      ico.setAttribute('icon', val); ico.style.cssText = '--mdc-icon-size:20px';
       preview.appendChild(ico);
     }
   }
 
-  _updateHdrIconPreview(val) {
-    const preview = this.querySelector('#hdr-icon-preview');
-    if (!preview) return;
-    preview.innerHTML = '';
-    if ((val || '').trim().match(/^mdi:[a-zA-Z0-9_-]+$/)) {
-      const ico = document.createElement('ha-icon');
-      ico.setAttribute('icon', val.trim());
-      ico.style.cssText = '--mdc-icon-size:20px';
-      preview.appendChild(ico);
+  _entity(key, label, prefix = '') {
+    const row = this._row(label);
+    const inp = document.createElement('input'); inp.type = 'text'; inp.autocomplete = 'off';
+    inp.placeholder = (prefix || 'domain') + '.…'; inp.dataset.key = key; inp.dataset.prefix = prefix;
+    inp.setAttribute('list', `nsw-ent-${(prefix || 'all').replace(/[^a-z]/g, '')}`);
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value.trim()));
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  _select(key, label, options, emptyLabel = null) {
+    const w = this._row(label).wrap;
+    const sel = document.createElement('select'); sel.dataset.key = key;
+    if (emptyLabel !== null) { const o = document.createElement('option'); o.value = ''; o.textContent = emptyLabel; sel.appendChild(o); }
+    options.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = (typeof opt === 'object') ? opt.value : opt;
+      o.textContent = (typeof opt === 'object') ? opt.label : opt;
+      sel.appendChild(o);
+    });
+    sel.value = this._read(key) ?? '';
+    sel.addEventListener('change', () => this._set(key, sel.value));
+    w.appendChild(sel); return sel;
+  }
+
+  // ── Mécanique commune (NE PAS toucher) ─────────────────────────────
+  _row(labelHtml, isHtml = false) {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('label');
+    if (isHtml) lbl.innerHTML = labelHtml; else lbl.textContent = labelHtml;
+    const wrap = document.createElement('div'); wrap.className = 'field-wrap';
+    row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
+    return { row, wrap };
+  }
+
+  _toHex(c) {
+    if (!c) return null;
+    if (/^#[0-9a-f]{6}$/i.test(c)) return c;
+    const m = c.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/i);
+    return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+  }
+
+  _bindIconPreviews(resyncOnly = false) {
+    this.querySelectorAll('.icon-preview[data-preview]').forEach(prev => {
+      const inp = this.querySelector(`input[data-key="${prev.dataset.preview}"]`);
+      const upd = () => {
+        const val = (inp && inp.value || '').trim();
+        prev.innerHTML = '';
+        if (/^mdi:[a-zA-Z0-9_-]+$/.test(val)) {
+          const ico = document.createElement('ha-icon');
+          ico.setAttribute('icon', val); ico.style.cssText = '--mdc-icon-size:20px';
+          prev.appendChild(ico);
+        }
+      };
+      if (!resyncOnly && inp && !inp._previewBound) { inp.addEventListener('input', upd); inp._previewBound = true; }
+      upd();
+    });
+    for (let i = 0; i < 8; i++) this._updatePortIconPreview(i);
+  }
+
+  _fillDatalists() {
+    if (!this._hass) return;
+    this.querySelectorAll('input[data-prefix]').forEach(inp => {
+      const id = inp.getAttribute('list'); if (!id) return;
+      let dl = this.querySelector('#' + id);
+      if (!dl) { dl = document.createElement('datalist'); dl.id = id; this.appendChild(dl); }
+      const ids = Object.keys(this._hass.states).filter(e => e.startsWith(inp.dataset.prefix || '')).sort();
+      if (dl.childElementCount === ids.length) return;
+      dl.textContent = '';
+      const frag = document.createDocumentFragment();
+      ids.forEach(id2 => { const o = document.createElement('option'); o.value = id2;
+        const fn = this._hass.states[id2].attributes?.friendly_name; if (fn && fn !== id2) o.label = fn; frag.appendChild(o); });
+      dl.appendChild(frag);
+    });
+    if (!this.querySelector('#nsw-mdi-list')) {
+      const dl = document.createElement('datalist'); dl.id = 'nsw-mdi-list';
+      dl.innerHTML = NSW_MDI_SUGGESTIONS.map(v => `<option value="${v}">`).join('');
+      this.appendChild(dl);
     }
+  }
+
+  // ── CSS commun (identique partout, + spécifique ports) ─────────────
+  _css() {
+    return `
+      :host { display:block; padding:14px; font-family:var(--primary-font-family,Roboto,sans-serif); }
+      .sec { font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--divider-color); }
+      .sec:first-child { margin-top:0; }
+      .row { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
+      .row label { flex:0 0 160px;font-size:12px;color:var(--secondary-text-color); }
+      .row label .mdi-link { color:var(--primary-color);font-size:9px;text-transform:none;letter-spacing:0; }
+      .field-wrap { flex:1;min-width:0;display:flex; }
+      input[type=text],input[type=number],select { flex:1;width:100%;padding:4px 8px;border:1px solid var(--divider-color);border-radius:4px;background:var(--card-background-color);color:var(--primary-text-color);font-size:12px;outline:none;box-sizing:border-box; }
+      select { cursor:pointer; }
+      input:focus,select:focus { box-shadow:0 0 0 1px var(--primary-color); }
+      .color-row { display:flex;gap:8px;flex:1; }
+      .color-row input[type=text] { flex:1; }
+      .color-row input[type=color] { width:36px;height:28px;flex:none;padding:0;border:none;background:none;border-radius:4px;cursor:pointer; }
+      .icon-row { display:flex;gap:8px;flex:1;align-items:center; }
+      .icon-row input { flex:1; }
+      .icon-preview { width:30px;height:28px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--divider-color);border-radius:4px;color:var(--primary-text-color); }
+      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:-2px 0 6px 168px; }
+      .port-row { display:flex;gap:6px;align-items:center;flex:1; }
+      .port-row .ep-icon { width:140px;flex:none; }
+      .port-row .ep-label { flex:1;min-width:0;padding:4px 8px;border:1px solid var(--divider-color);border-radius:4px;background:var(--card-background-color);color:var(--primary-text-color);font-size:12px;box-sizing:border-box; }
+      .port-row .ep-icon { padding:4px 8px;border:1px solid var(--divider-color);border-radius:4px;background:var(--card-background-color);color:var(--primary-text-color);font-size:12px;box-sizing:border-box; }
+    `;
+  }
+
+  // ── Render : on vide, on pose le style, on déroule le schéma ────────
+  _render() {
+    this.innerHTML = '';
+    const st = document.createElement('style'); st.textContent = this._css(); this.appendChild(st);
+    this._schema();
+    this._fillDatalists();
+    this._bindIconPreviews();
+  }
+
+  // ╔════════════════════════════════════════════════════════════════╗
+  // ║  SCHÉMA — LA SEULE PARTIE À ÉCRIRE PAR CARD                     ║
+  // ╚════════════════════════════════════════════════════════════════╝
+  _schema() {
+    this._section('Général');
+    this._text('header.title', 'Titre', 'GS108T · ProSafe');
+    this._icon('header.icon', 'Icône (mdi)');
+    this._color('header.color', 'Couleur titre', 'var(--primary-color)');
+    this._text('header.title_size', 'Taille titre', '13px');
+    this._select('header.font', 'Police', NSW_FONTS, '— thème HA —');
+    this._text('header.title_shadow', 'Text-shadow', '0 0 6px ...');
+    this._toggle('show_stats', 'Afficher les stats globales', false);
+    this._toggle('card_mod_bg', 'Hériter du fond card-mod', true);
+
+    this._section('Ports');
+    for (let i = 0; i < 8; i++) this._portIcon(i);
   }
 }
 

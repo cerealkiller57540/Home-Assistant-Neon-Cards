@@ -613,383 +613,306 @@ function T() { return LABELS; }
 
 // ═══════════════════════════════════════════════════════════════
 //  SECTION 8 — Visual Editor (config UI)
+//  Template unifié (cf CARDS-EDITOR-TEMPLATE.md).
+//  N'éditer QUE _schema() ; le reste est canonique et identique partout.
 // ═══════════════════════════════════════════════════════════════
-// Rendered inside HA's dashboard editor panel.  Emits
-// 'config-changed' events whenever the user tweaks a field.
 
 class NeonSolarCardEditor extends HTMLElement {
+  constructor() { super(); this._config = {}; this._hass = null; this._rendered = false; }
 
-  /* ── Lifecycle ───────────────────────────────────────── */
+  // ── Cycle de vie (NE PAS toucher) ──────────────────────────────────
+  setConfig(c) {
+    this._config = { ...(c || {}) };
+    if (!this._rendered) { this._rendered = true; this._render(); }
+    else this._syncValues();
+  }
+  set hass(h) { this._hass = h; this._fillDatalists(); }   // JAMAIS de render ici
+  disconnectedCallback() { this._rendered = false; }
 
-  setConfig(cfg) {
-    this._cfg = cfg;
-    if (!this._built && this._hass) { this._built = true; this._build(); }
+  // ── Lecture / écriture config (clés imbriquées via ".") ────────────
+  _read(key) {
+    return key.includes('.')
+      ? key.split('.').reduce((o, p) => (o && o[p] !== undefined ? o[p] : undefined), this._config)
+      : this._config[key];
+  }
+  _set(key, value) {
+    const empty = (value === undefined || value === '' || value === null);
+    if (key.includes('.')) {
+      const parts = key.split('.');
+      let o = this._config;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!o[parts[i]] || typeof o[parts[i]] !== 'object') o[parts[i]] = {};
+        o = o[parts[i]];
+      }
+      const last = parts[parts.length - 1];
+      if (empty) delete o[last]; else o[last] = value;
+      const parent = parts.slice(0, -1).reduce((a, k) => a && a[k], this._config);
+      if (parent && typeof parent === 'object' && !Object.keys(parent).length) delete this._config[parts[0]];
+    } else if (empty) { delete this._config[key]; }
+    else { this._config[key] = value; }
+    this.dispatchEvent(new CustomEvent('config-changed',
+      { detail: { config: { ...this._config } }, bubbles: true, composed: true }));
   }
 
-  set hass(h) {
-    this._hass = h;
-    if (!this._built && this._cfg) { this._built = true; this._build(); }
+  // ── Sync in-place (guard focus + clés imbriquées) ──────────────────
+  _syncValues() {
+    const active = this.querySelector(':focus') || document.activeElement;
+    this.querySelectorAll('[data-key]').forEach(el => {
+      if (el === active) return;
+      const v = this._read(el.dataset.key);
+      if (el.type === 'checkbox') el.checked = el.dataset.defaultOn ? (v !== false) : !!v;
+      else {
+        el.value = (v == null ? '' : v);
+        if (el._pick) el._pick.value = this._toHex(el.value) || (el._cssDefault ? this._resolveColor(el._cssDefault) : null) || '#6200EA';
+      }
+    });
+    this._bindIconPreviews(true);
   }
 
-  /* ── Entity list helpers ─────────────────────────────── */
+  // ── Helpers de champ (signatures FIXES — ne pas réinventer) ────────
+  _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d); return d; }
+  _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; this.appendChild(d); return d; }
 
-  /** Return all sensor.* and input_number.* entity IDs, sorted. */
-  _sensors() {
-    return !this._hass
-      ? []
-      : Object.keys(this._hass.states)
-          .filter(e => e.startsWith('sensor.') || e.startsWith('input_number.'))
-          .sort();
+  _text(key, label, ph = '') {
+    const row = this._row(label);
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.placeholder = ph; inp.dataset.key = key;
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    row.wrap.appendChild(inp); return inp;
   }
 
-  /** Return all weather.* entity IDs, sorted. */
-  _weathers() {
-    return !this._hass
-      ? []
-      : Object.keys(this._hass.states)
-          .filter(e => e.startsWith('weather.'))
-          .sort();
+  _number(key, label, { min, max, step = 1, ph = '' } = {}) {
+    const row = this._row(label);
+    const inp = document.createElement('input');
+    inp.type = 'number'; if (min != null) inp.min = min; if (max != null) inp.max = max;
+    inp.step = step; inp.placeholder = ph; inp.dataset.key = key;
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => { const n = parseFloat(inp.value); this._set(key, isNaN(n) ? undefined : n); });
+    row.wrap.appendChild(inp); return inp;
   }
 
-  /* ── Field widget builders ───────────────────────────── */
-
-  /** Entity input with autocomplete datalist. */
-  _eInput(label, key, list, hint = '') {
-    const v  = this._cfg[key] || '';
-    const id = `dl-${key.replace(/\W/g, '')}`;
-    return `<div class="f"><label>${label}</label>
-      <input type="text" data-key="${key}" data-e="1" value="${v}"
-        list="${id}" placeholder="sensor.example" autocomplete="off">
-      <datalist id="${id}">${list.map(e => `<option value="${e}">`).join('')}</datalist>
-      ${hint ? `<p class="h">${hint}</p>` : ''}</div>`;
+  _toggle(key, label, defaultOn = false) {
+    const row = this._row(label);
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.key = key;
+    if (defaultOn) cb.dataset.defaultOn = '1';
+    const v = this._read(key);
+    cb.checked = defaultOn ? (v !== false) : !!v;
+    cb.style.cssText = 'width:38px;height:20px;cursor:pointer;accent-color:var(--primary-color);flex:none;';
+    cb.addEventListener('change', () => this._set(key, cb.checked));
+    row.wrap.appendChild(cb); return cb;
   }
 
-  /** Single-line textarea (auto-height). */
-  _tArea(label, key, ph = '') {
-    const v = this._cfg[key] ?? '';
-    return `<div class="f"><label>${label}</label>
-      <textarea data-key="${key}" rows="1" class="ta"
-        placeholder="${ph}">${v}</textarea></div>`;
+  _color(key, label, cssDefault = null, ph = 'ex: #FF3366 / rgb(var(--rgb-lavande)) / var(--primary-color)') {
+    const row = this._row(label);
+    const box = document.createElement('div'); box.className = 'color-row';
+    const txt = document.createElement('input'); txt.type = 'text'; txt.placeholder = ph; txt.dataset.key = key;
+    txt.value = this._read(key) ?? '';
+    const pick = document.createElement('input'); pick.type = 'color';
+    txt._pick = pick; txt._cssDefault = cssDefault;
+    const refresh = () => { pick.value = this._toHex(txt.value) || (cssDefault ? this._resolveColor(cssDefault) : null) || '#6200EA'; };
+    txt.addEventListener('input', () => { this._set(key, txt.value); refresh(); });
+    pick.addEventListener('input', () => { txt.value = pick.value; this._set(key, pick.value); });
+    box.appendChild(txt); box.appendChild(pick); row.wrap.appendChild(box); refresh(); return txt;
   }
 
-  /** Text input with autocomplete datalist. */
-  _dInput(label, key, list, ph = '') {
-    const v = this._cfg[key] ?? '';
-    const id = `dl-${key.replace(/\W/g, '')}`;
-    return `<div class="f"><label>${label}</label>
-      <input type="text" data-key="${key}" value="${v}" list="${id}"
-        placeholder="${ph}" autocomplete="off">
-      <datalist id="${id}">${list.map(e => `<option value="${e}">`).join('')}</datalist>
-    </div>`;
+  _resolveColor(css) {
+    try {
+      const probe = document.createElement('span');
+      probe.style.cssText = `color:${css};position:absolute;left:-9999px;top:-9999px`;
+      this.appendChild(probe);
+      const rgb = getComputedStyle(probe).color; probe.remove();
+      const m = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
+      return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+    } catch { return null; }
   }
 
-  /** Numeric input with min / max / step. */
-  _num(label, key, min, max, step = 1) {
-    const v = this._cfg[key] ?? '';
-    return `<div class="f"><label>${label}</label>
-      <input type="number" data-key="${key}" value="${v}"
-        min="${min}" max="${max}" step="${step}"></div>`;
+  _icon(key, label) {
+    const row = this._row(`${label} — <a href="https://pictogrammers.com/library/mdi/" target="_blank" rel="noopener" class="mdi-link">parcourir ↗</a>`, true);
+    const box = document.createElement('div'); box.className = 'icon-row';
+    const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = 'mdi:home'; inp.dataset.key = key;
+    inp.value = this._read(key) ?? '';
+    const prev = document.createElement('div'); prev.className = 'icon-preview'; prev.dataset.preview = key;
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    box.appendChild(inp); box.appendChild(prev); row.wrap.appendChild(box); return inp;
   }
 
-  /** Toggle switch (checkbox). */
-  _toggle(label, key) {
-    const v = !!this._cfg[key];
-    return `<div class="f tog"><label>${label}</label>
-      <label class="sw"><input type="checkbox" data-key="${key}"
-        ${v ? 'checked' : ''}><span class="sl"></span></label></div>`;
+  _entity(key, label, prefix = '') {
+    const row = this._row(label);
+    const inp = document.createElement('input'); inp.type = 'text'; inp.autocomplete = 'off';
+    inp.placeholder = (prefix || 'domain') + '.…'; inp.dataset.key = key; inp.dataset.prefix = prefix;
+    inp.setAttribute('list', `nsc-ent-${(prefix || 'all').replace(/[^a-z]/g, '')}`);
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value.trim()));
+    row.wrap.appendChild(inp); return inp;
   }
 
-  /** Colour picker with hex-text input + reset button.
-   * CSS variables (e.g. var(--primary-color)) are supported in the text field;
-   * the colour swatch is dimmed but the value is preserved and applied as-is.
-   */
-  _color(label, key, def) {
-    const v = this._cfg[key] || '';
-    const isCssVar = v.startsWith('var(');
-    return `<div class="f"><label>${label}</label>
-      <div class="cr">
-        <input type="color" data-key="${key}" value="${isCssVar ? def : (v || def)}"
-          ${(!v || isCssVar) ? 'style="opacity:.4"' : ''}>
-        <input type="text" data-key="${key}" value="${v}"
-          placeholder="${def} or var(--primary-color)" class="ct">
-        <span class="rs" data-reset="${key}">↺</span>
-      </div></div>`;
+  _select(key, label, options, emptyLabel = null) {
+    const w = this._row(label).wrap;
+    const sel = document.createElement('select'); sel.dataset.key = key;
+    if (emptyLabel !== null) { const o = document.createElement('option'); o.value = ''; o.textContent = emptyLabel; sel.appendChild(o); }
+    options.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = (typeof opt === 'object') ? opt.value : opt;
+      o.textContent = (typeof opt === 'object') ? opt.label : opt;
+      sel.appendChild(o);
+    });
+    sel.value = this._read(key) ?? '';
+    sel.addEventListener('change', () => this._set(key, sel.value));
+    w.appendChild(sel); return sel;
   }
 
-  /** Drop-down select. */
-  _select(label, key, opts) {
-    const v = this._cfg[key] ?? opts[0][0];
-    const options = opts.map(([val, lbl]) =>
-      `<option value="${val}" ${v === val ? 'selected' : ''}>${lbl}</option>`
-    ).join('');
-    return `<div class="f"><label>${label}</label>
-      <select data-key="${key}" data-sel="1">${options}</select></div>`;
+  // ── Mécanique commune (NE PAS toucher) ─────────────────────────────
+  _row(labelHtml, isHtml = false) {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('label');
+    if (isHtml) lbl.innerHTML = labelHtml; else lbl.textContent = labelHtml;
+    const wrap = document.createElement('div'); wrap.className = 'field-wrap';
+    row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
+    return { row, wrap };
   }
 
-  /* ── Build the full editor DOM ───────────────────────── */
+  _toHex(c) {
+    if (!c) return null;
+    if (/^#[0-9a-f]{6}$/i.test(c)) return c;
+    const m = c.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/i);
+    return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+  }
 
-  _build() {
+  _bindIconPreviews(resyncOnly = false) {
+    this.querySelectorAll('.icon-preview[data-preview]').forEach(prev => {
+      const inp = this.querySelector(`input[data-key="${prev.dataset.preview}"]`);
+      const upd = () => {
+        const val = (inp && inp.value || '').trim();
+        prev.innerHTML = '';
+        if (/^mdi:[a-zA-Z0-9_-]+$/.test(val)) {
+          const ico = document.createElement('ha-icon');
+          ico.setAttribute('icon', val); ico.style.cssText = '--mdc-icon-size:20px';
+          prev.appendChild(ico);
+        }
+      };
+      if (!resyncOnly && inp && !inp._previewBound) { inp.addEventListener('input', upd); inp._previewBound = true; }
+      upd();
+    });
+  }
+
+  _fillDatalists() {
+    if (!this._hass) return;
+    this.querySelectorAll('input[data-prefix]').forEach(inp => {
+      const id = inp.getAttribute('list'); if (!id) return;
+      let dl = this.querySelector('#' + id);
+      if (!dl) { dl = document.createElement('datalist'); dl.id = id; this.appendChild(dl); }
+      const ids = Object.keys(this._hass.states).filter(e => e.startsWith(inp.dataset.prefix || '')).sort();
+      if (dl.childElementCount === ids.length) return;
+      dl.textContent = '';
+      const frag = document.createDocumentFragment();
+      ids.forEach(id2 => { const o = document.createElement('option'); o.value = id2;
+        const fn = this._hass.states[id2].attributes?.friendly_name; if (fn && fn !== id2) o.label = fn; frag.appendChild(o); });
+      dl.appendChild(frag);
+    });
+  }
+
+  // ── CSS commun (identique partout) ─────────────────────────────────
+  _css() {
+    return `
+      :host { display:block; padding:14px; font-family:var(--primary-font-family,Roboto,sans-serif); }
+      .sec { font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--divider-color); }
+      .sec:first-child { margin-top:0; }
+      .row { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
+      .row label { flex:0 0 160px;font-size:12px;color:var(--secondary-text-color); }
+      .row label .mdi-link { color:var(--primary-color);font-size:9px;text-transform:none;letter-spacing:0; }
+      .field-wrap { flex:1;min-width:0;display:flex; }
+      input[type=text],input[type=number],select { flex:1;width:100%;padding:4px 8px;border:1px solid var(--divider-color);border-radius:4px;background:var(--card-background-color);color:var(--primary-text-color);font-size:12px;outline:none;box-sizing:border-box; }
+      select { cursor:pointer; }
+      input:focus,select:focus { box-shadow:0 0 0 1px var(--primary-color); }
+      .color-row { display:flex;gap:8px;flex:1; }
+      .color-row input[type=text] { flex:1; }
+      .color-row input[type=color] { width:36px;height:28px;flex:none;padding:0;border:none;background:none;border-radius:4px;cursor:pointer; }
+      .icon-row { display:flex;gap:8px;flex:1;align-items:center; }
+      .icon-row input { flex:1; }
+      .icon-preview { width:30px;height:28px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--divider-color);border-radius:4px;color:var(--primary-text-color); }
+      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:-2px 0 6px 168px; }
+    `;
+  }
+
+  // ── Render : on vide, on pose le style, on déroule le schéma ────────
+  _render() {
+    this.innerHTML = '';
+    const st = document.createElement('style'); st.textContent = this._css(); this.appendChild(st);
+    this._schema();
+    this._fillDatalists();
+    this._bindIconPreviews();
+  }
+
+  // ╔════════════════════════════════════════════════════════════════╗
+  // ║  SCHÉMA — LA SEULE PARTIE À ÉCRIRE PAR CARD                     ║
+  // ╚════════════════════════════════════════════════════════════════╝
+  _schema() {
     const t = T();
-    const s = this._sensors();
-    const w = this._weathers();
 
-    this.innerHTML = `<style>
-      :host { display:block; padding:4px 0 }
-      h3 {
-        font-size:12px; font-weight:700; color:var(--primary-color);
-        text-transform:uppercase; letter-spacing:1.5px;
-        margin:18px 0 8px; padding-bottom:5px;
-        border-bottom:1px solid var(--divider-color);
-        display:flex; align-items:center; gap:6px;
-      }
-      h3::before {
-        content:''; display:block; width:3px; height:13px;
-        background:var(--primary-color); border-radius:2px;
-      }
-      .f  { margin-bottom:10px }
-      .tog{ display:flex; align-items:center; justify-content:space-between; gap:4px }
-      .tog label:first-child { flex:1 }
-      label {
-        display:block; font-size:12px;
-        color:var(--secondary-text-color); margin-bottom:3px;
-      }
-      input[type=text], input[type=number], select, textarea {
-        width:100%; padding:6px 8px; border-radius:6px;
-        border:1px solid var(--divider-color);
-        background:var(--card-background-color);
-        color:var(--primary-text-color);
-        font-size:13px; box-sizing:border-box; font-family:inherit;
-      }
-      .ta { resize:none; overflow:hidden; min-height:34px; line-height:1.4 }
-      input[type=color] {
-        height:34px; width:40px; padding:2px; border-radius:6px;
-        border:1px solid var(--divider-color); cursor:pointer; flex-shrink:0;
-      }
-      .cr { display:flex; gap:6px; align-items:center }
-      .ct { flex:1 }
-      .rs {
-        font-size:13px; color:var(--primary-color); cursor:pointer;
-        padding:4px 6px; border-radius:4px;
-        border:1px solid var(--divider-color);
-        line-height:1; flex-shrink:0; user-select:none;
-      }
-      .r2 { display:grid; grid-template-columns:1fr 1fr;     gap:10px }
-      .r3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px }
-      .g2 { display:grid; grid-template-columns:1fr 1fr;     gap:6px  }
-      .h  { font-size:10px; color:var(--disabled-text-color); margin:3px 0 0 }
-      /* Toggle switch */
-      .sw { position:relative; display:inline-block; width:36px; height:20px; flex-shrink:0 }
-      .sw input { opacity:0; width:0; height:0 }
-      .sl {
-        position:absolute; inset:0; background:var(--divider-color);
-        border-radius:20px; cursor:pointer; transition:.3s;
-      }
-      .sl:before {
-        content:''; position:absolute; width:14px; height:14px;
-        left:3px; bottom:3px; background:#fff;
-        border-radius:50%; transition:.3s;
-      }
-      input:checked + .sl { background:var(--primary-color) }
-      input:checked + .sl:before { transform:translateX(16px) }
-    </style>
+    this._section(t.entities);
+    this._entity('entity', t.entity, 'sensor');
+    this._select('input_unit', t.inputUnit, [['W', 'W — Watts'], ['kW', 'kW — Kilowatts']].map(([v, l]) => ({ value: v, label: l })));
+    this._entity('daily_entity', t.daily, 'sensor');
+    this._entity('secondary_entity', t.secondary, 'sensor');
+    this._text('secondary_label', t.secLabel, 'RENDEMENT');
+    this._text('secondary_unit', t.secUnit, '%');
+    this._entity('forecast_entity', t.forecast, 'sensor');
+    this._select('forecast_unit', t.forecastUnit, [['W', 'W — Watts'], ['kW', 'kW — Kilowatts']].map(([v, l]) => ({ value: v, label: l })));
+    this._entity('luminosity_entity', t.lux, 'sensor');
+    this._entity('weather_entity', t.weather, 'weather');
 
-    <!-- ════ ENTITIES SECTION ════ -->
-    <h3>${t.entities}</h3>
-    ${this._eInput(t.entity,    'entity',           s)}
-    ${this._select(t.inputUnit, 'input_unit', [['W', 'W — Watts'], ['kW', 'kW — Kilowatts']])}
-    ${this._eInput(t.daily,     'daily_entity',     s)}
-    ${this._eInput(t.secondary, 'secondary_entity', s)}
-    <div class="r2">
-      ${this._tArea(t.secLabel, 'secondary_label', 'RENDEMENT')}
-      ${this._tArea(t.secUnit,  'secondary_unit',  '%')}
-    </div>
-    ${this._eInput(t.forecast,     'forecast_entity', s)}
-    ${this._select(t.forecastUnit, 'forecast_unit', [['W', 'W — Watts'], ['kW', 'kW — Kilowatts']])}
-    ${this._eInput(t.lux,          'luminosity_entity', s)}
-    ${this._eInput(t.weather,      'weather_entity',    w)}
+    this._section(t.display);
+    this._text('name', t.name, 'Production Solaire');
+    this._number('max_power', t.maxPower, { min: 100, max: 50000, step: 100, ph: '5000' });
+    this._number('decimal_places', t.dec, { min: 0, max: 2, step: 1, ph: '1' });
+    this._number('animation_speed', t.speed, { min: 0.1, max: 5, step: 0.1, ph: '1' });
+    this._number('night_threshold', t.nightLux, { min: 0, max: 1000, step: 5, ph: '10' });
+    this._number('production_threshold', t.threshold, { min: 0, max: 50000, step: 50 });
+    this._hint(t.thresholdHint);
+    this._select('font_size', t.fontSize, [['small', t.small], ['medium', t.medium], ['large', t.large]].map(([v, l]) => ({ value: v, label: l })));
+    this._number('header_font_size', t.headerFontSize, { min: 8, max: 32, step: 1 });
+    this._select('title_font_family', t.titleFont, TITLE_FONT_OPTIONS, '— thème HA —');
+    this._text('title_shadow', 'Title shadow', '0 0 8px rgba(0,212,255,0.7)');
+    this._number('icon_size', 'Icon size (px)', { min: 12, max: 48, step: 1 });
+    this._toggle('show_history', t.history, true);
+    this._toggle('show_efficiency', t.efficiency, true);
+    this._toggle('glow_effect', t.glow, false);
+    this._toggle('reduce_animations', t.reduceAnim, false);
 
-    <!-- ════ DISPLAY SECTION ════ -->
-    <h3>${t.display}</h3>
-    ${this._tArea(t.name, 'name', 'Production Solaire')}
-    <div class="r3">
-      ${this._num(t.maxPower, 'max_power',       100, 50000, 100)}
-      ${this._num(t.dec,      'decimal_places',   0,  2,     1)}
-      ${this._num(t.speed,    'animation_speed',  0.1, 5,    0.1)}
-    </div>
-    ${this._num(t.nightLux, 'night_threshold', 0, 1000, 5)}
-    ${this._num(t.threshold, 'production_threshold', 0, 50000, 50)}
-    <p class="h">${t.thresholdHint}</p>
-    <div class="r2">
-      ${this._select(t.fontSize,       'font_size',        [['small', t.small], ['medium', t.medium], ['large', t.large]])}
-      ${this._num('Header font size (px)', 'header_font_size', 8, 32, 1)}
-    </div>
-    ${this._dInput(t.titleFont, 'title_font_family', TITLE_FONT_OPTIONS, 'Rajdhani, Orbitron, Space Grotesk...')}
-    ${this._dInput('Title shadow', 'title_shadow', [], '0 0 8px rgba(0,212,255,0.7)')}
-    ${this._num('Icon size (px)', 'icon_size', 12, 48, 1)}
-    <div class="g2">
-      ${this._toggle(t.history,    'show_history')}
-      ${this._toggle(t.efficiency, 'show_efficiency')}
-    </div>
-    <div class="g2">
-      ${this._toggle(t.glow, 'glow_effect')}
-      ${this._toggle(t.reduceAnim, 'reduce_animations')}
-    </div>
+    this._section('Typography');
+    this._color('color_efficiency_text', t.colorEffText, '#FFD23F');
+    this._color('color_mini_values_text', t.colorMiniText, '#ffffff');
+    this._color('color_sparkline_stats_text', t.colorStatsText, '#888888');
+    this._number('efficiency_font_weight', t.effFontWt, { min: 300, max: 900, step: 100, ph: '600' });
+    this._number('label_font_weight', t.labelFontWt, { min: 300, max: 900, step: 100, ph: '600' });
+    this._number('text_shadow_blur', t.textShadowBlur, { min: 0, max: 20, step: 1 });
 
-    <!-- ════ TYPOGRAPHY SECTION ════ -->
-    <h3>Typography</h3>
-    ${this._color(t.colorEffText, 'color_efficiency_text', '#FFD23F')}
-    ${this._color(t.colorMiniText, 'color_mini_values_text', '#ffffff')}
-    ${this._color(t.colorStatsText, 'color_sparkline_stats_text', '#888888')}
-    <div class="r2">
-      ${this._num(t.effFontWt, 'efficiency_font_weight', 300, 900, 100)}
-      ${this._num(t.labelFontWt, 'label_font_weight', 300, 900, 100)}
-    </div>
-    ${this._num(t.textShadowBlur, 'text_shadow_blur', 0, 20, 1)}
+    this._section('GLOW');
+    this._toggle('glow_effect', t.glow, false);
+    this._color('color_neon_glow', t.colorNeonGlow, '#00E8FF');
 
-    <!-- ════ GLOW SECTION ════ -->
-    <h3>GLOW</h3>
-    <div class="g2">
-      ${this._toggle(t.glow, 'glow_effect')}
-    </div>
-    ${this._color(t.colorNeonGlow, 'color_neon_glow', '#00E8FF')}
+    this._section('CYBERPUNK');
+    this._toggle('cyberpunk_mode', t.cyberpunk, false);
+    this._toggle('neon_panel_glow', t.neonPanelGlow, false);
+    this._toggle('neon_text_glow', t.neonTextGlow, false);
+    this._toggle('neon_card_glow', t.neonCardGlow, false);
+    this._toggle('neon_icon_glow', t.neonIconGlow, false);
+    this._toggle('neon_title_glow', t.neonTitleGlow, false);
+    this._toggle('neon_bar_glow', t.neonBarGlow, false);
+    this._toggle('neon_badge_glow', t.neonBadgeGlow, false);
+    this._toggle('neon_mini_glow', t.neonMiniGlow, false);
+    this._number('neon_saturation', t.neonSat, { min: 0, max: 100, step: 5, ph: '50' });
 
-    <!-- ════ CYBERPUNK SECTION ════ -->
-    <h3>CYBERPUNK</h3>
-    ${this._toggle(t.cyberpunk, 'cyberpunk_mode')}
-    <div class="g2">
-      ${this._toggle(t.neonPanelGlow, 'neon_panel_glow')}
-      ${this._toggle(t.neonTextGlow,  'neon_text_glow')}
-    </div>
-    <div class="g2">
-      ${this._toggle(t.neonCardGlow,  'neon_card_glow')}
-      ${this._toggle(t.neonIconGlow,  'neon_icon_glow')}
-    </div>
-    <div class="g2">
-      ${this._toggle(t.neonTitleGlow, 'neon_title_glow')}
-      ${this._toggle(t.neonBarGlow,   'neon_bar_glow')}
-    </div>
-    <div class="g2">
-      ${this._toggle(t.neonBadgeGlow, 'neon_badge_glow')}
-      ${this._toggle(t.neonMiniGlow,  'neon_mini_glow')}
-    </div>
-    ${this._num(t.neonSat, 'neon_saturation', 0, 100, 5)}
-
-    <!-- ════ COLOURS SECTION ════ -->
-    <h3>${t.colors} <span style="font-size:10px;font-weight:400;opacity:.6">(empty = HA theme — var(--css-var) supported)</span></h3>
-    ${this._color(t.colorTitle,   'color_title',   '#ffffff')}
-    ${this._color(t.colorPrimary, 'color_primary', '#FFD23F')}
-    <div class="r3">
-      ${this._color(t.colorCold, 'color_cold', '#00E8FF')}
-      ${this._color(t.colorMid,  'color_mid',  '#FFD23F')}
-      ${this._color(t.colorHot,  'color_hot',  '#FF6B35')}
-    </div>
-    <div class="r2">
-      ${this._color(t.colorIcon,  'color_icon',  '#FFD23F')}
-      ${this._color(t.colorBadge, 'color_badge', '#FFD23F')}
-    </div>`;
-
-    /* ── Wire up event listeners ───────────────────────── */
-
-    // Colour pickers: sync picker <-> text input
-    this.querySelectorAll('input[type=color]').forEach(pk => {
-      const k  = pk.dataset.key;
-      const tx = this.querySelector(`.ct[data-key="${k}"]`);
-      if (!tx) return;
-      pk.addEventListener('input', e => {
-        e.stopPropagation();
-        tx.value = pk.value;
-        this._ch(k, pk.value);
-      }, { passive: true });
-      tx.addEventListener('blur', e => {
-        e.stopPropagation();
-        if (/^#[0-9a-fA-F]{6}$/.test(tx.value)) pk.value = tx.value;
-        this._ch(k, tx.value || null);
-      });
-      tx.addEventListener('keydown', e => e.stopPropagation(), { passive: true });
-      tx.addEventListener('input',   e => e.stopPropagation(), { passive: true });
-    });
-
-    // Reset buttons
-    this.querySelectorAll('[data-reset]').forEach(el => {
-      el.addEventListener('click', () => {
-        const k  = el.dataset.reset;
-        const pk = this.querySelector(`input[type=color][data-key="${k}"]`);
-        const tx = this.querySelector(`.ct[data-key="${k}"]`);
-        if (pk) pk.style.opacity = '0.4';
-        if (tx) tx.value = '';
-        this._ch(k, null);
-      });
-    });
-
-    // Entity auto-complete inputs
-    this.querySelectorAll('[data-e]').forEach(el => {
-      ['keydown', 'keyup', 'input'].forEach(ev =>
-        el.addEventListener(ev, e => e.stopPropagation(), { passive: true })
-      );
-      ['change', 'blur'].forEach(ev =>
-        el.addEventListener(ev, e => {
-          e.stopPropagation();
-          this._ch(el.dataset.key, el.value || null);
-        })
-      );
-    });
-
-    // Select drop-downs
-    this.querySelectorAll('[data-sel]').forEach(el => {
-      el.addEventListener('change', e => {
-        e.stopPropagation();
-        this._ch(el.dataset.key, el.value || null);
-      });
-    });
-
-    // All other inputs (number, text, checkbox, textarea)
-    this.querySelectorAll(
-      '[data-key]:not([type=color]):not([data-e]):not([data-sel])'
-    ).forEach(el => {
-      if (el.type === 'checkbox') {
-        el.addEventListener('change', e => {
-          e.stopPropagation();
-          this._ch(el.dataset.key, el.checked);
-        });
-        return;
-      }
-      if (el.type === 'number') {
-        el.addEventListener('change', e => {
-          e.stopPropagation();
-          this._ch(el.dataset.key, el.value === '' ? null : parseFloat(el.value));
-        });
-        return;
-      }
-      ['keydown', 'keyup', 'input'].forEach(ev =>
-        el.addEventListener(ev, e => e.stopPropagation(), { passive: true })
-      );
-      el.addEventListener('blur', e => {
-        e.stopPropagation();
-        this._ch(el.dataset.key, el.value === '' ? null : el.value);
-      });
-    });
-  }
-
-  /**
-   * Emit a config-changed event to HA after a user edit.
-   * Removes the key entirely when set to null/empty (keeps YAML clean).
-   *
-   * @param {string} key - Config key that changed.
-   * @param {*}      val - New value (null to remove).
-   */
-  _ch(key, val) {
-    const cfg = { ...this._cfg };
-    if (val === null || val === '' || val === undefined) {
-      delete cfg[key];
-    } else {
-      cfg[key] = val;
-    }
-    this._cfg = cfg;
-    this.dispatchEvent(new CustomEvent('config-changed', {
-      detail:   { config: cfg },
-      bubbles:  true,
-      composed: true,
-    }));
+    this._section(t.colors);
+    this._hint('empty = HA theme — var(--css-var) supported');
+    this._color('color_title', t.colorTitle, '#ffffff');
+    this._color('color_primary', t.colorPrimary, '#FFD23F');
+    this._color('color_cold', t.colorCold, '#00E8FF');
+    this._color('color_mid', t.colorMid, '#FFD23F');
+    this._color('color_hot', t.colorHot, '#FF6B35');
+    this._color('color_icon', t.colorIcon, '#FFD23F');
+    this._color('color_badge', t.colorBadge, '#FFD23F');
   }
 }
 

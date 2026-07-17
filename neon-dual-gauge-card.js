@@ -2148,727 +2148,177 @@ class NeonDualGaugeCard extends HTMLElement {
 // VISUAL EDITOR
 // ============================================================================
 
+const NDG_THEMES = [{ value: 'light', label: 'Clair' }, { value: 'dark', label: 'Sombre' }, { value: 'custom', label: 'Personnalisé' }];
+const NDG_POSITIONS = ['bottom', 'top', 'inside-top', 'inside-bottom', 'none'];
+
 class NeonDualGaugeCardEditor extends HTMLElement {
-  setConfig(config) {
-    this._config = { ...config };
+  constructor() { super(); this._config = {}; this._hass = null; this._rendered = false; }
+
+  // ── Cycle de vie (NE PAS toucher) ──────────────────────────────────
+  setConfig(c) {
+    this._config = { ...(c || {}) };
     if (!this._config.gauges || this._config.gauges.length < 2) {
-      this._config.gauges = [
-        { entity: "", min: 0, max: 100 },
-        { entity: "", min: 0, max: 100 }
-      ];
+      this._config.gauges = [{ entity: '', min: 0, max: 100 }, { entity: '', min: 0, max: 100 }];
     }
-    this.render();
+    if (!this._rendered) { this._rendered = true; this._render(); }
+    else this._syncValues();
+  }
+  set hass(h) { this._hass = h; this._fillDatalists(); }   // JAMAIS de render ici
+  disconnectedCallback() { this._rendered = false; }
+
+  // ── Lecture / écriture config (clés imbriquées via ".") ────────────
+  _read(key) {
+    return key.includes('.')
+      ? key.split('.').reduce((o, p) => (o && o[p] !== undefined ? o[p] : undefined), this._config)
+      : this._config[key];
+  }
+  _set(key, value) {
+    const empty = (value === undefined || value === '' || value === null);
+    if (key.includes('.')) {
+      const parts = key.split('.');
+      let o = this._config;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!o[parts[i]] || typeof o[parts[i]] !== 'object') o[parts[i]] = /^\d+$/.test(parts[i + 1]) ? [] : {};
+        o = o[parts[i]];
+      }
+      const last = parts[parts.length - 1];
+      if (empty) delete o[last]; else o[last] = value;
+    } else if (empty) { delete this._config[key]; }
+    else { this._config[key] = value; }
+    this.dispatchEvent(new CustomEvent('config-changed',
+      { detail: { config: { ...this._config } }, bubbles: true, composed: true }));
   }
 
-  set hass(hass) {
-    this._hass = hass;
-    if (!this._entities) {
-      this._entities = Object.keys(hass.states).sort();
-    }
-  }
-
-  render() {
-    if (!this.shadowRoot) {
-      this.attachShadow({ mode: "open" });
-    }
-
-    const lang = navigator.language.startsWith('fr') ? 'fr' : 'en';
-    const t = {
-      // Card-level
-      cardTitle: lang === 'fr' ? 'Titre de la carte' : 'Card Title',
-      titlePosition: lang === 'fr' ? 'Position du titre' : 'Title Position',
-      gaugeSize: lang === 'fr' ? 'Taille jauge externe' : 'Outer Gauge Size',
-      innerGaugeSize: lang === 'fr' ? 'Taille jauge interne' : 'Inner Gauge Size',
-      primaryGauge: lang === 'fr' ? 'Jauge principale' : 'Primary Gauge',
-      hideCard: lang === 'fr' ? 'Masquer cadre' : 'Hide Card Frame',
-      effects: lang === 'fr' ? 'Effets visuels' : 'Visual Effects',
-      topGlow: lang === 'fr' ? 'Lueur supérieure' : 'Top Glow',
-      neonValueGlow: lang === 'fr' ? 'Triple neon glow (valeurs)' : 'Triple neon glow (values)',
-      cometHead: lang === 'fr' ? 'Tête de comète + traînée' : 'Comet head + trail',
-      ignition: lang === 'fr' ? "Sweep d'allumage (ignition)" : 'Ignition sweep',
-      tickMarks: lang === 'fr' ? 'Graduations gravées' : 'Engraved tick marks',
-      glassCenter: lang === 'fr' ? 'Anneau de verre central' : 'Glass center ring',
-      valueGlowDynamic: lang === 'fr' ? 'Glow de valeur dynamique (suit la sévérité)' : 'Dynamic value glow (follows severity)',
-      pulse: lang === 'fr' ? 'Animation pulse' : 'Pulse Animation',
-      pulseIntensity: lang === 'fr' ? 'Intensité pulse (px)' : 'Pulse Intensity (px)',
-      pulseSpeed: lang === 'fr' ? 'Vitesse pulse (s)' : 'Pulse Speed (s)',
-      pulseMinOpacity: lang === 'fr' ? 'Opacité min pulse' : 'Pulse Min Opacity',
-      glitchHover: lang === 'fr' ? 'Effet glitch survol' : 'Glitch on Hover',
-      // Themes
-      theme: lang === 'fr' ? 'Thème' : 'Theme',
-      cardTheme: lang === 'fr' ? 'Thème carte' : 'Card Theme',
-      hideShadows: lang === 'fr' ? 'Masquer ombres' : 'Hide Shadows',
-      customBackground: lang === 'fr' ? 'Fond personnalisé' : 'Custom Background',
-      customGaugeBackground: lang === 'fr' ? 'Fond jauge' : 'Custom Gauge Background',
-      customCenterBackground: lang === 'fr' ? 'Fond centre' : 'Custom Center Background',
-      customTextColor: lang === 'fr' ? 'Couleur texte' : 'Custom Text Color',
-      customSecondaryTextColor: lang === 'fr' ? 'Couleur texte secondaire' : 'Custom Secondary Text Color',
-      // Performance
-      performance: lang === 'fr' ? 'Performance' : 'Performance',
-      powerSave: lang === 'fr' ? 'Économie énergie' : 'Power Save Mode',
-      debounce: lang === 'fr' ? 'Debounce MàJ' : 'Debounce Updates',
-      kioskMode: lang === 'fr' ? 'Mode kiosque (économie thermique)' : 'Kiosk Mode (thermal throttle)',
-      // Gauges
-      innerGauge: lang === 'fr' ? 'Jauge Interne (0)' : 'Inner Gauge (0)',
-      outerGauge: lang === 'fr' ? 'Jauge Externe (1)' : 'Outer Gauge (1)',
-      entity: lang === 'fr' ? 'Entité' : 'Entity',
-      min: lang === 'fr' ? 'Min' : 'Min',
-      max: lang === 'fr' ? 'Max' : 'Max',
-      unit: lang === 'fr' ? 'Unité' : 'Unit',
-      decimals: lang === 'fr' ? 'Décimales' : 'Decimals',
-      ledsCount: lang === 'fr' ? 'Nombre LEDs' : 'LED Count',
-      ledSize: lang === 'fr' ? 'Taille LED' : 'LED Size',
-      smoothTransitions: lang === 'fr' ? 'Transitions douces' : 'Smooth Transitions',
-      animationDuration: lang === 'fr' ? 'Durée animation (ms)' : 'Animation Duration (ms)',
-      bidirectional: lang === 'fr' ? 'Bidirectionnel' : 'Bidirectional',
-      hideInactiveLeds: lang === 'fr' ? 'Masquer LEDs inactives' : 'Hide Inactive LEDs',
-      // Styling
-      valueSize: lang === 'fr' ? 'Taille valeur' : 'Value Size',
-      valueWeight: lang === 'fr' ? 'Poids valeur' : 'Value Weight',
-      valueColor: lang === 'fr' ? 'Couleur valeur' : 'Value Color',
-      unitSize: lang === 'fr' ? 'Taille unité' : 'Unit Size',
-      unitWeight: lang === 'fr' ? 'Poids unité' : 'Unit Weight',
-      unitColor: lang === 'fr' ? 'Couleur unité' : 'Unit Color',
-      // Fonts
-      titleFontFamily: lang === 'fr' ? 'Police titre' : 'Title Font Family',
-      valueFontFamily: lang === 'fr' ? 'Police valeur' : 'Value Font Family',
-      unitFontFamily: lang === 'fr' ? 'Police unité' : 'Unit Font Family',
-      // Shadows
-      shadows: lang === 'fr' ? 'Ombres' : 'Shadows',
-      enableShadow: lang === 'fr' ? 'Ombre conteneur' : 'Container Shadow',
-      centerShadow: lang === 'fr' ? 'Ombre centre' : 'Center Shadow',
-      centerShadowBlur: lang === 'fr' ? 'Flou ombre centre' : 'Center Shadow Blur',
-      centerShadowSpread: lang === 'fr' ? 'Étalement ombre centre' : 'Center Shadow Spread',
-      outerShadow: lang === 'fr' ? 'Ombre externe' : 'Outer Shadow',
-      outerShadowBlur: lang === 'fr' ? 'Flou ombre externe' : 'Outer Shadow Blur',
-      outerShadowSpread: lang === 'fr' ? 'Étalement ombre externe' : 'Outer Shadow Spread',
-      // Advanced
-      advanced: lang === 'fr' ? 'Avancé' : 'Advanced',
-      updateInterval: lang === 'fr' ? 'Intervalle MàJ (ms)' : 'Update Interval (ms)',
-      innerGaugeRadius: lang === 'fr' ? 'Rayon jauge interne' : 'Inner Gauge Radius',
-      markersRadius: lang === 'fr' ? 'Rayon markers' : 'Markers Radius',
-      severityCustom: lang === 'fr' ? 'Zones de sévérité (YAML)' : 'Severity Zones (YAML)',
-      markersCustom: lang === 'fr' ? 'Marqueurs (YAML)' : 'Markers (YAML)',
-      zonesCustom: lang === 'fr' ? 'Zones colorées (YAML)' : 'Colored Zones (YAML)',
-    };
-
-    const positionOptions = [
-      { value: 'bottom', label: 'Bottom' },
-      { value: 'top', label: 'Top' },
-      { value: 'inside-top', label: 'Inside Top' },
-      { value: 'inside-bottom', label: 'Inside Bottom' },
-      { value: 'none', label: 'None' }
-    ];
-
-    const primaryOptions = [
-      { value: 'inner', label: 'Inner' },
-      { value: 'outer', label: 'Outer' }
-    ];
-
-    const themeOptions = [
-      { value: '', label: lang === 'fr' ? 'Défaut' : 'Default' },
-      { value: 'light', label: lang === 'fr' ? 'Clair' : 'Light' },
-      { value: 'dark', label: lang === 'fr' ? 'Sombre' : 'Dark' },
-      { value: 'custom', label: lang === 'fr' ? 'Personnalisé' : 'Custom' }
-    ];
-
-    this.shadowRoot.innerHTML = `
-      <style>
-        :host {
-          display: block;
-          padding: 20px;
-          background: var(--ha-card-background, var(--card-background-color));
-          color: var(--primary-text-color);
-        }
-        .section {
-          margin-bottom: 24px;
-          padding-bottom: 16px;
-          border-bottom: 1px solid var(--divider-color);
-        }
-        .section:last-child {
-          border-bottom: none;
-        }
-        .section-title {
-          font-size: 16px;
-          font-weight: 600;
-          margin-bottom: 12px;
-          color: var(--primary-color);
-        }
-        .row {
-          display: flex;
-          gap: 12px;
-          margin-bottom: 12px;
-          align-items: center;
-        }
-        .field {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-        label {
-          font-size: 13px;
-          font-weight: 500;
-          color: var(--secondary-text-color);
-        }
-        input[type="text"],
-        input[type="number"],
-        select {
-          padding: 8px 12px;
-          border: 1px solid var(--divider-color);
-          border-radius: 4px;
-          background: var(--secondary-background-color);
-          color: var(--primary-text-color);
-          font-family: inherit;
-          font-size: 14px;
-          cursor: pointer;
-          max-width: 100%;
-        }
-        select.entity-select,
-        input.entity-select {
-          font-family: monospace;
-          width: 100%;
-          box-sizing: border-box;
-        }
-        input[type="text"]:focus,
-        input[type="number"]:focus,
-        select:focus {
-          outline: none;
-          border-color: var(--primary-color);
-        }
-        input[type="checkbox"] {
-          width: 18px;
-          height: 18px;
-          cursor: pointer;
-        }
-        .checkbox-row {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin-bottom: 8px;
-        }
-        .checkbox-row label {
-          margin: 0;
-          cursor: pointer;
-        }
-        .gauge-section {
-          background: var(--secondary-background-color);
-          padding: 16px;
-          border-radius: 8px;
-          margin-bottom: 16px;
-        }
-        .gauge-title {
-          font-weight: 600;
-          margin-bottom: 12px;
-          color: var(--primary-text-color);
-        }
-        .entity-input {
-          position: relative;
-        }
-        .no-entity-warning {
-          color: var(--warning-color, #ff9800);
-          font-size: 12px;
-          margin-top: 4px;
-        }
-        textarea {
-          width: 100%;
-          padding: 8px 12px;
-          border: 1px solid var(--divider-color);
-          border-radius: 4px;
-          background: var(--secondary-background-color);
-          color: var(--primary-text-color);
-          font-family: monospace;
-          font-size: 13px;
-          resize: vertical;
-          min-height: 80px;
-        }
-        textarea:focus {
-          outline: none;
-          border-color: var(--primary-color);
-        }
-        .yaml-help {
-          font-size: 11px;
-          color: var(--secondary-text-color);
-          margin-top: 4px;
-          font-style: italic;
-        }
-      </style>
-
-      <div class="section">
-        <div class="section-title">${t.cardTitle}</div>
-        <div class="row">
-          <div class="field">
-            <label>${t.cardTitle}</label>
-            <input type="text" id="name" value="${this._config.name || ''}" 
-                   placeholder="${lang === 'fr' ? 'Nom de la carte' : 'Card name'}">
-          </div>
-          <div class="field">
-            <label>${t.titleFontFamily}</label>
-            <input type="text" id="title_font_family" value="${this._config.title_font_family || ''}" 
-                   placeholder="inherit">
-          </div>
-          <div class="field">
-            <label>${t.titlePosition}</label>
-            <select id="title_position">
-              ${positionOptions.map(opt => `
-                <option value="${opt.value}" ${(this._config.title_position || 'bottom') === opt.value ? 'selected' : ''}>
-                  ${opt.label}
-                </option>
-              `).join('')}
-            </select>
-          </div>
-        </div>
-        <div class="row">
-          <div class="field">
-            <label>${t.gaugeSize} (px)</label>
-            <input type="number" id="gauge_size" value="${this._config.gauge_size || 200}" min="100" max="400">
-          </div>
-          <div class="field">
-            <label>${t.innerGaugeSize} (px)</label>
-            <input type="number" id="inner_gauge_size" value="${this._config.inner_gauge_size || ''}" 
-                   placeholder="${lang === 'fr' ? 'Auto (65%)' : 'Auto (65%)'}">
-          </div>
-          <div class="field">
-            <label>${t.innerGaugeRadius} (px)</label>
-            <input type="number" id="inner_gauge_radius" value="${this._config.inner_gauge_radius || ''}" 
-                   placeholder="${lang === 'fr' ? 'Auto' : 'Auto'}">
-          </div>
-          <div class="field">
-            <label>${t.primaryGauge}</label>
-            <select id="primary_gauge">
-              ${primaryOptions.map(opt => `
-                <option value="${opt.value}" ${(this._config.primary_gauge || 'inner') === opt.value ? 'selected' : ''}>
-                  ${opt.label}
-                </option>
-              `).join('')}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">${t.effects}</div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="enable_custom_effects" 
-                 ${this._config.enable_custom_effects !== false ? 'checked' : ''}>
-          <label for="enable_custom_effects">${t.effects}</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="enable_top_glow" 
-                 ${this._config.enable_top_glow !== false ? 'checked' : ''}>
-          <label for="enable_top_glow">${t.topGlow}</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="enable_pulse_animation" 
-                 ${this._config.enable_pulse_animation !== false ? 'checked' : ''}>
-          <label for="enable_pulse_animation">${t.pulse}</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="neon_value_glow" 
-                 ${this._config.neon_value_glow !== false ? 'checked' : ''}>
-          <label for="neon_value_glow">${t.neonValueGlow}</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="value_glow_dynamic" 
-                 ${this._config.value_glow_dynamic !== false ? 'checked' : ''}>
-          <label for="value_glow_dynamic">${t.valueGlowDynamic}</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="enable_comet_head" 
-                 ${this._config.enable_comet_head !== false ? 'checked' : ''}>
-          <label for="enable_comet_head">${t.cometHead}</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="enable_ignition" 
-                 ${this._config.enable_ignition !== false ? 'checked' : ''}>
-          <label for="enable_ignition">${t.ignition}</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="enable_tick_marks" 
-                 ${this._config.enable_tick_marks !== false ? 'checked' : ''}>
-          <label for="enable_tick_marks">${t.tickMarks}</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="enable_glass_center" 
-                 ${this._config.enable_glass_center !== false ? 'checked' : ''}>
-          <label for="enable_glass_center">${t.glassCenter}</label>
-        </div>
-        <div class="field">
-          <label>${t.pulseIntensity}</label>
-          <input type="range" id="pulse_intensity" min="5" max="80" step="1"
-                 value="${this._config.pulse_intensity ?? 20}"
-                 style="width:100%">
-          <span style="font-size:11px;opacity:0.6">${this._config.pulse_intensity ?? 20}px</span>
-        </div>
-        <div class="field">
-          <label>${t.pulseSpeed}</label>
-          <input type="range" id="pulse_speed" min="1" max="12" step="0.5"
-                 value="${this._config.pulse_speed || 4}"
-                 style="width:100%">
-          <span style="font-size:11px;opacity:0.6">${this._config.pulse_speed || 4}s</span>
-        </div>
-        <div class="field">
-          <label>${t.pulseMinOpacity}</label>
-          <input type="range" id="pulse_min_opacity" min="0" max="0.9" step="0.05"
-                 value="${this._config.pulse_min_opacity ?? 0.4}"
-                 style="width:100%">
-          <span style="font-size:11px;opacity:0.6">${this._config.pulse_min_opacity ?? 0.4}</span>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="enable_glitch_hover" 
-                 ${this._config.enable_glitch_hover !== false ? 'checked' : ''}>
-          <label for="enable_glitch_hover">${t.glitchHover}</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="hide_card" 
-                 ${this._config.hide_card ? 'checked' : ''}>
-          <label for="hide_card">${t.hideCard}</label>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">${t.theme}</div>
-        <div class="row">
-          <div class="field">
-            <label>${t.cardTheme}</label>
-            <select id="card_theme">
-              ${themeOptions.map(opt => `
-                <option value="${opt.value}" ${(this._config.card_theme || '') === opt.value ? 'selected' : ''}>
-                  ${opt.label}
-                </option>
-              `).join('')}
-            </select>
-          </div>
-          <div class="field">
-            <label>${t.customBackground}</label>
-            <input type="text" id="custom_background" 
-                   value="${this._config.custom_background || ''}" 
-                   placeholder="#1a1a1a">
-          </div>
-        </div>
-        <div class="row">
-          <div class="field">
-            <label>${t.customGaugeBackground}</label>
-            <input type="text" id="custom_gauge_background" 
-                   value="${this._config.custom_gauge_background || ''}" 
-                   placeholder="radial-gradient(circle, #333, #111)">
-          </div>
-          <div class="field">
-            <label>${t.customCenterBackground}</label>
-            <input type="text" id="custom_center_background" 
-                   value="${this._config.custom_center_background || ''}" 
-                   placeholder="radial-gradient(circle, #444, #222)">
-          </div>
-        </div>
-        <div class="row">
-          <div class="field">
-            <label>${t.customTextColor}</label>
-            <input type="text" id="custom_text_color" 
-                   value="${this._config.custom_text_color || ''}" 
-                   placeholder="#ffffff">
-          </div>
-          <div class="field">
-            <label>${t.customSecondaryTextColor}</label>
-            <input type="text" id="custom_secondary_text_color" 
-                   value="${this._config.custom_secondary_text_color || ''}" 
-                   placeholder="#cccccc">
-          </div>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="hide_shadows" 
-                 ${this._config.hide_shadows ? 'checked' : ''}>
-          <label for="hide_shadows">${t.hideShadows}</label>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">${t.performance}</div>
-        <div class="row">
-          <div class="field">
-            <label>${t.updateInterval}</label>
-            <input type="number" id="update_interval" value="${this._config.update_interval || 1000}" 
-                   min="100" max="10000" step="100">
-          </div>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="power_save_mode" 
-                 ${this._config.power_save_mode ? 'checked' : ''}>
-          <label for="power_save_mode">${t.powerSave}</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="debounce_updates" 
-                 ${this._config.debounce_updates ? 'checked' : ''}>
-          <label for="debounce_updates">${t.debounce}</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="kiosk_mode" 
-                 ${this._config.kiosk_mode ? 'checked' : ''}>
-          <label for="kiosk_mode">${t.kioskMode}</label>
-        </div>
-      </div>
-
-      ${[0, 1].map(idx => {
-        const gauge = this._config.gauges[idx] || {};
-        const title = idx === 0 ? t.innerGauge : t.outerGauge;
-        const entities = this._entities || [];
-        const currentEntity = gauge.entity || '';
-        
-        return `
-          <div class="gauge-section">
-            <div class="gauge-title">${title}</div>
-            <div class="row">
-              <div class="field">
-                <label>${t.entity} *</label>
-                <div class="entity-input">
-                  <input type="text" id="gauge${idx}_entity" class="entity-select"
-                    value="${currentEntity}" list="ndg-ent-list-${idx}" autocomplete="off"
-                    placeholder="sensor.example" required>
-                  <datalist id="ndg-ent-list-${idx}">${entities.map(e => `<option value="${e}">`).join('')}</datalist>
-                  ${!currentEntity ? `<div class="no-entity-warning">${lang === 'fr' ? 'Entité requise' : 'Entity required'}</div>` : ''}
-                </div>
-              </div>
-            </div>
-            <div class="row">
-              <div class="field">
-                <label>${t.min}</label>
-                <input type="number" id="gauge${idx}_min" value="${gauge.min !== undefined ? gauge.min : 0}">
-              </div>
-              <div class="field">
-                <label>${t.max}</label>
-                <input type="number" id="gauge${idx}_max" value="${gauge.max !== undefined ? gauge.max : 100}">
-              </div>
-              <div class="field">
-                <label>${t.unit}</label>
-                <input type="text" id="gauge${idx}_unit" value="${gauge.unit || ''}" placeholder="°C, %, W">
-              </div>
-              <div class="field">
-                <label>${t.decimals}</label>
-                <input type="number" id="gauge${idx}_decimals" value="${gauge.decimals !== undefined ? gauge.decimals : 1}" 
-                       min="0" max="3">
-              </div>
-            </div>
-            <div class="row">
-              <div class="field">
-                <label>${t.ledsCount}</label>
-                <input type="number" id="gauge${idx}_leds_count" value="${gauge.leds_count || 100}" 
-                       min="20" max="200">
-              </div>
-              <div class="field">
-                <label>${t.ledSize} (px)</label>
-                <input type="number" id="gauge${idx}_led_size" value="${gauge.led_size || (idx === 0 ? 6 : 8)}" 
-                       min="3" max="15">
-              </div>
-              <div class="field">
-                <label>${t.animationDuration}</label>
-                <input type="number" id="gauge${idx}_animation_duration" 
-                       value="${gauge.animation_duration || 800}" min="100" max="3000">
-              </div>
-            </div>
-            <div class="row">
-              <div class="checkbox-row">
-                <input type="checkbox" id="gauge${idx}_smooth_transitions" 
-                       ${gauge.smooth_transitions !== false ? 'checked' : ''}>
-                <label for="gauge${idx}_smooth_transitions">${t.smoothTransitions}</label>
-              </div>
-              <div class="checkbox-row">
-                <input type="checkbox" id="gauge${idx}_bidirectional" 
-                       ${gauge.bidirectional ? 'checked' : ''}>
-                <label for="gauge${idx}_bidirectional">${t.bidirectional}</label>
-              </div>
-              <div class="checkbox-row">
-                <input type="checkbox" id="gauge${idx}_hide_inactive_leds" 
-                       ${gauge.hide_inactive_leds ? 'checked' : ''}>
-                <label for="gauge${idx}_hide_inactive_leds">${t.hideInactiveLeds}</label>
-              </div>
-            </div>
-            <details>
-              <summary style="cursor: pointer; margin-top: 8px; font-weight: 500;">${t.advanced}</summary>
-              <div style="margin-top: 12px;">
-                <div class="row">
-                  <div class="field">
-                    <label>${t.theme}</label>
-                    <select id="gauge${idx}_theme">
-                      ${themeOptions.map(opt => `
-                        <option value="${opt.value}" ${(gauge.theme || '') === opt.value ? 'selected' : ''}>
-                          ${opt.label}
-                        </option>
-                      `).join('')}
-                    </select>
-                  </div>
-                </div>
-                <div class="row">
-                  <div class="field">
-                    <label>${t.customBackground}</label>
-                    <input type="text" id="gauge${idx}_custom_background" 
-                           value="${gauge.custom_background || ''}" placeholder="#f0f0f0">
-                  </div>
-                  <div class="field">
-                    <label>${t.customGaugeBackground}</label>
-                    <input type="text" id="gauge${idx}_custom_gauge_background" 
-                           value="${gauge.custom_gauge_background || ''}" placeholder="radial-gradient(...)">
-                  </div>
-                </div>
-                <div class="row">
-                  <div class="field">
-                    <label>${t.customCenterBackground}</label>
-                    <input type="text" id="gauge${idx}_custom_center_background" 
-                           value="${gauge.custom_center_background || ''}" placeholder="radial-gradient(...)">
-                  </div>
-                  <div class="field">
-                    <label>${t.customTextColor}</label>
-                    <input type="text" id="gauge${idx}_custom_text_color" 
-                           value="${gauge.custom_text_color || ''}" placeholder="#333">
-                  </div>
-                </div>
-                <div class="row">
-                  <div class="field">
-                    <label>${t.customSecondaryTextColor}</label>
-                    <input type="text" id="gauge${idx}_custom_secondary_text_color" 
-                           value="${gauge.custom_secondary_text_color || ''}" placeholder="#666">
-                  </div>
-                </div>
-                <div class="row">
-                  <div class="field">
-                    <label>${t.valueSize}</label>
-                    <input type="text" id="gauge${idx}_value_font_size" 
-                           value="${gauge.value_font_size || ''}" placeholder="24px">
-                  </div>
-                  <div class="field">
-                    <label>${t.valueWeight}</label>
-                    <input type="text" id="gauge${idx}_value_font_weight" 
-                           value="${gauge.value_font_weight || ''}" placeholder="bold">
-                  </div>
-                  <div class="field">
-                    <label>${t.valueColor}</label>
-                    <input type="text" id="gauge${idx}_value_font_color" 
-                           value="${gauge.value_font_color || ''}" placeholder="var(--primary-text-color)">
-                  </div>
-                  <div class="field">
-                    <label>${t.valueFontFamily}</label>
-                    <input type="text" id="gauge${idx}_value_font_family" 
-                           value="${gauge.value_font_family || ''}" placeholder="inherit">
-                  </div>
-                </div>
-                <div class="row">
-                  <div class="field">
-                    <label>${t.unitSize}</label>
-                    <input type="text" id="gauge${idx}_unit_font_size" 
-                           value="${gauge.unit_font_size || ''}" placeholder="14px">
-                  </div>
-                  <div class="field">
-                    <label>${t.unitWeight}</label>
-                    <input type="text" id="gauge${idx}_unit_font_weight" 
-                           value="${gauge.unit_font_weight || ''}" placeholder="normal">
-                  </div>
-                  <div class="field">
-                    <label>${t.unitColor}</label>
-                    <input type="text" id="gauge${idx}_unit_font_color" 
-                           value="${gauge.unit_font_color || ''}" placeholder="var(--secondary-text-color)">
-                  </div>
-                  <div class="field">
-                    <label>${t.unitFontFamily}</label>
-                    <input type="text" id="gauge${idx}_unit_font_family" 
-                           value="${gauge.unit_font_family || ''}" placeholder="inherit">
-                  </div>
-                </div>
-                <div class="checkbox-row">
-                  <input type="checkbox" id="gauge${idx}_enable_shadow" ${gauge.enable_shadow ? 'checked' : ''}>
-                  <label for="gauge${idx}_enable_shadow">${t.enableShadow}</label>
-                </div>
-                <div class="checkbox-row">
-                  <input type="checkbox" id="gauge${idx}_center_shadow" ${gauge.center_shadow ? 'checked' : ''}>
-                  <label for="gauge${idx}_center_shadow">${t.centerShadow}</label>
-                </div>
-                <div class="row" style="margin-left: 26px;">
-                  <div class="field">
-                    <label>${t.centerShadowBlur}</label>
-                    <input type="number" id="gauge${idx}_center_shadow_blur" 
-                           value="${gauge.center_shadow_blur || 30}" min="0" max="100">
-                  </div>
-                  <div class="field">
-                    <label>${t.centerShadowSpread}</label>
-                    <input type="number" id="gauge${idx}_center_shadow_spread" 
-                           value="${gauge.center_shadow_spread || 15}" min="0" max="50">
-                  </div>
-                </div>
-                <div class="checkbox-row">
-                  <input type="checkbox" id="gauge${idx}_outer_shadow" ${gauge.outer_shadow ? 'checked' : ''}>
-                  <label for="gauge${idx}_outer_shadow">${t.outerShadow}</label>
-                </div>
-                <div class="row" style="margin-left: 26px;">
-                  <div class="field">
-                    <label>${t.outerShadowBlur}</label>
-                    <input type="number" id="gauge${idx}_outer_shadow_blur" 
-                           value="${gauge.outer_shadow_blur || 30}" min="0" max="100">
-                  </div>
-                  <div class="field">
-                    <label>${t.outerShadowSpread}</label>
-                    <input type="number" id="gauge${idx}_outer_shadow_spread" 
-                           value="${gauge.outer_shadow_spread || 15}" min="0" max="50">
-                  </div>
-                </div>
-                <div style="margin-top: 16px;">
-                  <label>${t.markersRadius}</label>
-                  <input type="number" id="gauge${idx}_markers_radius" 
-                         value="${gauge.markers_radius || ''}" placeholder="${lang === 'fr' ? 'Auto' : 'Auto'}">
-                </div>
-                <div style="margin-top: 12px;">
-                  <label>${t.severityCustom}</label>
-                  <textarea id="gauge${idx}_severity" placeholder="- color: '#4caf50'\n  value: 33\n- color: '#ff9800'\n  value: 66">${gauge.severity ? this._yamlStringify(gauge.severity) : ''}</textarea>
-                  <div class="yaml-help">${lang === 'fr' ? 'Format YAML - Liste de seuils color/value' : 'YAML format - List of color/value thresholds'}</div>
-                </div>
-                <div style="margin-top: 12px;">
-                  <label>${t.markersCustom}</label>
-                  <textarea id="gauge${idx}_markers" placeholder="- value: 50\n  color: '#ffffff'\n  label: 'Mid'">${gauge.markers ? this._yamlStringify(gauge.markers) : ''}</textarea>
-                  <div class="yaml-help">${lang === 'fr' ? 'Format YAML - Liste de marqueurs' : 'YAML format - List of markers'}</div>
-                </div>
-                <div style="margin-top: 12px;">
-                  <label>${t.zonesCustom}</label>
-                  <textarea id="gauge${idx}_zones" placeholder="- from: 20\n  to: 80\n  color: '#00ff00'\n  opacity: '0.3'">${gauge.zones ? this._yamlStringify(gauge.zones) : ''}</textarea>
-                  <div class="yaml-help">${lang === 'fr' ? 'Format YAML - Zones colorées' : 'YAML format - Colored zones'}</div>
-                </div>
-              </div>
-            </details>
-          </div>
-        `;
-      }).join('')}
-    `;
-
-    this._attachListeners();
-  }
-
-  _attachListeners() {
-    const inputs = this.shadowRoot.querySelectorAll('input, select, textarea');
-    inputs.forEach(input => {
-      const isText = input.type === 'text' || input.tagName === 'TEXTAREA';
-      if (isText) {
-        // Text/textarea: only fire on blur to avoid constant re-renders while typing
-        input.addEventListener('keydown', e => e.stopPropagation(), { passive: true });
-        input.addEventListener('keyup',   e => e.stopPropagation(), { passive: true });
-        input.addEventListener('input',   e => e.stopPropagation(), { passive: true });
-        input.addEventListener('blur', e => {
-          e.stopPropagation();
-          this._configChanged();
-        });
-      } else {
-        // Checkboxes, selects, numbers: fire on change (committed value)
-        input.addEventListener('change', e => {
-          e.stopPropagation();
-          this._configChanged();
-        });
+  // ── Sync in-place (guard focus + clés imbriquées) ──────────────────
+  _syncValues() {
+    const active = this.querySelector(':focus') || document.activeElement;
+    this.querySelectorAll('[data-key]').forEach(el => {
+      if (el === active) return;
+      const v = this._read(el.dataset.key);
+      if (el.type === 'checkbox') el.checked = el.dataset.defaultOn ? (v !== false) : !!v;
+      else {
+        el.value = (v == null ? '' : v);
+        if (el._pick) el._pick.value = this._toHex(el.value) || (el._cssDefault ? this._resolveColor(el._cssDefault) : null) || '#6200EA';
+        if (el._rngLbl) el._rngLbl.textContent = el.value;
       }
     });
+    this.querySelectorAll('textarea[data-key]').forEach(ta => {
+      if (ta === active) return;
+      const v = this._read(ta.dataset.key);
+      ta.value = v ? this._yamlStringify(v) : '';
+    });
+    this._bindIconPreviews(true);
+  }
+
+  // ── Helpers de champ (signatures FIXES — ne pas réinventer) ────────
+  _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; (this._appendTo || this).appendChild(d); return d; }
+  _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; (this._appendTo || this).appendChild(d); return d; }
+
+  _text(key, label, ph = '') {
+    const row = this._row(label);
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.placeholder = ph; inp.dataset.key = key;
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  _number(key, label, { min, max, step = 1, ph = '' } = {}) {
+    const row = this._row(label);
+    const inp = document.createElement('input');
+    inp.type = 'number'; if (min != null) inp.min = min; if (max != null) inp.max = max;
+    inp.step = step; inp.placeholder = ph; inp.dataset.key = key;
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => { const n = parseFloat(inp.value); this._set(key, isNaN(n) ? undefined : n); });
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  _toggle(key, label, defaultOn = false) {
+    const row = this._row(label);
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.key = key;
+    if (defaultOn) cb.dataset.defaultOn = '1';
+    const v = this._read(key);
+    cb.checked = defaultOn ? (v !== false) : !!v;
+    cb.style.cssText = 'width:38px;height:20px;cursor:pointer;accent-color:var(--primary-color);flex:none;';
+    cb.addEventListener('change', () => this._set(key, cb.checked));
+    row.wrap.appendChild(cb); return cb;
+  }
+
+  _color(key, label, cssDefault = null, ph = 'ex: #FF3366 / rgb(var(--rgb-lavande)) / var(--primary-color)') {
+    const row = this._row(label);
+    const box = document.createElement('div'); box.className = 'color-row';
+    const txt = document.createElement('input'); txt.type = 'text'; txt.placeholder = ph; txt.dataset.key = key;
+    txt.value = this._read(key) ?? '';
+    const pick = document.createElement('input'); pick.type = 'color';
+    txt._pick = pick; txt._cssDefault = cssDefault;
+    const refresh = () => { pick.value = this._toHex(txt.value) || (cssDefault ? this._resolveColor(cssDefault) : null) || '#6200EA'; };
+    txt.addEventListener('input', () => { this._set(key, txt.value); refresh(); });
+    pick.addEventListener('input', () => { txt.value = pick.value; this._set(key, pick.value); });
+    box.appendChild(txt); box.appendChild(pick); row.wrap.appendChild(box); refresh(); return txt;
+  }
+
+  _resolveColor(css) {
+    try {
+      const probe = document.createElement('span');
+      probe.style.cssText = `color:${css};position:absolute;left:-9999px;top:-9999px`;
+      this.appendChild(probe);
+      const rgb = getComputedStyle(probe).color; probe.remove();
+      const m = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
+      return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+    } catch { return null; }
+  }
+
+  _entity(key, label, prefix = '') {
+    const row = this._row(label);
+    const inp = document.createElement('input'); inp.type = 'text'; inp.autocomplete = 'off';
+    inp.placeholder = (prefix || 'domain') + '.…'; inp.dataset.key = key; inp.dataset.prefix = prefix;
+    inp.setAttribute('list', `ndg-ent-${(prefix || 'all').replace(/[^a-z]/g, '')}`);
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value.trim()));
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  _select(key, label, options, emptyLabel = null) {
+    const w = this._row(label).wrap;
+    const sel = document.createElement('select'); sel.dataset.key = key;
+    if (emptyLabel !== null) { const o = document.createElement('option'); o.value = ''; o.textContent = emptyLabel; sel.appendChild(o); }
+    options.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = (typeof opt === 'object') ? opt.value : opt;
+      o.textContent = (typeof opt === 'object') ? opt.label : opt;
+      sel.appendChild(o);
+    });
+    sel.value = this._read(key) ?? '';
+    sel.addEventListener('change', () => this._set(key, sel.value));
+    w.appendChild(sel); return sel;
+  }
+
+  // Extension au canon : slider avec valeur affichée en live.
+  _range(key, label, { min = 0, max = 1, step = 0.01 } = {}) {
+    const row = this._row(label);
+    const box = document.createElement('div'); box.className = 'range-row';
+    const inp = document.createElement('input'); inp.type = 'range'; inp.min = min; inp.max = max; inp.step = step;
+    inp.dataset.key = key;
+    const v = this._read(key); inp.value = (v == null ? min : v);
+    const lbl = document.createElement('span'); lbl.className = 'range-val'; lbl.textContent = inp.value;
+    inp._rngLbl = lbl;
+    inp.addEventListener('input', () => { lbl.textContent = inp.value; this._set(key, parseFloat(inp.value)); });
+    box.appendChild(inp); box.appendChild(lbl); row.wrap.appendChild(box); return inp;
+  }
+
+  // Extension au canon : textarea YAML (listes d'objets) — severity/markers/zones.
+  _textarea(key, label, ph = '') {
+    const row = this._row(label);
+    const ta = document.createElement('textarea'); ta.placeholder = ph; ta.dataset.key = key;
+    const v = this._read(key); ta.value = v ? this._yamlStringify(v) : '';
+    ta.addEventListener('blur', () => this._set(key, this._yamlParse(ta.value)));
+    row.wrap.appendChild(ta); return ta;
   }
 
   _yamlStringify(obj) {
     if (!obj || !Array.isArray(obj)) return '';
     return obj.map(item => {
-      const lines = Object.entries(item).map(([key, value]) => {
-        if (typeof value === 'string') {
-          return `  ${key}: '${value}'`;
-        }
-        return `  ${key}: ${value}`;
-      });
+      const lines = Object.entries(item).map(([k, v]) => typeof v === 'string' ? `  ${k}: '${v}'` : `  ${k}: ${v}`);
       return '- ' + lines.join('\n  ').substring(2);
     }).join('\n');
   }
@@ -2876,148 +2326,211 @@ class NeonDualGaugeCardEditor extends HTMLElement {
   _yamlParse(str) {
     if (!str || !str.trim()) return undefined;
     try {
-      // Simple YAML parser pour les listes d'objets
       const items = [];
       const lines = str.split('\n').map(l => l.trim()).filter(l => l);
-      let currentItem = null;
-      
+      let cur = null;
       for (const line of lines) {
         if (line.startsWith('-')) {
-          if (currentItem) items.push(currentItem);
-          currentItem = {};
+          if (cur) items.push(cur);
+          cur = {};
           const rest = line.substring(1).trim();
           if (rest) {
-            const [key, ...valueParts] = rest.split(':');
-            const value = valueParts.join(':').trim().replace(/^['"]|['"]$/g, '');
-            currentItem[key.trim()] = isNaN(value) ? value : parseFloat(value);
+            const [k, ...vp] = rest.split(':');
+            const val = vp.join(':').trim().replace(/^['"]|['"]$/g, '');
+            cur[k.trim()] = isNaN(val) ? val : parseFloat(val);
           }
-        } else if (line.includes(':') && currentItem) {
-          const [key, ...valueParts] = line.split(':');
-          const value = valueParts.join(':').trim().replace(/^['"]|['"]$/g, '');
-          currentItem[key.trim()] = isNaN(value) ? value : parseFloat(value);
+        } else if (line.includes(':') && cur) {
+          const [k, ...vp] = line.split(':');
+          const val = vp.join(':').trim().replace(/^['"]|['"]$/g, '');
+          cur[k.trim()] = isNaN(val) ? val : parseFloat(val);
         }
       }
-      if (currentItem) items.push(currentItem);
-      
+      if (cur) items.push(cur);
       return items.length > 0 ? items : undefined;
-    } catch (e) {
-      console.warn('YAML parse error:', e);
-      return undefined;
-    }
+    } catch (e) { console.warn('YAML parse error:', e); return undefined; }
   }
 
-  _configChanged() {
-    const getValue = (id) => {
-      const el = this.shadowRoot.getElementById(id);
-      if (!el) return undefined;
-      if (el.type === 'checkbox') return el.checked;
-      if (el.type === 'number' || el.type === 'range') {
-        const val = parseFloat(el.value);
-        return isNaN(val) ? undefined : val;
-      }
-      const textVal = el.value || undefined;
-      // Ne retourner que les valeurs non-vides pour les champs texte
-      return (textVal && textVal.trim()) ? textVal : undefined;
-    };
+  // ── Mécanique commune (NE PAS toucher, + _appendTo pour grouper) ────
+  _row(labelHtml, isHtml = false) {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('label');
+    if (isHtml) lbl.innerHTML = labelHtml; else lbl.textContent = labelHtml;
+    const wrap = document.createElement('div'); wrap.className = 'field-wrap';
+    row.appendChild(lbl); row.appendChild(wrap);
+    (this._appendTo || this).appendChild(row);
+    return { row, wrap };
+  }
 
-    const newConfig = {
-      type: 'custom:neon-dual-gauge-card',
-      name: getValue('name'),
-      title_font_family: getValue('title_font_family'),
-      title_position: getValue('title_position'),
-      gauge_size: getValue('gauge_size'),
-      inner_gauge_size: getValue('inner_gauge_size'),
-      inner_gauge_radius: getValue('inner_gauge_radius'),
-      primary_gauge: getValue('primary_gauge'),
-      hide_card: getValue('hide_card'),
-      enable_custom_effects: getValue('enable_custom_effects'),
-      enable_top_glow: getValue('enable_top_glow'),
-      enable_pulse_animation: getValue('enable_pulse_animation'),
-      neon_value_glow: getValue('neon_value_glow'),
-      value_glow_dynamic: getValue('value_glow_dynamic'),
-      enable_comet_head: getValue('enable_comet_head'),
-      enable_ignition: getValue('enable_ignition'),
-      enable_tick_marks: getValue('enable_tick_marks'),
-      enable_glass_center: getValue('enable_glass_center'),
-      pulse_intensity: getValue('pulse_intensity'),
-      pulse_speed: getValue('pulse_speed'),
-      pulse_min_opacity: getValue('pulse_min_opacity'),
-      enable_glitch_hover: getValue('enable_glitch_hover'),
-      card_theme: getValue('card_theme'),
-      custom_background: getValue('custom_background'),
-      custom_gauge_background: getValue('custom_gauge_background'),
-      custom_center_background: getValue('custom_center_background'),
-      custom_text_color: getValue('custom_text_color'),
-      custom_secondary_text_color: getValue('custom_secondary_text_color'),
-      hide_shadows: getValue('hide_shadows'),
-      update_interval: getValue('update_interval'),
-      power_save_mode: getValue('power_save_mode'),
-      debounce_updates: getValue('debounce_updates'),
-      kiosk_mode: getValue('kiosk_mode'),
-      gauges: [0, 1].map(idx => {
-        const gauge = {
-          entity: getValue(`gauge${idx}_entity`),
-          min: getValue(`gauge${idx}_min`),
-          max: getValue(`gauge${idx}_max`),
-          unit: getValue(`gauge${idx}_unit`),
-          decimals: getValue(`gauge${idx}_decimals`),
-          leds_count: getValue(`gauge${idx}_leds_count`),
-          led_size: getValue(`gauge${idx}_led_size`),
-          animation_duration: getValue(`gauge${idx}_animation_duration`),
-          smooth_transitions: getValue(`gauge${idx}_smooth_transitions`),
-          bidirectional: getValue(`gauge${idx}_bidirectional`),
-          hide_inactive_leds: getValue(`gauge${idx}_hide_inactive_leds`),
-          theme: getValue(`gauge${idx}_theme`),
-          custom_background: getValue(`gauge${idx}_custom_background`),
-          custom_gauge_background: getValue(`gauge${idx}_custom_gauge_background`),
-          custom_center_background: getValue(`gauge${idx}_custom_center_background`),
-          custom_text_color: getValue(`gauge${idx}_custom_text_color`),
-          custom_secondary_text_color: getValue(`gauge${idx}_custom_secondary_text_color`),
-          value_font_size: getValue(`gauge${idx}_value_font_size`),
-          value_font_weight: getValue(`gauge${idx}_value_font_weight`),
-          value_font_color: getValue(`gauge${idx}_value_font_color`),
-          value_font_family: getValue(`gauge${idx}_value_font_family`),
-          unit_font_size: getValue(`gauge${idx}_unit_font_size`),
-          unit_font_weight: getValue(`gauge${idx}_unit_font_weight`),
-          unit_font_color: getValue(`gauge${idx}_unit_font_color`),
-          unit_font_family: getValue(`gauge${idx}_unit_font_family`),
-          enable_shadow: getValue(`gauge${idx}_enable_shadow`),
-          center_shadow: getValue(`gauge${idx}_center_shadow`),
-          center_shadow_blur: getValue(`gauge${idx}_center_shadow_blur`),
-          center_shadow_spread: getValue(`gauge${idx}_center_shadow_spread`),
-          outer_shadow: getValue(`gauge${idx}_outer_shadow`),
-          outer_shadow_blur: getValue(`gauge${idx}_outer_shadow_blur`),
-          outer_shadow_spread: getValue(`gauge${idx}_outer_shadow_spread`),
-          markers_radius: getValue(`gauge${idx}_markers_radius`),
-          severity: this._yamlParse(getValue(`gauge${idx}_severity`)),
-          markers: this._yamlParse(getValue(`gauge${idx}_markers`)),
-          zones: this._yamlParse(getValue(`gauge${idx}_zones`))
-        };
-        // Remove undefined values
-        Object.keys(gauge).forEach(key => {
-          if (gauge[key] === undefined || gauge[key] === '') {
-            delete gauge[key];
-          }
-        });
-        return gauge;
-      })
-    };
+  _toHex(c) {
+    if (!c) return null;
+    if (/^#[0-9a-f]{6}$/i.test(c)) return c;
+    const m = c.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/i);
+    return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+  }
 
-    // Remove undefined/empty top-level values
-    Object.keys(newConfig).forEach(key => {
-      if (newConfig[key] === undefined || newConfig[key] === '') {
-        delete newConfig[key];
-      }
+  _bindIconPreviews(resyncOnly = false) {
+    this.querySelectorAll('.icon-preview[data-preview]').forEach(prev => {
+      const inp = this.querySelector(`input[data-key="${prev.dataset.preview}"]`);
+      const upd = () => {
+        const val = (inp && inp.value || '').trim();
+        prev.innerHTML = '';
+        if (/^mdi:[a-zA-Z0-9_-]+$/.test(val)) {
+          const ico = document.createElement('ha-icon');
+          ico.setAttribute('icon', val); ico.style.cssText = '--mdc-icon-size:20px';
+          prev.appendChild(ico);
+        }
+      };
+      if (!resyncOnly && inp && !inp._previewBound) { inp.addEventListener('input', upd); inp._previewBound = true; }
+      upd();
     });
+  }
 
-    this._config = newConfig;
-
-    const event = new CustomEvent('config-changed', {
-      detail: { config: newConfig },
-      bubbles: true,
-      composed: true
+  _fillDatalists() {
+    if (!this._hass) return;
+    this.querySelectorAll('input[data-prefix]').forEach(inp => {
+      const id = inp.getAttribute('list'); if (!id) return;
+      let dl = this.querySelector('#' + id);
+      if (!dl) { dl = document.createElement('datalist'); dl.id = id; this.appendChild(dl); }
+      const ids = Object.keys(this._hass.states).filter(e => e.startsWith(inp.dataset.prefix || '')).sort();
+      if (dl.childElementCount === ids.length) return;
+      dl.textContent = '';
+      const frag = document.createDocumentFragment();
+      ids.forEach(id2 => { const o = document.createElement('option'); o.value = id2;
+        const fn = this._hass.states[id2].attributes?.friendly_name; if (fn && fn !== id2) o.label = fn; frag.appendChild(o); });
+      dl.appendChild(frag);
     });
-    this.dispatchEvent(event);
+  }
+
+  // ── CSS commun (identique partout, + spécifique range/textarea) ─────
+  _css() {
+    return `
+      :host { display:block; padding:14px; font-family:var(--primary-font-family,Roboto,sans-serif); }
+      .sec { font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--divider-color); }
+      .sec:first-child { margin-top:0; }
+      .row { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
+      .row label { flex:0 0 160px;font-size:12px;color:var(--secondary-text-color); }
+      .row label .mdi-link { color:var(--primary-color);font-size:9px;text-transform:none;letter-spacing:0; }
+      .field-wrap { flex:1;min-width:0;display:flex; }
+      input[type=text],input[type=number],select,textarea { flex:1;width:100%;padding:4px 8px;border:1px solid var(--divider-color);border-radius:4px;background:var(--card-background-color);color:var(--primary-text-color);font-size:12px;outline:none;box-sizing:border-box; }
+      textarea { font-family:monospace;min-height:70px;resize:vertical; }
+      select { cursor:pointer; }
+      input:focus,select:focus,textarea:focus { box-shadow:0 0 0 1px var(--primary-color); }
+      .color-row { display:flex;gap:8px;flex:1; }
+      .color-row input[type=text] { flex:1; }
+      .color-row input[type=color] { width:36px;height:28px;flex:none;padding:0;border:none;background:none;border-radius:4px;cursor:pointer; }
+      .icon-preview { width:30px;height:28px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--divider-color);border-radius:4px;color:var(--primary-text-color); }
+      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:-2px 0 6px 168px; }
+      .range-row { display:flex;gap:8px;flex:1;align-items:center; }
+      .range-row input[type=range] { flex:1; }
+      .range-row .range-val { flex:none;width:36px;text-align:right;font-size:11px;color:var(--secondary-text-color); }
+      .gauge-block { border:1px dashed var(--divider-color);border-radius:8px;padding:8px 10px 2px;margin-bottom:12px; }
+      .gauge-block-title { font-size:12px;font-weight:700;color:var(--primary-text-color);margin-bottom:8px; }
+      .adv-block { margin:8px 0 4px;padding-top:8px;border-top:1px dashed var(--divider-color); }
+    `;
+  }
+
+  // ── Render : on vide, on pose le style, on déroule le schéma ────────
+  _render() {
+    this.innerHTML = '';
+    const st = document.createElement('style'); st.textContent = this._css(); this.appendChild(st);
+    this._schema();
+    this._fillDatalists();
+    this._bindIconPreviews();
+  }
+
+  // ╔════════════════════════════════════════════════════════════════╗
+  // ║  SCHÉMA — LA SEULE PARTIE À ÉCRIRE PAR CARD                     ║
+  // ╚════════════════════════════════════════════════════════════════╝
+  _schema() {
+    this._section('Carte');
+    this._text('name', 'Titre de la carte', 'Nom de la carte');
+    this._text('title_font_family', 'Police du titre', 'inherit');
+    this._select('title_position', 'Position du titre', NDG_POSITIONS.map(p => ({ value: p, label: p })));
+    this._number('gauge_size', 'Taille jauge externe (px)', { min: 100, max: 400, step: 1, ph: '200' });
+    this._number('inner_gauge_size', 'Taille jauge interne (px)', { ph: 'Auto (65%)' });
+    this._number('inner_gauge_radius', 'Rayon jauge interne (px)', { ph: 'Auto' });
+    this._select('primary_gauge', 'Jauge principale', [{ value: 'inner', label: 'Interne' }, { value: 'outer', label: 'Externe' }]);
+
+    this._section('Effets visuels');
+    this._toggle('enable_custom_effects', 'Effets visuels', true);
+    this._toggle('enable_top_glow', 'Lueur supérieure', true);
+    this._toggle('enable_pulse_animation', 'Animation pulse', true);
+    this._toggle('neon_value_glow', 'Triple neon glow (valeurs)', true);
+    this._toggle('value_glow_dynamic', 'Glow de valeur dynamique (suit la sévérité)', true);
+    this._toggle('enable_comet_head', 'Tête de comète + traînée', true);
+    this._toggle('enable_ignition', "Sweep d'allumage (ignition)", true);
+    this._toggle('enable_tick_marks', 'Graduations gravées', true);
+    this._toggle('enable_glass_center', 'Anneau de verre central', true);
+    this._range('pulse_intensity', 'Intensité pulse (px)', { min: 5, max: 80, step: 1 });
+    this._range('pulse_speed', 'Vitesse pulse (s)', { min: 1, max: 12, step: 0.5 });
+    this._range('pulse_min_opacity', 'Opacité min pulse', { min: 0, max: 0.9, step: 0.05 });
+    this._toggle('enable_glitch_hover', 'Effet glitch survol', true);
+    this._toggle('hide_card', 'Masquer cadre', false);
+
+    this._section('Thème');
+    this._select('card_theme', 'Thème carte', NDG_THEMES, 'Défaut');
+    this._color('custom_background', 'Fond personnalisé', null, '#1a1a1a');
+    this._color('custom_gauge_background', 'Fond jauge', null, 'radial-gradient(...)');
+    this._color('custom_center_background', 'Fond centre', null, 'radial-gradient(...)');
+    this._color('custom_text_color', 'Couleur texte', null, '#ffffff');
+    this._color('custom_secondary_text_color', 'Couleur texte secondaire', null, '#cccccc');
+    this._toggle('hide_shadows', 'Masquer ombres', false);
+
+    this._section('Performance');
+    this._number('update_interval', 'Intervalle MàJ (ms)', { min: 100, max: 10000, step: 100, ph: '1000' });
+    this._toggle('power_save_mode', 'Économie énergie', false);
+    this._toggle('debounce_updates', 'Debounce MàJ', false);
+    this._toggle('kiosk_mode', 'Mode kiosque (économie thermique)', false);
+
+    [0, 1].forEach(idx => {
+      this._section(idx === 0 ? 'Jauge Interne (0)' : 'Jauge Externe (1)');
+      const box = document.createElement('div'); box.className = 'gauge-block'; this.appendChild(box);
+      this._appendTo = box;
+      this._entity(`gauges.${idx}.entity`, 'Entité', 'sensor');
+      this._number(`gauges.${idx}.min`, 'Min', { ph: '0' });
+      this._number(`gauges.${idx}.max`, 'Max', { ph: '100' });
+      this._text(`gauges.${idx}.unit`, 'Unité', '°C, %, W');
+      this._number(`gauges.${idx}.decimals`, 'Décimales', { min: 0, max: 3, step: 1, ph: '1' });
+      this._number(`gauges.${idx}.leds_count`, 'Nombre LEDs', { min: 20, max: 200, step: 1, ph: '100' });
+      this._number(`gauges.${idx}.led_size`, 'Taille LED (px)', { min: 3, max: 15, step: 1, ph: idx === 0 ? '6' : '8' });
+      this._number(`gauges.${idx}.animation_duration`, 'Durée animation (ms)', { min: 100, max: 3000, step: 10, ph: '800' });
+      this._toggle(`gauges.${idx}.smooth_transitions`, 'Transitions douces', true);
+      this._toggle(`gauges.${idx}.bidirectional`, 'Bidirectionnel', false);
+      this._toggle(`gauges.${idx}.hide_inactive_leds`, 'Masquer LEDs inactives', false);
+
+      const adv = document.createElement('div'); adv.className = 'adv-block'; box.appendChild(adv);
+      this._appendTo = adv;
+      this._hint('Avancé');
+      this._select(`gauges.${idx}.theme`, 'Thème', NDG_THEMES, 'Défaut');
+      this._color(`gauges.${idx}.custom_background`, 'Fond personnalisé', null, '#f0f0f0');
+      this._color(`gauges.${idx}.custom_gauge_background`, 'Fond jauge', null, 'radial-gradient(...)');
+      this._color(`gauges.${idx}.custom_center_background`, 'Fond centre', null, 'radial-gradient(...)');
+      this._color(`gauges.${idx}.custom_text_color`, 'Couleur texte', null, '#333');
+      this._color(`gauges.${idx}.custom_secondary_text_color`, 'Couleur texte secondaire', null, '#666');
+      this._text(`gauges.${idx}.value_font_size`, 'Taille valeur', '24px');
+      this._text(`gauges.${idx}.value_font_weight`, 'Poids valeur', 'bold');
+      this._color(`gauges.${idx}.value_font_color`, 'Couleur valeur', 'var(--primary-text-color)');
+      this._text(`gauges.${idx}.value_font_family`, 'Police valeur', 'inherit');
+      this._text(`gauges.${idx}.unit_font_size`, 'Taille unité', '14px');
+      this._text(`gauges.${idx}.unit_font_weight`, 'Poids unité', 'normal');
+      this._color(`gauges.${idx}.unit_font_color`, 'Couleur unité', 'var(--secondary-text-color)');
+      this._text(`gauges.${idx}.unit_font_family`, 'Police unité', 'inherit');
+      this._toggle(`gauges.${idx}.enable_shadow`, 'Ombre conteneur', false);
+      this._toggle(`gauges.${idx}.center_shadow`, 'Ombre centre', false);
+      this._number(`gauges.${idx}.center_shadow_blur`, 'Flou ombre centre', { min: 0, max: 100, step: 1, ph: '30' });
+      this._number(`gauges.${idx}.center_shadow_spread`, 'Étalement ombre centre', { min: 0, max: 50, step: 1, ph: '15' });
+      this._toggle(`gauges.${idx}.outer_shadow`, 'Ombre externe', false);
+      this._number(`gauges.${idx}.outer_shadow_blur`, 'Flou ombre externe', { min: 0, max: 100, step: 1, ph: '30' });
+      this._number(`gauges.${idx}.outer_shadow_spread`, 'Étalement ombre externe', { min: 0, max: 50, step: 1, ph: '15' });
+      this._number(`gauges.${idx}.markers_radius`, 'Rayon markers', { ph: 'Auto' });
+      this._textarea(`gauges.${idx}.severity`, 'Zones de sévérité (YAML)', "- color: '#4caf50'\n  value: 33\n- color: '#ff9800'\n  value: 66");
+      this._hint('Format YAML — liste de seuils color/value');
+      this._textarea(`gauges.${idx}.markers`, 'Marqueurs (YAML)', "- value: 50\n  color: '#ffffff'\n  label: 'Mid'");
+      this._hint('Format YAML — liste de marqueurs');
+      this._textarea(`gauges.${idx}.zones`, 'Zones colorées (YAML)', "- from: 20\n  to: 80\n  color: '#00ff00'\n  opacity: '0.3'");
+      this._hint('Format YAML — zones colorées');
+      this._appendTo = null;
+    });
   }
 }
 

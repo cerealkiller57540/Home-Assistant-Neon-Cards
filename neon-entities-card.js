@@ -621,7 +621,9 @@ class NeonEntitiesCard extends HTMLElement {
 
       const domain = (item.entity || '').split('.')[0];
       const row    = document.createElement('div');
-      row.className    = (ENT_IS_ANDROID || domain === 'binary_sensor') ? 'row on' : 'row off';
+      // La row reste toujours "on" visuellement (ne pas éteindre la ligne quand
+      // un switch est off) — comportement voulu partout, pas seulement mobile.
+      row.className    = 'row on';
       row.dataset.index  = i;
       row.dataset.entity = item.entity || '';
       row.dataset.domain = domain;
@@ -785,6 +787,31 @@ class NeonEntitiesCard extends HTMLElement {
         break;
       }
 
+      case 'button': {
+        // Un bouton n'a pas d'état on/off, mais on veut le confort d'un switch :
+        // toggle en mode IMPULSION — s'allume, appelle button.press, se rééteint
+        // après impulse_duration (défaut 500ms). Look de switch, geste = pression.
+        const tog = document.createElement('div');
+        tog.className = 'tog off';
+        tog.innerHTML = '<div class="tog-thumb"></div>';
+        tog.addEventListener('click', e => {
+          e.stopPropagation();
+          if (!this._hass || !item.entity) return;
+          const delay = item.impulse_duration ?? 500;
+          tog.classList.remove('off');
+          tog.classList.add('on', 'active');
+          this._hass.callService('button', 'press', { entity_id: item.entity });
+          const t = setTimeout(() => {
+            tog.classList.remove('on', 'active');
+            tog.classList.add('off');
+            this._impulseTimers.delete(t);
+          }, delay);
+          this._impulseTimers.add(t);
+        }, opts);
+        ctrl.appendChild(tog);
+        break;
+      }
+
       default: {
         // Fallback: afficher state brut
         const v = document.createElement('span');
@@ -821,12 +848,12 @@ class NeonEntitiesCard extends HTMLElement {
       if (!item || !entityId) return;
 
       const st = this._hass.states[entityId];
-      if (!st) { if (!ENT_IS_ANDROID) { row.classList.add('off'); row.classList.remove('on'); } return; }
+      if (!st) return;  // entité absente : laisser la row telle quelle (toujours "on")
 
-      const on = this._isOn(domain, st);
-      const rowOn = ENT_IS_ANDROID || domain === 'binary_sensor' ? true : on;
-      row.classList.toggle('on',  rowOn);
-      row.classList.toggle('off', !rowOn);
+      // La row reste toujours allumée (ne pas griser la ligne sur un switch off) —
+      // seul le toggle reflète l'état on/off, pas la row entière.
+      row.classList.add('on');
+      row.classList.remove('off');
 
       // secondary_info state label
       const sl = row.querySelector('.state-label');
@@ -988,6 +1015,12 @@ class NeonEntitiesCard extends HTMLElement {
         this._setVal(v, setpt != null ? parseFloat(setpt).toFixed(dec) + unit : '—');
         break;
       }
+      case 'button': {
+        // Rien \u00E0 mettre \u00E0 jour : le toggle impulse g\u00E8re son propre \u00E9tat visuel
+        // (on/off au clic). L'\u00E9tat HA d'un button ('unknown') ne doit pas le toucher.
+        break;
+      }
+
       default: {
         const v = row.querySelector('.sensor-val');
         if (!v) return;

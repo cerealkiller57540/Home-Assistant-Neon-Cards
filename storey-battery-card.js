@@ -1367,249 +1367,321 @@ class StoreyBatteryCard extends HTMLElement {
   static getStubConfig() { return { modules: 1 }; }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════ *
- *  VISUAL CONFIG EDITOR                                                      *
- * ═══════════════════════════════════════════════════════════════════════════ */
-
+/* ═══════════════════════════════════════════════════════════════════
+ *  EDITOR — template unifié (cf CARDS-EDITOR-TEMPLATE.md)
+ *  N'éditer QUE _schema() ; le reste est canonique et identique partout.
+ * ═══════════════════════════════════════════════════════════════════ */
+const SBC_FONTS = [
+  'Orbitron','Rajdhani','Share Tech Mono','Exo 2','Roboto','Montserrat',
+  'Oswald','Bebas Neue','Inter','Poppins','Space Grotesk','Syne',
+  'DM Sans','Playfair Display','Cinzel',
+];
 class StoreyBatteryCardEditor extends HTMLElement {
+  constructor() { super(); this._config = {}; this._hass = null; this._rendered = false; }
 
+  // ── Cycle de vie (NE PAS toucher) ──────────────────────────────────
   setConfig(c) {
-    this._config = { ...c };
-    if (!this._built && this._hass) { this._built = true; this._render(); }
+    this._config = { ...(c || {}) };
+    if (!this._rendered) { this._rendered = true; this._render(); }
+    else this._syncValues();
   }
+  set hass(h) { this._hass = h; this._fillDatalists(); }   // JAMAIS de render ici
+  disconnectedCallback() { this._rendered = false; }
 
-  set hass(h) {
-    this._hass = h;
-    if (!this._built && this._config) { this._built = true; this._render(); return; }
-    const sensorKeys = Object.keys(h.states).filter(e => e.startsWith('sensor.')).sort();
-    const newKeys = sensorKeys.join('\n');
-    if (newKeys === this._lastEntKeys) return;
-    this._lastEntKeys = newKeys;
-    const frag = document.createDocumentFragment();
-    for (const e of sensorKeys) { const o = document.createElement('option'); o.value = e; frag.appendChild(o); }
-    this.querySelectorAll('datalist').forEach(dl => { dl.innerHTML = ''; dl.appendChild(frag.cloneNode(true)); });
+  // ── Lecture / écriture config (clés imbriquées via ".") ────────────
+  _read(key) {
+    return key.includes('.')
+      ? key.split('.').reduce((o, p) => (o && o[p] !== undefined ? o[p] : undefined), this._config)
+      : this._config[key];
   }
-
-  _fire() {
-    this.dispatchEvent(new CustomEvent('config-changed', {
-      detail: { config: this._config }, bubbles: true, composed: true,
-    }));
-  }
-
-  _set(key, val, isChecked) {
+  _set(key, value) {
+    const empty = (value === undefined || value === '' || value === null);
     if (key.includes('.')) {
-      const [parent, child] = key.split('.');
-      if (!this._config[parent] || typeof this._config[parent] !== 'object') this._config[parent] = {};
-      if (val===''||val===null||val===undefined) delete this._config[parent][child];
-      else this._config[parent][child] = isNaN(val) ? val : (val==='' ? val : Number(val)||val);
-    } else if (isChecked !== undefined) {
-      if (isChecked) this._config[key] = true; else delete this._config[key];
-    } else if (val===''||val===null||val===undefined) {
-      delete this._config[key];
-    } else {
-      this._config[key] = val;
-    }
-    this._fire();
-    if (['modules','glow_enabled','cyberpunk_mode','neon_glow','card_mod_bg'].includes(key)) {
-      this._built = false; this._built = true; this._render();
-    }
+      const parts = key.split('.');
+      let o = this._config;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!o[parts[i]] || typeof o[parts[i]] !== 'object') o[parts[i]] = {};
+        o = o[parts[i]];
+      }
+      const last = parts[parts.length - 1];
+      if (empty) delete o[last]; else o[last] = value;
+      const parent = parts.slice(0, -1).reduce((a, k) => a && a[k], this._config);
+      if (parent && typeof parent === 'object' && !Object.keys(parent).length) delete this._config[parts[0]];
+    } else if (empty) { delete this._config[key]; }
+    else { this._config[key] = value; }
+    this.dispatchEvent(new CustomEvent('config-changed',
+      { detail: { config: { ...this._config } }, bubbles: true, composed: true }));
+    // "modules" change le nombre de blocs affichés → seul cas qui a besoin d'un re-render complet.
+    if (key === 'modules') { this._rendered = false; this._rendered = true; this._render(); }
   }
 
-  _modules() { return Math.min(3, Math.max(0, parseInt(this._config.modules)||0)); }
-  _entities() { return this._hass ? Object.keys(this._hass.states).filter(e => e.startsWith('sensor.')).sort() : []; }
-
-  _picker(label, key, placeholder) {
-    const val = this._config[key]||'';
-    const lid = 'dl'+key.replace(/\W/g,'');
-    const opts = this._entities().map(e => `<option value="${e}">`).join('');
-    return `<div class="field">
-      <label>${label}</label>
-      <input class="ep" data-key="${key}" value="${val}"
-        list="${lid}" placeholder="${placeholder||'Search\u2026'}" autocomplete="off"/>
-      <datalist id="${lid}">${opts}</datalist>
-    </div>`;
+  // ── Sync in-place (guard focus + clés imbriquées) ──────────────────
+  _syncValues() {
+    const active = this.querySelector(':focus') || document.activeElement;
+    this.querySelectorAll('[data-key]').forEach(el => {
+      if (el === active) return;
+      const v = this._read(el.dataset.key);
+      if (el.type === 'checkbox') el.checked = el.dataset.defaultOn ? (v !== false) : !!v;
+      else {
+        el.value = (v == null ? '' : v);
+        if (el._pick) el._pick.value = this._toHex(el.value) || (el._cssDefault ? this._resolveColor(el._cssDefault) : null) || '#6200EA';
+        if (el._rngLbl) el._rngLbl.textContent = el.value;
+      }
+    });
+    this._bindIconPreviews(true);
   }
 
-  _toggle(label, key, activeColor) {
-    const on = !!this._config[key];
-    return `<div class="field tog-row">
-      <label>${label}</label>
-      <label style="position:relative;display:inline-block;width:42px;height:24px;flex-shrink:0;">
-        <input type="checkbox" data-key="${key}" ${on?'checked':''}
-          style="opacity:0;width:0;height:0;position:absolute;"/>
-        <span style="position:absolute;inset:0;border-radius:99px;cursor:pointer;transition:background .2s;
-          background:${on?activeColor:'rgba(255,255,255,0.12)'};">
-          <span style="position:absolute;top:3px;border-radius:50%;width:18px;height:18px;transition:left .2s;
-            left:${on?'21px':'3px'};background:${on?'#1a1a1a':'rgba(255,255,255,0.6)'};">
-          </span>
-        </span>
-      </label>
-    </div>`;
+  // ── Helpers de champ (signatures FIXES — ne pas réinventer) ────────
+  _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; (this._appendTo || this).appendChild(d); return d; }
+  _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; (this._appendTo || this).appendChild(d); return d; }
+
+  _text(key, label, ph = '') {
+    const row = this._row(label);
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.placeholder = ph; inp.dataset.key = key;
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    row.wrap.appendChild(inp); return inp;
   }
 
+  _number(key, label, { min, max, step = 1, ph = '' } = {}) {
+    const row = this._row(label);
+    const inp = document.createElement('input');
+    inp.type = 'number'; if (min != null) inp.min = min; if (max != null) inp.max = max;
+    inp.step = step; inp.placeholder = ph; inp.dataset.key = key;
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => { const n = parseFloat(inp.value); this._set(key, isNaN(n) ? undefined : n); });
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  _toggle(key, label, defaultOn = false) {
+    const row = this._row(label);
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.key = key;
+    if (defaultOn) cb.dataset.defaultOn = '1';
+    const v = this._read(key);
+    cb.checked = defaultOn ? (v !== false) : !!v;
+    cb.style.cssText = 'width:38px;height:20px;cursor:pointer;accent-color:var(--primary-color);flex:none;';
+    cb.addEventListener('change', () => this._set(key, cb.checked));
+    row.wrap.appendChild(cb); return cb;
+  }
+
+  _color(key, label, cssDefault = null, ph = 'ex: #FF3366 / rgb(var(--rgb-lavande)) / var(--primary-color)') {
+    const row = this._row(label);
+    const box = document.createElement('div'); box.className = 'color-row';
+    const txt = document.createElement('input'); txt.type = 'text'; txt.placeholder = ph; txt.dataset.key = key;
+    txt.value = this._read(key) ?? '';
+    const pick = document.createElement('input'); pick.type = 'color';
+    txt._pick = pick; txt._cssDefault = cssDefault;
+    const refresh = () => { pick.value = this._toHex(txt.value) || (cssDefault ? this._resolveColor(cssDefault) : null) || '#6200EA'; };
+    txt.addEventListener('input', () => { this._set(key, txt.value); refresh(); });
+    pick.addEventListener('input', () => { txt.value = pick.value; this._set(key, pick.value); });
+    box.appendChild(txt); box.appendChild(pick); row.wrap.appendChild(box); refresh(); return txt;
+  }
+
+  _resolveColor(css) {
+    try {
+      const probe = document.createElement('span');
+      probe.style.cssText = `color:${css};position:absolute;left:-9999px;top:-9999px`;
+      this.appendChild(probe);
+      const rgb = getComputedStyle(probe).color; probe.remove();
+      const m = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
+      return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+    } catch { return null; }
+  }
+
+  _icon(key, label) {
+    const row = this._row(`${label} — <a href="https://pictogrammers.com/library/mdi/" target="_blank" rel="noopener" class="mdi-link">parcourir ↗</a>`, true);
+    const box = document.createElement('div'); box.className = 'icon-row';
+    const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = 'mdi:home'; inp.dataset.key = key;
+    inp.value = this._read(key) ?? '';
+    const prev = document.createElement('div'); prev.className = 'icon-preview'; prev.dataset.preview = key;
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    box.appendChild(inp); box.appendChild(prev); row.wrap.appendChild(box); return inp;
+  }
+
+  _entity(key, label, prefix = '') {
+    const row = this._row(label);
+    const inp = document.createElement('input'); inp.type = 'text'; inp.autocomplete = 'off';
+    inp.placeholder = (prefix || 'domain') + '.…'; inp.dataset.key = key; inp.dataset.prefix = prefix;
+    inp.setAttribute('list', `sbc-ent-${(prefix || 'all').replace(/[^a-z]/g, '')}`);
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value.trim()));
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  _select(key, label, options, emptyLabel = null) {
+    const w = this._row(label).wrap;
+    const sel = document.createElement('select'); sel.dataset.key = key;
+    if (emptyLabel !== null) { const o = document.createElement('option'); o.value = ''; o.textContent = emptyLabel; sel.appendChild(o); }
+    options.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = (typeof opt === 'object') ? opt.value : opt;
+      o.textContent = (typeof opt === 'object') ? opt.label : opt;
+      sel.appendChild(o);
+    });
+    sel.value = this._read(key) ?? '';
+    sel.addEventListener('change', () => this._set(key, sel.value));
+    w.appendChild(sel); return sel;
+  }
+
+  // Extension au canon : slider avec valeur affichée en live (elec_crackle/spark_rate/spark_amp).
+  // Signature alignée sur _number : (key, label, {min,max,step,ph}).
+  _range(key, label, { min = 0, max = 1, step = 0.01 } = {}) {
+    const row = this._row(label);
+    const box = document.createElement('div'); box.className = 'range-row';
+    const inp = document.createElement('input'); inp.type = 'range'; inp.min = min; inp.max = max; inp.step = step;
+    inp.dataset.key = key;
+    const v = this._read(key); inp.value = (v == null ? min : v);
+    const lbl = document.createElement('span'); lbl.className = 'range-val'; lbl.textContent = inp.value;
+    inp._rngLbl = lbl;
+    inp.addEventListener('input', () => { lbl.textContent = inp.value; this._set(key, parseFloat(inp.value)); });
+    box.appendChild(inp); box.appendChild(lbl); row.wrap.appendChild(box); return inp;
+  }
+
+  // ── Mécanique commune (NE PAS toucher, + _appendTo pour grouper) ────
+  _row(labelHtml, isHtml = false) {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('label');
+    if (isHtml) lbl.innerHTML = labelHtml; else lbl.textContent = labelHtml;
+    const wrap = document.createElement('div'); wrap.className = 'field-wrap';
+    row.appendChild(lbl); row.appendChild(wrap);
+    (this._appendTo || this).appendChild(row);
+    return { row, wrap };
+  }
+
+  _toHex(c) {
+    if (!c) return null;
+    if (/^#[0-9a-f]{6}$/i.test(c)) return c;
+    const m = c.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/i);
+    return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+  }
+
+  _bindIconPreviews(resyncOnly = false) {
+    this.querySelectorAll('.icon-preview[data-preview]').forEach(prev => {
+      const inp = this.querySelector(`input[data-key="${prev.dataset.preview}"]`);
+      const upd = () => {
+        const val = (inp && inp.value || '').trim();
+        prev.innerHTML = '';
+        if (/^mdi:[a-zA-Z0-9_-]+$/.test(val)) {
+          const ico = document.createElement('ha-icon');
+          ico.setAttribute('icon', val); ico.style.cssText = '--mdc-icon-size:20px';
+          prev.appendChild(ico);
+        }
+      };
+      if (!resyncOnly && inp && !inp._previewBound) { inp.addEventListener('input', upd); inp._previewBound = true; }
+      upd();
+    });
+  }
+
+  _fillDatalists() {
+    if (!this._hass) return;
+    this.querySelectorAll('input[data-prefix]').forEach(inp => {
+      const id = inp.getAttribute('list'); if (!id) return;
+      let dl = this.querySelector('#' + id);
+      if (!dl) { dl = document.createElement('datalist'); dl.id = id; this.appendChild(dl); }
+      const ids = Object.keys(this._hass.states).filter(e => e.startsWith(inp.dataset.prefix || '')).sort();
+      if (dl.childElementCount === ids.length) return;
+      dl.textContent = '';
+      const frag = document.createDocumentFragment();
+      ids.forEach(id2 => { const o = document.createElement('option'); o.value = id2;
+        const fn = this._hass.states[id2].attributes?.friendly_name; if (fn && fn !== id2) o.label = fn; frag.appendChild(o); });
+      dl.appendChild(frag);
+    });
+  }
+
+  // ── CSS commun (identique partout, + spécifique range) ──────────────
+  _css() {
+    return `
+      :host { display:block; padding:14px; font-family:var(--primary-font-family,Roboto,sans-serif); }
+      .sec { font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--divider-color); }
+      .sec:first-child { margin-top:0; }
+      .row { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
+      .row label { flex:0 0 160px;font-size:12px;color:var(--secondary-text-color); }
+      .row label .mdi-link { color:var(--primary-color);font-size:9px;text-transform:none;letter-spacing:0; }
+      .field-wrap { flex:1;min-width:0;display:flex; }
+      input[type=text],input[type=number],select { flex:1;width:100%;padding:4px 8px;border:1px solid var(--divider-color);border-radius:4px;background:var(--card-background-color);color:var(--primary-text-color);font-size:12px;outline:none;box-sizing:border-box; }
+      select { cursor:pointer; }
+      input:focus,select:focus { box-shadow:0 0 0 1px var(--primary-color); }
+      .color-row { display:flex;gap:8px;flex:1; }
+      .color-row input[type=text] { flex:1; }
+      .color-row input[type=color] { width:36px;height:28px;flex:none;padding:0;border:none;background:none;border-radius:4px;cursor:pointer; }
+      .icon-row { display:flex;gap:8px;flex:1;align-items:center; }
+      .icon-row input { flex:1; }
+      .icon-preview { width:30px;height:28px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--divider-color);border-radius:4px;color:var(--primary-text-color); }
+      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:-2px 0 6px 168px; }
+      .range-row { display:flex;gap:8px;flex:1;align-items:center; }
+      .range-row input[type=range] { flex:1; }
+      .range-row .range-val { flex:none;width:36px;text-align:right;font-size:11px;color:var(--secondary-text-color); }
+      .module-block { border:1px dashed var(--divider-color);border-radius:8px;padding:8px 10px 2px;margin-bottom:8px; }
+    `;
+  }
+
+  // ── Render : on vide, on pose le style, on déroule le schéma ────────
   _render() {
-    const c = this._config||{};
-    const m = this._modules();
-    let modFields = '';
-    for (let i = 1; i <= m; i++) {
-      modFields += `<div class="row2">
-        ${this._picker(`Module ${i} \u2014 Entity`, `module_${i}_entity`, `sensor.storey_module_${i}`)}
-        <div class="field"><label>Module ${i} \u2014 Unit</label>
-          <input type="text" data-key="module_${i}_unit" value="${c['module_'+i+'_unit']||''}" placeholder="W, kW\u2026" style="max-width:80px;"/>
-        </div>
-      </div>`;
+    this.innerHTML = '';
+    const st = document.createElement('style'); st.textContent = this._css(); this.appendChild(st);
+    this._schema();
+    this._fillDatalists();
+    this._bindIconPreviews();
+  }
+
+  // ╔════════════════════════════════════════════════════════════════╗
+  // ║  SCHÉMA — LA SEULE PARTIE À ÉCRIRE PAR CARD                     ║
+  // ╚════════════════════════════════════════════════════════════════╝
+  _schema() {
+    this._section('En-tête');
+    this._text('header.title', 'Titre', 'STOREY');
+    this._icon('header.icon', 'Icône (mdi)');
+    this._number('header.title_size', 'Taille titre (px)', { min: 8, max: 48, step: 1, ph: '24' });
+    this._number('header.icon_size', 'Taille icône (px)', { min: 10, max: 48, step: 1, ph: '22' });
+    this._color('header.color', 'Couleur titre', 'var(--primary-color)');
+    this._select('header.font', 'Police', SBC_FONTS, '— thème HA —');
+    this._text('header.title_shadow', 'Text-shadow', '0 0 8px rgba(0,212,255,0.7)');
+
+    this._section('Modules');
+    this._select('modules', 'Modules additionnels (0–3)',
+      [0, 1, 2, 3].map(n => ({ value: String(n), label: `${n} module${n > 1 ? 's' : ''} — total ${n + 1}` })));
+
+    this._section('Capteurs');
+    this._entity('master_status_entity', 'Master Status', 'sensor');
+    this._entity('soc_entity', 'State of Charge %', 'sensor');
+    this._entity('power_entity', 'Power W', 'sensor');
+    this._number('power_threshold', 'Seuil puissance (W) — stabilise la flèche', { min: 0, max: 500, step: 10, ph: '50' });
+    this._number('soc_full_threshold', 'Seuil SOC plein (%) — anim fill+glitch', { min: 80, max: 100, step: 1, ph: '97' });
+
+    const mainBox = document.createElement('div'); mainBox.className = 'module-block'; this.appendChild(mainBox);
+    this._appendTo = mainBox;
+    this._entity('module_0_entity', 'Module principal — Entité', 'sensor');
+    this._text('module_0_unit', 'Module principal — Unité', 'W, kW…');
+    this._appendTo = null;
+
+    const modules = Math.min(3, Math.max(0, parseInt(this._config.modules) || 0));
+    for (let i = 1; i <= modules; i++) {
+      const box = document.createElement('div'); box.className = 'module-block'; this.appendChild(box);
+      this._appendTo = box;
+      this._entity(`module_${i}_entity`, `Module ${i} — Entité`, 'sensor');
+      this._text(`module_${i}_unit`, `Module ${i} — Unité`, 'W, kW…');
+      this._appendTo = null;
     }
 
-    this.innerHTML = `
-      <style>
-        *{box-sizing:border-box;font-family:-apple-system,sans-serif}
-        .grid{display:flex;flex-direction:column;gap:10px;padding:14px 0}
-        .group{border:1px solid var(--divider-color,#333);border-radius:10px;padding:12px}
-        .group-title{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--secondary-text-color);margin-bottom:10px}
-        .field{display:flex;flex-direction:column;gap:3px;margin-bottom:8px}
-        .field:last-child{margin-bottom:0}
-        label{font-size:12px;color:var(--secondary-text-color)}
-        input,select{padding:8px 10px;border:1px solid var(--divider-color,#333);border-radius:7px;
-          background:var(--card-background-color);color:var(--primary-text-color);font-size:13px;width:100%}
-        input.ep{border-color:var(--primary-color,#777)}
-        input.ep:focus{outline:none;box-shadow:0 0 0 1px var(--primary-color)}
-        .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-        .color-row{display:flex;align-items:center;gap:8px}
-        .color-row input[type=color]{width:36px;height:36px;padding:2px;border-radius:6px;cursor:pointer;flex-shrink:0;border:none}
-        .color-row input[type=text]{flex:1}
-        .tog-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
-        .tog-row label{margin:0;font-size:12px;color:var(--secondary-text-color)}
-      </style>
-      <div class="grid">
-        <div class="group">
-          <div class="group-title">Header</div>
-          <div class="field"><label>Title</label><input class="ep" data-key="header.title" value="${c.header?.title||''}" placeholder="STOREY"></div>
-          <div class="field"><label>Icon (mdi:...)</label><input class="ep" data-key="header.icon" value="${c.header?.icon||''}" placeholder="mdi:battery-high"></div>
-          <div class="field"><label>Title size (px)</label><input type="number" class="ep" data-key="header.title_size" value="${c.header?.title_size||''}" placeholder="24" min="8" max="48"></div>
-          <div class="field"><label>Icon size (px)</label><input type="number" class="ep" data-key="header.icon_size" value="${c.header?.icon_size||''}" placeholder="22" min="10" max="48"></div>
-          <div class="field"><label>Title color</label><input class="ep" data-key="header.color" value="${c.header?.color||''}" placeholder="ex: #00fff9"></div>
-          <div class="field"><label>Title font</label><input class="ep" data-key="header.font" value="${c.header?.font||''}" placeholder="Orbitron, Rajdhani..."></div>
-          <div class="field"><label>Title shadow</label><input class="ep" data-key="header.title_shadow" value="${c.header?.title_shadow||''}" placeholder="0 0 8px rgba(0,212,255,0.7)"></div>
-        </div>
-        <div class="group">
-          <div class="group-title">Modules</div>
-          <div class="field"><label>Additional modules (0\u20133)</label>
-            <select data-key="modules">
-              ${[0,1,2,3].map(n=>`<option value="${n}"${c.modules==n?' selected':''}>${n} module${n>1?'s':''} \u2014 total ${n+1}</option>`).join('')}
-            </select>
-          </div>
-        </div>
-        <div class="group">
-          <div class="group-title">Sensors</div>
-          ${this._picker('Master Status','master_status_entity','sensor.storey_master_status')}
-          ${this._picker('State of Charge %','soc_entity','sensor.storey_soc')}
-          ${this._picker('Power W','power_entity','sensor.storey_power')}
-          <div class="field">
-            <label>Power threshold (W) &mdash; stabilizes arrow</label>
-            <input type="number" data-key="power_threshold" value="${c.power_threshold||50}" min="0" max="500" step="10" placeholder="50"/>
-          </div>
-          <div class="field">
-            <label>SOC full threshold (%) &mdash; fill+glitch animation</label>
-            <input type="number" data-key="soc_full_threshold" value="${c.soc_full_threshold||97}" min="80" max="100" step="1" placeholder="97"/>
-          </div>
-          <div class="row2">
-            ${this._picker('Main module \u2014 Entity','module_0_entity','sensor.storey_module_0')}
-            <div class="field"><label>Main module \u2014 Unit</label>
-              <input type="text" data-key="module_0_unit" value="${c.module_0_unit||''}" placeholder="W, kW\u2026" style="max-width:80px;"/>
-            </div>
-          </div>
-          ${modFields}
-        </div>
-        <div class="group">
-          <div class="group-title">Effects</div>
-          ${this._toggle('Inter-module glow','glow_enabled',DEF_ACCENT)}
-          ${this._toggle('Inherit card-mod background','card_mod_bg',DEF_ACCENT)}
-        </div>
-        <div class="group">
-          <div class="group-title">Electric arc</div>
-          <div class="field"><label>Crackle speed &mdash; <span class="rngv" data-for="elec_crackle">${(c.elec_crackle ?? 0.13)}</span></label>
-            <input type="range" class="rng" data-key="elec_crackle" min="0.04" max="0.4" step="0.01" value="${c.elec_crackle ?? 0.13}"/>
-          </div>
-          <div class="field"><label>Spark rate (bursts/s) &mdash; <span class="rngv" data-for="elec_spark_rate">${(c.elec_spark_rate ?? 1.6)}</span></label>
-            <input type="range" class="rng" data-key="elec_spark_rate" min="0.3" max="4" step="0.1" value="${c.elec_spark_rate ?? 1.6}"/>
-          </div>
-          <div class="field"><label>Spark amplitude &mdash; <span class="rngv" data-for="elec_spark_amp">${(c.elec_spark_amp ?? 4)}</span></label>
-            <input type="range" class="rng" data-key="elec_spark_amp" min="1" max="9" step="0.5" value="${c.elec_spark_amp ?? 4}"/>
-          </div>
-          <div class="row2">
-            <div class="field"><label>Charge color (default: theme)</label>
-              <div class="color-row">
-                <input type="color" data-key="elec_color_charge" value="${c.elec_color_charge||'#ffd000'}"/>
-                <input type="text"  data-key="elec_color_charge" value="${c.elec_color_charge||''}" placeholder="auto"/>
-              </div>
-            </div>
-            <div class="field"><label>Discharge color (default: theme)</label>
-              <div class="color-row">
-                <input type="color" data-key="elec_color_discharge" value="${c.elec_color_discharge||'#4D7CFF'}"/>
-                <input type="text"  data-key="elec_color_discharge" value="${c.elec_color_discharge||''}" placeholder="auto"/>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="group">
-          <div class="group-title">Cyberpunk</div>
-          ${this._toggle('Neo Tokyo Mode','cyberpunk_mode',CP_PRIMARY)}
-          ${this._toggle('Neon Glow','neon_glow',CP_ACCENT)}
-        </div>
-        <div class="group">
-          <div class="group-title">Colors</div>
-          <div class="row2">
-            <div class="field"><label>Accent</label>
-              <div class="color-row">
-                <input type="color" data-key="color_accent" value="${c.color_accent||DEF_ACCENT}"/>
-                <input type="text"  data-key="color_accent" value="${c.color_accent||DEF_ACCENT}" placeholder="${DEF_ACCENT}"/>
-              </div>
-            </div>
-            <div class="field"><label>Background</label>
-              <div class="color-row">
-                <input type="color" data-key="color_bg" value="${c.color_bg||DEF_BG}"/>
-                <input type="text"  data-key="color_bg" value="${c.color_bg||DEF_BG}" placeholder="${DEF_BG}"/>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>`;
+    this._section('Effets');
+    this._toggle('glow_enabled', 'Glow inter-modules', false);
+    this._toggle('card_mod_bg', 'Hériter du fond card-mod', false);
 
-    this.querySelectorAll('input.ep').forEach(el => {
-      ['keydown','keyup','input'].forEach(ev => el.addEventListener(ev, e => e.stopPropagation(), {passive:true}));
-      ['change','blur'].forEach(ev => el.addEventListener(ev, e => { e.stopPropagation(); this._set(el.dataset.key, el.value||null); }));
-    });
-    this.querySelectorAll('input[type=number][data-key]').forEach(el => {
-      ['keydown','keyup','input'].forEach(ev => el.addEventListener(ev, e => e.stopPropagation(), {passive:true}));
-      el.addEventListener('change', e => { e.stopPropagation(); this._set(el.dataset.key, el.value||null); });
-    });
-    this.querySelectorAll('input[type=text][data-key]:not(.ep)').forEach(el => {
-      ['keydown','keyup','input'].forEach(ev => el.addEventListener(ev, e => e.stopPropagation(), {passive:true}));
-      el.addEventListener('blur', e => { e.stopPropagation(); this._set(el.dataset.key, el.value||null); });
-    });
-    this.querySelectorAll('input[type=color][data-key]').forEach(el => {
-      el.addEventListener('input', e => {
-        e.stopPropagation();
-        const t = this.querySelector(`input[type=text][data-key="${el.dataset.key}"]`);
-        if (t) t.value = el.value;
-        this._set(el.dataset.key, el.value);
-      }, {passive:true});
-    });
-    this.querySelectorAll('input.rng[data-key]').forEach(el => {
-      el.addEventListener('input', e => {
-        e.stopPropagation();
-        const lbl = this.querySelector(`.rngv[data-for="${el.dataset.key}"]`);
-        if (lbl) lbl.textContent = el.value;
-        this._set(el.dataset.key, el.value);
-      }, {passive:true});
-    });
-    this.querySelectorAll('select[data-key],input[type=checkbox][data-key]').forEach(el => {
-      el.addEventListener('change', e => {
-        e.stopPropagation();
-        if (el.type==='checkbox') this._set(el.dataset.key, null, el.checked);
-        else this._set(el.dataset.key, el.value);
-      });
-    });
+    this._section('Arc électrique');
+    this._range('elec_crackle', 'Vitesse crépitement', { min: 0.04, max: 0.4, step: 0.01 });
+    this._range('elec_spark_rate', 'Fréquence étincelles (rafales/s)', { min: 0.3, max: 4, step: 0.1 });
+    this._range('elec_spark_amp', 'Amplitude étincelles', { min: 1, max: 9, step: 0.5 });
+    this._color('elec_color_charge', 'Couleur charge', null, 'auto — ex #ffd000');
+    this._color('elec_color_discharge', 'Couleur décharge', null, 'auto — ex #4D7CFF');
+
+    this._section('Cyberpunk');
+    this._toggle('cyberpunk_mode', 'Mode Neo Tokyo', false);
+    this._toggle('neon_glow', 'Neon Glow', false);
+
+    this._section('Couleurs');
+    this._color('color_accent', 'Accent', DEF_ACCENT);
+    this._color('color_bg', 'Fond', DEF_BG);
   }
 }
 
@@ -1617,7 +1689,7 @@ class StoreyBatteryCardEditor extends HTMLElement {
  *  REGISTRATION                                                              *
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-customElements.define('storey-battery-card',           StoreyBatteryCard);
+customElements.define('storey-battery-card',        StoreyBatteryCard);
 customElements.define('storey-battery-card-editor', StoreyBatteryCardEditor);
 
 window.customCards = window.customCards || [];

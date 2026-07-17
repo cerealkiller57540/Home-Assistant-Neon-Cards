@@ -660,401 +660,359 @@ function buildDualSparkSVG(histLeft, histRight, colors, id, speed = 1, hours = 2
 //  ÉDITEUR VISUEL
 // ═══════════════════════════════════════════════════════
 class NeonDualThermoCardEditor extends HTMLElement {
-  setConfig(config) {
-    this._config = config;
-    if (!this._built && this._hass) { this._built = true; this._build(); }
-    else if (this._built) this._syncPickers();
+  constructor() { super(); this._config = {}; this._hass = null; this._rendered = false; }
+
+  // ── Cycle de vie (NE PAS toucher) ──────────────────────────────────
+  setConfig(c) {
+    this._config = { ...(c || {}) };
+    if (!this._rendered) { this._rendered = true; this._render(); }
+    else this._syncValues();
   }
-  set hass(h) {
-    this._hass = h;
-    if (!this._built && this._config) { this._built = true; this._build(); }
-    else if (this._built) this._syncPickers();
+  set hass(h) { this._hass = h; this._fillDatalists(); }   // JAMAIS de render ici
+  disconnectedCallback() { this._rendered = false; }
+
+  // ── Lecture / écriture config (clés imbriquées via ".") ────────────
+  _read(key) {
+    return key.includes('.')
+      ? key.split('.').reduce((o, p) => (o && o[p] !== undefined ? o[p] : undefined), this._config)
+      : this._config[key];
+  }
+  _set(key, value) {
+    // zone_thresholds_* : texte "5, 15, 22, 28" → tableau de 4 nombres.
+    if (key.startsWith('zone_thresholds') && typeof value === 'string') {
+      const arr = value.split(/[,;]+/).map(v => parseFloat(v.trim())).filter(v => !isNaN(v));
+      value = arr.length === 4 ? arr : (value.trim() === '' ? undefined : this._config[key]);
+    }
+    // tap_action_*/hold_action_* : JSON texte → objet.
+    if ((key.endsWith('_action_left') || key.endsWith('_action_right')) && typeof value === 'string' && value.trim()) {
+      try { value = JSON.parse(value); } catch { /* garde la chaîne si invalide */ }
+    }
+    const empty = (value === undefined || value === '' || value === null);
+    if (key.includes('.')) {
+      const parts = key.split('.');
+      let o = this._config;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!o[parts[i]] || typeof o[parts[i]] !== 'object') o[parts[i]] = {};
+        o = o[parts[i]];
+      }
+      const last = parts[parts.length - 1];
+      if (empty) delete o[last]; else o[last] = value;
+      const parent = parts.slice(0, -1).reduce((a, k) => a && a[k], this._config);
+      if (parent && typeof parent === 'object' && !Object.keys(parent).length) delete this._config[parts[0]];
+    } else if (empty) { delete this._config[key]; }
+    else { this._config[key] = value; }
+    this.dispatchEvent(new CustomEvent('config-changed',
+      { detail: { config: { ...this._config } }, bubbles: true, composed: true }));
   }
 
-  _entitySelect(label, key, hint = '') {
-    // §22 : input + <datalist> inline dans le template (même placement que _input/_color).
-    const val = this._config[key] || '';
-    return `<div class="field"><label>${label}</label>
-      <input type="text" data-entity-key="${key}" value="${val}" list="ndt-ent-list"
-        autocomplete="off" placeholder="sensor.…"/>
-      ${hint ? `<p class="hint">${hint}</p>` : ''}</div>`;
+  // ── Sync in-place (guard focus + clés imbriquées) ──────────────────
+  _syncValues() {
+    const active = this.querySelector(':focus') || document.activeElement;
+    this.querySelectorAll('[data-key]').forEach(el => {
+      if (el === active) return;
+      const v = this._read(el.dataset.key);
+      if (el.type === 'checkbox') el.checked = el.dataset.defaultOn ? (v !== false) : !!v;
+      else {
+        let sv = v;
+        if (Array.isArray(sv)) sv = sv.join(', ');
+        else if (typeof sv === 'object' && sv !== null) sv = JSON.stringify(sv);
+        el.value = (sv == null ? '' : sv);
+        if (el._pick) el._pick.value = this._toHex(el.value) || (el._cssDefault ? this._resolveColor(el._cssDefault) : null) || '#6200EA';
+      }
+    });
+    this._bindIconPreviews(true);
   }
 
-  _initPickers() {
-    // §22 : construit le <datalist> partagé + câble les events des inputs entité (input+datalist, pas de ha-entity-picker).
-    this._fillEntityList();
-    this.querySelectorAll('input[data-entity-key]').forEach(inp => {
-      const key = inp.dataset.entityKey;
-      inp.addEventListener('keydown', e => e.stopPropagation(), { passive: true });
-      inp.addEventListener('input',   e => e.stopPropagation(), { passive: true });
-      inp.addEventListener('change', (e) => { e.stopPropagation(); this._changed(key, e.target.value.trim() || null); });
+  // ── Helpers de champ (signatures FIXES — ne pas réinventer) ────────
+  _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; (this._appendTo || this).appendChild(d); return d; }
+  _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; (this._appendTo || this).appendChild(d); return d; }
+
+  _text(key, label, ph = '') {
+    const row = this._row(label);
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.placeholder = ph; inp.dataset.key = key;
+    let v = this._read(key);
+    if (Array.isArray(v)) v = v.join(', ');
+    else if (typeof v === 'object' && v !== null) v = JSON.stringify(v);
+    inp.value = v ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  _number(key, label, { min, max, step = 1, ph = '' } = {}) {
+    const row = this._row(label);
+    const inp = document.createElement('input');
+    inp.type = 'number'; if (min != null) inp.min = min; if (max != null) inp.max = max;
+    inp.step = step; inp.placeholder = ph; inp.dataset.key = key;
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => { const n = parseFloat(inp.value); this._set(key, isNaN(n) ? undefined : n); });
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  _toggle(key, label, defaultOn = false) {
+    const row = this._row(label);
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.key = key;
+    if (defaultOn) cb.dataset.defaultOn = '1';
+    const v = this._read(key);
+    cb.checked = defaultOn ? (v !== false) : !!v;
+    cb.style.cssText = 'width:38px;height:20px;cursor:pointer;accent-color:var(--primary-color);flex:none;';
+    cb.addEventListener('change', () => this._set(key, cb.checked));
+    row.wrap.appendChild(cb); return cb;
+  }
+
+  _color(key, label, cssDefault = null, ph = 'ex: #FF3366 / rgb(var(--rgb-lavande)) / var(--primary-color)') {
+    const row = this._row(label);
+    const box = document.createElement('div'); box.className = 'color-row';
+    const txt = document.createElement('input'); txt.type = 'text'; txt.placeholder = ph; txt.dataset.key = key;
+    txt.value = this._read(key) ?? '';
+    const pick = document.createElement('input'); pick.type = 'color';
+    txt._pick = pick; txt._cssDefault = cssDefault;
+    const refresh = () => { pick.value = this._toHex(txt.value) || (cssDefault ? this._resolveColor(cssDefault) : null) || '#6200EA'; };
+    txt.addEventListener('input', () => { this._set(key, txt.value); refresh(); });
+    pick.addEventListener('input', () => { txt.value = pick.value; this._set(key, pick.value); });
+    box.appendChild(txt); box.appendChild(pick); row.wrap.appendChild(box); refresh(); return txt;
+  }
+
+  _resolveColor(css) {
+    try {
+      const probe = document.createElement('span');
+      probe.style.cssText = `color:${css};position:absolute;left:-9999px;top:-9999px`;
+      this.appendChild(probe);
+      const rgb = getComputedStyle(probe).color; probe.remove();
+      const m = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
+      return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+    } catch { return null; }
+  }
+
+  _entity(key, label, prefix = '') {
+    const row = this._row(label);
+    const inp = document.createElement('input'); inp.type = 'text'; inp.autocomplete = 'off';
+    inp.placeholder = (prefix || 'domain') + '.…'; inp.dataset.key = key; inp.dataset.prefix = prefix;
+    inp.setAttribute('list', `ndt-ent-${(prefix || 'all').replace(/[^a-z]/g, '')}`);
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value.trim()));
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  _select(key, label, options, emptyLabel = null) {
+    const w = this._row(label).wrap;
+    const sel = document.createElement('select'); sel.dataset.key = key;
+    if (emptyLabel !== null) { const o = document.createElement('option'); o.value = ''; o.textContent = emptyLabel; sel.appendChild(o); }
+    options.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = (typeof opt === 'object') ? opt.value : opt;
+      o.textContent = (typeof opt === 'object') ? opt.label : opt;
+      sel.appendChild(o);
+    });
+    sel.value = this._read(key) ?? '';
+    sel.addEventListener('change', () => this._set(key, sel.value));
+    w.appendChild(sel); return sel;
+  }
+
+  // ── Mécanique commune (NE PAS toucher, + _appendTo pour grouper) ────
+  _row(labelHtml, isHtml = false) {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('label');
+    if (isHtml) lbl.innerHTML = labelHtml; else lbl.textContent = labelHtml;
+    const wrap = document.createElement('div'); wrap.className = 'field-wrap';
+    row.appendChild(lbl); row.appendChild(wrap);
+    (this._appendTo || this).appendChild(row);
+    return { row, wrap };
+  }
+
+  _toHex(c) {
+    if (!c) return null;
+    if (/^#[0-9a-f]{6}$/i.test(c)) return c;
+    const m = c.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/i);
+    return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+  }
+
+  _bindIconPreviews(resyncOnly = false) {
+    this.querySelectorAll('.icon-preview[data-preview]').forEach(prev => {
+      const inp = this.querySelector(`input[data-key="${prev.dataset.preview}"]`);
+      const upd = () => {
+        const val = (inp && inp.value || '').trim();
+        prev.innerHTML = '';
+        if (/^mdi:[a-zA-Z0-9_-]+$/.test(val)) {
+          const ico = document.createElement('ha-icon');
+          ico.setAttribute('icon', val); ico.style.cssText = '--mdc-icon-size:20px';
+          prev.appendChild(ico);
+        }
+      };
+      if (!resyncOnly && inp && !inp._previewBound) { inp.addEventListener('input', upd); inp._previewBound = true; }
+      upd();
     });
   }
 
-  _fillEntityList() {
+  _fillDatalists() {
     if (!this._hass) return;
-    let dl = this.querySelector('#ndt-ent-list');
-    if (!dl) { dl = document.createElement('datalist'); dl.id = 'ndt-ent-list'; this.appendChild(dl); }
-    const ids = Object.keys(this._hass.states)
-      .filter(e => e.startsWith('sensor.') || e.startsWith('input_number.')).sort();
-    if (dl.childElementCount === ids.length) return;
-    dl.textContent = '';
-    const frag = document.createDocumentFragment();
-    ids.forEach(id => {
-      const o = document.createElement('option'); o.value = id;
-      const fn = this._hass.states[id].attributes?.friendly_name;
-      if (fn && fn !== id) o.label = fn;
-      frag.appendChild(o);
-    });
-    dl.appendChild(frag);
-  }
-
-  _syncPickers() {
-    this._fillEntityList();
-    this.querySelectorAll('input[data-entity-key]').forEach(inp => {
-      if (inp === document.activeElement) return;   // guard focus §22
-      const key = inp.dataset.entityKey;
-      const expected = this._config[key] || '';
-      if (inp.value !== expected) inp.value = expected;
+    this.querySelectorAll('input[data-prefix]').forEach(inp => {
+      const id = inp.getAttribute('list'); if (!id) return;
+      let dl = this.querySelector('#' + id);
+      if (!dl) { dl = document.createElement('datalist'); dl.id = id; this.appendChild(dl); }
+      const ids = Object.keys(this._hass.states).filter(e => e.startsWith(inp.dataset.prefix || '')).sort();
+      if (dl.childElementCount === ids.length) return;
+      dl.textContent = '';
+      const frag = document.createDocumentFragment();
+      ids.forEach(id2 => { const o = document.createElement('option'); o.value = id2;
+        const fn = this._hass.states[id2].attributes?.friendly_name; if (fn && fn !== id2) o.label = fn; frag.appendChild(o); });
+      dl.appendChild(frag);
     });
   }
 
-  _input(label, key, type = 'text', placeholder = '', hint = '') {
-    let val = this._config[key] ?? '';
-    if (Array.isArray(val)) val = val.join(', ');
-    else if (typeof val === 'object' && val !== null) val = JSON.stringify(val);
-    if (type === 'text') {
-      return `<div class="field"><label>${label}</label>
-        <textarea data-key="${key}" rows="1" class="text-input" placeholder="${placeholder}">${val}</textarea>
-        ${hint ? `<p class="hint">${hint}</p>` : ''}</div>`;
-    }
-    return `<div class="field"><label>${label}</label>
-      <input type="${type}" data-key="${key}" value="${val}" placeholder="${placeholder}"/>
-      ${hint ? `<p class="hint">${hint}</p>` : ''}</div>`;
-  }
-
-  _number(label, key, min, max, step = 1, hint = '') {
-    const val = this._config[key] ?? '';
-    return `<div class="field"><label>${label}</label>
-      <input type="number" data-key="${key}" value="${val}" min="${min}" max="${max}" step="${step}"/>
-      ${hint ? `<p class="hint">${hint}</p>` : ''}</div>`;
-  }
-
-  _toggle(label, key, hint = '') {
-    const val = !!this._config[key];
-    return `<div class="field toggle-field">
-      <label>${label}</label>
-      <label class="switch">
-        <input type="checkbox" data-key="${key}" ${val ? 'checked' : ''}/>
-        <span class="slider"></span>
-      </label>
-      ${hint ? `<p class="hint" style="flex-basis:100%">${hint}</p>` : ''}
-    </div>`;
-  }
-
-  _color(label, key, def = '#00E8FF', ph = 'var(--primary-color) ou #hex') {
-    const val = this._config[key] || '';
-    return `<div class="field"><label>${label}</label>
-      <div class="color-row">
-        <input type="color" data-key="${key}" value="${val || def}" ${!val ? 'style="opacity:.4"' : ''}/>
-        <input type="text" data-key="${key}" value="${val}" placeholder="${ph}" class="color-text"/>
-        <span class="color-reset" data-reset="${key}">↺</span>
-      </div></div>`;
-  }
-
-  _build() {
-    this.innerHTML = `
-      <style>
-        :host { display:block; padding:4px 0; }
-        h3 { font-size:12px; font-weight:700; color:var(--primary-color);
-          text-transform:uppercase; letter-spacing:1.5px; margin:18px 0 8px;
-          padding-bottom:5px; border-bottom:1px solid var(--divider-color);
-          display:flex; align-items:center; gap:6px; }
-        h3::before { content:''; display:block; width:3px; height:13px;
-          background:var(--primary-color); border-radius:2px; }
-        .field { margin-bottom:10px; }
-        .toggle-field { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px; }
-        .toggle-field label:first-child { flex:1; }
-        label { display:block; font-size:12px; color:var(--secondary-text-color); margin-bottom:3px; }
-        input[type=text],input[type=number],select,textarea {
-          width:100%; padding:6px 8px; border-radius:6px;
-          border:1px solid var(--divider-color); background:var(--card-background-color);
-          color:var(--primary-text-color); font-size:13px; box-sizing:border-box; font-family:inherit; }
-        textarea.text-input { resize:none; overflow:hidden; min-height:34px; line-height:1.4; }
-        input[type=color] { height:34px; width:40px; padding:2px; border-radius:6px;
-          border:1px solid var(--divider-color); cursor:pointer; flex-shrink:0; }
-        .color-row { display:flex; gap:6px; align-items:center; }
-        .color-text { flex:1; }
-        .color-reset { font-size:13px; color:var(--primary-color); cursor:pointer;
-          padding:4px 6px; border-radius:4px; border:1px solid var(--divider-color);
-          line-height:1; flex-shrink:0; user-select:none; }
-        .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-        .row3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
-        .hint { font-size:10px; color:var(--disabled-text-color); margin:3px 0 0; }
-        .switch { position:relative; display:inline-block; width:36px; height:20px; flex-shrink:0; }
-        .switch input { opacity:0; width:0; height:0; }
-        .slider { position:absolute; inset:0; background:var(--divider-color);
-          border-radius:20px; cursor:pointer; transition:.3s; }
-        .slider:before { content:''; position:absolute; width:14px; height:14px;
-          left:3px; bottom:3px; background:white; border-radius:50%; transition:.3s; }
-        input:checked + .slider { background:var(--primary-color); }
-        input:checked + .slider:before { transform:translateX(16px); }
-        .section-header { background:var(--primary-color); color:white; padding:6px 10px;
-          margin:16px -10px 10px; font-size:11px; font-weight:700; letter-spacing:1.5px; }
-        /* Override per-side */
-        details { margin-top:12px; }
-        summary {
-          cursor:pointer; font-size:11px; font-weight:700; letter-spacing:1.2px;
-          color:var(--primary-color); text-transform:uppercase; padding:6px 8px;
-          background:var(--primary-color)12; border:1px solid var(--primary-color)30;
-          border-radius:6px; user-select:none; list-style:none; display:flex;
-          align-items:center; gap:6px;
-        }
-        summary::before { content:'▶'; font-size:9px; transition:.2s; }
-        details[open] summary::before { content:'▼'; }
-        details .inner { padding:12px 0 4px; border-left:2px solid var(--primary-color)30; padding-left:10px; margin-left:4px; }
-        .override-badge { font-size:9px; background:var(--primary-color)25; color:var(--primary-color);
-          padding:1px 5px; border-radius:4px; text-transform:none; letter-spacing:.5px; font-weight:400; }
-      </style>
-
-      <h3>Vent (optionnel)</h3>
-      ${this._entitySelect('Capteur vent', 'entity_wind')}
-      <div class="row2">
-        ${this._input('Nom vent', 'name_wind', 'text', 'VENT')}
-        ${this._input('Unité vent', 'wind_unit', 'text', 'km/h')}
-      </div>
-      ${this._entitySelect('Pression (graph fond)', 'entity_bg_pressure', 'Optionnel — tracé discret derrière les thermos')}
-
-      <h3>Thermomètre Gauche</h3>
-      ${this._entitySelect('Température gauche (requis)', 'entity_left')}
-      ${this._input('Nom / pièce gauche', 'name_left', 'text', 'SALON')}
-      ${this._entitySelect('Humidité gauche', 'humidity_entity_left')}
-      ${this._entitySelect('Capteur secondaire gauche', 'secondary_entity_left')}
-      <div class="row2">
-        ${this._input('Label capteur sec. gauche', 'secondary_label_left', 'text', 'LUMINOSITY')}
-        ${this._input('Unité capteur sec. gauche', 'secondary_unit_left', 'text', 'lx')}
-      </div>
-
-      <h3>Thermomètre Droit</h3>
-      ${this._entitySelect('Température droite (requis)', 'entity_right')}
-      ${this._input('Nom / pièce droite', 'name_right', 'text', 'CHAMBRE')}
-      ${this._entitySelect('Humidité droite', 'humidity_entity_right')}
-      ${this._entitySelect('Capteur secondaire droit', 'secondary_entity_right')}
-      <div class="row2">
-        ${this._input('Label capteur sec. droit', 'secondary_label_right', 'text', 'CO2')}
-        ${this._input('Unité capteur sec. droit', 'secondary_unit_right', 'text', 'ppm')}
-      </div>
-
-      <h3>Échelle <span style="font-size:10px;font-weight:400">(défauts partagés)</span></h3>
-      <div class="row3">
-        ${this._number('Temp min (°C)', 'temp_min', -50, 50, 1)}
-        ${this._number('Temp max (°C)', 'temp_max', 0, 100, 1)}
-        ${this._number('Décimales', 'decimal_places', 0, 2, 1)}
-      </div>
-      ${this._input('Unité', 'unit', 'text', '°C')}
-
-      <details>
-        <summary>Overrides Gauche <span class="override-badge">optionnel</span></summary>
-        <div class="inner">
-          <div class="row2">
-            ${this._number('Min gauche', 'temp_min_left', -50, 50, 1, 'Ex: 16 pour intérieur')}
-            ${this._number('Max gauche', 'temp_max_left', 0, 100, 1, 'Ex: 28 pour intérieur')}
-          </div>
-          ${this._input('Seuils zones gauche', 'zone_thresholds_left', 'text', '5, 15, 22, 28', '4 seuils séparés par virgules ex: 18, 20, 23, 26')}
-          <div class="row3">
-            ${this._color('Zone 1 gauche', 'color_zone1_left', '#0099FF', '#hex')}
-            ${this._color('Zone 2 gauche', 'color_zone2_left', '#00E8FF', '#hex')}
-            ${this._color('Zone 3 gauche', 'color_zone3_left', '#00FFB3', '#hex')}
-          </div>
-          <div class="row2">
-            ${this._color('Zone 4 gauche', 'color_zone4_left', '#FF9D00', '#hex')}
-            ${this._color('Zone 5 gauche', 'color_zone5_left', '#FF2D78', '#hex')}
-          </div>
-          <div class="row2">
-            ${this._color('Plasma anneau 1 gauche', 'color_plasma_ring1_left', '#00FFB3', '#hex')}
-            ${this._color('Plasma anneau 2 gauche', 'color_plasma_ring2_left', '#FF2D78', '#hex')}
-          </div>
-          ${this._number('Saturation plasma gauche', 'plasma_saturation_left', 0.5, 3, 0.1)}
-        </div>
-      </details>
-
-      <details>
-        <summary>Overrides Droite <span class="override-badge">optionnel</span></summary>
-        <div class="inner">
-          <div class="row2">
-            ${this._number('Min droite', 'temp_min_right', -50, 50, 1, 'Ex: -10 pour extérieur')}
-            ${this._number('Max droite', 'temp_max_right', 0, 100, 1, 'Ex: 35 pour extérieur')}
-          </div>
-          ${this._input('Seuils zones droite', 'zone_thresholds_right', 'text', '5, 15, 22, 28', '4 seuils séparés par virgules ex: 5, 15, 22, 28')}
-          <div class="row3">
-            ${this._color('Zone 1 droite', 'color_zone1_right', '#0099FF', '#hex')}
-            ${this._color('Zone 2 droite', 'color_zone2_right', '#00E8FF', '#hex')}
-            ${this._color('Zone 3 droite', 'color_zone3_right', '#00FFB3', '#hex')}
-          </div>
-          <div class="row2">
-            ${this._color('Zone 4 droite', 'color_zone4_right', '#FF9D00', '#hex')}
-            ${this._color('Zone 5 droite', 'color_zone5_right', '#FF2D78', '#hex')}
-          </div>
-          <div class="row2">
-            ${this._color('Plasma anneau 1 droite', 'color_plasma_ring1_right', '#00FFB3', '#hex')}
-            ${this._color('Plasma anneau 2 droite', 'color_plasma_ring2_right', '#FF2D78', '#hex')}
-          </div>
-          ${this._number('Saturation plasma droite', 'plasma_saturation_right', 0.5, 3, 0.1)}
-        </div>
-      </details>
-
-      <h3>Polices</h3>
-      <div class="row2">
-        ${this._input('Police nom', 'name_font_family', 'text', 'Rajdhani, monospace', 'Vide = thème HA')}
-        ${this._input('Taille nom', 'name_font_size', 'text', '12px', 'Ex: 12px, 0.8rem')}
-      </div>
-      <div class="row2">
-        ${this._input('Police valeur', 'value_font_family', 'text', 'Rajdhani, monospace', 'Vide = thème HA')}
-        ${this._input('Taille valeur', 'value_font_size', 'text', '28px', 'Ex: 28px, 1.8rem')}
-      </div>
-      <div class="row2">
-        ${this._input('Police capteurs', 'sensor_font_family', 'text', 'Rajdhani, monospace', 'Humidité, secondaire...')}
-        ${this._input('Taille capteurs', 'sensor_font_size', 'text', '24px', 'Ex: 24px, 1.5rem')}
-      </div>
-
-      <h3>Affichage</h3>
-      <div class="row2">
-        ${this._toggle('Réacteur plasma', 'show_plasma')}
-        ${this._toggle('Historique', 'show_history')}
-      </div>
-      <div class="row2">
-        ${this._number('Vitesse animations', 'animation_speed', 0.2, 5, 0.1)}
-        ${this._number('Heures historique', 'history_hours', 1, 168, 1, '1-168h (défaut: 24)')}
-      </div>
-      ${this._number('Saturation plasma', 'plasma_saturation', 0.5, 3, 0.1, '1=normal, 2=ultra saturé (défaut: 1.8)')}
-
-      <h3>🐾 Easter-egg GLITCH <span style="font-size:10px;font-weight:400">(chat sur la courbe la plus froide)</span></h3>
-      ${this._toggle('Activer GLITCH', 'glitch_cat', 'Le chat se matérialise en hologramme glitché Silverhand sur la sparkline')}
-      <div class="row2">
-        ${this._number('Fréquence', 'glitch_cat_chance', 0, 1, 0.01, 'Proba par tick (~6 s). 0.12 ≈ 1 apparition/50 s')}
-        ${this._number('Taille (px)', 'glitch_cat_size', 14, 48, 1, 'Hauteur du chat (défaut: 26)')}
-      </div>
-      ${this._input('Image (GIF)', 'glitch_cat_image', 'text', '/local/cat-walking-white.gif', 'Sprite marcheur — défaut: cat-walking-white.gif')}
-
-      <h3>Actions Gauche <span style="font-size:10px;font-weight:400">(tap / appui long)</span></h3>
-      <div class="row2">
-        ${this._input('Tap action', 'tap_action_left', 'text', '{"action":"more-info"}', 'JSON: more-info, navigate, call-service, toggle, none')}
-        ${this._input('Hold action', 'hold_action_left', 'text', '{"action":"none"}', 'JSON: idem')}
-      </div>
-
-      <h3>Actions Droite <span style="font-size:10px;font-weight:400">(tap / appui long)</span></h3>
-      <div class="row2">
-        ${this._input('Tap action', 'tap_action_right', 'text', '{"action":"more-info"}', 'JSON: more-info, navigate, call-service, toggle, none')}
-        ${this._input('Hold action', 'hold_action_right', 'text', '{"action":"none"}', 'JSON: idem')}
-      </div>
-
-      <h3>Couleurs <span style="font-size:10px;font-weight:400">(vide = thème HA)</span></h3>
-      <div class="row2">
-        ${this._color('Couleur gauche', 'color_primary', '#00E8FF')}
-        ${this._color('Couleur droite', 'color_secondary', '#E946FF')}
-      </div>
-      <h3>Gradient Mercure <span style="font-size:10px;font-weight:400">(partagé — override dans ▶ ci-dessus)</span></h3>
-      <div class="row3">
-        ${this._color('Zone 1 (seuil 1)', 'color_zone1', '#0099FF', '#hex')}
-        ${this._color('Zone 2 (seuil 2)', 'color_zone2', '#00E8FF', '#hex')}
-        ${this._color('Zone 3 (seuil 3)', 'color_zone3', '#00FFB3', '#hex')}
-      </div>
-      <div class="row2">
-        ${this._color('Zone 4 (seuil 4)', 'color_zone4', '#FF9D00', '#hex')}
-        ${this._color('Zone 5 (au-delà)', 'color_zone5', '#FF2D78', '#hex')}
-      </div>
-      ${this._color('Fond intérieur', 'color_background', '#04060b', '#hex')}
-      <h3>Anneaux Plasma <span style="font-size:10px;font-weight:400">(partagé — override dans ▶ ci-dessus)</span></h3>
-      <div class="row2">
-        ${this._color('Anneau 1 (horizontal)', 'color_plasma_ring1', '#00FFB3', '#hex')}
-        ${this._color('Anneau 2 (vertical)', 'color_plasma_ring2', '#FF2D78', '#hex')}
-      </div>
+  // ── CSS commun (identique partout) ───────────────────────────────
+  _css() {
+    return `
+      :host { display:block; padding:14px; font-family:var(--primary-font-family,Roboto,sans-serif); }
+      .sec { font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--divider-color); }
+      .sec:first-child { margin-top:0; }
+      .row { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
+      .row label { flex:0 0 160px;font-size:12px;color:var(--secondary-text-color); }
+      .field-wrap { flex:1;min-width:0;display:flex; }
+      input[type=text],input[type=number],select { flex:1;width:100%;padding:4px 8px;border:1px solid var(--divider-color);border-radius:4px;background:var(--card-background-color);color:var(--primary-text-color);font-size:12px;outline:none;box-sizing:border-box; }
+      select { cursor:pointer; }
+      input:focus,select:focus { box-shadow:0 0 0 1px var(--primary-color); }
+      .color-row { display:flex;gap:8px;flex:1; }
+      .color-row input[type=text] { flex:1; }
+      .color-row input[type=color] { width:36px;height:28px;flex:none;padding:0;border:none;background:none;border-radius:4px;cursor:pointer; }
+      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:-2px 0 6px 168px; }
+      details { margin:10px 0; }
+      summary { cursor:pointer; font-size:11px; font-weight:700; letter-spacing:1px; color:var(--primary-color); text-transform:uppercase; padding:6px 8px; background:rgba(var(--rgb-primary-color,98,0,234),.08); border:1px solid rgba(var(--rgb-primary-color,98,0,234),.2); border-radius:6px; }
+      details .adv-inner { padding:10px 0 2px 10px; border-left:2px solid var(--divider-color); margin-left:4px; }
     `;
-
-    // Color pickers sync
-    this.querySelectorAll('input[type=color]').forEach(picker => {
-      const key  = picker.dataset.key;
-      const text = this.querySelector(`.color-text[data-key="${key}"]`);
-      if (!text) return;
-      picker.addEventListener('input', e => {
-        e.stopPropagation();
-        text.value = picker.value;
-        this._changed(key, picker.value);
-      }, { passive: true });
-      text.addEventListener('blur', e => {
-        e.stopPropagation();
-        if (/^#[0-9a-fA-F]{6}$/.test(text.value)) picker.value = text.value;
-        this._changed(key, text.value || null);
-      });
-      text.addEventListener('keydown', e => e.stopPropagation(), { passive: true });
-      text.addEventListener('input',   e => e.stopPropagation(), { passive: true });
-    });
-
-    // Resets
-    this.querySelectorAll('[data-reset]').forEach(el => {
-      el.addEventListener('click', () => {
-        const key = el.dataset.reset;
-        const picker = this.querySelector(`input[type=color][data-key="${key}"]`);
-        const text   = this.querySelector(`.color-text[data-key="${key}"]`);
-        if (picker) picker.style.opacity = '0.4';
-        if (text)   text.value = '';
-        this._changed(key, null);
-      });
-    });
-
-    // Entity inputs (§22 : input + <datalist> partagé, jamais ha-entity-picker)
-    this._initPickers();
-
-    // Other fields
-    this.querySelectorAll('[data-key]:not([type=color]):not([data-entity])').forEach(el => {
-      if (el.type === 'checkbox' || el.tagName === 'SELECT') {
-        el.addEventListener('change', e => {
-          e.stopPropagation();
-          this._changed(el.dataset.key, el.type === 'checkbox' ? el.checked : (el.value || null));
-        });
-        return;
-      }
-      if (el.type === 'number') {
-        el.addEventListener('change', e => {
-          e.stopPropagation();
-          this._changed(el.dataset.key, el.value === '' ? null : parseFloat(el.value));
-        });
-        return;
-      }
-      el.addEventListener('keydown', e => e.stopPropagation(), { passive: true });
-      el.addEventListener('keyup',   e => e.stopPropagation(), { passive: true });
-      el.addEventListener('input',   e => e.stopPropagation(), { passive: true });
-      el.addEventListener('blur', e => {
-        e.stopPropagation();
-        this._changed(el.dataset.key, el.value === '' ? null : el.value);
-      });
-    });
   }
 
-  _changed(key, val) {
-    const config = { ...this._config };
-    if (val === null || val === '' || val === undefined) delete config[key];
-    else {
-      // Auto-parse JSON for action keys
-      if (key.endsWith('_action_left') || key.endsWith('_action_right')) {
-        if (typeof val === 'string') {
-          try { val = JSON.parse(val); } catch { /* keep as string */ }
-        }
-      }
-      // Parse zone_thresholds comme tableau de 4 nombres
-      if (key.startsWith('zone_thresholds')) {
-        if (typeof val === 'string') {
-          const arr = val.split(/[,;]+/).map(v => parseFloat(v.trim())).filter(v => !isNaN(v));
-          if (arr.length === 4) val = arr;
-          else return; // invalide, on n'applique pas
-        }
-      }
-      config[key] = val;
-    }
-    this._config = config;
-    this.dispatchEvent(new CustomEvent('config-changed', {
-      detail: { config }, bubbles: true, composed: true,
-    }));
+  // ── Render : on vide, on pose le style, on déroule le schéma ────────
+  _render() {
+    this.innerHTML = '';
+    const st = document.createElement('style'); st.textContent = this._css(); this.appendChild(st);
+    this._schema();
+    this._fillDatalists();
+    this._bindIconPreviews();
+  }
+
+  // ╔════════════════════════════════════════════════════════════════╗
+  // ║  SCHÉMA — LA SEULE PARTIE À ÉCRIRE PAR CARD                     ║
+  // ╚════════════════════════════════════════════════════════════════╝
+  _schema() {
+    this._section('Vent (optionnel)');
+    this._entity('entity_wind', 'Capteur vent', 'sensor');
+    this._text('name_wind', 'Nom vent', 'VENT');
+    this._text('wind_unit', 'Unité vent', 'km/h');
+    this._entity('entity_bg_pressure', 'Pression (graph fond)', 'sensor');
+    this._hint('Optionnel — tracé discret derrière les thermos');
+
+    this._section('Thermomètre Gauche');
+    this._entity('entity_left', 'Température gauche (requis)', 'sensor');
+    this._text('name_left', 'Nom / pièce gauche', 'SALON');
+    this._entity('humidity_entity_left', 'Humidité gauche', 'sensor');
+    this._entity('secondary_entity_left', 'Capteur secondaire gauche', 'sensor');
+    this._text('secondary_label_left', 'Label capteur sec. gauche', 'LUMINOSITY');
+    this._text('secondary_unit_left', 'Unité capteur sec. gauche', 'lx');
+
+    this._section('Thermomètre Droit');
+    this._entity('entity_right', 'Température droite (requis)', 'sensor');
+    this._text('name_right', 'Nom / pièce droite', 'CHAMBRE');
+    this._entity('humidity_entity_right', 'Humidité droite', 'sensor');
+    this._entity('secondary_entity_right', 'Capteur secondaire droit', 'sensor');
+    this._text('secondary_label_right', 'Label capteur sec. droit', 'CO2');
+    this._text('secondary_unit_right', 'Unité capteur sec. droit', 'ppm');
+
+    this._section('Échelle (défauts partagés)');
+    this._number('temp_min', 'Temp min (°C)', { min: -50, max: 50, step: 1 });
+    this._number('temp_max', 'Temp max (°C)', { min: 0, max: 100, step: 1 });
+    this._number('decimal_places', 'Décimales', { min: 0, max: 2, step: 1 });
+    this._text('unit', 'Unité', '°C');
+
+    const advL = document.createElement('details'); this.appendChild(advL);
+    const sumL = document.createElement('summary'); sumL.textContent = 'Overrides Gauche (optionnel)'; advL.appendChild(sumL);
+    const innerL = document.createElement('div'); innerL.className = 'adv-inner'; advL.appendChild(innerL);
+    this._appendTo = innerL;
+    this._number('temp_min_left', 'Min gauche', { min: -50, max: 50, step: 1, ph: 'Ex: 16 pour intérieur' });
+    this._number('temp_max_left', 'Max gauche', { min: 0, max: 100, step: 1, ph: 'Ex: 28 pour intérieur' });
+    this._text('zone_thresholds_left', 'Seuils zones gauche', '5, 15, 22, 28');
+    this._hint('4 seuils séparés par virgules ex: 18, 20, 23, 26');
+    this._color('color_zone1_left', 'Zone 1 gauche', null, '#0099FF');
+    this._color('color_zone2_left', 'Zone 2 gauche', null, '#00E8FF');
+    this._color('color_zone3_left', 'Zone 3 gauche', null, '#00FFB3');
+    this._color('color_zone4_left', 'Zone 4 gauche', null, '#FF9D00');
+    this._color('color_zone5_left', 'Zone 5 gauche', null, '#FF2D78');
+    this._color('color_plasma_ring1_left', 'Plasma anneau 1 gauche', null, '#00FFB3');
+    this._color('color_plasma_ring2_left', 'Plasma anneau 2 gauche', null, '#FF2D78');
+    this._number('plasma_saturation_left', 'Saturation plasma gauche', { min: 0.5, max: 3, step: 0.1 });
+    this._appendTo = null;
+
+    const advR = document.createElement('details'); this.appendChild(advR);
+    const sumR = document.createElement('summary'); sumR.textContent = 'Overrides Droite (optionnel)'; advR.appendChild(sumR);
+    const innerR = document.createElement('div'); innerR.className = 'adv-inner'; advR.appendChild(innerR);
+    this._appendTo = innerR;
+    this._number('temp_min_right', 'Min droite', { min: -50, max: 50, step: 1, ph: 'Ex: -10 pour extérieur' });
+    this._number('temp_max_right', 'Max droite', { min: 0, max: 100, step: 1, ph: 'Ex: 35 pour extérieur' });
+    this._text('zone_thresholds_right', 'Seuils zones droite', '5, 15, 22, 28');
+    this._hint('4 seuils séparés par virgules ex: 5, 15, 22, 28');
+    this._color('color_zone1_right', 'Zone 1 droite', null, '#0099FF');
+    this._color('color_zone2_right', 'Zone 2 droite', null, '#00E8FF');
+    this._color('color_zone3_right', 'Zone 3 droite', null, '#00FFB3');
+    this._color('color_zone4_right', 'Zone 4 droite', null, '#FF9D00');
+    this._color('color_zone5_right', 'Zone 5 droite', null, '#FF2D78');
+    this._color('color_plasma_ring1_right', 'Plasma anneau 1 droite', null, '#00FFB3');
+    this._color('color_plasma_ring2_right', 'Plasma anneau 2 droite', null, '#FF2D78');
+    this._number('plasma_saturation_right', 'Saturation plasma droite', { min: 0.5, max: 3, step: 0.1 });
+    this._appendTo = null;
+
+    this._section('Polices');
+    this._text('name_font_family', 'Police nom', 'Rajdhani, monospace');
+    this._hint('Vide = thème HA');
+    this._text('name_font_size', 'Taille nom', '12px');
+    this._text('value_font_family', 'Police valeur', 'Rajdhani, monospace');
+    this._text('value_font_size', 'Taille valeur', '28px');
+    this._text('sensor_font_family', 'Police capteurs', 'Rajdhani, monospace');
+    this._hint('Humidité, secondaire…');
+    this._text('sensor_font_size', 'Taille capteurs', '24px');
+
+    this._section('Affichage');
+    this._toggle('show_plasma', 'Réacteur plasma', false);
+    this._toggle('show_history', 'Historique', false);
+    this._number('animation_speed', 'Vitesse animations', { min: 0.2, max: 5, step: 0.1 });
+    this._number('history_hours', 'Heures historique', { min: 1, max: 168, step: 1, ph: '24' });
+    this._number('plasma_saturation', 'Saturation plasma', { min: 0.5, max: 3, step: 0.1, ph: '1.8' });
+    this._hint('1=normal, 2=ultra saturé (défaut: 1.8)');
+
+    this._section('🐾 Easter-egg GLITCH');
+    this._hint('chat sur la courbe la plus froide');
+    this._toggle('glitch_cat', 'Activer GLITCH', false);
+    this._hint('Le chat se matérialise en hologramme glitché Silverhand sur la sparkline');
+    this._number('glitch_cat_chance', 'Fréquence', { min: 0, max: 1, step: 0.01, ph: '0.12' });
+    this._hint('Proba par tick (~6 s). 0.12 ≈ 1 apparition/50 s');
+    this._number('glitch_cat_size', 'Taille (px)', { min: 14, max: 48, step: 1, ph: '26' });
+    this._text('glitch_cat_image', 'Image (GIF)', '/local/cat-walking-white.gif');
+    this._hint('Sprite marcheur — défaut: cat-walking-white.gif');
+
+    this._section('Actions Gauche (tap / appui long)');
+    this._text('tap_action_left', 'Tap action', '{"action":"more-info"}');
+    this._hint('JSON: more-info, navigate, call-service, toggle, none');
+    this._text('hold_action_left', 'Hold action', '{"action":"none"}');
+
+    this._section('Actions Droite (tap / appui long)');
+    this._text('tap_action_right', 'Tap action', '{"action":"more-info"}');
+    this._hint('JSON: idem');
+    this._text('hold_action_right', 'Hold action', '{"action":"none"}');
+
+    this._section('Couleurs (vide = thème HA)');
+    this._color('color_primary', 'Couleur gauche', null, '#00E8FF');
+    this._color('color_secondary', 'Couleur droite', null, '#E946FF');
+
+    this._section('Gradient Mercure (partagé — override dans ▶ ci-dessus)');
+    this._color('color_zone1', 'Zone 1 (seuil 1)', null, '#0099FF');
+    this._color('color_zone2', 'Zone 2 (seuil 2)', null, '#00E8FF');
+    this._color('color_zone3', 'Zone 3 (seuil 3)', null, '#00FFB3');
+    this._color('color_zone4', 'Zone 4 (seuil 4)', null, '#FF9D00');
+    this._color('color_zone5', 'Zone 5 (au-delà)', null, '#FF2D78');
+    this._color('color_background', 'Fond intérieur', null, '#04060b');
+
+    this._section('Anneaux Plasma (partagé — override dans ▶ ci-dessus)');
+    this._color('color_plasma_ring1', 'Anneau 1 (horizontal)', null, '#00FFB3');
+    this._color('color_plasma_ring2', 'Anneau 2 (vertical)', null, '#FF2D78');
   }
 }
 customElements.define('neon-dual-thermo-card-editor', NeonDualThermoCardEditor);

@@ -1257,240 +1257,298 @@ class HeatPumpCard extends HTMLElement {
   }
 }
 
-// ── Editor ────────────────────────────────────────────────────────────────────
+// ── Editor — template unifié (cf CARDS-EDITOR-TEMPLATE.md) ─────────────────
+// N'éditer QUE _schema() ; le reste est canonique et identique partout.
 
-const ENTITY_KEYS = ['fan_rpm','temp_water_out','temp_water_ret','power','status',
+const HPC_ENTITY_KEYS = ['fan_rpm','temp_water_out','temp_water_ret','power','status',
   'compressor','comp_freq','booster','lockout'];
-const ENTITY_LABELS = {
+const HPC_ENTITY_LABELS = {
   fan_rpm:'Vitesse ventilateur', temp_water_out:'Temp départ eau', temp_water_ret:'Temp retour eau',
   power:'Puissance W', status:'Mode opération', compressor:'Compresseur (binary)',
   comp_freq:'Fréquence compresseur', booster:'Appoint (binary)', lockout:'Short-cycle lockout (binary)'
 };
-const COLOR_KEYS = ['border_color','badge_on','badge_off','badge_cool','badge_defrost',
+const HPC_ENTITY_PREFIX = {
+  fan_rpm:'sensor', temp_water_out:'sensor', temp_water_ret:'sensor', power:'sensor',
+  status:'sensor', compressor:'binary_sensor', comp_freq:'sensor',
+  booster:'binary_sensor', lockout:'binary_sensor'
+};
+const HPC_COLOR_KEYS = ['border_color','badge_on','badge_off','badge_cool','badge_defrost',
   'power_core','climate','dep_color','ret_color','fan_outer','fan_core','blade_cold','blade_hot','title_color'];
-const COLOR_LABELS = {
+const HPC_COLOR_LABELS = {
   border_color:'Bordure', badge_on:'Badge ON', badge_off:'Badge OFF',
   badge_cool:'Badge clim', badge_defrost:'Badge dégivrage',
   power_core:'Core puissance', climate:'Thermostat', dep_color:'Départ', ret_color:'Retour',
   fan_outer:'Fan extérieur', fan_core:'Fan centre', blade_cold:'Blade froid', blade_hot:'Blade chaud',
   title_color:'Titre'
 };
+const HPC_GAS_PALETTE = ['xenon','argon','krypton','helium'];
 
 class HeatPumpCardEditor extends HTMLElement {
-  constructor() {
-    super();
-    this._config = null;
-    this._rendered = false;
-  }
+  constructor() { super(); this._config = {}; this._hass = null; this._rendered = false; }
 
-  setConfig(cfg) {
-    this._config = JSON.parse(JSON.stringify(cfg || {}));
+  // ── Cycle de vie (NE PAS toucher) ──────────────────────────────────
+  setConfig(c) {
+    this._config = { ...(c || {}) };
     if (!this._rendered) { this._rendered = true; this._render(); }
     else this._syncValues();
   }
+  set hass(h) { this._hass = h; this._fillDatalists(); }   // JAMAIS de render ici
+  disconnectedCallback() { this._rendered = false; }
 
-  set hass(h) { this._hass = h; }
-
-  _fire() {
-    this.dispatchEvent(new CustomEvent('config-changed', {
-      detail: { config: this._config }, bubbles: true, composed: true
-    }));
+  // ── Lecture / écriture config (clés imbriquées via ".") ────────────
+  _read(key) {
+    return key.includes('.')
+      ? key.split('.').reduce((o, p) => (o && o[p] !== undefined ? o[p] : undefined), this._config)
+      : this._config[key];
   }
-
-  _set(path, val) {
-    const parts = path.split('.');
-    let o = this._config;
-    for (let i = 0; i < parts.length - 1; i++) {
-      if (!o[parts[i]]) o[parts[i]] = {};
-      o = o[parts[i]];
-    }
-    o[parts[parts.length - 1]] = val;
-    this._fire();
-  }
-
-  _get(path) {
-    return path.split('.').reduce((o, k) => (o && o[k] !== undefined ? o[k] : ''), this._config || {});
-  }
-
-  _render() {
-    const css = `
-      :host { display:block; font-family: var(--mdc-typography-body1-font-family, inherit); }
-      .ed-section { margin-bottom:16px; }
-      .ed-title { font-size:11px; letter-spacing:.12em; text-transform:uppercase;
-        color:var(--secondary-text-color); margin:0 0 6px; padding-bottom:4px;
-        border-bottom:1px solid var(--divider-color); }
-      .ed-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
-      .ed-row label { flex:0 0 160px; font-size:12px; color:var(--secondary-text-color); }
-      .ed-row input[type=text], .ed-row input[type=number] {
-        flex:1; padding:4px 8px; border:1px solid var(--divider-color);
-        border-radius:4px; background:var(--card-background-color);
-        color:var(--primary-text-color); font-size:12px; box-sizing:border-box; }
-      .ed-row input[type=color] { width:36px; height:28px; border:none; padding:0;
-        background:none; cursor:pointer; border-radius:4px; }
-      .tile-block { background:var(--secondary-background-color); border-radius:6px;
-        padding:8px 10px; margin-bottom:6px; }
-      .tile-block .tile-hdr { font-size:11px; color:var(--accent-color); margin-bottom:6px; }
-    `;
-
-    const tilesHTML = [0,1,2,3].map(i => {
-      const t = (this._config.tiles || [])[i] || {};
-      return `<div class="tile-block">
-        <div class="tile-hdr">Tile ${i+1}</div>
-        <div class="ed-row"><label>Entité</label>
-          <input type="text" data-path="tiles.${i}.entity" value="${t.entity||''}" list="hpc-entities"/></div>
-        <div class="ed-row"><label>Label</label>
-          <input type="text" data-path="tiles.${i}.label" value="${t.label||''}"/></div>
-        <div class="ed-row"><label>Unité</label>
-          <input type="text" data-path="tiles.${i}.unit" value="${t.unit||''}"/></div>
-      </div>`;
-    }).join('');
-
-    const entitiesHTML = ENTITY_KEYS.map(k => `
-      <div class="ed-row"><label>${ENTITY_LABELS[k]}</label>
-        <input type="text" data-path="entities.${k}" value="${this._get('entities.'+k)}" list="hpc-entities"/>
-      </div>`).join('');
-
-    const colorsHTML = COLOR_KEYS.map(k => `
-      <div class="ed-row"><label>${COLOR_LABELS[k]}</label>
-        <input type="color" data-path="colors.${k}" value="${this._get('colors.'+k)||'#000000'}"/>
-        <input type="text" data-path="colors.${k}" value="${this._get('colors.'+k)||''}" style="flex:1"/>
-      </div>`).join('');
-
-    this.innerHTML = `<style>${css}</style>
-      <datalist id="hpc-entities"></datalist>
-
-      <div class="ed-section">
-        <p class="ed-title">Général</p>
-        <div class="ed-row"><label>Titre</label>
-          <input type="text" data-path="title" value="${this._get('title')}"/></div>
-        <div class="ed-row"><label>Entité climate</label>
-          <input type="text" data-path="climate" value="${this._get('climate')}" list="hpc-entities"/></div>
-        <div class="ed-row"><label>Puissance max (kW)</label>
-          <input type="number" data-path="max_power" value="${this._get('max_power')||3}" step="0.5" min="0.5" max="20"/></div>
-        <div class="ed-row"><label>Seuil IDLE (W)</label>
-          <input type="number" data-path="idle_threshold" value="${this._get('idle_threshold')||20}" step="5" min="0" max="500"/></div>
-      </div>
-
-      <div class="ed-section">
-        <p class="ed-title">En-tête</p>
-        <div class="ed-row"><label>Titre header</label>
-          <input type="text" data-path="header.title" value="${this._get('header.title')}"/></div>
-        <div class="ed-row"><label>Icône header</label>
-          <input type="text" data-path="header.icon" value="${this._get('header.icon')}" list="hpc-mdi-list"/>
-          <a href="https://pictogrammers.com/library/mdi/" target="_blank" style="font-size:10px;color:var(--accent-color)">MDI</a>
-        </div>
-        <div class="ed-row"><label>Couleur header</label>
-          <input type="color" data-path="header.color" value="${this._hexColor(this._get('header.color'))||'#00d4ff'}"/>
-          <input type="text" data-path="header.color" value="${this._get('header.color')}" style="flex:1"/>
-        </div>
-      </div>
-
-      <div class="ed-section">
-        <p class="ed-title">Entités</p>
-        ${entitiesHTML}
-      </div>
-
-      <div class="ed-section">
-        <p class="ed-title">Tiles (4 max)</p>
-        ${tilesHTML}
-      </div>
-
-      <div class="ed-section">
-        <p class="ed-title">Couleurs</p>
-        ${colorsHTML}
-      </div>
-
-      <datalist id="hpc-mdi-list">
-        <option value="mdi:heat-pump"><option value="mdi:snowflake">
-        <option value="mdi:fire"><option value="mdi:air-conditioner">
-        <option value="mdi:thermometer"><option value="mdi:radiator">
-        <option value="mdi:flash"><option value="mdi:cog">
-        <option value="mdi:home-thermometer"><option value="mdi:weather-windy">
-      </datalist>`;
-
-    this._populateEntities();
-    this._attachListeners();
-  }
-
-  _hexColor(v) {
-    if (!v) return '';
-    if (/^#[0-9a-fA-F]{6}$/.test(v)) return v;
-    const m = v.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-    if (!m) return '';
-    return '#' + [m[1],m[2],m[3]].map(n => parseInt(n).toString(16).padStart(2,'0')).join('');
-  }
-
-  _populateEntities() {
-    if (!this._hass) return;
-    const dl = this.querySelector('#hpc-entities');
-    if (!dl) return;
-    dl.innerHTML = Object.keys(this._hass.states)
-      .sort()
-      .map(e => `<option value="${e}">`)
-      .join('');
-  }
-
-  _attachListeners() {
-    this.querySelectorAll('input[data-path]').forEach(inp => {
-      inp.addEventListener('change', () => this._onInput(inp));
-      if (inp.type === 'text') inp.addEventListener('input', () => this._onInput(inp));
-      if (inp.type === 'color') {
-        inp.addEventListener('input', () => {
-          const path = inp.dataset.path;
-          const sibling = this.querySelector(`input[type=text][data-path="${path}"]`);
-          if (sibling && document.activeElement !== sibling) sibling.value = inp.value;
-          this._set(path, inp.value);
-        });
+  _set(key, value) {
+    const empty = (value === undefined || value === '' || value === null);
+    if (key.includes('.')) {
+      const parts = key.split('.');
+      let o = this._config;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!o[parts[i]] || typeof o[parts[i]] !== 'object') o[parts[i]] = {};
+        o = o[parts[i]];
       }
-    });
+      const last = parts[parts.length - 1];
+      if (empty) delete o[last]; else o[last] = value;
+      const parent = parts.slice(0, -1).reduce((a, k) => a && a[k], this._config);
+      if (parent && typeof parent === 'object' && !Object.keys(parent).length) delete this._config[parts[0]];
+    } else if (empty) { delete this._config[key]; }
+    else { this._config[key] = value; }
+    this.dispatchEvent(new CustomEvent('config-changed',
+      { detail: { config: { ...this._config } }, bubbles: true, composed: true }));
   }
 
-  _onInput(inp) {
-    if (inp.type === 'color') return;
-    const path = inp.dataset.path;
-    const val = inp.type === 'number' ? parseFloat(inp.value) || 0 : inp.value;
-
-    // sync paired color picker
-    if (inp.type === 'text') {
-      const hex = this._hexColor(val);
-      const picker = this.querySelector(`input[type=color][data-path="${path}"]`);
-      if (picker && hex) picker.value = hex;
-    }
-
-    // tiles path: tiles.N.key
-    if (path.startsWith('tiles.')) {
-      const parts = path.split('.');
-      const idx = parseInt(parts[1]);
-      const key = parts[2];
-      if (!this._config.tiles) this._config.tiles = [];
-      while (this._config.tiles.length <= idx) this._config.tiles.push({});
-      this._config.tiles[idx][key] = val;
-      this._fire();
-    } else {
-      this._set(path, val);
-    }
-  }
-
+  // ── Sync in-place (guard focus + clés imbriquées) ──────────────────
   _syncValues() {
-    this.querySelectorAll('input[data-path]').forEach(inp => {
-      if (document.activeElement === inp) return;
-      const path = inp.dataset.path;
-      let val;
-      if (path.startsWith('tiles.')) {
-        const parts = path.split('.');
-        const t = (this._config.tiles || [])[parseInt(parts[1])] || {};
-        val = t[parts[2]] || '';
-      } else {
-        val = this._get(path);
-      }
-      if (inp.type === 'color') {
-        const hex = this._hexColor(String(val));
-        if (hex) inp.value = hex;
-      } else {
-        inp.value = val;
+    const active = this.querySelector(':focus') || document.activeElement;
+    this.querySelectorAll('[data-key]').forEach(el => {
+      if (el === active) return;
+      const v = this._read(el.dataset.key);
+      if (el.type === 'checkbox') el.checked = el.dataset.defaultOn ? (v !== false) : !!v;
+      else {
+        el.value = (v == null ? '' : v);
+        if (el._pick) el._pick.value = this._toHex(el.value) || (el._cssDefault ? this._resolveColor(el._cssDefault) : null) || '#6200EA';
       }
     });
-    this._populateEntities();
+    this._bindIconPreviews(true);
+  }
+
+  // ── Helpers de champ (signatures FIXES — ne pas réinventer) ────────
+  _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d); return d; }
+  _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; this.appendChild(d); return d; }
+
+  _text(key, label, ph = '') {
+    const row = this._row(label);
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.placeholder = ph; inp.dataset.key = key;
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  _number(key, label, { min, max, step = 1, ph = '' } = {}) {
+    const row = this._row(label);
+    const inp = document.createElement('input');
+    inp.type = 'number'; if (min != null) inp.min = min; if (max != null) inp.max = max;
+    inp.step = step; inp.placeholder = ph; inp.dataset.key = key;
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => { const n = parseFloat(inp.value); this._set(key, isNaN(n) ? undefined : n); });
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  _toggle(key, label, defaultOn = false) {
+    const row = this._row(label);
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.key = key;
+    if (defaultOn) cb.dataset.defaultOn = '1';
+    const v = this._read(key);
+    cb.checked = defaultOn ? (v !== false) : !!v;
+    cb.style.cssText = 'width:38px;height:20px;cursor:pointer;accent-color:var(--primary-color);flex:none;';
+    cb.addEventListener('change', () => this._set(key, cb.checked));
+    row.wrap.appendChild(cb); return cb;
+  }
+
+  _color(key, label, cssDefault = null, ph = 'ex: #FF3366 / rgb(var(--rgb-lavande)) / var(--primary-color)') {
+    const row = this._row(label);
+    const box = document.createElement('div'); box.className = 'color-row';
+    const txt = document.createElement('input'); txt.type = 'text'; txt.placeholder = ph; txt.dataset.key = key;
+    txt.value = this._read(key) ?? '';
+    const pick = document.createElement('input'); pick.type = 'color';
+    txt._pick = pick; txt._cssDefault = cssDefault;
+    const refresh = () => { pick.value = this._toHex(txt.value) || (cssDefault ? this._resolveColor(cssDefault) : null) || '#6200EA'; };
+    txt.addEventListener('input', () => { this._set(key, txt.value); refresh(); });
+    pick.addEventListener('input', () => { txt.value = pick.value; this._set(key, pick.value); });
+    box.appendChild(txt); box.appendChild(pick); row.wrap.appendChild(box); refresh(); return txt;
+  }
+
+  _resolveColor(css) {
+    try {
+      const probe = document.createElement('span');
+      probe.style.cssText = `color:${css};position:absolute;left:-9999px;top:-9999px`;
+      this.appendChild(probe);
+      const rgb = getComputedStyle(probe).color; probe.remove();
+      const m = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
+      return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+    } catch { return null; }
+  }
+
+  _icon(key, label) {
+    const row = this._row(`${label} — <a href="https://pictogrammers.com/library/mdi/" target="_blank" rel="noopener" class="mdi-link">parcourir ↗</a>`, true);
+    const box = document.createElement('div'); box.className = 'icon-row';
+    const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = 'mdi:home'; inp.dataset.key = key;
+    inp.value = this._read(key) ?? '';
+    const prev = document.createElement('div'); prev.className = 'icon-preview'; prev.dataset.preview = key;
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    box.appendChild(inp); box.appendChild(prev); row.wrap.appendChild(box); return inp;
+  }
+
+  _entity(key, label, prefix = '') {
+    const row = this._row(label);
+    const inp = document.createElement('input'); inp.type = 'text'; inp.autocomplete = 'off';
+    inp.placeholder = (prefix || 'domain') + '.…'; inp.dataset.key = key; inp.dataset.prefix = prefix;
+    inp.setAttribute('list', `hpc-ent-${(prefix || 'all').replace(/[^a-z]/g, '')}`);
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value.trim()));
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  // Tuile n°i (tiles[i] = {entity,label,unit,color}) — clés "tiles.i.xxx"
+  _tile(i) {
+    const box = document.createElement('div'); box.className = 'tile-block';
+    const hdr = document.createElement('div'); hdr.className = 'tile-hdr'; hdr.textContent = `Tile ${i + 1}`;
+    box.appendChild(hdr); this.appendChild(box);
+    this._appendTo = box;
+    this._entity(`tiles.${i}.entity`, 'Entité', 'sensor');
+    this._text(`tiles.${i}.label`, 'Label', 'ex: T_EXT');
+    this._text(`tiles.${i}.unit`, 'Unité', '°C');
+    this._select(`tiles.${i}.color`, 'Couleur (gaz)', HPC_GAS_PALETTE, '— défaut —');
+    this._appendTo = null;
+  }
+
+  _select(key, label, options, emptyLabel = null) {
+    const w = this._row(label).wrap;
+    const sel = document.createElement('select'); sel.dataset.key = key;
+    if (emptyLabel !== null) { const o = document.createElement('option'); o.value = ''; o.textContent = emptyLabel; sel.appendChild(o); }
+    options.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = (typeof opt === 'object') ? opt.value : opt;
+      o.textContent = (typeof opt === 'object') ? opt.label : opt;
+      sel.appendChild(o);
+    });
+    sel.value = this._read(key) ?? '';
+    sel.addEventListener('change', () => this._set(key, sel.value));
+    w.appendChild(sel); return sel;
+  }
+
+  // ── Mécanique commune (NE PAS toucher, + _appendTo pour grouper) ────
+  _row(labelHtml, isHtml = false) {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('label');
+    if (isHtml) lbl.innerHTML = labelHtml; else lbl.textContent = labelHtml;
+    const wrap = document.createElement('div'); wrap.className = 'field-wrap';
+    row.appendChild(lbl); row.appendChild(wrap);
+    (this._appendTo || this).appendChild(row);
+    return { row, wrap };
+  }
+
+  _toHex(c) {
+    if (!c) return null;
+    if (/^#[0-9a-f]{6}$/i.test(c)) return c;
+    const m = c.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/i);
+    return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+  }
+
+  _bindIconPreviews(resyncOnly = false) {
+    this.querySelectorAll('.icon-preview[data-preview]').forEach(prev => {
+      const inp = this.querySelector(`input[data-key="${prev.dataset.preview}"]`);
+      const upd = () => {
+        const val = (inp && inp.value || '').trim();
+        prev.innerHTML = '';
+        if (/^mdi:[a-zA-Z0-9_-]+$/.test(val)) {
+          const ico = document.createElement('ha-icon');
+          ico.setAttribute('icon', val); ico.style.cssText = '--mdc-icon-size:20px';
+          prev.appendChild(ico);
+        }
+      };
+      if (!resyncOnly && inp && !inp._previewBound) { inp.addEventListener('input', upd); inp._previewBound = true; }
+      upd();
+    });
+  }
+
+  _fillDatalists() {
+    if (!this._hass) return;
+    this.querySelectorAll('input[data-prefix]').forEach(inp => {
+      const id = inp.getAttribute('list'); if (!id) return;
+      let dl = this.querySelector('#' + id);
+      if (!dl) { dl = document.createElement('datalist'); dl.id = id; this.appendChild(dl); }
+      const ids = Object.keys(this._hass.states).filter(e => e.startsWith(inp.dataset.prefix || '')).sort();
+      if (dl.childElementCount === ids.length) return;
+      dl.textContent = '';
+      const frag = document.createDocumentFragment();
+      ids.forEach(id2 => { const o = document.createElement('option'); o.value = id2;
+        const fn = this._hass.states[id2].attributes?.friendly_name; if (fn && fn !== id2) o.label = fn; frag.appendChild(o); });
+      dl.appendChild(frag);
+    });
+  }
+
+  // ── CSS commun (identique partout, + spécifique tiles) ──────────────
+  _css() {
+    return `
+      :host { display:block; padding:14px; font-family:var(--primary-font-family,Roboto,sans-serif); }
+      .sec { font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--divider-color); }
+      .sec:first-child { margin-top:0; }
+      .row { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
+      .row label { flex:0 0 160px;font-size:12px;color:var(--secondary-text-color); }
+      .row label .mdi-link { color:var(--primary-color);font-size:9px;text-transform:none;letter-spacing:0; }
+      .field-wrap { flex:1;min-width:0;display:flex; }
+      input[type=text],input[type=number],select { flex:1;width:100%;padding:4px 8px;border:1px solid var(--divider-color);border-radius:4px;background:var(--card-background-color);color:var(--primary-text-color);font-size:12px;outline:none;box-sizing:border-box; }
+      select { cursor:pointer; }
+      input:focus,select:focus { box-shadow:0 0 0 1px var(--primary-color); }
+      .color-row { display:flex;gap:8px;flex:1; }
+      .color-row input[type=text] { flex:1; }
+      .color-row input[type=color] { width:36px;height:28px;flex:none;padding:0;border:none;background:none;border-radius:4px;cursor:pointer; }
+      .icon-row { display:flex;gap:8px;flex:1;align-items:center; }
+      .icon-row input { flex:1; }
+      .icon-preview { width:30px;height:28px;flex:none;display:flex;align-items:center;justify-content:center;border:1px solid var(--divider-color);border-radius:4px;color:var(--primary-text-color); }
+      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:-2px 0 6px 168px; }
+      .tile-block { background:var(--secondary-background-color); border-radius:6px; padding:8px 10px; margin-bottom:6px; }
+      .tile-hdr { font-size:11px; color:var(--accent-color); margin-bottom:6px; }
+    `;
+  }
+
+  // ── Render : on vide, on pose le style, on déroule le schéma ────────
+  _render() {
+    this.innerHTML = '';
+    const st = document.createElement('style'); st.textContent = this._css(); this.appendChild(st);
+    this._schema();
+    this._fillDatalists();
+    this._bindIconPreviews();
+  }
+
+  // ╔════════════════════════════════════════════════════════════════╗
+  // ║  SCHÉMA — LA SEULE PARTIE À ÉCRIRE PAR CARD                     ║
+  // ╚════════════════════════════════════════════════════════════════╝
+  _schema() {
+    this._section('Général');
+    this._text('title', 'Titre', 'PAC Ecodan');
+    this._entity('climate', 'Entité climate', 'climate');
+    this._number('max_power', 'Puissance max (kW)', { min: 0.5, max: 20, step: 0.5, ph: '3' });
+    this._number('idle_threshold', 'Seuil IDLE (W)', { min: 0, max: 500, step: 5, ph: '20' });
+
+    this._section('En-tête');
+    this._text('header.title', 'Titre header', 'ex: PAC Ecodan');
+    this._icon('header.icon', 'Icône header');
+    this._color('header.color', 'Couleur header', 'var(--primary-color)');
+
+    this._section('Entités');
+    HPC_ENTITY_KEYS.forEach(k => this._entity(`entities.${k}`, HPC_ENTITY_LABELS[k], HPC_ENTITY_PREFIX[k]));
+
+    this._section('Tiles (4 max)');
+    for (let i = 0; i < 4; i++) this._tile(i);
+
+    this._section('Couleurs');
+    HPC_COLOR_KEYS.forEach(k => this._color(`colors.${k}`, HPC_COLOR_LABELS[k]));
   }
 }
 
