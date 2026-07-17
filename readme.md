@@ -114,8 +114,6 @@
 
 | Card | File | Version | Description |
 |------|------|:-------:|-------------|
-| 🚗 VW Car Card | `vw-car-card.js` | `0.4.1` | VW ID.4 — door/window status, battery, solar charge threshold |
-| 🚗 ID.3 Car Card | `id3-car-card.js` | `1.0.0` | VW ID.3 via CarConnectivity MQTT (`id3_*` entities) |
 | 🤖 Mova Mower Card | `mova-mower-card.js` | `12.765` | Robot mower with map, room selection, cleaning modes |
 
 ### 🎵 Media & Entertainment
