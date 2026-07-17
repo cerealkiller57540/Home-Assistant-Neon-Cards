@@ -96,6 +96,12 @@
 | 📋 Neon Entities Card | `neon-entities-card.js` | `1.8.0` | Multi-entity card (switch, sensor, cover, climate, number + dividers) — theme-agnostic colors, unified UI editor with per-entity icon preview |
 | 📝 Neon Markdown Card | `neon-markdown-card.js` | `4.2` | Neon header + full HTML/Markdown/Jinja-like body — client-side template engine (set/if/for/loop, filters), sparklines, scoped `<style>` |
 
+<div align="center">
+
+![Neon Markdown Card](https://raw.githubusercontent.com/cerealkiller57540/Home-Assistant-Neon-Cards/main/assets/markdown-card.png)
+
+</div>
+
 ### 🖥️ Network & NAS
 
 | Card | File | Version | Description |
