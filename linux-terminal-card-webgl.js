@@ -1,4 +1,4 @@
-/* ── linux-terminal-card-webgl v1.6 ──
+/* ── linux-terminal-card-webgl v1.7 ──
  * Variante WEBGL de linux-terminal-card : vrai verre CRT bombé rendu par shader.
  *
  * Desktop : le terminal (texte + barres + GLITCH le chat) est dessiné sur un canvas 2D
@@ -53,6 +53,14 @@
  * v1.6 (2026-08-24) : éditeur condensé — les groupes secondaires (CRT, écran injoignable,
  *   couleurs, OS/MQTT, charge, temp/batteries/réseau, seuils, détournement de barres) passent
  *   en <ha-expansion-panel> repliables ; seuls Général et En-tête restent ouverts par défaut.
+ *
+ * v1.7 (2026-08-24) : header canonique — mêmes réglages que neon-entities-card.js /
+ *   neon-climate-card-webgl.js (police, majuscules, épaisseur, espacement, italique, dégradé,
+ *   glow, flicker, couleur/taille icône). L'icône du header (header.icon) n'était même pas
+ *   dessinée dans le markup malgré du CSS .hdr-icon mort depuis toujours — corrigé. Portage
+ *   fait sur les DEUX chemins de rendu (_render() complet ET _applyLiveConfig(), le chemin
+ *   "config live" qui évite de recréer le contexte WebGL) pour rester synchro à la frappe
+ *   dans l'éditeur. Vide partout = comportement d'origine (rétro-compatible).
  */
 (() => {
 
@@ -75,6 +83,15 @@ const CAT_PATH = 'M15.724 15.662h5.454v5.454h5.455v-5.454h5.457v-5.455h5.455v5.4
 const _catSvg = () => `<svg viewBox="0 0 51 46"><path fill="currentColor" d="${CAT_PATH}"/></svg>`;
 // Path2D du chat (viewBox 51×46) — pour le dessin canvas
 const _catPath2D = new Path2D(CAT_PATH);
+
+// Polices proposées dans l'éditeur pour le titre du header (canon commun aux cards néon —
+// cf neon-entities-card.js / neon-climate-card-webgl.js). Aucune n'est chargée sans filet
+// local : fallback CSS toujours présent (var(--primary-font-family, 'Rajdhani', …)).
+const NEON_FONTS = [
+  'Orbitron','Rajdhani','Share Tech Mono','Exo 2','Roboto','Montserrat',
+  'Oswald','Bebas Neue','Inter','Poppins','Space Grotesk','Syne',
+  'DM Sans','Playfair Display','Cinzel',
+];
 
 /* ── helpers ──────────────────────────────────────────────────────────── */
 function _num(v){ const n = parseFloat(v); return isNaN(n) ? null : n; }
@@ -359,12 +376,36 @@ class LinuxTerminalCardWebgl extends HTMLElement {
     const cfg = this._config;
     this._fx = this._readFx();
     this._tint = this._resolveTint();
-    // met à jour le header (titre/couleur) si présent
+    // met à jour le header (titre/couleur/typo/effets) si présent — mêmes réglages que _render()
     const hdr = cfg.header || {};
     const ht = this.shadowRoot.getElementById('hdr-title');
     if (ht) ht.textContent = hdr.title || cfg.title || 'Latitude 5420';
     const card = this.shadowRoot.querySelector('ha-card');
-    if (card && hdr.color) card.style.setProperty('--ltc-hdr-color', hdr.color);
+    if (card){
+      const hdrColor = hdr.color || 'var(--primary-color)';
+      card.style.setProperty('--ltc-hdr-color', hdrColor);
+      const setOrClear = (prop, val) => val ? card.style.setProperty(prop, val) : card.style.removeProperty(prop);
+      setOrClear('--ltc-hdr-size', hdr.title_size || '');
+      setOrClear('--ltc-hdr-font', hdr.font ? `'${hdr.font}', var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif)` : '');
+      setOrClear('--ltc-hdr-weight', hdr.font_weight ?? '');
+      setOrClear('--ltc-hdr-spacing', hdr.letter_spacing || '');
+      setOrClear('--ltc-hdr-upper', hdr.uppercase === false ? 'none' : '');
+      setOrClear('--ltc-hdr-italic', hdr.italic ? 'italic' : '');
+      const glowColor = hdr.glow_color || hdrColor;
+      const glowSize  = parseFloat(hdr.glow_size) || 12;
+      const glow = (col, sz) => `0 0 ${Math.round(sz*0.2)}px #fff,0 0 ${Math.round(sz*0.4)}px ${col},0 0 ${Math.round(sz*0.8)}px ${col},0 0 ${sz}px ${col}`;
+      setOrClear('--ltc-hdr-shadow', hdr.title_shadow || (hdr.glow ? glow(glowColor, glowSize) : ''));
+      setOrClear('--ltc-hdr-grad', hdr.gradient ? `linear-gradient(90deg,${hdr.gradient_from || hdrColor},${hdr.gradient_to || 'var(--accent-color)'})` : '');
+      if (ht) ht.classList.toggle('grad', !!hdr.gradient);
+      setOrClear('--ltc-hdr-icon-color', hdr.icon_color || '');
+      setOrClear('--ltc-hdr-icon-size', hdr.icon_size || '');
+      setOrClear('--ltc-hdr-icon-glow', hdr.glow ? `drop-shadow(0 0 ${Math.round(glowSize*0.4)}px ${glowColor}) drop-shadow(0 0 ${glowSize}px ${glowColor})` : '');
+      setOrClear('--ltc-hdr-flicker', hdr.flicker ? 'ltc-hdr-flicker 3s ease-in-out infinite' : '');
+      // l'icône elle-même (présence/absence, mdi) exige de recréer le nœud — rare en usage live,
+      // pris en charge par le rendu complet (_render) déclenché aux changements structurels.
+      const hi = this.shadowRoot.querySelector('.hdr-icon');
+      if (hi && hdr.icon) hi.setAttribute('icon', hdr.icon);
+    }
     // force le re-dessin de la texture (nouvelle palette / fond)
     this._renderKey = null;
     this._rasterized = false;
@@ -562,19 +603,55 @@ class LinuxTerminalCardWebgl extends HTMLElement {
     // ci-dessus était INATTEIGNABLE sur un navigateur sans WebGL. Vérifié 2026-07-25.
     this._webgl ??= true;
 
+    // Header canonique (même moteur que neon-entities-card.js / neon-climate-card-webgl.js) :
+    // police/majuscules/épaisseur/espacement/italique/dégradé/glow/flicker/icône. Défauts
+    // conservés identiques à avant quand les nouveaux champs ne sont pas renseignés (pas de
+    // régression sur les configs existantes).
+    const hdrFont = hdr.font
+      ? `'${hdr.font}', var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif)`
+      : '';
+    const hdrWeight  = hdr.font_weight ?? '';
+    const hdrSpacing = hdr.letter_spacing || '';
+    const hdrUpper   = hdr.uppercase === false ? 'none' : '';
+    const hdrItalic  = hdr.italic ? 'italic' : '';
+    const _neonGlow = (col, sz) => `0 0 ${Math.round(sz*0.2)}px #fff,0 0 ${Math.round(sz*0.4)}px ${col},0 0 ${Math.round(sz*0.8)}px ${col},0 0 ${sz}px ${col}`;
+    const hdrGlowColor = hdr.glow_color || hdrColor;
+    const hdrGlowSize  = parseFloat(hdr.glow_size) || 12;
+    const hdrShadow = hdr.title_shadow || (hdr.glow ? _neonGlow(hdrGlowColor, hdrGlowSize) : '');
+    const hdrGradFrom = hdr.gradient_from || hdrColor;
+    const hdrGradTo   = hdr.gradient_to   || 'var(--accent-color)';
+    const hdrGrad = hdr.gradient ? `linear-gradient(90deg,${hdrGradFrom},${hdrGradTo})` : '';
+    const hdrIconColor = hdr.icon_color || '';
+    const hdrIconSize  = hdr.icon_size || '';
+    const hdrIconGlow = hdr.glow
+      ? `drop-shadow(0 0 ${Math.round(hdrGlowSize*0.4)}px ${hdrGlowColor}) drop-shadow(0 0 ${hdrGlowSize}px ${hdrGlowColor})`
+      : '';
+    const hdrFlickAnim = hdr.flicker ? 'ltc-hdr-flicker 3s ease-in-out infinite' : '';
+
     this.shadowRoot.innerHTML = `
       <style>${STYLES}
         ha-card{
           ${cardModBg ? '' : `background:${c.color_bg || '#0c0818'};`}
           --ltc-hdr-color:${hdrColor};
           ${hdr.title_size  ? `--ltc-hdr-size:${hdr.title_size};`     : ''}
-          ${hdr.title_shadow? `--ltc-hdr-shadow:${hdr.title_shadow};` : ''}
+          ${hdrShadow       ? `--ltc-hdr-shadow:${hdrShadow};`        : ''}
+          ${hdrFont         ? `--ltc-hdr-font:${hdrFont};`            : ''}
+          ${hdrWeight       ? `--ltc-hdr-weight:${hdrWeight};`        : ''}
+          ${hdrSpacing      ? `--ltc-hdr-spacing:${hdrSpacing};`      : ''}
+          ${hdrUpper        ? `--ltc-hdr-upper:${hdrUpper};`          : ''}
+          ${hdrItalic       ? `--ltc-hdr-italic:${hdrItalic};`        : ''}
+          ${hdrGrad         ? `--ltc-hdr-grad:${hdrGrad};`            : ''}
+          ${hdrIconColor    ? `--ltc-hdr-icon-color:${hdrIconColor};` : ''}
+          ${hdrIconSize     ? `--ltc-hdr-icon-size:${hdrIconSize};`   : ''}
+          ${hdrIconGlow     ? `--ltc-hdr-icon-glow:${hdrIconGlow};`   : ''}
+          ${hdrFlickAnim    ? `--ltc-hdr-flicker:${hdrFlickAnim};`    : ''}
           ${frameRgb ? `--ltc-frame:${frameRgb.join(',')};` : ''}
         }
       </style>
       <ha-card>
         <div class="hdr" id="hdr">
-          <span class="hdr-title" id="hdr-title">${_esc(hdr.title || c.title || 'Latitude 5420')}</span>
+          ${hdr.icon ? `<ha-icon class="hdr-icon" icon="${_esc(hdr.icon)}"></ha-icon>` : ''}
+          <span class="hdr-title${hdrGrad ? ' grad' : ''}" id="hdr-title">${_esc(hdr.title || c.title || 'Latitude 5420')}</span>
           <span class="hdr-pill" id="pwr">●</span>
         </div>
         ${this._webgl ? `
@@ -1466,9 +1543,13 @@ const STYLES = `
   .hdr{ display:flex; align-items:center; gap:9px; padding-bottom:9px; margin-bottom:10px; position:relative; }
   .hdr::after{ content:''; position:absolute; bottom:0; left:0; right:0; height:1px;
     background:linear-gradient(90deg, transparent, rgba(var(--ltc-uv),.55) 20%, rgba(var(--ltc-cy),.3) 50%, rgba(var(--ltc-uv),.55) 80%, transparent); }
-  .hdr-icon{ --mdc-icon-size:20px; color:var(--ltc-hdr-color); filter:drop-shadow(0 0 5px color-mix(in srgb, var(--ltc-hdr-color), transparent 20%)); flex-shrink:0; }
-  .hdr-title{ flex:1; font-family:var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif); font-size:var(--ltc-hdr-size,18px); letter-spacing:.05em;
-    text-transform:uppercase; color:var(--ltc-hdr-color); text-shadow:var(--ltc-hdr-shadow,0 0 8px color-mix(in srgb, var(--ltc-hdr-color), transparent 30%)); }
+  .hdr-icon{ --mdc-icon-size:var(--ltc-hdr-icon-size,var(--ltc-hdr-size,18px)); color:var(--ltc-hdr-icon-color,var(--ltc-hdr-color)); filter:drop-shadow(0 0 5px color-mix(in srgb, currentColor, transparent 20%)) var(--ltc-hdr-icon-glow,none); flex-shrink:0; animation:var(--ltc-hdr-flicker,none); }
+  .hdr-title{ flex:1; font-family:var(--ltc-hdr-font,var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif)); font-size:var(--ltc-hdr-size,18px);
+    font-weight:var(--ltc-hdr-weight,400); font-style:var(--ltc-hdr-italic,normal); letter-spacing:var(--ltc-hdr-spacing,.05em);
+    text-transform:var(--ltc-hdr-upper,uppercase); color:var(--ltc-hdr-color); text-shadow:var(--ltc-hdr-shadow,0 0 8px color-mix(in srgb, var(--ltc-hdr-color), transparent 30%));
+    animation:var(--ltc-hdr-flicker,none); }
+  .hdr-title.grad{ background:var(--ltc-hdr-grad); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  @keyframes ltc-hdr-flicker { 0%,19%,21%,23%,25%,54%,56%,100%{opacity:1;} 20%,24%,55%{opacity:.6;} }
   .hdr-pill{ font-size:11px; line-height:1; }
   .hdr-pill.on{ color:rgb(var(--ltc-grn)); filter:drop-shadow(0 0 5px rgb(var(--ltc-grn))); animation:ltc-blink 2.4s infinite; }
   .hdr-pill.crit{ color:rgb(var(--ltc-red)); filter:drop-shadow(0 0 6px rgb(var(--ltc-red))); animation:ltc-blink .6s infinite; }
@@ -1632,10 +1713,11 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
   }
   _syncValues(){
     const c = this._config || {};
-    this.querySelectorAll('input[data-key]').forEach(inp => {
+    this.querySelectorAll('input[data-key], select[data-key]').forEach(inp => {
       if (document.activeElement === inp) return;
       const parts = inp.dataset.key.split('.');
       const v = parts.length === 2 ? (c[parts[0]] || {})[parts[1]] : c[inp.dataset.key];
+      if (inp.type === 'checkbox'){ inp.checked = (v === true || v === 'true'); return; }
       if (inp.type === 'color'){ const hx = this._hexColor(v); if (hx) inp.value = hx; return; }
       inp.value = (v != null) ? v : '';
     });
@@ -1677,6 +1759,23 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
         <div class="icon-preview" data-preview="${_esc(key)}"></div>
       </div></div>`;
   }
+  _toggle(label, key, def){
+    const v = this._val(key);
+    const checked = v === '' ? !!def : (v === true || v === 'true');
+    return `<div class="field toggle-field"><label class="toggle-row">
+      <input type="checkbox" data-key="${_esc(key)}" data-bool="1" ${checked ? 'checked' : ''}/>
+      <span>${_esc(label)}</span></label></div>`;
+  }
+  _select(label, key, options, ph){
+    const v = this._val(key);
+    const opts = (options || []).map(opt => {
+      // accepte une string nue (ex: NEON_FONTS) ou un tuple [valeur, libellé]
+      const [ov, olbl] = Array.isArray(opt) ? opt : [opt, opt];
+      return `<option value="${_esc(ov)}" ${v === ov ? 'selected' : ''}>${_esc(olbl)}</option>`;
+    }).join('');
+    return `<div class="field"><label>${_esc(label)}</label>
+      <select data-key="${_esc(key)}"><option value="">${_esc(ph || '—')}</option>${opts}</select></div>`;
+  }
   _render(){
     this.innerHTML = `
       <style>
@@ -1687,8 +1786,11 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
         ha-expansion-panel{display:block;--expansion-panel-content-padding:8px 12px 12px}
         .field{display:flex;flex-direction:column;gap:3px;margin-bottom:8px}
         label{font-size:12px;color:var(--secondary-text-color)}
-        input{padding:8px 10px;border:1px solid var(--primary-color,#777);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);font-size:13px;width:100%}
-        input:focus{outline:none;box-shadow:0 0 0 1px var(--primary-color)}
+        input,select{padding:8px 10px;border:1px solid var(--primary-color,#777);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);font-size:13px;width:100%}
+        input:focus,select:focus{outline:none;box-shadow:0 0 0 1px var(--primary-color)}
+        .toggle-row{display:flex;align-items:center;gap:8px;cursor:pointer}
+        .toggle-row input[type=checkbox]{width:auto;padding:0;accent-color:var(--primary-color)}
+        .toggle-row span{font-size:12px;color:var(--secondary-text-color)}
         .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
         .icon-row{display:flex;gap:8px;align-items:center}
         .icon-row .icon-input{flex:1}
@@ -1732,10 +1834,22 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
           ${this._text('Titre', 'header.title', 'Latitude 5420')}
           ${this._icon('Icône', 'header.icon', 'mdi:laptop')}
           ${this._color('Couleur', 'header.color', '#b482ff')}
+          ${this._text('Taille titre', 'header.title_size', '18px')}
+          ${this._select('header.font', 'Police', NEON_FONTS, '— thème HA —')}
+          ${this._toggle('Majuscules', 'header.uppercase', true)}
         </div>
         <ha-expansion-panel outlined header="En-tête — effets avancés">
-          ${this._text('Taille titre', 'header.title_size', '18px')}
           ${this._text('Ombre titre (text-shadow)', 'header.title_shadow', '0 0 8px ...')}
+          <div class="hint">Si renseignée, l'ombre remplace le glow ci-dessous.</div>
+          <div class="row2">${this._text('Épaisseur', 'header.font_weight', '400')}${this._text('Espacement', 'header.letter_spacing', '.05em')}</div>
+          ${this._toggle('Italique', 'header.italic', false)}
+          ${this._toggle('Titre en dégradé', 'header.gradient', false)}
+          <div class="row2">${this._color('Dégradé — départ', 'header.gradient_from', 'var(--primary-color)')}${this._color('Dégradé — arrivée', 'header.gradient_to', 'var(--accent-color)')}</div>
+          ${this._toggle('Glow du titre', 'header.glow', false)}
+          <div class="row2">${this._text('Taille du glow', 'header.glow_size', '12')}${this._color('Couleur du glow', 'header.glow_color', 'var(--primary-color)')}</div>
+          ${this._toggle('Scintillement du titre', 'header.flicker', false)}
+          <div class="row2">${this._color("Couleur de l'icône", 'header.icon_color', 'défaut : couleur du titre')}${this._text("Taille de l'icône", 'header.icon_size', 'défaut : taille du titre')}</div>
+          <div class="hint">Mêmes réglages que sur les autres cards néon (entities/climate).</div>
         </ha-expansion-panel>
         <ha-expansion-panel outlined header="Système / OS (reporter MQTT)">
           ${this._entity('OS', 'os_entity')}
@@ -1779,7 +1893,7 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
           <div class="row2">${this._text('Libellé BATT', 'batt_label', 'BATT')}${this._text('Libellé BATT2', 'batt2_label', 'BATT2')}</div>
         </ha-expansion-panel>
       </div>`;
-    this.querySelectorAll('input[data-key]').forEach(inp =>
+    this.querySelectorAll('input[data-key]:not([data-bool])').forEach(inp =>
       inp.addEventListener('input', () => {
         const val = inp.value.trim();
         this._set(inp.dataset.key, val);
@@ -1789,6 +1903,10 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
           else t.value = val;
         });
       }));
+    this.querySelectorAll('input[data-key][data-bool]').forEach(inp =>
+      inp.addEventListener('change', () => this._set(inp.dataset.key, inp.checked ? true : '')));
+    this.querySelectorAll('select[data-key]').forEach(sel =>
+      sel.addEventListener('change', () => this._set(sel.dataset.key, sel.value.trim())));
     this._refreshLists();
     this._bindIconPreviews();
   }
