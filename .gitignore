@@ -32,3 +32,7 @@ www/dreame/
 pyscript/modules/ha_secrets.py
 # Logs applicatifs (grossissent en continu, pas du code à versionner)
 logs/
+
+# Zigbee2MQTT runtime (logs + state, régénéré en continu, pas du code)
+zigbee2mqtt/log/
+zigbee2mqtt/state.json
