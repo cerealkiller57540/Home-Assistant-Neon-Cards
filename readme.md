@@ -110,7 +110,7 @@
 | 🖥️ Neon NAS Card | `neon-nas-card.js` | `1.9` | Synology NAS monitor (RS + RX410) with LED bay status |
 | 🖥️ Neon NAS Card v2 | `neon-nas-card-v2.js` | `2.0` | Synology NAS monitor — v2 with SNMP RAID status badge, themable header, UI editor |
 | 🐧 Linux Terminal Card | `linux-terminal-card.js` | `1.7` | Sci-fi CRT terminal for a remote Linux host — CPU/GPU/RAM/temp/updates/network + GLITCH cat, alert framing, UI editor |
-| 🐧🌀 Linux Terminal Card (WebGL) | `linux-terminal-card-webgl.js` | `1.8` | Same terminal, real CRT glass tube rendered by a post-process shader (barrel distortion, chromatic aberration, scanlines, phosphor bloom/persistence, boot-up flicker, glitch bursts); canonical header (font, weight, gradient, glow, flicker, icon); collapsible grouped UI editor |
+| 🐧🌀 Linux Terminal Card (WebGL) | `linux-terminal-card-webgl.js` | `1.9` | Same terminal, real CRT glass tube rendered by a post-process shader (barrel distortion, chromatic aberration, scanlines, phosphor bloom/persistence, boot-up flicker, glitch bursts); canonical header (font, weight, gradient, glow, flicker, icon); collapsible grouped UI editor |
 
 ### 🚗 Vehicles
 
