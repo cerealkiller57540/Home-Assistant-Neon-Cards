@@ -94,7 +94,7 @@
 |------|------|:-------:|-------------|
 | 🏷️ Neon Header Card | `neon-header-card.js` | `1.4.2` | Stylish neon section header |
 | 🏷️ Neon Header Card v2 | `neon-header-card-v2.js` | `2.7` | Advanced header with a built-in Jinja-like template engine — build fully data-driven, animated HTML headers right in YAML. Supports `{% set %}`, `{% if/elif/else %}`, `and/or/not`, `in`, arithmetic, ternaries, filters, concatenation, + 20 reusable neon `@keyframes`, + inline SVG (sanitized) for charts/maps. See the [demo](#-header-card-v2--template-engine) |
-| 📋 Neon Entities Card | `neon-entities-card.js` | `1.8.0` | Multi-entity card (switch, sensor, cover, climate, number + dividers) — theme-agnostic colors, unified UI editor with per-entity icon preview |
+| 📋 Neon Entities Card | `neon-entities-card.js` | `1.14.0` | Multi-entity card (switch, sensor, cover, climate, number + dividers) — theme-agnostic colors, collapsible grouped UI editor with per-entity icon preview |
 | 📝 Neon Markdown Card | `neon-markdown-card.js` | `4.2` | Neon header + full HTML/Markdown/Jinja-like body — client-side template engine (set/if/for/loop, filters), sparklines, scoped `<style>` |
 
 <div align="center">
@@ -110,6 +110,7 @@
 | 🖥️ Neon NAS Card | `neon-nas-card.js` | `1.9` | Synology NAS monitor (RS + RX410) with LED bay status |
 | 🖥️ Neon NAS Card v2 | `neon-nas-card-v2.js` | `2.0` | Synology NAS monitor — v2 with SNMP RAID status badge, themable header, UI editor |
 | 🐧 Linux Terminal Card | `linux-terminal-card.js` | `1.7` | Sci-fi CRT terminal for a remote Linux host — CPU/GPU/RAM/temp/updates/network + GLITCH cat, alert framing, UI editor |
+| 🐧🌀 Linux Terminal Card (WebGL) | `linux-terminal-card-webgl.js` | `1.6` | Same terminal, real CRT glass tube rendered by a post-process shader (barrel distortion, chromatic aberration, scanlines, phosphor bloom/persistence, boot-up flicker, glitch bursts); collapsible grouped UI editor |
 
 ### 🚗 Vehicles
 
