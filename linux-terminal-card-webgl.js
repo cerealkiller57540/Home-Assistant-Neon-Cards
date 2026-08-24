@@ -82,8 +82,9 @@
  *   « Share Tech Mono »/« Bebas Neue ») ; (2) le glow de l'icône du header n'avait que 2 couches
  *   de drop-shadow (pas de halo blanc central) alors que le glow du titre en a 4 (_neonGlow) →
  *   les deux glowaient visiblement différemment. Icône alignée sur les mêmes 4 couches que le
- *   canon climate-webgl. Retour Chris : intensité trop forte (drop-shadow s'accumule plus que
- *   text-shadow sur une icône compacte) → rayons réduits ×0.6 par rapport au titre.
+ *   canon climate-webgl/markdown (facteurs .2/.4/.8/1, vérifiés identiques dans les 2 fichiers).
+ *   Retour Chris « trop fort » : cause réelle = un drop-shadow(0 0 5px) câblé en dur et permanent
+ *   sur .hdr-icon (indépendant de hdr.glow) qui se cumulait avec les 4 couches → retiré.
  */
 (() => {
 
@@ -441,7 +442,7 @@ class LinuxTerminalCardWebgl extends HTMLElement {
       if (ht) ht.classList.toggle('grad', !!hdr.gradient);
       setOrClear('--ltc-hdr-icon-color', hdr.icon_color || '');
       setOrClear('--ltc-hdr-icon-size', hdr.icon_size || '');
-      setOrClear('--ltc-hdr-icon-glow', hdr.glow ? `drop-shadow(0 0 ${Math.round(glowSize*0.12)}px #fff) drop-shadow(0 0 ${Math.round(glowSize*0.24)}px ${glowColor}) drop-shadow(0 0 ${Math.round(glowSize*0.48)}px ${glowColor}) drop-shadow(0 0 ${Math.round(glowSize*0.6)}px ${glowColor})` : '');
+      setOrClear('--ltc-hdr-icon-glow', hdr.glow ? `drop-shadow(0 0 ${Math.round(glowSize*0.2)}px #fff) drop-shadow(0 0 ${Math.round(glowSize*0.4)}px ${glowColor}) drop-shadow(0 0 ${Math.round(glowSize*0.8)}px ${glowColor}) drop-shadow(0 0 ${glowSize}px ${glowColor})` : '');
       setOrClear('--ltc-hdr-flicker', hdr.flicker ? 'ltc-hdr-flicker 3s ease-in-out infinite' : '');
       // l'icône elle-même (présence/absence, mdi) exige de recréer le nœud — rare en usage live,
       // pris en charge par le rendu complet (_render) déclenché aux changements structurels.
@@ -666,12 +667,12 @@ class LinuxTerminalCardWebgl extends HTMLElement {
     const hdrGrad = hdr.gradient ? `linear-gradient(90deg,${hdrGradFrom},${hdrGradTo})` : '';
     const hdrIconColor = hdr.icon_color || '';
     const hdrIconSize  = hdr.icon_size || '';
-    // 4 couches, symétrique à _neonGlow() du titre (canon neon-climate-card-webgl.js) — un halo
-    // blanc serré en tête, sinon l'icône et le titre glow visiblement différemment. drop-shadow()
-    // s'accumule plus fort que text-shadow sur une icône compacte : rayons réduits (×0.6) pour
-    // que l'intensité perçue matche le titre au lieu de le dépasser (retour Chris v1.9).
+    // 4 couches, identique à _neonGlow() du titre ET au canon neon-markdown-card.js (facteurs
+    // pleins .2/.4/.8/1 vérifiés dans les 2 fichiers). Le "trop fort" signalé par Chris venait
+    // d'un drop-shadow(0 0 5px) permanent câblé en dur sur .hdr-icon (indépendant de hdr.glow),
+    // qui se cumulait avec ces 4 couches — retiré, .hdr-icon n'a plus que --ltc-hdr-icon-glow.
     const hdrIconGlow = hdr.glow
-      ? `drop-shadow(0 0 ${Math.round(hdrGlowSize*0.12)}px #fff) drop-shadow(0 0 ${Math.round(hdrGlowSize*0.24)}px ${hdrGlowColor}) drop-shadow(0 0 ${Math.round(hdrGlowSize*0.48)}px ${hdrGlowColor}) drop-shadow(0 0 ${Math.round(hdrGlowSize*0.6)}px ${hdrGlowColor})`
+      ? `drop-shadow(0 0 ${Math.round(hdrGlowSize*0.2)}px #fff) drop-shadow(0 0 ${Math.round(hdrGlowSize*0.4)}px ${hdrGlowColor}) drop-shadow(0 0 ${Math.round(hdrGlowSize*0.8)}px ${hdrGlowColor}) drop-shadow(0 0 ${hdrGlowSize}px ${hdrGlowColor})`
       : '';
     const hdrFlickAnim = hdr.flicker ? 'ltc-hdr-flicker 3s ease-in-out infinite' : '';
 
@@ -1584,7 +1585,7 @@ const STYLES = `
   .hdr{ display:flex; align-items:center; gap:9px; padding-bottom:9px; margin-bottom:10px; position:relative; }
   .hdr::after{ content:''; position:absolute; bottom:0; left:0; right:0; height:1px;
     background:linear-gradient(90deg, transparent, rgba(var(--ltc-uv),.55) 20%, rgba(var(--ltc-cy),.3) 50%, rgba(var(--ltc-uv),.55) 80%, transparent); }
-  .hdr-icon{ --mdc-icon-size:var(--ltc-hdr-icon-size,var(--ltc-hdr-size,18px)); color:var(--ltc-hdr-icon-color,var(--ltc-hdr-color)); filter:drop-shadow(0 0 5px color-mix(in srgb, currentColor, transparent 20%)) var(--ltc-hdr-icon-glow,none); flex-shrink:0; animation:var(--ltc-hdr-flicker,none); }
+  .hdr-icon{ --mdc-icon-size:var(--ltc-hdr-icon-size,var(--ltc-hdr-size,18px)); color:var(--ltc-hdr-icon-color,var(--ltc-hdr-color)); filter:var(--ltc-hdr-icon-glow,none); flex-shrink:0; animation:var(--ltc-hdr-flicker,none); }
   .hdr-title{ flex:1; font-family:var(--ltc-hdr-font,var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif)); font-size:var(--ltc-hdr-size,18px);
     font-weight:var(--ltc-hdr-weight,600); font-style:var(--ltc-hdr-italic,normal); letter-spacing:var(--ltc-hdr-spacing,0.02em);
     text-transform:var(--ltc-hdr-upper,uppercase); color:var(--ltc-hdr-color); text-shadow:var(--ltc-hdr-shadow,0 0 8px color-mix(in srgb, var(--ltc-hdr-color), transparent 30%));
