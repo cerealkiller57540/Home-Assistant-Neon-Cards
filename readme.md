@@ -71,6 +71,7 @@
 | 🌡️ Neon Thermo Card | `neon-thermo-card.js` | `1.4.0` | Temperature & humidity with neon styling |
 | 🌡️🌡️ Neon Dual Thermo Card | `neon-dual-thermo-card.js` | `2.3.0` | Two temperature sensors side by side |
 | ❄️ Neon Climate Card | `neon-climate-card.js` | `1.3.0` | Full climate control with Neo Tokyo UV palette, wind animations, unified UI editor (header + colors, CSS-variable friendly) |
+| ❄️🌀 Neon Climate Card (WebGL) | `neon-climate-card-webgl.js` | `1.1` | Same climate control, wind rendered by a real Navier-Stokes fluid solver (GLSL shaders); collapsible grouped UI editor |
 | 🔥 Heat Pump Card | `heat-pump-card.js` | — | PAC/heat pump card (Ecodan Neo Tokyo edition) with UI editor |
 | 📈 Heat Monitor Card | `heat-monitor-card.js` | `1.17` | CRT-style heat pump monitor with scrolling notes |
 
