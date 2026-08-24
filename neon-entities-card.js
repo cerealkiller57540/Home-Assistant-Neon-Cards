@@ -11,7 +11,7 @@
  * Boutons cover agrandis (34px, SVG 16px) → cible tactile confortable iPad
  * Couleurs : variables standard HA (primary-text-color / primary-color),
  *   thème-agnostique + surcharge UI (name/value/icon/primary/accent)
- * @version 1.8.0
+ * @version 1.13.1
  */
 
 console.log('neon-entities-card.js loaded!');
@@ -57,23 +57,23 @@ const DOMAIN_ICONS = {
 
 function binaryLabel(deviceClass, on) {
   const map = {
-    door:         [on ? 'OUVERT'       : 'FERMÉ'],
-    window:       [on ? 'OUVERT'       : 'FERMÉ'],
-    garage_door:  [on ? 'OUVERT'       : 'FERMÉ'],
-    opening:      [on ? 'OUVERT'       : 'FERMÉ'],
-    lock:         [on ? 'DÉVERR.'      : 'VERR.'],
-    motion:       [on ? 'DÉTECTÉ'      : 'LIBRE'],
-    presence:     [on ? 'PRÉSENCE'     : 'ABSENT'],
-    occupancy:    [on ? 'OCCUPÉ'       : 'LIBRE'],
-    connectivity: [on ? 'CONNECTÉ'     : 'HORS LIGNE'],
-    smoke:        [on ? 'FUMÉE'        : 'OK'],
-    moisture:     [on ? 'HUMIDE'       : 'SEC'],
-    plug:         [on ? 'BRANCHÉ'      : 'DÉBRANCHÉ'],
-    battery:      [on ? 'FAIBLE'       : 'OK'],
-    vibration:    [on ? 'VIBRATION'    : 'CALME'],
-    tamper:       [on ? 'ALTÉRÉ'       : 'OK'],
+    door:         on ? 'OUVERT'       : 'FERMÉ',
+    window:       on ? 'OUVERT'       : 'FERMÉ',
+    garage_door:  on ? 'OUVERT'       : 'FERMÉ',
+    opening:      on ? 'OUVERT'       : 'FERMÉ',
+    lock:         on ? 'DÉVERR.'      : 'VERR.',
+    motion:       on ? 'DÉTECTÉ'      : 'LIBRE',
+    presence:     on ? 'PRÉSENCE'     : 'ABSENT',
+    occupancy:    on ? 'OCCUPÉ'       : 'LIBRE',
+    connectivity: on ? 'CONNECTÉ'     : 'HORS LIGNE',
+    smoke:        on ? 'FUMÉE'        : 'OK',
+    moisture:     on ? 'HUMIDE'       : 'SEC',
+    plug:         on ? 'BRANCHÉ'      : 'DÉBRANCHÉ',
+    battery:      on ? 'FAIBLE'       : 'OK',
+    vibration:    on ? 'VIBRATION'    : 'CALME',
+    tamper:       on ? 'ALTÉRÉ'       : 'OK',
   };
-  return map[deviceClass]?.[0] ?? (on ? 'ACTIF' : 'INACTIF');
+  return map[deviceClass] ?? (on ? 'ACTIF' : 'INACTIF');
 }
 
 function stateLabel(state) {
@@ -95,6 +95,10 @@ class NeonEntitiesCard extends HTMLElement {
     this._config = {};
     this._ac     = null; // AbortController — cleanup listeners on rebuild/disconnect
     this._impulseTimers = new Set();
+    // flicker du titre : desynchronise par card, comme la neon-markdown-card
+    const necRnd = (a, b) => a + Math.random() * (b - a);
+    this._flickDur = necRnd(3.5, 5.5);
+    this._flickOff = necRnd(-2, 0);
   }
 
   setConfig(config) {
@@ -106,6 +110,9 @@ class NeonEntitiesCard extends HTMLElement {
       use_theme_card: config.use_theme_card ?? false,
       color_primary:  config.color_primary  || null,
       color_accent:   config.color_accent   || null,
+      rgb_primary:    config.rgb_primary    || null,
+      rgb_accent:     config.rgb_accent     || null,
+      card_bg:        config.card_bg        || null,
       name_color:     config.name_color     || null,
       value_color:    config.value_color    || null,
       icon_color:     config.icon_color     || null,
@@ -152,14 +159,69 @@ class NeonEntitiesCard extends HTMLElement {
     const cfg = this._config;
     const hdr = (cfg.header && typeof cfg.header === 'object') ? cfg.header : {};
 
-    const colorPrimary = cfg.color_primary || 'var(--primary-color, #6200EA)';
+    const colorPrimary = cfg.color_primary || 'var(--primary-color, #00E8FF)';
     const colorAccent  = cfg.color_accent  || 'var(--accent-color, #00fff9)';
-    const titleColor  = hdr.color      || 'rgba(var(--rgb-primary-text-color),0.55)';
-    const nameColorOn  = cfg.name_color  || 'rgba(var(--rgb-primary-text-color),0.75)';
-    const nameColorOff = cfg.name_color  ? cfg.name_color.replace(/[\d.]+\)$/, v => (parseFloat(v)*0.3).toFixed(2)+')') : 'rgba(var(--rgb-primary-text-color),0.30)';
+    const titleColor  = hdr.color      || 'rgba(var(--rgb-primary-text-color),0.85)';
+    const nameColorOn  = cfg.name_color  || 'var(--primary-text-color)';
+    const nameColorOff = cfg.name_color
+      ? `color-mix(in srgb, ${cfg.name_color}, transparent 70%)`
+      : 'rgba(var(--rgb-primary-text-color, 232,224,255),0.30)';
     const valueColor   = cfg.value_color || 'rgba(var(--nec-cy), 0.75)';
     const iconColor    = cfg.icon_color  || colorPrimary;
-    const titleFont   = hdr.font       ? `'${hdr.font}', ` : "'Orbitron', ";
+    // Triplets RGB alimentant les ~40 rgba() de la card (fonds, bordures, boutons,
+    // glows). Non renseignes -> fallback theme strictement identique a avant.
+    const rgbPrimary   = cfg.rgb_primary || 'var(--rgb-primary-color, 98,0,234)';
+    const rgbAccent    = cfg.rgb_accent  || 'var(--rgb-accent-color, 0,255,249)';
+    const cardBgColor  = cfg.card_bg     || 'rgba(10,6,30,0.82)';
+    // Police du titre : bloc COPIE de neon-markdown-card telle quelle (chaine de
+    // fallback purement locale, sans dependance a un chargement externe type Google
+    // Fonts pour le filet de secours — contrairement a l'ancien "'Orbitron', " qui
+    // retombait sur system-ui si le @import echouait/etait bloque). hdr.font reste
+    // prioritaire quand renseigne, exactement comme t.font_family dans nmc.
+    const titleFont = hdr.font
+      ? `'${hdr.font}', var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif)`
+      : "var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif)";
+    // Header : MEME moteur de titre que la neon-markdown-card (glow 4 couches a
+    // coeur blanc, degrade, flicker). Defauts identiques a nmc pour un rendu jumeau.
+    const _neonGlow = (color, size) => {
+      if (!color) return "";
+      const sz = parseInt(size) || 10;
+      return `text-shadow:0 0 ${Math.round(sz * 0.2)}px #fff,0 0 ${Math.round(sz * 0.4)}px ${color},0 0 ${Math.round(sz * 0.8)}px ${color},0 0 ${sz}px ${color};`;
+    };
+    const hdrGlowColor = hdr.glow_color || 'var(--primary-color, #00E8FF)';
+    const hdrGlowSize  = parseFloat(hdr.glow_size) || 12;
+    // nmc : text_shadow explicite PRIORITAIRE sur glow (pas de cumul)
+    const hdrGlow = hdr.title_shadow
+      ? `text-shadow: ${hdr.title_shadow};`
+      : hdr.glow
+        ? _neonGlow(hdrGlowColor, hdrGlowSize)
+        : '';
+    const hdrGradFrom = hdr.gradient_from || 'var(--primary-color, #00E8FF)';
+    const hdrGradTo   = hdr.gradient_to   || 'var(--accent-color, #FF50A0)';
+    const hdrGrad = hdr.gradient
+      ? `background:linear-gradient(90deg,${hdrGradFrom},${hdrGradTo});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;`
+      : `color: ${titleColor};`;
+    // icone du header : couleur et taille propres, comme la neon-markdown-card
+    // (nmc : icon_size par defaut = taille du titre x 1.2, icon_color par defaut = couleur du titre)
+    const hdrIconColor = hdr.icon_color || titleColor;
+    const hdrIconSize  = hdr.icon_size
+      ? (/^[\d.]+$/.test(String(hdr.icon_size)) ? `${hdr.icon_size}px` : hdr.icon_size)
+      : (hdr.title_size ? `calc(${hdr.title_size} * 1.2)` : 'clamp(8px, 3.1cqi, 14px)');
+    const hdrFlick = hdr.flicker
+      ? `animation:nec-flicker ${this._flickDur}s ease-in-out infinite ${this._flickOff}s;`
+      : '';
+    // Typo du titre : poids/espacement/casse/italique configurables (défauts
+    // identiques au rendu historique — uppercase + letter-spacing en dur).
+    const hdrWeight   = hdr.font_weight ?? 700;
+    const hdrSpacing  = hdr.letter_spacing || 'clamp(1px, 0.5cqi, 3px)';
+    const hdrUpper    = hdr.uppercase === false ? 'none' : 'uppercase';
+    const hdrItalic   = hdr.italic ? 'italic' : 'normal';
+    // icone du header : MEME glow que le titre nmc — 4 couches de drop-shadow
+    // (coeur blanc 0.2 + 3 halos 0.4/0.8/1.0×size), et RIEN si glow desactive
+    // (nmc n'a pas de fallback permanent : net par defaut, glow seulement en opt-in).
+    const hdrIconGlow = hdr.glow
+      ? `filter:drop-shadow(0 0 ${Math.round(hdrGlowSize * 0.2)}px #fff) drop-shadow(0 0 ${Math.round(hdrGlowSize * 0.4)}px ${hdrGlowColor}) drop-shadow(0 0 ${Math.round(hdrGlowSize * 0.8)}px ${hdrGlowColor}) drop-shadow(0 0 ${hdrGlowSize}px ${hdrGlowColor});`
+      : '';
 
     const cardBg = cfg.use_theme_card ? `
       background: var(--ha-card-background);
@@ -168,7 +230,7 @@ class NeonEntitiesCard extends HTMLElement {
       backdrop-filter: var(--ha-card-backdrop-filter, blur(var(--blur-strength, 20px)) saturate(160%));
       -webkit-backdrop-filter: var(--ha-card-backdrop-filter, blur(var(--blur-strength, 20px)) saturate(160%));
     ` : `
-      background: rgba(10,6,30,0.82);
+      background: ${cardBgColor};
       border: 1px solid rgba(var(--nec-uv), 0.45);
       backdrop-filter: blur(var(--blur-strength, 20px)) saturate(160%);
       -webkit-backdrop-filter: blur(var(--blur-strength, 20px)) saturate(160%);
@@ -180,7 +242,7 @@ class NeonEntitiesCard extends HTMLElement {
     `;
 
     return `
-      @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+      /* Orbitron loaded globally via <link> to avoid FOUC in shadow DOM */
 
       :host {
         display: block;
@@ -193,9 +255,9 @@ class NeonEntitiesCard extends HTMLElement {
         --nec-a:  ${colorAccent};
         --nec-val: ${valueColor};
         --nec-ico: ${iconColor};
-        --nec-uv: var(--rgb-primary-color, 98,0,234);
-        --nec-cy: var(--rgb-accent-color, 0,255,249);
-        --nec-bl: var(--rgb-blacklight-color, 180,0,255);
+        --nec-uv: ${rgbPrimary};
+        --nec-cy: ${rgbAccent};
+        --nec-bl: var(--nec-uv);
       }
 
       ha-card {
@@ -230,23 +292,27 @@ class NeonEntitiesCard extends HTMLElement {
       }
       .hdr-icon { display: flex; align-items: center; flex-shrink: 0; }
       .hdr-icon ha-icon {
-        --mdc-icon-size: ${hdr.title_size ? hdr.title_size : 'clamp(6px, 2.6cqi, 11px)'};
-        color: ${titleColor};
-        filter: drop-shadow(0 0 8px color-mix(in srgb, currentColor, transparent 10%));
+        --mdc-icon-size: ${hdrIconSize};
+        color: ${hdrIconColor};
+        ${hdrIconGlow}
+        ${hdrFlick}
       }
       .hdr-title {
         flex: 1 1 auto;
-        font-family: ${titleFont}var(--primary-font-family, system-ui);
+        font-family: ${titleFont};
         font-size: ${hdr.title_size ? hdr.title_size : 'clamp(6px, 2.6cqi, 11px)'};
         padding-left: 8px;
         white-space: normal;
         overflow: visible;
         text-overflow: unset;
         min-width: 0;
-        color: ${titleColor};
-        letter-spacing: clamp(1px, 0.5cqi, 3px);
-        text-transform: uppercase;
-        text-shadow: ${hdr.title_shadow || '0 0 8px color-mix(in srgb, currentColor, transparent 30%)'};
+        ${hdrGrad}
+        font-weight: ${hdrWeight};
+        font-style: ${hdrItalic};
+        letter-spacing: ${hdrSpacing};
+        text-transform: ${hdrUpper};
+        ${hdrGlow}
+        ${hdrFlick}
         line-height: 1.2;
       }
 
@@ -298,7 +364,7 @@ class NeonEntitiesCard extends HTMLElement {
 
     /* On assombrit aussi légèrement le fond de la ligne active pour le contraste */
     .row.on {
-      background: rgba(18, 0, 33, 0.4) !important; /* Dark Actinoid en transparence */
+      background: rgba(var(--nec-uv), 0.10) !important; /* teinte primaire en transparence */
       border-left: 1px solid color-mix(in srgb, var(--nec-p) 35%, #000);
     }
       .row:hover { background: rgba(var(--nec-uv),0.05) !important; }
@@ -312,6 +378,7 @@ class NeonEntitiesCard extends HTMLElement {
         }
       }
       @keyframes nec-row-sweep { from { left: -70px; } to { left: 110%; } }
+      @keyframes nec-flicker { 0%,19%,21%,23%,25%,54%,56%,100%{opacity:1;} 20%,24%,55%{opacity:.6;} }
       @keyframes nec-div-flow  { from { background-position: 0% 0; } to { background-position: 200% 0; } }
 
       /* ── FX (1) Pulse du liseré actif — opt-in ── */
@@ -341,10 +408,8 @@ class NeonEntitiesCard extends HTMLElement {
         flex-shrink: 0; transition: all .3s;
       }
       .row.on  .ico { background: color-mix(in srgb, var(--nec-ico) 18%, transparent); border: 1px solid color-mix(in srgb, var(--nec-ico) 40%, transparent); box-shadow: 0 0 6px color-mix(in srgb, var(--nec-ico) 25%, transparent), inset 0 0 4px color-mix(in srgb, var(--nec-ico) 10%, transparent); }
-      .row.off .ico { background: color-mix(in srgb, var(--nec-ico) 5%, transparent); border: 1px solid color-mix(in srgb, var(--nec-ico) 15%, transparent); }
       .ico ha-icon { --mdc-icon-size: 14px; transition: color .3s, filter .3s; }
       .row.on  .ico ha-icon { color: color-mix(in srgb, var(--nec-ico) 90%, transparent); filter: drop-shadow(0 0 3px color-mix(in srgb, var(--nec-ico) 70%, transparent)) drop-shadow(0 0 6px color-mix(in srgb, var(--nec-ico) 35%, transparent)); }
-      .row.off .ico ha-icon { color: color-mix(in srgb, var(--nec-ico) 30%, transparent); }
 
       /* ── Meta ── */
       .meta { flex: 1; min-width: 0; }
@@ -355,8 +420,7 @@ class NeonEntitiesCard extends HTMLElement {
         text-transform: uppercase;
         ${cfg.show_label ? '' : 'display: none;'}
       }
-      .row.on  .meta-label { color: rgba(var(--rgb-primary-text-color),0.7); }
-      .row.off .meta-label { color: rgba(var(--nec-uv),0.4); }
+      .row.on  .meta-label { color: var(--primary-text-color); opacity: 0.7; }
       .meta-name {
         font-size: clamp(9px, 2.5cqi, 11px);
         letter-spacing: 0.8px;
@@ -367,7 +431,6 @@ class NeonEntitiesCard extends HTMLElement {
       .meta-name { font-size: clamp(10px, 2.8cqi, 12.5px); line-height: 1.15; }
       `}
       .row.on  .meta-name { color: ${nameColorOn}; }
-      .row.off .meta-name { color: ${nameColorOff}; }
       .state-label {
         font-size: 6.5px;
         letter-spacing: 1.2px;
@@ -429,7 +492,7 @@ class NeonEntitiesCard extends HTMLElement {
 
       /* ── Cover ── */
       .cover-wrap { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
-      .pos-pct  { font-size: clamp(10px,2.4cqi,12px); font-weight: 600; color: rgba(var(--rgb-primary-text-color),0.65); min-width: 26px; text-align: right; }
+      .pos-pct  { font-size: clamp(10px,2.4cqi,12px); font-weight: 600; color: var(--primary-text-color); opacity: 0.65; min-width: 26px; text-align: right; }
       .pos-bar  { width: 44px; height: 5px; display: flex; gap: 2px; flex-shrink: 0; }
       .pos-seg  { flex: 1; height: 100%; border-radius: 1px; background: rgba(var(--nec-uv),0.15); transition: background .35s, box-shadow .35s; }
       .pos-seg.lit {
@@ -447,8 +510,6 @@ class NeonEntitiesCard extends HTMLElement {
       .cbtn:hover  { background: rgba(var(--nec-uv),0.22); box-shadow: 0 0 8px rgba(var(--nec-uv),0.30); }
       .cbtn:active { background: rgba(var(--nec-uv),0.36); }
       .cbtn svg { width: 16px; height: 16px; stroke: rgba(var(--rgb-primary-color),0.80); filter: drop-shadow(0 0 2px rgba(var(--rgb-primary-color),0.6)); }
-      .row.off .cbtn { border-color: rgba(var(--nec-uv),0.18); background: rgba(var(--nec-uv),0.34); }
-      .row.off .cbtn svg { stroke: rgba(var(--rgb-primary-color),0.30); filter: none; }
 
       /* ── Sensor value ── */
       .sensor-val {
@@ -518,7 +579,7 @@ class NeonEntitiesCard extends HTMLElement {
         font-size: clamp(9px, 2.5cqi, 11px); font-weight: 700;
         min-width: 36px; text-align: center; letter-spacing: 0.8px;
       }
-      .num-val.def  { color: rgba(var(--rgb-primary-text-color),0.85); }
+      .num-val.def  { color: var(--primary-text-color); opacity: 0.85; }
       .num-val.temp { color: rgba(255,180,80,0.85); }
       .nbtn {
         width: 20px; height: 20px; border-radius: 4px;
@@ -544,7 +605,8 @@ class NeonEntitiesCard extends HTMLElement {
       }
       .footer-text {
         font-size: clamp(6px, 1.5cqi, 7px);
-        color: rgba(var(--rgb-primary-text-color),0.28);
+        color: var(--primary-text-color);
+        opacity: 0.28;
         letter-spacing: 1px;
       }
 
@@ -561,8 +623,11 @@ class NeonEntitiesCard extends HTMLElement {
   // ── Build ──────────────────────────────────────────────────────────────────
 
   _build() {
+    // FIX #4 : nettoie les timers en cours avant rebuild
+    this._impulseTimers.forEach(t => clearTimeout(t));
+    this._impulseTimers.clear();
     // Annule tous les listeners précédents avant rebuild
-    if (this._ac) this._ac.abort();
+    if (this._ac) { this._ac.abort(); this._ac = null; }
     this._ac = new AbortController();
     const sig = this._ac.signal;
 
@@ -1094,42 +1159,11 @@ class NeonEntitiesCard extends HTMLElement {
   }
 
   connectedCallback() {
-    const card = this.shadowRoot && this.shadowRoot.querySelector('ha-card');
-    if (!card) return;
-    // Re-create AbortController and re-attach signal-based listeners
-    if (!this._ac) {
-      this._ac = new AbortController();
-      const sig = this._ac.signal;
-      const opts = { signal: sig };
-      this.shadowRoot.querySelectorAll('.row[data-entity]').forEach(row => {
-        const idx = parseInt(row.dataset.index);
-        const item = this._config.entities[idx];
-        if (!item) return;
-        const domain = row.dataset.domain;
-        if (domain === 'cover') {
-          const open  = row.querySelector('.cbtn-open');
-          const stop  = row.querySelector('.cbtn-stop');
-          const close = row.querySelector('.cbtn-close');
-          if (open)  open.addEventListener('click',  e => { e.stopPropagation(); this._svc('cover', 'open_cover',  item.entity); }, opts);
-          if (stop)  stop.addEventListener('click',  e => { e.stopPropagation(); this._svc('cover', 'stop_cover',  item.entity); }, opts);
-          if (close) close.addEventListener('click', e => { e.stopPropagation(); this._svc('cover', 'close_cover', item.entity); }, opts);
-        } else if (domain === 'number' || domain === 'input_number') {
-          const dec = row.querySelector('.nbtn-dec');
-          const inc = row.querySelector('.nbtn-inc');
-          if (dec) dec.addEventListener('click', e => { e.stopPropagation(); this._stepNumber(item.entity, -1); }, opts);
-          if (inc) inc.addEventListener('click', e => { e.stopPropagation(); this._stepNumber(item.entity, +1); }, opts);
-        } else if (domain === 'climate') {
-          const dec = row.querySelector('.nbtn-dec');
-          const inc = row.querySelector('.nbtn-inc');
-          if (dec) dec.addEventListener('click', e => { e.stopPropagation(); this._stepClimate(item.entity, -1); }, opts);
-          if (inc) inc.addEventListener('click', e => { e.stopPropagation(); this._stepClimate(item.entity, +1); }, opts);
-        }
-        // Re-attache le more-info sur les valeurs cliquables (sensor, badge, num-val, cover position…)
-        row.querySelectorAll('.clickable').forEach(el =>
-          el.addEventListener('click', e => { e.stopPropagation(); this._moreInfo(item.entity); }, opts));
-      });
+    // FIX #1 : rebuild complet pour ré-attaquer proprement tous les listeners
+    // après une déconnexion (mode édition, virtual scroll, etc.)
+    if (this.shadowRoot && this.shadowRoot.querySelector('ha-card')) {
+      this._build();
     }
-    if (this._hass) this._update();
   }
 }
 
@@ -1204,8 +1238,27 @@ class NeonEntitiesCardEditor extends HTMLElement {
   }
 
   // ── Helpers de champ (template) ──────────────────────────────────────────────
-  _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d); return d; }
-  _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; this.appendChild(d); return d; }
+  // Titre de section fixe (non repliable) — repère visuel plat, comme sur les autres cards néon.
+  _section(t) {
+    this._target = null; // les sections top-level reviennent s'ancrer directement sur `this`
+    const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d); return d;
+  }
+  // Sous-groupe repliable (pattern neon-solar-production-card.js / neon-climate-card-webgl.js) —
+  // ha-expansion-panel natif HA. buildFn() ré-ancre les helpers dessus via _target, puis restaure
+  // l'ancrage précédent (permet d'imbriquer).
+  _group(title, expanded, buildFn) {
+    const panel = document.createElement('ha-expansion-panel');
+    panel.outlined = true;
+    panel.header = title;
+    if (expanded) panel.expanded = true;
+    (this._target || this).appendChild(panel);
+    const prevTarget = this._target;
+    this._target = panel;
+    buildFn();
+    this._target = prevTarget;
+    return panel;
+  }
+  _hint(t) { const d = document.createElement('div'); d.className = 'hint'; (this._target || this).appendChild(d); return d; }
 
   _text(key, label, ph = '') {
     const w = this._row(label).wrap;
@@ -1236,11 +1289,12 @@ class NeonEntitiesCardEditor extends HTMLElement {
   // Résout une couleur CSS (hex, rgb, ou var(--…)) en #rrggbb via un témoin appliqué
   // sur la CARD réelle (pour que les variables du thème/card soient dans le scope).
   _resolveColor(css) {
+    if (!css || /défaut|default|ex:/i.test(css)) return null;
     try {
       const probe = document.createElement('span');
       probe.style.cssText = `color:${css};position:absolute;left:-9999px;top:-9999px`;
-      this.appendChild(probe);                       // dans l'éditeur → scope thème HA
-      const rgb = getComputedStyle(probe).color;     // "rgb(r, g, b)" / "rgba(...)"
+      this.appendChild(probe);
+      const rgb = getComputedStyle(probe).color;
       probe.remove();
       const m = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
       return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
@@ -1261,7 +1315,11 @@ class NeonEntitiesCardEditor extends HTMLElement {
     const w = this._row(label).wrap;
     const sel = document.createElement('select');
     if (emptyLabel !== null) { const o = document.createElement('option'); o.value = ''; o.textContent = emptyLabel; sel.appendChild(o); }
-    options.forEach(opt => { const o = document.createElement('option'); o.value = opt; o.textContent = opt; sel.appendChild(o); });
+    options.forEach(opt => {
+      // accepte une string nue (ex: NEON_FONTS) ou un tuple [valeur, libellé]
+      const [v, lbl] = Array.isArray(opt) ? opt : [opt, opt];
+      const o = document.createElement('option'); o.value = v; o.textContent = lbl; sel.appendChild(o);
+    });
     sel.value = this._read(key) ?? '';
     sel.addEventListener('change', () => this._set(key, sel.value || undefined));
     w.appendChild(sel); return sel;
@@ -1272,7 +1330,7 @@ class NeonEntitiesCardEditor extends HTMLElement {
     const lbl = document.createElement('label');
     if (isHtml) lbl.innerHTML = labelHtml; else lbl.textContent = labelHtml;
     const wrap = document.createElement('div'); wrap.className = 'field-wrap';
-    row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
+    row.appendChild(lbl); row.appendChild(wrap); (this._target || this).appendChild(row);
     return { row, wrap };
   }
 
@@ -1334,6 +1392,8 @@ class NeonEntitiesCardEditor extends HTMLElement {
       :host { display:block; padding:14px; font-family:var(--primary-font-family,Roboto,sans-serif); }
       .sec { font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--divider-color); }
       .sec:first-child { margin-top:0; }
+      ha-expansion-panel { display:block; margin:8px 0; --expansion-panel-content-padding:8px 12px 12px; }
+      ha-expansion-panel .row:first-child { margin-top:2px; }
       .row { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
       .row label { flex:0 0 150px;font-size:12px;color:var(--secondary-text-color); }
       .row label .mdi-link { color:var(--primary-color);font-size:9px;text-transform:none;letter-spacing:0; }
@@ -1359,6 +1419,7 @@ class NeonEntitiesCardEditor extends HTMLElement {
   _render() {
     this._built = true;
     this.innerHTML = '';
+    this._target = null;
     const st = document.createElement('style'); st.textContent = this._css(); this.appendChild(st);
     this._schema();
     this._fillDatalists();
@@ -1372,17 +1433,50 @@ class NeonEntitiesCardEditor extends HTMLElement {
     this._toggle(null, 'Afficher en-tête', true, 'header');
     this._text('header.title', 'Titre', 'ex: Maison');
     this._icon('header.icon', 'Icône (mdi)');
-    this._color('header.color', 'Couleur titre', 'rgba(var(--rgb-primary-text-color),0.55)', 'défaut : texte primaire — ex rgb(var(--rgb-lavande))');
+    this._color('header.color', 'Couleur titre', 'var(--primary-color)', 'défaut : couleur primaire — ex rgb(var(--rgb-lavande))');
     this._text('header.title_size', 'Taille titre', 'clamp(7px,2.6cqi,11px)');
     this._select('header.font', 'Police', NEON_FONTS, '— thème HA —');
-    this._text('header.title_shadow', 'Text-shadow');
+    this._toggle('header.uppercase', 'Majuscules', true);
+
+    this._group('Effets avancés du titre', false, () => {
+      this._text('header.font_weight', 'Épaisseur', '700');
+      this._text('header.letter_spacing', 'Espacement', 'clamp(1px, 0.5cqi, 3px)');
+      this._toggle('header.italic', 'Italique', false);
+      this._text('header.title_shadow', 'Text-shadow');
+      this._toggle('header.gradient', 'Titre en dégradé');
+      this._color('header.gradient_from', 'Dégradé — départ', 'var(--primary-color)');
+      this._color('header.gradient_to', 'Dégradé — arrivée', 'var(--accent-color)');
+      this._toggle('header.glow', 'Glow du titre');
+      this._text('header.glow_size', 'Taille du glow', '12');
+      this._color('header.glow_color', 'Couleur du glow', 'var(--primary-color)');
+      this._toggle('header.flicker', 'Scintillement du titre');
+      this._color('header.icon_color', "Couleur de l'icône", null, 'défaut : couleur du titre');
+      this._text('header.icon_size', "Taille de l'icône", 'défaut : 1.2 × la taille du titre');
+      this._hint('Mêmes réglages que la neon-markdown-card. Text-shadow ci-dessus, si renseigné, remplace le glow.');
+    });
 
     this._section('Apparence');
-    this._color('name_color', 'Couleur des noms',     'rgba(var(--rgb-primary-text-color),0.75)', 'défaut : texte primaire — ex rgb(var(--rgb-lavande))');
-    this._color('value_color', 'Couleur des valeurs', 'rgba(var(--rgb-accent-color),0.75)',       'défaut : accent — ex #00fff9');
-    this._color('icon_color', 'Couleur des icônes',   'var(--primary-color)',                     'défaut : couleur primaire — ex var(--primary-color)');
-    this._color('color_primary', 'Couleur primaire',  'var(--primary-color)',                     'ex: #6200EA / var(--primary-color)');
-    this._color('color_accent', 'Couleur accent',     'var(--accent-color)',                      'ex: #00fff9 / var(--accent-color)');
+    this._group('Couleurs texte & icônes', false, () => {
+      this._color('name_color', 'Couleur des noms',     'rgba(var(--rgb-primary-text-color),0.75)', 'défaut : texte primaire — ex rgb(var(--rgb-lavande))');
+      this._color('value_color', 'Couleur des valeurs', 'rgba(var(--rgb-accent-color),0.75)',       'défaut : accent — ex #00fff9');
+      this._color('icon_color', 'Couleur des icônes',   'var(--primary-color)',                     'défaut : couleur primaire — ex var(--primary-color)');
+    });
+    this._group('Thème RGB & fond', false, () => {
+      this._color('color_primary', 'Couleur primaire',  'var(--primary-color)',                     'ex: #6200EA / var(--primary-color)');
+      this._color('color_accent', 'Couleur accent',     'var(--accent-color)',                      'ex: #00fff9 / var(--accent-color)');
+      this._text('rgb_primary', 'Teinte RGB primaire',   'var(--rgb-primary-color)');
+      this._hint('Triplet RGB (ex : 0,180,255) pilotant fonds, bordures et boutons. Vide = couleur du theme.');
+      this._text('rgb_accent', 'Teinte RGB accent',      'var(--rgb-accent-color)');
+      this._hint('Triplet RGB (ex : 0,255,249) pilotant valeurs, badges et jauges. Vide = couleur du theme.');
+      this._color('card_bg', 'Fond de la card',          'rgba(10,6,30,0.82)',                       'ex : rgba(4,16,24,0.82) - ignore si Heriter du card-mod theme');
+    });
+    this._group('Options d\'affichage', false, () => {
+      this._toggle('use_theme_card', 'Hériter du card-mod thème');
+      this._toggle('show_label', "Afficher le type d'entité");
+      this._toggle('pulse_active', 'Pulse du liseré actif', true);
+      this._toggle('flash_on_change', 'Flash de la valeur au changement');
+      this._toggle('value_glow', 'Glow valeurs & statuts', true);
+    });
 
     this._section('Pied de page');
     this._toggle(null, 'Afficher pied', true, 'footer');
@@ -1395,14 +1489,7 @@ class NeonEntitiesCardEditor extends HTMLElement {
     addEnt.addEventListener('click', () => { this._config.entities.push({ entity: '' }); this._dispatch(); this._render(); });
     const addDiv = document.createElement('button'); addDiv.className = 'add-btn'; addDiv.textContent = '+ Séparateur';
     addDiv.addEventListener('click', () => { this._config.entities.push({ type: 'divider' }); this._dispatch(); this._render(); });
-    this.appendChild(addEnt); this.appendChild(addDiv);
-
-    this._section('Options');
-    this._toggle('use_theme_card', 'Hériter du card-mod thème');
-    this._toggle('show_label', "Afficher le type d'entité");
-    this._toggle('pulse_active', 'Pulse du liseré actif', true);
-    this._toggle('flash_on_change', 'Flash de la valeur au changement');
-    this._toggle('value_glow', 'Glow valeurs & statuts', true);
+    (this._target || this).appendChild(addEnt); (this._target || this).appendChild(addDiv);
   }
 
   // Champ icône statique (header) — même rendu que _entIcon mais via _set.
@@ -1425,7 +1512,7 @@ class NeonEntitiesCardEditor extends HTMLElement {
         div.innerHTML = `<span>— Séparateur —</span>`;
         const del = document.createElement('button'); del.className = 'del-btn'; del.innerHTML = '×';
         del.addEventListener('click', () => { this._config.entities.splice(i, 1); this._dispatch(); this._render(); });
-        div.appendChild(del); this.appendChild(div); return;
+        div.appendChild(del); (this._target || this).appendChild(div); return;
       }
       const block = document.createElement('div'); block.className = 'block';
       const title = document.createElement('div'); title.className = 'block-title'; title.textContent = `Entité ${i + 1}`;
@@ -1442,7 +1529,7 @@ class NeonEntitiesCardEditor extends HTMLElement {
       this._entField(block, i, 'secondary_info','Info secondaire',item.secondary_info,{ ph: 'state ou vide' });
       this._entField(block, i, 'decimal_places','Décimales',      item.decimal_places,{ ph: '1' });
 
-      this.appendChild(block);
+      (this._target || this).appendChild(block);
     });
   }
 
@@ -1451,7 +1538,7 @@ class NeonEntitiesCardEditor extends HTMLElement {
     let v = value;
     if (field === 'decimal_places' && v !== undefined) { const n = parseInt(v); v = isNaN(n) ? undefined : n; }
     ents[idx] = { ...(ents[idx] || {}), [field]: v };
-    if (v === undefined) delete ents[idx][field];
+    if (v === undefined || v === '') delete ents[idx][field];
     this._config = { ...this._config, entities: ents };
     this._dispatch();
   }
@@ -1469,10 +1556,10 @@ window.customCards.push({
   preview:     true,
 });
 
-console.info('%c NEON-ENTITIES-CARD %c v1.8.0 ', 'color:#6200EA;font-weight:bold;background:#040816', 'color:#fff;background:#444');
+console.info('%c NEON-ENTITIES-CARD %c v1.14.0 ', 'color:#6200EA;font-weight:bold;background:#040816', 'color:#fff;background:#444');
 
 console.info(
-  '%c 📋 neon-entities-card v1.8.0 %c Neo Tokyo ',
+  '%c 📋 neon-entities-card v1.14.0 %c Neo Tokyo ',
   'background:#6200EA;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#BB86FC;padding:2px 4px;border-radius:0 3px 3px 0;'
 );
