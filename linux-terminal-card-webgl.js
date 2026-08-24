@@ -1,4 +1,4 @@
-/* ── linux-terminal-card-webgl v1.8 ──
+/* ── linux-terminal-card-webgl v1.9 ──
  * Variante WEBGL de linux-terminal-card : vrai verre CRT bombé rendu par shader.
  *
  * Desktop : le terminal (texte + barres + GLITCH le chat) est dessiné sur un canvas 2D
@@ -72,6 +72,18 @@
  *   écrivait dans une clé 'Police' jamais lue au lieu de 'header.font' ; (4) défauts épaisseur/
  *   espacement pas alignés sur le goût de Chris pour cette card — fallback CSS 400→600 et
  *   .05em→0.02em (placeholders éditeur synchronisés).
+ *
+ * v1.9 (2026-08-24) : 2 fixes supplémentaires sur le header canonique —
+ *   (1) le sélecteur de police (NEON_FONTS) ne chargeait jamais réellement la police choisie
+ *   (même dette repérée sur entities/climate/storey : seul Orbitron est en dur, parfois même pas)
+ *   → ajout de _loadGoogleFont(), <link> Google Fonts injecté dans le <head> du document, copié
+ *   du seul pattern qui marche vraiment dans la famille (neon-switch-card.js::_loadGoogleFont,
+ *   avec le encodeURIComponent(...).replace(/%20/g,'+') nécessaire pour les noms à espaces type
+ *   « Share Tech Mono »/« Bebas Neue ») ; (2) le glow de l'icône du header n'avait que 2 couches
+ *   de drop-shadow (pas de halo blanc central) alors que le glow du titre en a 4 (_neonGlow) →
+ *   les deux glowaient visiblement différemment. Icône alignée sur les mêmes 4 couches que le
+ *   canon climate-webgl. Retour Chris : intensité trop forte (drop-shadow s'accumule plus que
+ *   text-shadow sur une icône compacte) → rayons réduits ×0.6 par rapport au titre.
  */
 (() => {
 
@@ -96,13 +108,31 @@ const _catSvg = () => `<svg viewBox="0 0 51 46"><path fill="currentColor" d="${C
 const _catPath2D = new Path2D(CAT_PATH);
 
 // Polices proposées dans l'éditeur pour le titre du header (canon commun aux cards néon —
-// cf neon-entities-card.js / neon-climate-card-webgl.js). Aucune n'est chargée sans filet
-// local : fallback CSS toujours présent (var(--primary-font-family, 'Rajdhani', …)).
+// cf neon-entities-card.js / neon-climate-card-webgl.js). Fallback CSS toujours présent
+// (var(--primary-font-family, 'Rajdhani', …)) si le chargement Google Fonts échoue (offline).
 const NEON_FONTS = [
   'Orbitron','Rajdhani','Share Tech Mono','Exo 2','Roboto','Montserrat',
   'Oswald','Bebas Neue','Inter','Poppins','Space Grotesk','Syne',
   'DM Sans','Playfair Display','Cinzel',
 ];
+// Charge la police choisie via un <link> Google Fonts injecté dans le <head> du document (pas
+// dans le shadowRoot — les fonts se chargent au niveau document, pas par instance de card). Cache
+// module-level partagé par toutes les instances. Pattern copié à l'identique de
+// neon-switch-card.js::_loadGoogleFont (cf skill ha-neon-css, piège "police choisie dans
+// l'éditeur silencieusement jamais chargée" — même dette constatée sur entities/climate/storey,
+// qui proposent NEON_FONTS mais ne chargent jamais que Orbitron en dur, voire rien).
+// ⚠️ Google Fonts veut des '+' pour les espaces dans le nom de famille, PAS '%20' —
+// encodeURIComponent seul aurait laissé la moitié des polices (« Share Tech Mono », « Bebas
+// Neue », « Space Grotesk », « DM Sans », « Playfair Display ») silencieusement introuvables.
+const _loadedFonts = new Set();
+function _loadGoogleFont(family){
+  if (!family || _loadedFonts.has(family)) return;
+  _loadedFonts.add(family);
+  const link = document.createElement('link');
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, '+')}:wght@400;600;700;900&display=swap`;
+  link.rel = 'stylesheet';
+  document.head.appendChild(link);
+}
 
 /* ── helpers ──────────────────────────────────────────────────────────── */
 function _num(v){ const n = parseFloat(v); return isNaN(n) ? null : n; }
@@ -397,6 +427,7 @@ class LinuxTerminalCardWebgl extends HTMLElement {
       card.style.setProperty('--ltc-hdr-color', hdrColor);
       const setOrClear = (prop, val) => val ? card.style.setProperty(prop, val) : card.style.removeProperty(prop);
       setOrClear('--ltc-hdr-size', hdr.title_size || '');
+      if (hdr.font) _loadGoogleFont(hdr.font);
       setOrClear('--ltc-hdr-font', hdr.font ? `'${hdr.font}', var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif)` : '');
       setOrClear('--ltc-hdr-weight', hdr.font_weight ?? '');
       setOrClear('--ltc-hdr-spacing', hdr.letter_spacing || '');
@@ -410,7 +441,7 @@ class LinuxTerminalCardWebgl extends HTMLElement {
       if (ht) ht.classList.toggle('grad', !!hdr.gradient);
       setOrClear('--ltc-hdr-icon-color', hdr.icon_color || '');
       setOrClear('--ltc-hdr-icon-size', hdr.icon_size || '');
-      setOrClear('--ltc-hdr-icon-glow', hdr.glow ? `drop-shadow(0 0 ${Math.round(glowSize*0.4)}px ${glowColor}) drop-shadow(0 0 ${glowSize}px ${glowColor})` : '');
+      setOrClear('--ltc-hdr-icon-glow', hdr.glow ? `drop-shadow(0 0 ${Math.round(glowSize*0.12)}px #fff) drop-shadow(0 0 ${Math.round(glowSize*0.24)}px ${glowColor}) drop-shadow(0 0 ${Math.round(glowSize*0.48)}px ${glowColor}) drop-shadow(0 0 ${Math.round(glowSize*0.6)}px ${glowColor})` : '');
       setOrClear('--ltc-hdr-flicker', hdr.flicker ? 'ltc-hdr-flicker 3s ease-in-out infinite' : '');
       // l'icône elle-même (présence/absence, mdi) exige de recréer le nœud — rare en usage live,
       // pris en charge par le rendu complet (_render) déclenché aux changements structurels.
@@ -618,6 +649,7 @@ class LinuxTerminalCardWebgl extends HTMLElement {
     // police/majuscules/épaisseur/espacement/italique/dégradé/glow/flicker/icône. Défauts
     // conservés identiques à avant quand les nouveaux champs ne sont pas renseignés (pas de
     // régression sur les configs existantes).
+    if (hdr.font) _loadGoogleFont(hdr.font);
     const hdrFont = hdr.font
       ? `'${hdr.font}', var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif)`
       : '';
@@ -634,8 +666,12 @@ class LinuxTerminalCardWebgl extends HTMLElement {
     const hdrGrad = hdr.gradient ? `linear-gradient(90deg,${hdrGradFrom},${hdrGradTo})` : '';
     const hdrIconColor = hdr.icon_color || '';
     const hdrIconSize  = hdr.icon_size || '';
+    // 4 couches, symétrique à _neonGlow() du titre (canon neon-climate-card-webgl.js) — un halo
+    // blanc serré en tête, sinon l'icône et le titre glow visiblement différemment. drop-shadow()
+    // s'accumule plus fort que text-shadow sur une icône compacte : rayons réduits (×0.6) pour
+    // que l'intensité perçue matche le titre au lieu de le dépasser (retour Chris v1.9).
     const hdrIconGlow = hdr.glow
-      ? `drop-shadow(0 0 ${Math.round(hdrGlowSize*0.4)}px ${hdrGlowColor}) drop-shadow(0 0 ${hdrGlowSize}px ${hdrGlowColor})`
+      ? `drop-shadow(0 0 ${Math.round(hdrGlowSize*0.12)}px #fff) drop-shadow(0 0 ${Math.round(hdrGlowSize*0.24)}px ${hdrGlowColor}) drop-shadow(0 0 ${Math.round(hdrGlowSize*0.48)}px ${hdrGlowColor}) drop-shadow(0 0 ${Math.round(hdrGlowSize*0.6)}px ${hdrGlowColor})`
       : '';
     const hdrFlickAnim = hdr.flicker ? 'ltc-hdr-flicker 3s ease-in-out infinite' : '';
 
@@ -1966,7 +2002,7 @@ if (!window.customCards.some(c => c.type === 'linux-terminal-card-webgl')){
   });
 }
 
-console.info('%c 🐧 linux-terminal-card-webgl v1.8 %c CRT SHADER ',
+console.info('%c 🐧 linux-terminal-card-webgl v1.9 %c CRT SHADER ',
   'background:#6200EA;color:#fff;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#00e5ff;padding:2px 4px;border-radius:0 3px 3px 0;');
 
