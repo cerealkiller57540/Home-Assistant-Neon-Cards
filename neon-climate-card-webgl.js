@@ -1,4 +1,4 @@
-/* ── neon-climate-card-webgl v1.2 ──────────────────────────────────────────────
+/* ── neon-climate-card-webgl v1.3 ──────────────────────────────────────────────
  * Variante WEBGL de neon-climate-card : le souffle sous la grille n'est plus une
  * animation 2D scriptée mais un vrai fluide (Navier-Stokes stable, lignée Stam /
  * PavelDoGreat) rendu par shaders. Chaque fente de la grille est un jet à part
@@ -51,7 +51,7 @@
     'DM Sans','Playfair Display','Cinzel',
   ];
 
-  const CARD_VERSION = '1.2';
+  const CARD_VERSION = '1.3';
 
   /* Défauts validés au banc (climate_flow_v2.html). Ce sont EUX la référence :
    * les valeurs "théoriques" de la v1 avaient été calibrées sur une géométrie
@@ -2536,7 +2536,9 @@
       s.style.cssText = 'width:100%;padding:6px 8px;border-radius:6px;cursor:pointer;' +
                         'background:var(--secondary-background-color);color:var(--primary-text-color);' +
                         'border:1px solid var(--divider-color);';
-      options.forEach(([v, lbl]) => {
+      options.forEach(opt => {
+        // accepte une string nue (ex: NEON_FONTS) ou un tuple [valeur, libellé] (ex: flow_quality)
+        const [v, lbl] = Array.isArray(opt) ? opt : [opt, opt];
         const o = document.createElement('option');
         o.value = v; o.textContent = lbl; s.appendChild(o);
       });
@@ -2552,13 +2554,6 @@
       // tout le schéma de la prod (en-tête, entités, couleurs de mode, display…)
       this._schemaBase();
 
-      this._section('Couleurs boutons machine');
-      this._hint('Gaz rares & radiations — la teinte monte avec le réglage');
-      this._color('color_fan_lo',   'Ventilation — mini',  COLOR_DEFAULTS.color_fan_lo);
-      this._color('color_fan_hi',   'Ventilation — maxi',  COLOR_DEFAULTS.color_fan_hi);
-      this._color('color_swing_lo', 'Volet — fermé',       COLOR_DEFAULTS.color_swing_lo);
-      this._color('color_swing_hi', 'Volet — grand ouvert', COLOR_DEFAULTS.color_swing_hi);
-
       this._section('Flux d\'air (WebGL)');
       this._select('flow_quality', 'Qualité', [
         ['auto',  'Auto — léger sur écran dense (recommandé)'],
@@ -2568,9 +2563,11 @@
       ], 'auto', 'Sur mobile (écran dense), « léger » rend le flux PLUS visible et ~7× moins coûteux : ' +
                  'à 2× la même matière est diluée sur 4× plus de pixels. L\'animation se met aussi en ' +
                  'veille dès que la card sort de l\'écran.');
-      this._hint('Défauts = réglages validés au banc. Double-clic sur une valeur pour y revenir.');
-      FLOW_META.forEach(([k, min, max, step, dec, note]) => {
-        this._slider('flow_' + k, k, min, max, step, dec, FLOW_DEFAULTS[k], note);
+      this._group('Réglages fins du flux (19 paramètres)', false, () => {
+        this._hint('Défauts = réglages validés au banc. Double-clic sur une valeur pour y revenir.');
+        FLOW_META.forEach(([k, min, max, step, dec, note]) => {
+          this._slider('flow_' + k, k, min, max, step, dec, FLOW_DEFAULTS[k], note);
+        });
       });
     }
 
@@ -2627,17 +2624,26 @@
       });
       this._bindIconPreviews(true);
     }
-    /* Groupe repliable : chaque _section() ouvre un nouveau <details>, et tout
-     * ce qui suit (_row/_hint, donc _text/_color/_slider/_select/_toggle/_icon/
-     * _entity) y est ajouté — jusqu'à la _section() suivante. Ouvert par défaut
-     * seulement pour le tout premier groupe, pour ne pas noyer l'éditeur. */
+    // Titre de section fixe (non repliable) — repère visuel plat, comme sur les autres cards néon.
     _section(t) {
-      const det = document.createElement('details'); det.className = 'sec-group';
-      if (!this._sectionsOpened) { det.open = true; this._sectionsOpened = true; }
-      const sum = document.createElement('summary'); sum.className = 'sec'; sum.textContent = t;
-      det.appendChild(sum); this.appendChild(det);
-      this._target = det;
-      return sum;
+      this._target = null; // les sections top-level reviennent s'ancrer directement sur `this`
+      const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d);
+      return d;
+    }
+    // Sous-groupe repliable (pattern storey-battery-card-gl.js / neon-solar-production-card.js) —
+    // ha-expansion-panel natif HA. buildFn() ré-ancre les helpers dessus via _target, puis restaure
+    // l'ancrage précédent (permet d'imbrer, même si on ne l'utilise pas ici).
+    _group(title, expanded, buildFn) {
+      const panel = document.createElement('ha-expansion-panel');
+      panel.outlined = true;
+      panel.header = title;
+      if (expanded) panel.expanded = true;
+      (this._target || this).appendChild(panel);
+      const prevTarget = this._target;
+      this._target = panel;
+      buildFn();
+      this._target = prevTarget;
+      return panel;
     }
     _hint(t) { const d = document.createElement('div'); d.className = 'hint'; (this._target || this).appendChild(d); return d; }
     _text(key, label, ph = '') {
@@ -2742,19 +2748,10 @@
     _css() {
       return `
         :host { display:block; padding:14px; font-family:var(--primary-font-family,Roboto,sans-serif); }
-        .sec-group { margin:10px 0; }
-        .sec-group:first-child { margin-top:0; }
-        .sec-group[open] { margin-bottom:16px; }
-        .sec {
-          font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-color);
-          padding:6px 4px 6px 0;border-bottom:1px solid var(--divider-color);cursor:pointer;
-          list-style:none;display:flex;align-items:center;gap:6px;user-select:none;
-        }
-        .sec::-webkit-details-marker { display:none; }
-        .sec::before { content:'▸'; font-size:9px;transition:transform .15s ease;color:var(--secondary-text-color); }
-        .sec-group[open] > .sec::before { transform:rotate(90deg); }
-        .sec-group > .row:first-of-type,
-        .sec-group > .hint:first-of-type { margin-top:8px; }
+        .sec { font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--divider-color); }
+        .sec:first-child { margin-top:0; }
+        ha-expansion-panel { display:block; margin:8px 0; --expansion-panel-content-padding:8px 12px 12px; }
+        ha-expansion-panel .row:first-child { margin-top:2px; }
         .row { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
         .row label { flex:0 0 160px;font-size:12px;color:var(--secondary-text-color); }
         .row label .mdi-link { color:var(--primary-color);font-size:9px;text-transform:none;letter-spacing:0; }
@@ -2773,7 +2770,7 @@
     }
     _render() {
       this.innerHTML = '';
-      this._target = this; this._sectionsOpened = false;
+      this._target = null;
       const st = document.createElement('style'); st.textContent = this._css(); this.appendChild(st);
       this._schema();
       this._fillDatalists();
@@ -2786,52 +2783,60 @@
       this._color('header.color', 'Couleur titre', 'var(--primary-color)', 'défaut : couleur primaire — ex rgb(var(--rgb-lavande))');
       this._text('header.title_size', 'Taille titre', '16px');
       this._select('header.font', 'Police', NEON_FONTS, '— thème HA —');
-      this._text('header.subtitle', 'Sous-titre', 'optionnel');
-      this._text('header.badge', 'Badge', 'optionnel');
-      this._text('header.font_weight', 'Épaisseur', '400');
-      this._text('header.letter_spacing', 'Espacement', 'clamp(1px, 0.5cqi, 3px)');
       this._toggle('header.uppercase', 'Majuscules', true);
-      this._toggle('header.italic', 'Italique', false);
-      this._text('header.title_shadow', 'Text-shadow', '0 0 6px ...');
-      this._toggle('header.gradient', 'Titre en dégradé');
-      this._color('header.gradient_from', 'Dégradé — départ', 'var(--primary-color)');
-      this._color('header.gradient_to', 'Dégradé — arrivée', 'var(--accent-color)');
-      this._toggle('header.glow', 'Glow du titre');
-      this._text('header.glow_size', 'Taille du glow', '12');
-      this._color('header.glow_color', 'Couleur du glow', 'var(--primary-color)');
-      this._toggle('header.flicker', 'Scintillement du titre');
-      this._color('header.icon_color', "Couleur de l'icône", 'défaut : couleur du titre');
-      this._text('header.icon_size', "Taille de l'icône", 'défaut : taille du titre');
-      this._hint('Mêmes réglages que la neon-entities-card. Text-shadow ci-dessus, si renseigné, remplace le glow.');
 
-      this._section('Entité principale');
+      this._group('Effets avancés du titre', false, () => {
+        this._text('header.subtitle', 'Sous-titre', 'optionnel — texte sous le titre');
+        this._text('header.badge', 'Badge', 'optionnel — étiquette courte à côté du titre, ex: AUTO');
+        this._text('header.font_weight', 'Épaisseur', '400');
+        this._text('header.letter_spacing', 'Espacement', 'clamp(1px, 0.5cqi, 3px)');
+        this._toggle('header.italic', 'Italique', false);
+        this._text('header.title_shadow', 'Text-shadow', '0 0 6px ...');
+        this._toggle('header.gradient', 'Titre en dégradé');
+        this._color('header.gradient_from', 'Dégradé — départ', 'var(--primary-color)');
+        this._color('header.gradient_to', 'Dégradé — arrivée', 'var(--accent-color)');
+        this._toggle('header.glow', 'Glow du titre');
+        this._text('header.glow_size', 'Taille du glow', '12');
+        this._color('header.glow_color', 'Couleur du glow', 'var(--primary-color)');
+        this._toggle('header.flicker', 'Scintillement du titre');
+        this._color('header.icon_color', "Couleur de l'icône", 'défaut : couleur du titre');
+        this._text('header.icon_size', "Taille de l'icône", 'défaut : taille du titre');
+        this._hint('Mêmes réglages que la neon-entities-card. Text-shadow, si renseigné, remplace le glow.');
+      });
+
+      this._section('Entité, capteurs & options');
       this._entity('entity', 'Entité climate *', 'climate');
       this._text('name', 'Nom affiché', 'Vide = friendly_name');
-
-      this._section('Capteurs');
       this._entity('humidity_entity', 'Entité humidité', 'sensor');
       this._hint("Facultatif — sinon current_humidity de l'entité climate");
       this._entity('power_entity', 'Entité puissance', 'sensor');
       this._hint("Facultatif — anime le flux d'air seulement si puissance ≥ seuil (sinon basé sur le mode seul)");
-
-      this._section('Couleurs boutons mode');
-      this._color('color_off', 'OFF', MODE_DEFAULTS.off);
-      this._color('color_heat', 'HEAT', MODE_DEFAULTS.heat);
-      this._color('color_cool', 'COOL', MODE_DEFAULTS.cool);
-      this._color('color_dry', 'DRY', MODE_DEFAULTS.dry);
-      this._color('color_fan', 'FAN ONLY', MODE_DEFAULTS.fan_only);
-      this._color('color_fan_btn', 'FAN (bouton cycle)', '#00FFAA');
-
-      this._section('Couleur pill température');
-      this._color('color_pill', 'Pill cible', PILL_DEFAULT);
-
-      this._section('Couleur display AC');
-      this._color('color_display', 'Dot-matrix / display', '#00fff9');
-      this._toggle('neon_display_glow', 'Triple neon glow', true);
-
-      this._section('Options');
       this._toggle('show_wind', 'Animation air', true);
       this._text('power_threshold', 'Seuil puissance (W)', '10');
+
+      this._section('Couleurs');
+      this._group('Boutons mode', true, () => {
+        this._color('color_off', 'OFF', MODE_DEFAULTS.off);
+        this._color('color_heat', 'HEAT', MODE_DEFAULTS.heat);
+        this._color('color_cool', 'COOL', MODE_DEFAULTS.cool);
+        this._color('color_dry', 'DRY', MODE_DEFAULTS.dry);
+        this._color('color_fan', 'FAN ONLY', MODE_DEFAULTS.fan_only);
+        this._color('color_fan_btn', 'FAN (bouton cycle)', '#00FFAA');
+      });
+      this._group('Pill température', false, () => {
+        this._color('color_pill', 'Pill cible', PILL_DEFAULT);
+      });
+      this._group('Display AC', false, () => {
+        this._color('color_display', 'Dot-matrix / display', '#00fff9');
+        this._toggle('neon_display_glow', 'Triple neon glow', true);
+      });
+      this._group('Boutons machine (ventilation / volet)', false, () => {
+        this._hint('Gaz rares & radiations — la teinte monte avec le réglage');
+        this._color('color_fan_lo',   'Ventilation — mini',  COLOR_DEFAULTS.color_fan_lo);
+        this._color('color_fan_hi',   'Ventilation — maxi',  COLOR_DEFAULTS.color_fan_hi);
+        this._color('color_swing_lo', 'Volet — fermé',       COLOR_DEFAULTS.color_swing_lo);
+        this._color('color_swing_hi', 'Volet — grand ouvert', COLOR_DEFAULTS.color_swing_hi);
+      });
     }
   }
 
