@@ -1,0 +1,234 @@
+# Copyright 2026 Prash Balan (@its-me-prash) — GNU AGPL v3.0-or-later
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""Network-ADB transport for the companion channel — v3.0.0-alpha.
+
+Pure-python ``adb-shell`` over TCP, so no ``adb`` binary is needed inside the
+Home Assistant container. This is the only module that talks to the device, and
+it is deliberately thin: everything that can be reasoned about without hardware
+lives in ``screen.py`` and ``channel.py`` instead.
+
+``adb-shell`` is imported lazily inside the methods, so importing this module
+(and running the test suite) never requires the dependency to be present. The
+requirement is declared in the manifest for real installs.
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import Any
+
+_LOGGER = logging.getLogger(__name__)
+
+# uiautomator writes the dump here, then we read it back over the same shell.
+_DUMP_PATH = "/sdcard/vag_connect_ui.xml"
+
+# Where adb-shell persists the RSA keypair that authorises this HA instance to
+# the phone (the phone shows the "allow USB debugging" prompt once, then trusts
+# this key). Kept under the config dir so it survives restarts.
+_ADBKEY_BASENAME = "vag_connect_adbkey"
+
+
+class CompanionTransportError(RuntimeError):
+    """A device-side / connection failure. Carries a human-readable reason."""
+
+
+class NetworkAdbTransport:
+    """Talks to one phone over TCP ADB. All methods are async and best-effort.
+
+    The device object and the blocking adb-shell calls are marshalled onto a
+    worker thread via ``asyncio.to_thread`` so nothing blocks the event loop.
+    """
+
+    def __init__(
+        self, host: str, port: int, adbkey_path: str, *, wake_sleep: bool = False
+    ) -> None:
+        self._host = host
+        self._port = int(port)
+        self._adbkey_path = adbkey_path
+        self._device: Any = None
+        # v2.26.0 (#974) — when True, the display is put back to SLEEP after each
+        # read so a locked/asleep phone shows the app during the dump but does
+        # not stay lit permanently. The wake happens anyway (foreground_app);
+        # this adds the matching sleep.
+        self._wake_sleep = bool(wake_sleep)
+
+    # -- connection -----------------------------------------------------------
+
+    async def connect(self, timeout_s: float = 10.0) -> None:
+        """Open (or reopen) the ADB connection, loading/creating the RSA key."""
+        await asyncio.to_thread(self._connect_blocking, timeout_s)
+
+    def _connect_blocking(self, timeout_s: float) -> None:
+        try:
+            from adb_shell.adb_device import AdbDeviceTcp  # noqa: PLC0415
+            from adb_shell.auth.sign_pythonrsa import PythonRSASigner  # noqa: PLC0415
+            from adb_shell.auth.keygen import keygen  # noqa: PLC0415
+        except ImportError as err:  # pragma: no cover - requires the dependency
+            raise CompanionTransportError(
+                "the adb-shell library is not installed; it ships as a "
+                "requirement of this integration, so this usually means the "
+                "install did not complete"
+            ) from err
+
+        import os  # noqa: PLC0415
+
+        if not os.path.exists(self._adbkey_path):
+            # First run on this HA instance: mint a keypair. The phone will show
+            # a one-time "allow USB debugging from this computer" prompt.
+            keygen(self._adbkey_path)
+        with open(self._adbkey_path, encoding="utf-8") as fh:
+            priv = fh.read()
+        with open(self._adbkey_path + ".pub", encoding="utf-8") as fh:
+            pub = fh.read()
+        signer = PythonRSASigner(pub, priv)
+
+        device = AdbDeviceTcp(self._host, self._port, default_transport_timeout_s=timeout_s)
+        try:
+            device.connect(rsa_keys=[signer], auth_timeout_s=timeout_s)
+        except Exception as err:  # noqa: BLE001 - adb-shell raises many types
+            raise CompanionTransportError(
+                f"could not reach the phone at {self._host}:{self._port} "
+                f"({type(err).__name__}); check it is on the network, that ADB "
+                "over Wi-Fi is enabled, and that you accepted the debugging "
+                "prompt"
+            ) from err
+        self._device = device
+
+    async def close(self) -> None:
+        if self._device is not None:
+            try:
+                await asyncio.to_thread(self._device.close)
+            except Exception:  # noqa: BLE001
+                pass
+            self._device = None
+
+    @property
+    def connected(self) -> bool:
+        return self._device is not None and getattr(self._device, "available", False)
+
+    # -- operations -----------------------------------------------------------
+
+    async def shell(self, cmd: str, timeout_s: float = 10.0) -> str:
+        if self._device is None:
+            raise CompanionTransportError("not connected")
+        return await asyncio.to_thread(self._device.shell, cmd, timeout_s)
+
+    async def dump_ui(self, timeout_s: float = 15.0) -> str:
+        """Run uiautomator, return the screen's accessibility XML.
+
+        Two steps on the same shell: dump to a file, then cat it back. The dump
+        command prints a status line to stdout, not the XML, so reading the file
+        is the reliable path.
+        """
+        # v2.26.0 (ckomma #20/#22) — delete any previous dump FIRST. uiautomator
+        # prints its status to stdout, not into the file, and on a failed dump
+        # (secure screen, overlay, idle display) it does NOT overwrite the file.
+        # Without this rm, the cat below would return the PREVIOUS run's XML,
+        # which still contains "<hierarchy>" and sails past the guard, so we
+        # would parse a frozen screen as if it were live, the connector
+        # manufacturing its own stale value. Removing it first turns a failed
+        # dump into an honest no-data (empty cat, guard raises) instead.
+        await self.shell(f"rm -f {_DUMP_PATH}", timeout_s)
+        await self.shell(f"uiautomator dump {_DUMP_PATH}", timeout_s)
+        xml = await self.shell(f"cat {_DUMP_PATH}", timeout_s)
+        if "<hierarchy" not in xml:
+            raise CompanionTransportError(
+                "uiautomator returned no screen dump; the phone may be asleep, "
+                "the app may not be in the foreground, or the screen may be "
+                "secured"
+            )
+        return xml
+
+    async def foreground_app(self, package: str, timeout_s: float = 10.0) -> None:
+        """Bring the app to the front and let it settle.
+
+        v2.26.0 — wake the display first (ckomma #23a: a sleeping screen is the
+        commonest cause of an empty dump), then skip the monkey-launch if the
+        app is already frontmost (ckomma #21: relaunching every read is needless
+        churn and a possible backend nudge). A cold launch still gets the settle
+        delay; an already-foreground app returns immediately.
+        """
+        await self.wake(timeout_s)
+        if await self.is_foreground(package, timeout_s):
+            return
+        await self.shell(
+            f"monkey -p {package} -c android.intent.category.LAUNCHER 1", timeout_s
+        )
+        await asyncio.sleep(1.5)
+
+    async def current_app_version(self, package: str) -> str | None:
+        """Read the installed versionName of the app, for the write quarantine."""
+        out = await self.shell(f"dumpsys package {package} | grep versionName")
+        for line in (out or "").splitlines():
+            line = line.strip()
+            if line.startswith("versionName="):
+                return line.split("=", 1)[1].strip() or None
+        return None
+
+    async def tap(self, x: int, y: int, timeout_s: float = 10.0) -> None:
+        await self.shell(f"input tap {int(x)} {int(y)}", timeout_s)
+        await asyncio.sleep(0.6)
+
+    # v2.26.0 — reliability primitives adapted from the prior-art ADB projects.
+
+    async def wake(self, timeout_s: float = 10.0) -> None:
+        """Wake the display (KEYCODE_WAKEUP) before a dump.
+
+        ckomma #23a: a sleeping screen makes ``dump_ui`` return no hierarchy,
+        which otherwise trips the failure cooldown. Waking first removes the
+        single most common false trip. Raw keyevent, identical on every app.
+        """
+        await self.shell("input keyevent 224", timeout_s)  # KEYCODE_WAKEUP
+        await asyncio.sleep(0.4)
+
+    async def sleep_if_enabled(self, timeout_s: float = 10.0) -> None:
+        """Put the display back to sleep (KEYCODE_SLEEP) after a poll (#974).
+
+        No-op unless the wake/sleep opt-in is on. Best-effort: a failure here
+        must never turn a good read into an error, so it swallows exceptions.
+        """
+        if not self._wake_sleep:
+            return
+        try:
+            await self.shell("input keyevent 223", timeout_s)  # KEYCODE_SLEEP
+        except Exception:  # noqa: BLE001
+            pass
+
+    async def key_back(self, timeout_s: float = 10.0) -> None:
+        """Press BACK (KEYCODE_BACK). The dismissal primitive for overlay
+        recovery. Deliberately BACK-only: BACK can never actuate the car, so
+        overlay recovery is safe to run even on the unverified read-only brands.
+        """
+        await self.shell("input keyevent 4", timeout_s)  # KEYCODE_BACK
+        await asyncio.sleep(0.5)
+
+    async def is_foreground(self, package: str, timeout_s: float = 10.0) -> bool:
+        """True if ``package`` is the frontmost app.
+
+        ckomma #21: monkey-launching on every read even when the app is already
+        in front is needless churn. Lets the caller skip the relaunch. Best
+        effort: on any parse failure it returns False so the caller relaunches
+        (safe default).
+        """
+        out = await self.shell(
+            "dumpsys activity activities | grep -E 'mResumedActivity|mCurrentFocus'",
+            timeout_s,
+        )
+        return package in (out or "")
+
+    async def swipe(
+        self, x1: int, y1: int, x2: int, y2: int, dur_ms: int = 300,
+        timeout_s: float = 10.0,
+    ) -> None:
+        """Swipe gesture (e.g. pull-to-refresh).
+
+        CAUTION: unlike a local uiautomator dump, a pull-to-refresh forces an
+        app->backend sync, so it re-introduces the rate-limit surface a passive
+        read avoids. The channel only ever calls this behind its rate-limit
+        backoff, never as a free local op.
+        """
+        await self.shell(
+            f"input swipe {int(x1)} {int(y1)} {int(x2)} {int(y2)} {int(dur_ms)}",
+            timeout_s,
+        )
+        await asyncio.sleep(0.6)

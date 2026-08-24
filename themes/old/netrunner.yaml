@@ -1,0 +1,357 @@
+cyberpunk-2077-netrunner:
+  # ===== Base palette NETRUNNER =====
+  cyan-color:        "#00F0FF"        # Cyan plus intense
+  ice-blue-color:    "#8CFFFF"        # Bleu glacé
+  dark-cyan-color:   "#0A3A3D"
+  dark-purple-color: "#0A0E1A"        # Presque noir avec teinte bleue
+  dark-blue-color:   "#0F1923"
+  accent-cyan:       "#00FFCC"        # Cyan-vert néon
+  red-color:         "#FF1744"        # Rouge vif pour les alertes
+  primary-font-family: "'Share Tech Mono','Courier New','monospace'"
+
+  # Primaires - dominance cyan
+  primary-color: "var(--cyan-color)"
+  primary-background-color: "var(--dark-purple-color)"
+  primary-text-color: "var(--cyan-color)"
+
+  # ===== Glow/Blur knobs =====
+  cp-glow-cyan:   "rgba(0,240,255,0.85)"
+  cp-glow-ice:    "rgba(140,255,255,0.65)"
+  cp-glow-soft:   "rgba(0,255,204,0.30)"
+  cp-blur-weak:   "blur(8px) saturate(140%)"
+  cp-blur-strong: "blur(20px) saturate(180%)"
+  
+  # Matrix data flow effect
+  cp-data-flow: "rgba(0,240,255,0.08)"
+
+  # ===== Wallpaper =====
+  # Option 1: Si tu la mets dans /config/www/
+  lovelace-background: |
+      center / cover no-repeat fixed url('/local/netrunner.jpeg'),
+      linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4))
+  
+  # Option 2: Garder dans /homeassistant/themes/ (nécessite config Lovelace resources)
+  # Pour l'instant, utilise un overlay cyan sur fond noir qui matche ton image
+  #lovelace-background: |
+  #  center / cover no-repeat fixed,
+  #  radial-gradient(ellipse at 50% 50%, rgba(0,240,255,0.15) 0%, rgba(10,14,26,0.95) 50%, #050810 100%)
+  
+  # INSTRUCTIONS pour utiliser ton image:
+  # 1. Déplace /homeassistant/themes/netrunner.jpeg vers /config/www/netrunner.jpeg
+  # 2. Puis décommente la ligne "Option 1" ci-dessus et supprime l'Option 2
+  
+  # ===== Modes =====
+  modes:
+    dark:
+      primary-background-color:   "#050810"
+      secondary-background-color: "#0A0E1A"
+      secondary-color: "var(--ice-blue-color)"
+      secondary-text-color: "var(--cyan-color)"
+
+      primary-color: "var(--cyan-color)"
+      accent-color:  "var(--accent-cyan)"
+
+      app-header-background-color: "rgba(10,14,26,0.60)"
+      app-header-text-color: "var(--cyan-color)"
+      app-header-selection-bar-color: "var(--accent-cyan)"
+      app-header-edit-background-color: "var(--dark-purple-color)"
+      app-header-edit-text-color: "var(--cyan-color)"
+
+      disabled-color: "var(--dark-blue-color)"
+      disabled-text-color: "rgba(0,240,255,0.35)"
+      
+      ha-color-surface-default: "var(--dark-purple-color)"
+      ha-color-on-neutral-quiet: "var(--cyan-color)"
+      ha-color-on-neutral-normal: "var(--cyan-color)"
+
+      # Sidebar - effet terminal
+      sidebar-background-color: "rgba(10,14,26,0.75)"
+      sidebar-text-color:       "var(--cyan-color)"
+      sidebar-icon-color:       "var(--cyan-color)"
+      sidebar-selected-color: "var(--accent-cyan)"
+      sidebar-selected-icon-color: "var(--accent-cyan)"
+      sidebar-selected-text-color: "var(--accent-cyan)"
+
+      # Cartes - translucides avec data flow
+      card-background-color: "rgba(10,14,26,0.85)"
+      ha-card-background:    "rgba(10,14,26,0.55)"
+      ha-card-backdrop-filter: "var(--cp-blur-strong)"
+      dialog-backdrop-filter:  "var(--cp-blur-strong)"
+      ha-card-border-radius:   "12px"
+      ha-card-border-color:    "rgba(0,240,255,0.35)"
+      ha-card-box-shadow:      "0 0 30px rgba(0,240,255,0.25), 0 8px 32px rgba(0,0,0,0.60), inset 0 1px 0 rgba(0,240,255,0.15)"
+
+      state-icon-color: "var(--cyan-color)"
+      state-icon-active-color: "var(--accent-cyan)"
+      state-color: "var(--cyan-color)"
+      state-inactive-color: "rgba(0,240,255,0.40)"
+      ha-button-neutral-color: "var(--cyan-color)"
+
+      state-media_player-active-color: "var(--accent-cyan)"
+      state-media_player-off-color: "rgba(0,240,255,0.25)"
+      state-media_player-idle-color: "var(--dark-blue-color)"
+      state-media_player-unavailable-color: "#1A1A1A"
+      
+      divider-color: "rgba(0,240,255,0.20)"
+      
+      ha-tile-background: "var(--dark-purple-color)"
+      ha-tile-info-background-color: "rgba(10,14,26,0.15)"
+      
+      input-ink-color:           "var(--cyan-color)"
+      input-label-ink-color:     "rgba(140,255,255,0.70)"
+      input-dropdown-icon-color: "var(--accent-cyan)"
+
+      switch-checked-button-color: "var(--accent-cyan)"
+      switch-checked-color: "var(--accent-cyan)"
+      switch-checked-track-color: "var(--accent-cyan)"
+      switch-unchecked-button-color: "rgba(0,240,255,0.40)"
+      switch-unchecked-color: "var(--dark-blue-color)"
+      switch-unchecked-track-color: "rgba(0,240,255,0.10)"
+
+      slider-color: "var(--cyan-color)"
+      slider-secondary-color: "var(--accent-cyan)"
+      slider-track-color: "rgba(0,240,255,0.25)"
+
+      # Fonts - monospace pour effet terminal
+      paper-font-common-base_-_font-family: "'Share Tech Mono','Courier New','monospace'"
+      paper-font-common-code_-_font-family: "'Share Tech Mono','Courier New','monospace'"
+      mdc-typography-font-family: "'Share Tech Mono','Courier New','monospace'"
+
+      rgb-primary-text-color: "0, 240, 255"
+      rgb-primary-background-color: "10, 14, 26"
+      rgb-card-background-color: "10, 14, 26"
+
+      label-badge-color: "var(--cyan-color)"
+      label-badge-background-color: "rgba(0,240,255,0.15)"
+
+  # ===== HACS =====
+  hacs-error-color:   "var(--red-color)"
+  hacs-warning-color: "var(--accent-cyan)"
+  hacs-update-color:  "var(--cyan-color)"
+  hacs-new-color:     "var(--ice-blue-color)"
+
+  # ===== CARD-MOD NETRUNNER EFFECTS =====
+  card-mod-theme: cyberpunk-2077-netrunner
+  
+  card-mod-card: | 
+    ha-card {
+      position: relative;
+      background: transparent;
+      overflow: hidden;
+      transition: transform 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55),
+                  box-shadow 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
+                  opacity 0.3s ease;
+    }
+
+    /* Data flow effect - lignes qui descendent */
+    ha-card::after {
+      content: "";
+      position: absolute;
+      top: -100%;
+      left: 0;
+      right: 0;
+      height: 200%;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,240,255,0.03) 2px,
+        rgba(0,240,255,0.03) 4px
+      );
+      animation: dataFlow 20s linear infinite;
+      pointer-events: none;
+      opacity: 0.6;
+    }
+
+    @keyframes dataFlow {
+      0% { transform: translateY(0); }
+      100% { transform: translateY(50%); }
+    }
+
+    /* Glow néon sur les icônes */
+    state-badge, ha-state-icon, ha-icon, .icon {
+      filter: drop-shadow(0 0 4px currentColor) 
+              drop-shadow(0 0 12px currentColor);
+      transition: filter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
+                  transform 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+
+    state-badge:hover, ha-state-icon:hover, ha-icon:hover {
+      filter: drop-shadow(0 0 8px currentColor) 
+              drop-shadow(0 0 20px currentColor)
+              drop-shadow(0 0 30px currentColor);
+      transform: scale(1.15) rotate(5deg);
+      animation: iconBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+
+    @keyframes iconBounce {
+      0% { transform: scale(1) rotate(0deg); }
+      50% { transform: scale(1.25) rotate(-5deg); }
+      100% { transform: scale(1.15) rotate(5deg); }
+    }
+    
+    /* Border néon pulsant */
+    ha-card::before {
+      content: "";
+      position: absolute;
+      inset: -2px;
+      background: transparent;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(0,240,255,0.30),
+                  0 0 40px rgba(0,255,204,0.15),
+                  inset 0 0 20px rgba(0,240,255,0.10);
+      z-index: -1;
+      pointer-events: none;
+      animation: pulseGlow 3s ease-in-out infinite;
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { 
+        box-shadow: 0 0 20px rgba(0,240,255,0.30),
+                    0 0 40px rgba(0,255,204,0.15),
+                    inset 0 0 20px rgba(0,240,255,0.10);
+      }
+      50% { 
+        box-shadow: 0 0 30px rgba(0,240,255,0.50),
+                    0 0 60px rgba(0,255,204,0.30),
+                    inset 0 0 30px rgba(0,240,255,0.20);
+      }
+    }
+    
+    ha-card:hover {
+      transform: translateY(-8px) scale(1.02);
+      box-shadow: 0 0 40px rgba(0,240,255,0.40) !important;
+      animation: cardBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+
+    @keyframes cardBounce {
+      0% { transform: translateY(0) scale(1); }
+      40% { transform: translateY(-12px) scale(1.03); }
+      60% { transform: translateY(-6px) scale(1.015); }
+      100% { transform: translateY(-8px) scale(1.02); }
+    }
+
+  card-mod-root-yaml: |
+    .: |
+    * {
+    font-family: 'Share Tech Mono','Courier New','monospace' !important;
+    letter-spacing: 0px;
+    }
+      
+    h1, h2, h3, .card-header, .menu .title {
+        letter-spacing: 2px;
+        }
+      
+      /* Effet scanline sur tout le background */
+      body::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: repeating-linear-gradient(
+          0deg,
+          rgba(0,240,255,0.02) 0px,
+          transparent 1px,
+          transparent 2px,
+          rgba(0,240,255,0.02) 3px
+        );
+        pointer-events: none;
+        z-index: 9999;
+        animation: scanline 8s linear infinite;
+      }
+
+      @keyframes scanline {
+        0% { transform: translateY(0); }
+        100% { transform: translateY(10px); }
+      }
+
+  # === SIDEBAR NETRUNNER ===
+  card-mod-sidebar: |
+    host, ha-sidebar {
+    backdrop-filter: var(--cp-blur-strong) !important;
+    -webkit-backdrop-filter: var(--cp-blur-strong) !important;
+    background: var(--sidebar-background-color) !important;
+    color: var(--cyan-color) !important;
+    box-shadow: inset -2px 0 0 rgba(0,240,255,0.50),
+    inset -20px 0 40px rgba(0,0,0,0.40);
+    position: relative;
+    }
+    
+    :host::before, ha-sidebar::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent 10px,
+        rgba(0,240,255,0.02) 10px,
+        rgba(0,240,255,0.02) 11px
+      );
+      pointer-events: none;
+      z-index: 0;
+    }
+    
+    .menu .title {
+      color: var(--accent-cyan);
+      font-family: 'Share Tech Mono','Courier New','monospace';
+      font-weight: bold;
+      font-size: 1.1em;
+      letter-spacing: 0px;
+      margin-top: 4px;
+      text-shadow: 0 0 10px var(--accent-cyan), 
+                   0 0 20px var(--cyan-color);
+      text-transform: uppercase;
+    }
+    
+    ha-sidebar mwc-list mwc-list-item ha-icon,
+    ha-sidebar mwc-list mwc-list-item ha-svg-icon {
+      color: var(--cyan-color) !important;
+      fill: var(--cyan-color) !important;
+      filter: drop-shadow(0 0 6px var(--cyan-color));
+      transition: all 0.3s ease;
+    }
+    
+    ha-sidebar a mwc-list-item:hover ha-icon,
+    ha-sidebar a mwc-list-item:hover ha-svg-icon {
+      filter: drop-shadow(0 0 10px var(--accent-cyan)) 
+              drop-shadow(0 0 20px var(--cyan-color));
+      transform: scale(1.2) translateX(5px);
+      animation: sidebarBounce 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+    
+    @keyframes sidebarBounce {
+      0% { transform: scale(1) translateX(0); }
+      50% { transform: scale(1.3) translateX(8px); }
+      100% { transform: scale(1.2) translateX(5px); }
+    }
+    
+    ha-sidebar a[aria-selected="true"] mwc-list-item,
+    ha-sidebar a[aria-current="page"] mwc-list-item {
+      position: relative;
+      color: var(--accent-cyan) !important;
+      background: linear-gradient(
+        90deg,
+        rgba(0,255,204,0.15) 0%,
+        rgba(0,240,255,0.05) 100%
+      );
+      border-left: 3px solid var(--accent-cyan);
+      border-radius: 0 8px 8px 0;
+      box-shadow: 0 0 20px rgba(0,240,255,0.30),
+                  inset 0 0 20px rgba(0,255,204,0.10);
+    }
+    
+    ha-sidebar a[aria-selected="true"] mwc-list-item ha-icon,
+    ha-sidebar a[aria-current="page"] mwc-list-item ha-icon,
+    ha-sidebar a[aria-selected="true"] mwc-list-item ha-svg-icon,
+    ha-sidebar a[aria-current="page"] mwc-list-item ha-svg-icon {
+      color: var(--accent-cyan) !important;
+      fill: var(--accent-cyan) !important;
+      filter: drop-shadow(0 0 8px var(--accent-cyan)) 
+              drop-shadow(0 0 16px var(--cyan-color));
+    }

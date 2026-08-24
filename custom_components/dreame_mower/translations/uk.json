@@ -1,0 +1,172 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Виберіть тип облікового запису",
+        "description": "Виберіть тип свого облікового запису для інтеграції косарки Dreame.",
+        "data": {
+          "account_type": "Тип рахунку"
+        }
+      },
+      "dreame": {
+        "data": {
+          "username": "Ім'я користувача",
+          "password": "Пароль",
+          "country": "Країна сервера"
+        },
+        "description": "Увійдіть у хмару Dreamehome."
+      },
+      "mova": {
+        "data": {
+          "username": "Ім'я користувача",
+          "password": "Пароль",
+          "country": "Країна сервера"
+        },
+        "description": "Увійдіть у хмару Movahome."
+      },
+      "devices": {
+        "data": {
+          "devices": "Підтримувані пристрої"
+        },
+        "description": "Будь ласка, виберіть пристрій Dreame Cower, який ви хочете налаштувати."
+      },
+      "options": {
+        "data": {
+          "name": "Назва пристрою",
+          "notify": "Типи сповіщень"
+        },
+        "description": "Налаштуйте назву пристрою Dreame Care та налаштування сповіщення."
+      }
+    },
+    "error": {
+      "cannot_connect": "Не вдалося підключитися. Перевірте мережу та спробуйте ще раз. Деталі дивіться в журналах Home Assistant.",
+      "unsupported": "Ця модель пристрою не підтримується цією інтеграцією.",
+      "credentials_incomplete": "Необхідно вказати ім'я користувача, пароль та країну.",
+      "login_error": "Помилка входу. Перевірте ім'я користувача та пароль. Переконайтеся, що вибрано правильний тип облікового запису (Dreamehome або MOVAhome).",
+      "no_devices": "У цьому обліковому записі не знайдено підтримувану газонокосарку. Переконайтеся, що ви вибрали правильний тип облікового запису — MOVAhome для пристроїв MOVA, Dreamehome для Dreame — і що пристрій додано до відповідного застосунку. Також можна спробувати іншу країну сервера.",
+      "invalid_account_type": "Вибрано недійсний тип облікового запису."
+    },
+    "abort": {
+      "cannot_connect": "Не вдалося підключитися.",
+      "already_configured": "Цей пристрій вже налаштовано."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Варіанти",
+        "description": "Налаштуйте налаштування сповіщення для інтеграції косарки Dreame.",
+        "data": {
+          "notify": "Типи сповіщень",
+          "map_rotation": "Поворот карти",
+          "map_show_title": "Показувати заголовок карти",
+          "map_show_legend": "Показувати легенду карти",
+          "map_padding": "Відступ карти (пікселі)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Статус",
+        "state": {
+          "no_status": "Немає статусу",
+          "mowing": "Скошування",
+          "standby": "Резервний",
+          "paused": "Призупинений",
+          "paused_due_to_errors": "Зупинившись через помилки",
+          "returning_to_station_to_charge": "Повернення на станцію для заряду",
+          "charging": "Зарядка",
+          "mapping": "Картографування",
+          "charging_complete": "Зарядка завершена",
+          "updating": "Оновлення",
+          "charging_paused_high_temperature": "Зарядка призупинена: температура акумулятора занадто висока",
+          "charging_paused_low_temperature": "Зарядка призупинена: температура акумулятора занадто низька",
+          "maintenance_paused": "Призупинено в точці обслуговування"
+        }
+      },
+      "charging_status": {
+        "name": "Статус зарядки",
+        "state": {
+          "not_docked": "Не стикається",
+          "charging": "Зарядка",
+          "not_charging": "Не заряджається",
+          "charging_completed": "Зарядка завершена",
+          "return_to_charge": "Повернення до заряду",
+          "charging_paused_high_temperature": "Зарядка призупинена: температура акумулятора занадто висока",
+          "charging_paused_low_temperature": "Зарядка призупинена: температура акумулятора занадто низька"
+        }
+      },
+      "mowing_progress": {
+        "name": "Косіння прогресу"
+      },
+      "bluetooth_connection": {
+        "name": "Блюдот"
+      },
+      "dnd_status": {
+        "name": "Не турбувати"
+      },
+      "charging_schedule": {
+        "name": "Графік зарядки"
+      },
+      "timezone": {
+        "name": "Часовий пояс"
+      },
+      "device_code": {
+        "name": "Код пристрою"
+      },
+      "current_task": {
+        "name": "Поточне завдання",
+        "state": {
+          "idle": "Немає завдання",
+          "starting": "Запуск",
+          "mowing": "Скошування",
+          "paused": "Призупинено",
+          "finished": "Завершено",
+          "failed": "Помилка",
+          "exit": "Зупинено",
+          "returning_to_dock": "Повернення на станцію"
+        }
+      },
+      "consumable_blade_health": {
+        "name": "Стан ножів"
+      },
+      "consumable_brush_health": {
+        "name": "Стан щітки"
+      },
+      "consumable_robot_health": {
+        "name": "Стан обслуговування"
+      }
+    },
+    "binary_sensor": {
+      "firmware_update_available": {
+        "name": "Доступне оновлення прошивки"
+      }
+    },
+    "camera": {
+      "map_camera": {
+        "name": "Карта"
+      }
+    },
+    "button": {
+      "reset_blade": {
+        "name": "Скинути лічильник ножів"
+      },
+      "reset_brush": {
+        "name": "Скинути лічильник щітки"
+      },
+      "reset_robot_maintenance": {
+        "name": "Скинути лічильник обслуговування"
+      },
+      "dock_without_stopping": {
+        "name": "Повернутися на базу без зупинки завдання"
+      }
+    },
+    "number": {
+      "cutting_height": {
+        "name": "Висота скошування"
+      }
+    }
+  }
+}

@@ -1,0 +1,749 @@
+blade-runner-neon-night:
+  # ══════════════════════════════════════════════════════════
+  # 🌃 BLADE RUNNER NEON NIGHT
+  # Version vibrante avec néons intenses
+  # ══════════════════════════════════════════════════════════
+  
+  # ===== NEON PALETTE - BLADE RUNNER 2049 =====
+  # Couleurs extraites de l'image JOI
+  neon-pink: "#FF4D94"
+  hot-pink: "#FF0080"
+  magenta-glow: "#D946EF"
+  electric-blue: "#00D4FF"
+  cyan-blue: "#4DD0E1"
+  deep-violet: "#2D1B4E"
+  dark-purple: "#1A1428"
+  void-black: "#0F0A1E"
+  
+  # Effects
+  neon-blur: "blur(16px) saturate(200%)"
+  intense-ease: "cubic-bezier(0.68, -0.55, 0.265, 1.55)"
+  
+  # Font
+  primary-font-family: "'Inter', 'Roboto', 'SF Pro Display', -apple-system, sans-serif"
+  
+  # ===== BASE COLORS =====
+  primary-color: "var(--electric-blue)"
+  primary-background-color: "var(--void-black)"
+  primary-text-color: "#00D4FF"
+  secondary-text-color: "rgba(0, 212, 255, 0.8)"
+  
+  # ===== WALLPAPER =====
+  lovelace-background: "center / cover no-repeat fixed, repeating-linear-gradient(0deg, transparent 0px, transparent 39px, rgba(0, 212, 255, 0.12) 39px, rgba(0, 212, 255, 0.12) 40px), repeating-linear-gradient(90deg, transparent 0px, transparent 39px, rgba(255, 77, 148, 0.10) 39px, rgba(255, 77, 148, 0.10) 40px), radial-gradient(ellipse at top, #2D1B4E 0%, #0F0A1E 100%)"
+  
+  # ===== DARK MODE =====
+  modes:
+    dark:
+      # Backgrounds
+      primary-background-color: "#0F0A1E"
+      secondary-background-color: "#1A1428"
+      
+      # Text - Plus lumineux
+      primary-text-color: "#FFFFFF"
+      secondary-text-color: "rgba(255, 255, 255, 0.85)"
+      disabled-text-color: "rgba(255, 255, 255, 0.4)"
+      
+      # Colors - Rose/Violet/Bleu
+      primary-color: "var(--electric-blue)"
+      accent-color: "var(--neon-pink)"
+      
+      # App Header
+      app-header-background-color: "rgba(26, 20, 40, 0.90)"
+      app-header-text-color: "var(--electric-blue)"
+      app-header-selection-bar-color: "var(--electric-blue)"
+      app-header-edit-background-color: "var(--deep-violet)"
+      app-header-edit-text-color: "var(--electric-blue)"
+      
+      # Sidebar - Plus de glow
+      sidebar-background-color: "rgba(26, 20, 40, 0.70)"
+      sidebar-text-color: "#FFFFFF"
+      sidebar-icon-color: "var(--electric-blue)"
+      sidebar-selected-background-color: "rgba(0, 212, 255, 0.18)"
+      sidebar-selected-text-color: "var(--electric-blue)"
+      sidebar-selected-icon-color: "var(--electric-blue)"
+      
+      # Cards - Plus transparentes, plus de glow
+      card-background-color: "rgba(26, 20, 40, 0.80)"
+      ha-card-background: "rgba(26, 20, 40, 0.70)"
+      ha-card-backdrop-filter: "var(--neon-blur)"
+      ha-card-border-radius: "16px"
+      ha-card-border-width: "2px"
+      ha-card-border-color: "rgba(255, 77, 148, 0.3)"
+      ha-card-box-shadow: "0 8px 32px rgba(0, 0, 0, 0.6), 0 0 40px rgba(255, 77, 148, 0.2), inset 0 0 20px rgba(0, 212, 255, 0.05)"
+      
+      # States - Couleurs vives
+      state-icon-color: "var(--electric-blue)"
+      state-icon-active-color: "var(--neon-pink)"
+      state-active-color: "var(--hot-pink)"
+      state-inactive-color: "rgba(255, 255, 255, 0.3)"
+      
+      # Switches - Néon
+      switch-checked-button-color: "var(--neon-pink)"
+      switch-checked-track-color: "rgba(255, 77, 148, 0.6)"
+      switch-unchecked-button-color: "rgba(255, 255, 255, 0.4)"
+      switch-unchecked-track-color: "rgba(255, 255, 255, 0.15)"
+      
+      # Sliders - Multi-couleurs
+      slider-color: "var(--electric-blue)"
+      slider-secondary-color: "var(--neon-pink)"
+      slider-track-color: "rgba(0, 212, 255, 0.3)"
+      
+      # Dialogs
+      dialog-backdrop-filter: "var(--neon-blur)"
+      dialog-background-color: "rgba(26, 20, 40, 0.95)"
+      mdc-dialog-scrim-color: "rgba(15, 10, 30, 0.85)"
+      
+      # Other
+      divider-color: "rgba(255, 77, 148, 0.2)"
+      error-color: "#FF0055"
+      success-color: "#00D4FF"
+      warning-color: "#FF4D94"
+      info-color: "var(--electric-blue)"
+      
+      # RGB values
+      rgb-primary-color: "0, 212, 255"
+      rgb-accent-color: "255, 77, 148"
+      
+  # ===== CARD-MOD =====
+  card-mod-theme: blade-runner-neon-night
+  
+  card-mod-card: |
+    ha-card {
+      font-family: var(--primary-font-family) !important;
+      transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    /* ═══ INTENSE NEON GLOW ═══ */
+    ha-card {
+      box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.6),
+        0 0 40px rgba(0, 255, 255, 0.25),
+        0 0 60px rgba(255, 0, 255, 0.15),
+        inset 0 0 20px rgba(0, 255, 255, 0.08);
+    }
+    
+    /* ═══ HOLOGRAPHIC SHIMMER ═══ */
+    @keyframes neonShimmer {
+      0%, 100% {
+        background-position: 0% 0%;
+        opacity: 0.05;
+      }
+      50% {
+        background-position: 100% 100%;
+        opacity: 0.12;
+      }
+    }
+    
+    ha-card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 16px;
+      background: 
+        repeating-linear-gradient(
+          45deg,
+          transparent,
+          transparent 2px,
+          rgba(0, 255, 255, 0.04) 2px,
+          rgba(0, 255, 255, 0.04) 4px
+        ),
+        repeating-linear-gradient(
+          -45deg,
+          transparent,
+          transparent 2px,
+          rgba(255, 0, 255, 0.03) 2px,
+          rgba(255, 0, 255, 0.03) 4px
+        ),
+        radial-gradient(circle at 50% 0%, 
+          rgba(0, 255, 255, 0.08) 0%, 
+          transparent 60%);
+      background-size: 200% 200%;
+      pointer-events: none;
+      animation: neonShimmer 6s ease-in-out infinite;
+    }
+    
+    /* ═══ NEON BORDERS - ROSE/BLEU/VIOLET ═══ */
+    ha-card:nth-child(3n+1)::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, 
+                  transparent 0%, 
+                  var(--electric-blue) 50%, 
+                  transparent 100%);
+      box-shadow: 0 0 15px var(--electric-blue);
+      opacity: 0.8;
+    }
+    
+    ha-card:nth-child(3n+2)::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, 
+                  transparent 0%, 
+                  var(--neon-pink) 50%, 
+                  transparent 100%);
+      box-shadow: 0 0 15px var(--neon-pink);
+      opacity: 0.8;
+    }
+    
+    ha-card:nth-child(3n)::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, 
+                  transparent 0%, 
+                  var(--magenta-glow) 50%, 
+                  transparent 100%);
+      box-shadow: 0 0 15px var(--magenta-glow);
+      opacity: 0.8;
+    }
+    
+    /* ═══ PULSING GLOW - ROSE/BLEU ═══ */
+    @keyframes neonPulse {
+      0%, 100% {
+        box-shadow: 
+          0 8px 32px rgba(0, 0, 0, 0.6),
+          0 0 40px rgba(255, 77, 148, 0.25),
+          0 0 60px rgba(0, 212, 255, 0.15);
+      }
+      50% {
+        box-shadow: 
+          0 8px 32px rgba(0, 0, 0, 0.6),
+          0 0 60px rgba(255, 77, 148, 0.4),
+          0 0 80px rgba(0, 212, 255, 0.25);
+      }
+    }
+    
+    ha-card {
+      animation: neonPulse 4s ease-in-out infinite;
+    }
+    
+    ha-card:nth-child(2) { animation-delay: 0.5s; }
+    ha-card:nth-child(3) { animation-delay: 1s; }
+    ha-card:nth-child(4) { animation-delay: 1.5s; }
+    ha-card:nth-child(5) { animation-delay: 2s; }
+    
+    /* ═══ INTENSE HOVER ═══ */
+    @media (hover: hover) {
+      ha-card:hover {
+        transform: translateY(-4px) scale(1.02);
+        box-shadow: 
+          0 16px 48px rgba(0, 0, 0, 0.8),
+          0 0 60px rgba(255, 77, 148, 0.4),
+          0 0 80px rgba(0, 212, 255, 0.3),
+          inset 0 0 30px rgba(217, 70, 239, 0.1);
+      }
+    }
+
+    @media (hover: hover) {
+      :host(:hover) ha-card {
+        box-shadow: 0 0 40px rgba(255,77,148,0.6),
+                    0 0 60px rgba(217,70,239,0.4),
+                    0 0 80px rgba(0,212,255,0.3) !important;
+        animation: cardGlowGlitchs 0.8s ease;
+        will-change: box-shadow;
+      }
+    }
+
+    @keyframes cardGlowGlitch {
+      0%, 100% { box-shadow: 0 0 40px rgba(255,77,148,0.6), 0 0 60px rgba(217,70,239,0.4), 0 0 80px rgba(0,212,255,0.3); }
+      15% { box-shadow: 6px 0 45px #FF4D94, -6px 0 45px #D946EF; }
+      30% { box-shadow: -6px 0 45px #FF0080, 6px 0 45px #00D4FF; }
+      45% { box-shadow: 4px 4px 45px #D946EF, -4px -4px 45px #FF4D94; }
+      60% { box-shadow: 0 0 50px rgba(217,70,239,0.7), 0 0 70px rgba(255,77,148,0.5); }
+      75% { box-shadow: 3px -3px 45px #00D4FF, -3px 3px 45px #FF0080; }
+      90% { box-shadow: 0 0 42px rgba(255,77,148,0.65), 0 0 65px rgba(0,212,255,0.4); }
+    }
+
+    @media (hover: hover) {
+      :host(:hover) ha-icon,
+      :host(:hover) ha-state-icon {
+        animation: iconGlitchSpin 0.8s ease;
+        will-change: transform, filter;
+      }
+    }
+
+    @keyframes iconGlitchSpin {
+      0%, 100% { transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 8px currentColor); }
+      12% { transform: scale(1.08) rotate(-10deg); filter: drop-shadow(5px 0 14px #FF4D94) drop-shadow(-5px 0 14px #D946EF); }
+      24% { transform: scale(1.15) rotate(10deg); filter: drop-shadow(-5px 0 14px #FF0080) drop-shadow(5px 0 14px #00D4FF); }
+      36% { transform: scale(1.12) rotate(-6deg); filter: drop-shadow(4px 4px 14px #D946EF) drop-shadow(-4px -4px 14px #FF4D94); }
+      48% { transform: scale(1.1) rotate(6deg); filter: drop-shadow(-3px 3px 14px #00D4FF) drop-shadow(3px -3px 14px #FF0080); }
+      60% { transform: scale(1.08) rotate(-4deg); filter: drop-shadow(0 0 16px currentColor); }
+      72% { transform: scale(1.06) rotate(4deg); filter: drop-shadow(0 0 14px currentColor); }
+      84% { transform: scale(1.03) rotate(-2deg); filter: drop-shadow(0 0 12px currentColor); }
+    }
+
+    @media (hover: hover) {
+      :host(:hover) .name {
+        animation: nameGlitch 0.8s ease;
+        will-change: transform;
+      }
+    }
+
+    @keyframes nameGlitch {
+      0%, 100% { transform: translate(0); text-shadow: none; }
+      15% { transform: translate(-2px, 0); text-shadow: 2px 0 #FF4D94, -2px 0 #D946EF; }
+      30% { transform: translate(2px, 0); text-shadow: -2px 0 #FF0080, 2px 0 #00D4FF; }
+      45% { transform: translate(-1.5px, 0); text-shadow: 1.5px 1.5px #D946EF, -1.5px -1.5px #FF4D94; }
+      60% { transform: translate(1.5px, 0); text-shadow: -1px 1px #00D4FF, 1px -1px #FF0080; }
+      75% { transform: translate(-1px, 0); text-shadow: 1px 0 #FF4D94, -1px 0 #D946EF; }
+      90% { transform: translate(0.5px, 0); text-shadow: 0 0 12px #D946EF; }
+    }
+    
+    /* ═══ NEON ICONS - BASE GLOW ═══ */
+    ha-icon, ha-state-icon {
+      filter: drop-shadow(0 0 6px currentColor) drop-shadow(0 0 12px currentColor);
+      transition: all 0.3s ease;
+    }
+    
+    /* ═══ DISABLE ON MOBILE ═══ */
+    @media (max-width: 768px), (hover: none) {
+      :host(:hover) .container,
+      :host(:hover) ha-card,
+      :host(:hover) ha-icon,
+      :host(:hover) ha-state-icon,
+      :host(:hover) .name {
+        animation: none !important;
+        transform: none !important;
+        will-change: auto !important;
+      }
+      
+      .container, ha-card {
+        transition: none !important;
+      }
+      
+      ha-card {
+        animation: neonPulse 4s ease-in-out infinite !important;
+      }
+    }
+  
+  card-mod-root-yaml: |
+    .: |
+      * {
+        font-family: var(--primary-font-family) !important;
+      }
+      
+      body {
+        position: relative;
+        background: transparent !important;
+      }
+      
+      /* ═══ SCANLINE MULTICOLORE AVEC GLITCH ═══ */
+      @keyframes neonScan {
+        0% { 
+          transform: translateY(-100%);
+          opacity: 0;
+          background: linear-gradient(to bottom, transparent, rgba(0, 212, 255, 0.9), transparent);
+        }
+        33% {
+          background: linear-gradient(to bottom, transparent, rgba(255, 77, 148, 0.9), transparent);
+          opacity: 0.8;
+        }
+        66% {
+          background: linear-gradient(to bottom, transparent, rgba(217, 70, 239, 0.9), transparent);
+          opacity: 0.8;
+        }
+        100% { 
+          transform: translateY(100vh);
+          opacity: 0;
+          background: linear-gradient(to bottom, transparent, rgba(0, 212, 255, 0.9), transparent);
+        }
+      }
+      
+      @keyframes neonGlitch {
+        0%, 88%, 100% { 
+          filter: blur(0) hue-rotate(0deg);
+          transform: translateX(0) scaleX(1);
+        }
+        90% { 
+          filter: blur(3px) hue-rotate(30deg);
+          transform: translateX(8px) scaleX(1.8);
+        }
+        92% { 
+          filter: blur(1px) hue-rotate(-20deg);
+          transform: translateX(-5px) scaleX(0.6);
+        }
+        94% { 
+          filter: blur(2px) hue-rotate(15deg);
+          transform: translateX(3px) scaleX(1.4);
+        }
+      }
+      
+      body::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        animation: 
+          neonScan 10s linear infinite,
+          neonGlitch 10s step-end infinite;
+        box-shadow: 
+          0 0 30px currentColor, 
+          0 0 60px currentColor,
+          0 0 90px rgba(0, 212, 255, 0.3);
+        pointer-events: none;
+        z-index: 99999;
+        will-change: transform;
+      }
+      
+      /* ═══ ATMOSPHÈRE INTENSE - ROSE/VIOLET/BLEU ═══ */
+      @keyframes neonAtmosphere {
+        0%, 100% {
+          background-position: 0% 0%, 100% 100%, 50% 50%;
+          opacity: 1;
+        }
+        50% {
+          background-position: 100% 100%, 0% 0%, 50% 50%;
+          opacity: 0.8;
+        }
+      }
+      
+      body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background: 
+          radial-gradient(ellipse at 15% 25%, rgba(0, 212, 255, 0.08) 0%, transparent 45%),
+          radial-gradient(ellipse at 85% 75%, rgba(255, 77, 148, 0.08) 0%, transparent 45%),
+          radial-gradient(ellipse at 50% 50%, rgba(217, 70, 239, 0.05) 0%, transparent 60%);
+        pointer-events: none;
+        z-index: 0;
+        animation: neonAtmosphere 20s ease-in-out infinite;
+      }
+      
+      /* ═══ CORNERS NÉON PULSANTS ═══ */
+      @keyframes neonCornerPulse {
+        0%, 100% { 
+          opacity: 0.4;
+          box-shadow: 0 0 10px currentColor;
+        }
+        50% { 
+          opacity: 0.8;
+          box-shadow: 0 0 20px currentColor, 0 0 40px currentColor;
+        }
+      }
+      
+      ha-panel-lovelace::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 50px;
+        height: 50px;
+        border-top: 3px solid var(--electric-blue);
+        border-left: 3px solid var(--electric-blue);
+        pointer-events: none;
+        z-index: 1;
+        animation: neonCornerPulse 3s ease-in-out infinite;
+      }
+      
+      ha-panel-lovelace::after {
+        content: "";
+        position: fixed;
+        bottom: 0;
+        right: 0;
+        width: 50px;
+        height: 50px;
+        border-bottom: 3px solid var(--neon-pink);
+        border-right: 3px solid var(--neon-pink);
+        pointer-events: none;
+        z-index: 1;
+        animation: neonCornerPulse 3s ease-in-out infinite 1.5s;
+      }
+      
+      /* ═══ TEXT GLOW - ROSE/BLEU ═══ */
+      @keyframes textNeonGlow {
+        0%, 90%, 100% { 
+          text-shadow: 
+            0 0 10px currentColor,
+            0 0 20px currentColor;
+        }
+        93% { 
+          text-shadow: 
+            3px 0 var(--neon-pink),
+            -3px 0 var(--electric-blue),
+            0 0 30px currentColor;
+        }
+        96% { 
+          text-shadow: 
+            -2px 0 var(--electric-blue),
+            2px 0 var(--neon-pink),
+            0 0 30px currentColor;
+        }
+      }
+      
+      h1, h2, h3, .card-header {
+        font-weight: 300;
+        letter-spacing: 1px;
+        color: #FFFFFF;
+        text-shadow: 
+          0 0 10px currentColor,
+          0 0 20px currentColor,
+          0 0 30px rgba(255, 77, 148, 0.5);
+        animation: textNeonGlow 8s infinite;
+      }
+      
+      /* ═══ APP HEADER ICONS - COULEUR ═══ */
+      app-toolbar ha-icon,
+      app-toolbar ha-svg-icon,
+      app-toolbar ha-icon-button,
+      app-toolbar mwc-icon-button,
+      app-toolbar paper-icon-button,
+      .tab-bar ha-icon,
+      .tab-bar ha-svg-icon,
+      .tab-bar ha-icon-button {
+        color: var(--electric-blue) !important;
+        fill: var(--electric-blue) !important;
+        --mdc-icon-button-size: 48px !important;
+        filter: drop-shadow(0 0 6px var(--electric-blue)) drop-shadow(0 0 12px var(--electric-blue)) !important;
+      }
+      
+      app-toolbar ha-icon svg,
+      .tab-bar ha-icon svg {
+        fill: var(--electric-blue) !important;
+      }
+      
+      /* ═══ DÉSACTIVATION DES EFFETS SUR MOBILE ═══ */
+      @media (max-width: 768px), (hover: none) {
+        body::before,
+        body::after,
+        ha-panel-lovelace::before,
+        ha-panel-lovelace::after {
+          display: none !important;
+        }
+        
+        h1, h2, h3, .card-header {
+          animation: none !important;
+          color: #FFFFFF !important;
+          text-shadow: none !important;
+        }
+        
+        /* Texte blanc sur mobile */
+        * {
+          color: #FFFFFF !important;
+        }
+      }
+      
+      /* ═══ ACCESSIBILITÉ ═══ */
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+  
+  card-mod-sidebar: |
+    :host, ha-sidebar {
+      backdrop-filter: blur(16px) saturate(200%) !important;
+      background: rgba(26, 20, 40, 0.50) !important;
+      color: #FFFFFF !important;
+      position: relative;
+      box-shadow: inset -3px 0 0 rgba(0,212,255,0.60),
+                  inset -25px 0 50px rgba(0,0,0,0.50),
+                  5px 0 40px rgba(255,77,148,0.15);
+      font-family: var(--primary-font-family) !important;
+    }
+    
+    /* Animated border pulse - BLEU/ROSE */
+    :host::before, ha-sidebar::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 3px;
+      height: 100%;
+      background: linear-gradient(180deg, 
+                  transparent 0%, 
+                  var(--electric-blue) 30%,
+                  var(--neon-pink) 50%,
+                  var(--electric-blue) 70%, 
+                  transparent 100%);
+      box-shadow: 0 0 20px var(--electric-blue);
+      animation: sidebarPulse 3s ease-in-out infinite;
+      z-index: 10;
+    }
+    
+    @keyframes sidebarPulse {
+      0%, 100% {
+        opacity: 0.6;
+        box-shadow: 0 0 20px var(--electric-blue);
+      }
+      50% {
+        opacity: 1;
+        box-shadow: 0 0 40px var(--neon-pink),
+                    0 0 60px rgba(255,77,148,0.5);
+      }
+    }
+    
+    /* Logo intense glow - BLEU */
+    .menu ha-icon,
+    .menu ha-svg-icon {
+      filter: 
+        drop-shadow(0 0 8px var(--electric-blue)) 
+        drop-shadow(0 0 16px var(--electric-blue))
+        drop-shadow(0 0 24px rgba(0, 212, 255, 0.5)) !important;
+      color: var(--electric-blue) !important;
+    }
+    
+    /* Title neon qui claque - BLEU/ROSE */
+    @keyframes titleGlow {
+      0%, 100% {
+        text-shadow: 
+          0 0 10px var(--electric-blue),
+          0 0 20px var(--electric-blue),
+          0 0 30px rgba(0, 212, 255, 0.6),
+          0 0 40px rgba(0, 212, 255, 0.4);
+      }
+      50% {
+        text-shadow: 
+          0 0 15px var(--neon-pink),
+          0 0 30px var(--neon-pink),
+          0 0 45px rgba(255, 77, 148, 0.8),
+          0 0 60px rgba(255, 77, 148, 0.5),
+          2px 2px 0 var(--electric-blue),
+          -2px -2px 0 var(--magenta-glow);
+      }
+    }
+    
+    .menu .title {
+      color: #FFFFFF !important;
+      font-weight: 400;
+      font-size: 1.1em;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      text-shadow: 
+        0 0 10px var(--electric-blue),
+        0 0 20px var(--electric-blue),
+        0 0 30px rgba(0, 212, 255, 0.5);
+      animation: titleGlow 4s ease-in-out infinite;
+      background: linear-gradient(90deg, 
+                  var(--electric-blue) 0%,
+                  var(--neon-pink) 50%,
+                  var(--electric-blue) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      filter: drop-shadow(0 0 20px var(--electric-blue));
+    }
+    
+    /* Menu items */
+    ha-md-list-item {
+      transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      margin: 2px 8px;
+      border-radius: 12px;
+    }
+    
+    ha-md-list-item ha-icon,
+    ha-md-list-item ha-svg-icon {
+      color: rgba(255, 255, 255, 0.7) !important;
+      filter: drop-shadow(0 0 4px currentColor);
+      transition: all 0.3s ease;
+    }
+    
+    /* Hover neon burst - ROSE */
+    @media (hover: hover) {
+      ha-md-list-item:hover {
+        background: rgba(255, 77, 148, 0.12) !important;
+        transform: translateX(8px);
+        will-change: transform;
+      }
+      
+      ha-md-list-item:hover ha-icon,
+      ha-md-list-item:hover ha-svg-icon {
+        color: var(--neon-pink) !important;
+        filter: 
+          drop-shadow(0 0 8px var(--neon-pink)) 
+          drop-shadow(0 0 16px var(--neon-pink));
+        transform: scale(1.2);
+        will-change: transform, filter;
+      }
+      
+      ha-md-list-item:hover span {
+        color: var(--neon-pink) !important;
+      }
+    }
+    
+    /* Selected with pulse - BLEU */
+    @keyframes selectedNeonPulse {
+      0%, 100% {
+        box-shadow: 
+          0 0 20px rgba(0, 212, 255, 0.3),
+          inset 0 0 20px rgba(0, 212, 255, 0.1);
+      }
+      50% {
+        box-shadow: 
+          0 0 30px rgba(0, 212, 255, 0.5),
+          inset 0 0 30px rgba(0, 212, 255, 0.2);
+      }
+    }
+    
+    ha-md-list-item.selected {
+      background: linear-gradient(90deg,
+                  rgba(0, 212, 255, 0.25) 0%,
+                  rgba(0, 212, 255, 0.08) 100%) !important;
+      border-left: 3px solid var(--electric-blue);
+      animation: selectedNeonPulse 2s ease-in-out infinite;
+    }
+    
+    ha-md-list-item.selected ha-icon,
+    ha-md-list-item.selected ha-svg-icon {
+      color: var(--electric-blue) !important;
+      filter: 
+        drop-shadow(0 0 10px var(--electric-blue)) 
+        drop-shadow(0 0 20px var(--electric-blue));
+    }
+    
+    ha-md-list-item.selected span {
+      color: var(--electric-blue) !important;
+      text-shadow: 0 0 10px var(--electric-blue);
+    }
+    
+    /* Neon divider - BLEU/ROSE */
+    .divider {
+      background: linear-gradient(90deg,
+                  transparent 0%,
+                  var(--electric-blue) 25%,
+                  var(--neon-pink) 50%,
+                  var(--electric-blue) 75%,
+                  transparent 100%);
+      height: 2px;
+      margin: 12px 16px;
+      box-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+    }
+    
+    /* Disable animations on mobile */
+    @media (max-width: 768px), (hover: none) {
+      :host::before,
+      ha-sidebar::before,
+      ha-md-list-item.selected,
+      .menu .title {
+        animation: none !important;
+      }
+      
+      ha-md-list-item {
+        transition: none !important;
+      }
+    }
+    
+    /* Accessibility */
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation: none !important;
+        transition: none !important;
+      }
+    }

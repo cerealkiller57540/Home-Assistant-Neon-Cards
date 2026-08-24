@@ -1,0 +1,346 @@
+# =============================================================================
+#  ECODAN — COUCHE DÉTERMINISTE  (la couche GRATUITE du système)
+#
+#  Produit la cible de bias "par défaut" + le baseline appris la nuit. Aucune IA
+#  ici : tout est calculé par templates/automations HA. heat_agent.py lit ce
+#  sensor (état + attributs) comme plan de référence et ne dévie qu'en escalade.
+#
+#  SEAMS (points de contact avec le reste du système)
+#   - sensor.ecodan_planned_bias                          -> SORTIE : bias planifié (état)
+#                                                            + bundle de contexte (attributs)
+#                                                            lus par heat_agent (gate + LLM)
+#   - input_number.heat_pump_bias_off_peak                -> baseline HC nuit appris
+#                                                            PROPRIÉTAIRE EXCLUSIF = self-learning 06:22.
+#                                                            Personne d'autre n'écrit dessus (ni heat_agent).
+#   - number.ecodan_heatpump_auto_adaptive_setpoint_bias  -> sortie finale appliquée à la PAC
+#                                                            (écrite par heat_agent, pas ici)
+#
+#  HORLOGE vs TARIF : le tarif (sensor.lixee_current_price) fait autorité pour
+#  savoir si on est en heures creuses ; l'horloge ne sert qu'à donner la FORME de
+#  la courbe (quelle phase, quel niveau de bias).
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1. ENTITÉS HELPER (persistantes) — trackers nuit + miroir météo
+#    Survivent aux redémarrages (mode: box). Alimentent le self-learning 06:22
+#    et la card dashboard. Valeurs "sentinelles" volontairement hautes au reset
+#    (99 / 50) pour que le premier min() relevé prenne le dessus.
+# -----------------------------------------------------------------------------
+input_number:
+  hc_min_salon:                       # min de température salon relevé pendant la HC nuit (00h20->06h20)
+    name: HC min salon (tracker nuit)
+    min: 0
+    max: 99                           # 99 = sentinelle "pas encore de relevé" (cf. reset 00h20)
+    step: 0.1
+    mode: box
+
+  ext_min_nuit:                       # min de température extérieure pendant la même fenêtre
+    name: Ext min nuit (tracker)
+    min: -40
+    max: 50                           # 50 = sentinelle "pas encore de relevé"
+    step: 0.1
+    mode: box
+
+  ecodan_meteo_min_12h:               # miroir persistant du min météo 12h (maj horaire, section 5)
+    name: Ecodan - Météo min 12h (°C)
+    min: -20
+    max: 45
+    step: 0.1
+    mode: box
+    icon: mdi:thermometer-low
+
+# -----------------------------------------------------------------------------
+# 2. CIBLE DÉTERMINISTE — sensor.ecodan_planned_bias
+#    L'état = le bias planifié (clampé [-2, 3]). Les attributs = le bundle de
+#    contexte consommé par heat_agent (phase, tarif, temp, PAC, solaire, modèle).
+# -----------------------------------------------------------------------------
+template:
+  - sensor:
+      - name: ecodan_planned_bias
+        unique_id: ecodan_planned_bias
+        unit_of_measurement: "C"
+        # ─────────────────────────────────────────────────────────────────────
+        # ALGORITHME DU BIAS PLANIFIÉ (état du sensor)
+        #
+        # tm = multiplicateur de froid (plus il fait froid, plus on pré-chauffe fort) :
+        #     ext>=7 ->0.7 | ext>=3 ->1.0 | ext>=0 ->1.35 | ext<0 ->1.7
+        # dboost = appoint dégivrage/grand froid : defrost ->0.5 | ext<1 ->0.2 | sinon 0
+        # sol = lecture du surplus PV : >=1500W ->'soak' | >=500W ->'neutralize' | sinon 'none'
+        #
+        # TABLE DES PHASES (bornes en minutes depuis minuit -> heure) :
+        #   HC_NUIT     00h20-06h20  b = opb            (heures creuses nuit = baseline APPRIS)
+        #   MORNING     06h20-08h00  b = 0.4            (relance douce après la nuit)
+        #   JOURNEE     08h00-14h00  b = 0.15           (maintien mini, l'enveloppe DPE A porte)
+        #   PRE_HC_PM   14h00-14h20  b = 0.65/0.4       (0.65 si surplus PV>=500, sinon 0.4)
+        #   HC_PM       14h20-16h20  b = min(1.85·tm + dboost, 3.0)   (grosse charge HC après-midi)
+        #   POST_HC     16h20-17h00  b = 0.35           (fin de charge)
+        #   PEAK_COAST  17h00-21h00  b = -1.0           (pointe : on COAST sur l'inertie dalle,
+        #                                                on évite l'import réseau cher)
+        #   SOIREE      21h00-23h50  b = -0.25          (léger délestage)
+        #   PRE_NUIT    23h50-00h20  b = 0.55           (pré-charge avant la HC nuit)
+        #
+        # SOLAIRE = "batterie dalle" (pas de revente -> PV gratuit gagne toujours ; seule
+        # limite = surchauffe, maison RT2012 étanche). marge = (consigne +1°C) − salon ;
+        # le salon intègre déjà solaire + gains internes (PC) + dalle. Soak proportionnel à
+        # la marge : soak & marge>=1.5 -> +0.8 ; >=0.8 -> +0.5 ; >0 -> +0.2 ; neutralize &
+        # marge>=0.5 -> +0.2. marge<=0 (plafond atteint) -> RIEN. En PEAK_COAST le soak
+        # override partiellement le coast (b=sb). Jamais en heures creuses.
+        # CLAMP FINAL : b borné à [-2.0, 3.0].
+        # Pour décaler une fenêtre : éditer les bornes minutes ICI **et** dans l'attribut `phase`.
+        # ─────────────────────────────────────────────────────────────────────
+        state: >
+          {% set m      = now().hour * 60 + now().minute %}
+          {% set ext    = states('sensor.temperature_exterieure') | float(7) %}
+          {% set opb    = states('input_number.heat_pump_bias_off_peak') | float(1.0) %}
+          {% set surplus = states('sensor.surplus_solaire_disponible') | float(0) %}
+          {% set price  = states('sensor.lixee_current_price') | lower %}
+          {% set is_hc  = 'creuse' in price %}
+          {% set defrost = is_state('binary_sensor.ecodan_heatpump_defrost', 'on') %}
+          {% set salon  = states('sensor.thermometre_salon_temperature') | float(20) %}
+          {% set sp     = state_attr('climate.ecodan_heatpump_virtual_thermostat_z1', 'temperature') | float(20.25) %}
+          {% set marge  = (sp + 1.0) - salon %}{# place avant le plafond de soak = consigne +1°C #}
+
+          {% if   ext >= 7  %}{% set tm = 0.7  %}
+          {% elif ext >= 3  %}{% set tm = 1.0  %}
+          {% elif ext >= 0  %}{% set tm = 1.35 %}
+          {% else            %}{% set tm = 1.7  %}{% endif %}
+
+          {% set dboost = 0.5 if defrost else (0.2 if ext < 1 else 0.0) %}
+
+          {% if   surplus >= 1500 %}{% set sol = 'soak' %}
+          {% elif surplus >=  500 %}{% set sol = 'neutralize' %}
+          {% else                  %}{% set sol = 'none' %}{% endif %}
+
+          {% if   m >= 20  and m < 380  %}{% set ph = 'HC_NUIT'     %}{% set b = opb %}{# 00h20-06h20 #}
+          {% elif m >= 380 and m < 480  %}{% set ph = 'MORNING'     %}{% set b = 0.4 %}{# 06h20-08h00 #}
+          {% elif m >= 480 and m < 840  %}{% set ph = 'JOURNEE'     %}{% set b = 0.15 %}{# 08h00-14h00 #}
+          {% elif m >= 840 and m < 860  %}{% set ph = 'PRE_HC_PM'   %}{% set b = 0.65 if surplus >= 500 else 0.4 %}{# 14h00-14h20 #}
+          {% elif m >= 860 and m < 980  %}{% set ph = 'HC_PM'       %}{% set b = [1.85 * tm + dboost, 3.0] | min %}{# 14h20-16h20 #}
+          {% elif m >= 980 and m < 1020 %}{% set ph = 'POST_HC'     %}{% set b = 0.35 %}{# 16h20-17h00 #}
+          {% elif m >= 1020 and m < 1260%}{% set ph = 'PEAK_COAST'  %}{% set b = -1.0 %}{# 17h00-21h00 pointe #}
+          {% elif m >= 1260 and m < 1430%}{% set ph = 'SOIREE'      %}{% set b = -0.25 %}{# 21h00-23h50 #}
+          {% else                        %}{% set ph = 'PRE_NUIT'   %}{% set b = 0.55 %}{% endif %}{# 23h50-00h20 #}
+
+          {# --- "Batterie dalle" : pas de revente => le PV gratuit gagne TOUJOURS ; la seule
+                 limite est la surchauffe (RT2012 étanche : le free heat solaire+interne ne sort
+                 pas vite). marge = place restante avant le plafond ; le salon intègre DÉJÀ tous
+                 les gains (solaire + PC/interne + dalle) -> on soak d'autant plus fort que la
+                 marge est grande, et RIEN si la marge est épuisée. Jamais en heures creuses. --- #}
+          {% set sb = 0.0 %}
+          {% if not is_hc and marge > 0 %}
+            {% if   sol == 'soak' and marge >= 1.5 %}{% set sb = 0.8 %}
+            {% elif sol == 'soak' and marge >= 0.8 %}{% set sb = 0.5 %}
+            {% elif sol == 'soak'                   %}{% set sb = 0.2 %}
+            {% elif sol == 'neutralize' and marge >= 0.5 %}{% set sb = 0.2 %}{% endif %}
+          {% endif %}
+          {% if sb > 0 %}
+            {% if ph == 'PEAK_COAST' %}{% set b = sb %}{# override partiel du coast pour banker le PV #}
+            {% elif b < 1.0 %}{% set b = b + sb %}{% endif %}
+          {% endif %}
+
+          {# --- Clamp final [-2.0, 3.0] : c'est cette valeur qui devient l'état --- #}
+          {{ [[b, 3.0] | min, -2.0] | max | round(2) }}
+
+        # ─── BUNDLE DE CONTEXTE (attributs) ──────────────────────────────────
+        # Chaque attribut est lu par heat_agent via _get_planned_attrs(). Garder les
+        # NOMS synchronisés avec heat_agent.py (il fait des planned_attrs.get('<clé>')).
+        # `phase` DUPLIQUE la table de phases de l'état -> les éditer ENSEMBLE.
+        attributes:
+          phase: >
+            {% set m = now().hour * 60 + now().minute %}
+            {% if   m >= 20  and m < 380  %}HC_NUIT
+            {% elif m >= 380 and m < 480  %}MORNING
+            {% elif m >= 480 and m < 840  %}JOURNEE
+            {% elif m >= 840 and m < 860  %}PRE_HC_PM
+            {% elif m >= 860 and m < 980  %}HC_PM
+            {% elif m >= 980 and m < 1020 %}POST_HC
+            {% elif m >= 1020 and m < 1260%}PEAK_COAST
+            {% elif m >= 1260 and m < 1430%}SOIREE
+            {% else %}PRE_NUIT{% endif %}
+          tariff: "{{ 'HC' if 'creuse' in states('sensor.lixee_current_price') | lower else 'HP' }}"
+          # float(none) VOLONTAIRE (≠ float(7) de l'état) : capteur mort -> attribut None ->
+          # heat_agent escalade "capteur_ext" -> mode DÉGRADÉ LLM. Un défaut numérique ici
+          # masquait la panne au gate (le mode dégradé était inatteignable). L'ÉTAT du
+          # sensor, lui, garde float(7) : le plan doit rester calculable pendant la panne.
+          temp_ext: "{{ states('sensor.temperature_exterieure') | float(none) }}"
+          temp_mult: >
+            {% set e = states('sensor.temperature_exterieure') | float(7) %}
+            {{ 0.7 if e >= 7 else (1.0 if e >= 3 else (1.35 if e >= 0 else 1.7)) }}
+          defrost_boost: >
+            {% set e = states('sensor.temperature_exterieure') | float(7) %}
+            {{ 0.5 if is_state('binary_sensor.ecodan_heatpump_defrost', 'on') else (0.2 if e < 1 else 0.0) }}
+          defrost_active: "{{ is_state('binary_sensor.ecodan_heatpump_defrost', 'on') }}"
+          surplus_solaire: "{{ states('sensor.surplus_solaire_disponible') | float(0) }}"
+          solar_resolution: >
+            {% set s = states('sensor.surplus_solaire_disponible') | float(0) %}
+            {{ 'soak' if s >= 1500 else ('neutralize' if s >= 500 else 'none') }}
+          off_peak_boost_appris: "{{ states('input_number.heat_pump_bias_off_peak') | float(1.0) }}"
+          # float(none) VOLONTAIRE (avant : float(0) -> capteur mort = "salon à 0°C" pris
+          # pour vrai -> bias_optimal clampé à 3.0 + escalade modele_sous_consigne sur
+          # données fausses). None -> heat_agent escalade "capteur_salon" -> DÉGRADÉ propre.
+          temp_salon: "{{ states('sensor.thermometre_salon_temperature') | float(none) }}"
+          compressor_freq: "{{ states('sensor.ecodan_heatpump_compressor_frequency') | float(0) }}"
+          booster_active: "{{ is_state('binary_sensor.ecodan_heatpump_booster_heater', 'on') }}"
+          # Pente salon sur ~2h = (moyenne 1h − moyenne 3h)/2. 'none' si une moyenne manque.
+          salon_trend_2h: >
+            {% set t1 = states('sensor.salon_temp_mean_1h') | float(none) %}
+            {% set t3 = states('sensor.salon_temp_mean_3h') | float(none) %}
+            {% if t1 is not none and t3 is not none %}
+              {{ ((t1 - t3) / 2) | round(2) }}
+            {% else %}
+              none
+            {% endif %}
+          # Miroir du min météo 12h (calculé en section 5, stocké dans l'input_number).
+          meteo_min_12h: "{{ states('input_number.ecodan_meteo_min_12h') | float(none) }}"
+
+# -----------------------------------------------------------------------------
+# 3. TRACKERS NUIT — automations de capture (alimentent le self-learning 06:22)
+#    Principe : à 00h20 on arme les sentinelles (hautes), puis pendant toute la HC
+#    nuit on garde le MIN glissant du salon et de l'extérieur. À 06:22 le self-
+#    learning lit ces minima pour ajuster le baseline.
+# -----------------------------------------------------------------------------
+automation:
+  # Reset à 00h20 : début de la fenêtre HC nuit -> on repart de sentinelles hautes
+  # (99 / 50) pour que le premier relevé via min() les remplace immédiatement.
+  - alias: "Ecodan - reset trackers debut HC nuit"
+    id: ecodan_reset_trackers
+    trigger:
+      - platform: time
+        at: "00:20:00"
+    action:
+      - service: input_number.set_value
+        target: { entity_id: input_number.hc_min_salon }
+        data: { value: 99 }
+      - service: input_number.set_value
+        target: { entity_id: input_number.ext_min_nuit }
+        data: { value: 50 }
+
+  # Capture : à chaque variation de température (salon ou ext) DANS la fenêtre
+  # 00h20-06h20, on écrit min(valeur_courante_tracker, nouvelle_mesure).
+  # mode: queued -> les déclenchements rapprochés ne se court-circuitent pas.
+  - alias: "Ecodan - tracking min salon/ext HC nuit"
+    id: ecodan_track_min
+    mode: queued
+    trigger:
+      - platform: state
+        entity_id: sensor.thermometre_salon_temperature
+      - platform: state
+        entity_id: sensor.temperature_exterieure
+    condition:
+      - condition: time
+        after: "00:20:00"
+        before: "06:20:00"
+    action:
+      - service: input_number.set_value
+        target: { entity_id: input_number.hc_min_salon }
+        data:
+          value: >
+            {{ [states('input_number.hc_min_salon') | float(99),
+                states('sensor.thermometre_salon_temperature') | float(99)] | min }}
+      - service: input_number.set_value
+        target: { entity_id: input_number.ext_min_nuit }
+        data:
+          value: >
+            {{ [states('input_number.ext_min_nuit') | float(50),
+                states('sensor.temperature_exterieure') | float(50)] | min }}
+
+# -----------------------------------------------------------------------------
+# 4. SELF-LEARNING 06:22 — intégrateur proportionnel (boucle lente jour après jour)
+#    PROPRIÉTAIRE EXCLUSIF de input_number.heat_pump_bias_off_peak (= opb / baseline
+#    HC nuit utilisé en phase HC_NUIT). Personne d'autre n'écrit dessus.
+#
+#    Idée : chaque matin, on compare le point le plus froid atteint par le salon
+#    cette nuit (tmin) à la consigne confort. Si on a sous-chauffé, on monte le
+#    baseline d'un cran ; si on a sur-chauffé, on le descend. Convergence en
+#    quelques nuits (1 pas/jour) -> stable, insensible au bruit.
+#
+#      err  = setpoint_confort − tmin      (>0 = trop froid -> il faut monter opb)
+#      pas  = ±step (0.2) selon le signe de err
+#      opb' = clamp(opb + pas, 0.5, 3.0)   (ANTI-WINDUP : bornes dures)
+#
+#    GARDE-FOUS (conditions) :
+#      - deadband 0.3 : on n'ajuste pas pour un écart mineur (évite l'oscillation)
+#      - extmin > -8  : on n'apprend PAS pendant un grand froid atypique (anti-outlier)
+#      - tmin < 90    : tmin==99 = sentinelle "pas de relevé" -> on ne fait rien
+# -----------------------------------------------------------------------------
+  - alias: "Ecodan - self-learning off-peak boost"
+    id: ecodan_self_learning
+    trigger:
+      - platform: time
+        at: "06:22:00"                 # juste après la fin de fenêtre de capture (06h20)
+    variables:
+      # Cible confort = SOURCE UNIQUE = setpoint du thermostat Z1, lu en direct.
+      # Régler le thermostat suffit : le self-learning suit, il ne te combat plus.
+      setpoint_confort: "{{ state_attr('climate.ecodan_heatpump_virtual_thermostat_z1', 'temperature') | float(20.25) }}"
+      deadband: 0.3                     # zone morte : |err| en deçà -> pas d'ajustement
+      step: 0.2                         # pas d'intégration par nuit (°C de bias)
+      tmin: "{{ states('input_number.hc_min_salon') | float(99) }}"      # min salon nuit
+      extmin: "{{ states('input_number.ext_min_nuit') | float(50) }}"    # min ext nuit
+      cur: "{{ states('input_number.heat_pump_bias_off_peak') | float(1.0) }}"  # opb actuel
+      err: "{{ (setpoint_confort | float(20.25)) - tmin }}"             # erreur signée (vs cible live)
+    condition:
+      - condition: template            # plancher de chauffe : consigne parquée basse (été) => on n'apprend pas
+        value_template: "{{ setpoint_confort | float(0) >= 16 }}"   # = HEAT_FLOOR (heat_agent.py utilise >=)
+      - condition: template            # anti-outlier : pas d'apprentissage si grand froid / pas de data
+        value_template: "{{ extmin > -8 and tmin < 90 }}"
+      - condition: template            # zone morte : on n'agit que si l'écart est significatif
+        value_template: "{{ (err | abs) > deadband }}"
+    action:
+      - service: input_number.set_value
+        target: { entity_id: input_number.heat_pump_bias_off_peak }
+        data:
+          value: >
+            {% set nv = cur + (step if err > 0 else -step) %}
+            {{ [[nv, 3.0] | min, 0.5] | max | round(2) }}
+      # Trace l'ajustement dans le logbook (utile pour suivre la convergence).
+      - service: logbook.log
+        data:
+          name: Ecodan self-learning
+          message: >
+            err={{ err | round(2) }} tmin={{ tmin }} extmin={{ extmin }}
+            opb {{ cur }} -> {{ states('input_number.heat_pump_bias_off_peak') }}
+
+# -----------------------------------------------------------------------------
+# 5. MÉTÉO MIN 12H — rafraîchi chaque heure
+#    Calcule le minimum de température sur les 12 prochaines heures et le stocke
+#    dans l'input_number (persistant). Consommé par la card dashboard CH2 et exposé
+#    comme attribut meteo_min_12h. (heat_agent, lui, relit le forecast en direct.)
+#    NB : `namespace(...)` est nécessaire car une variable de boucle Jinja ne
+#    survit pas hors de la boucle ; le namespace, si.
+# -----------------------------------------------------------------------------
+  - alias: "Ecodan - update météo min 12h"
+    id: ecodan_meteo_min_12h
+    trigger:
+      - platform: time_pattern
+        hours: "/1"                    # toutes les heures
+    action:
+      - service: weather.get_forecasts
+        target: { entity_id: weather.forecast_maison }
+        data: { type: hourly }
+        response_variable: fc_resp     # récupère la prévision dans fc_resp
+      - variables:
+          # `temps` = liste brute des 12 prochaines températures (debug/affichage)
+          temps: >
+            {% set fc = fc_resp['weather.forecast_maison']['forecast'] %}
+            {% set ns = namespace(vals=[]) %}
+            {% for h in fc[:12] %}
+              {% if h.temperature is defined %}
+                {% set ns.vals = ns.vals + [h.temperature | float] %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.vals }}
+          # `t_min` = minimum glissant sur ces 12h (99 = sentinelle si aucune donnée)
+          t_min: >
+            {% set fc = fc_resp['weather.forecast_maison']['forecast'] %}
+            {% set ns = namespace(m=99) %}
+            {% for h in fc[:12] %}
+              {% if h.temperature is defined %}
+                {% set v = h.temperature | float %}
+                {% if v < ns.m %}{% set ns.m = v %}{% endif %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.m }}
+      - service: input_number.set_value
+        target: { entity_id: input_number.ecodan_meteo_min_12h }
+        data:
+          value: "{{ t_min | float(20) | round(1) }}"   # défaut 20 si t_min illisible

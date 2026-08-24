@@ -1,0 +1,666 @@
+# Neo Tokyo Theme for Home Assistant — v2
+# Cyberpunk / Blade Runner — atmosphère bleu-indigo nocturne,
+# néon rose/magenta en ponctuation, bleu électrique comme glow structurel
+# Installation : /config/themes/neo-tokyo-v2.yaml
+# Activate     : Settings → Appearance → Themes → Neo Tokyo v2
+
+neo-tokyo:
+  modes:
+    dark:
+
+      # ============================================================
+      # COULEURS DE BASE
+      # Ref images : fond = bleu-indigo noir profond (pas violet pur)
+      # primary = magenta-violet néon (ponctuation / enseignes)
+      # accent  = bleu électrique (glow ambiant / icônes idle)
+      # ============================================================
+      primary-color: "#ff10f0"                    # Hot pink/magenta - primary accent
+      accent-color: "#00fff9"                     # Cyan - secondary accent
+      secondary-color: "#6020d0"        # Indigo profond — badges, liens discrets
+      dark-primary-color: "#900aaa"     # Magenta sombre — variante éteinte du primary
+      state-active-color: "#d42aff"     # = primary — état allumé
+      state-inactive-color: "rgba(100, 130, 200, 0.18)"
+      lovelace-background: "center / cover no-repeat fixed url('/local/neo-tokyo.jpg')"
+
+      # ============================================================
+      # STATE COLORS
+      # ============================================================
+      state-on-color: "var(--state-active-color)"
+      state-off-color: "var(--state-inactive-color)"
+      state-home-color: "#00b870"
+      state-not-home-color: "#3a4862"
+      error-state-color: "var(--error-color)"
+      warning-state-color: "var(--warning-color)"
+      success-state-color: "var(--success-color)"
+      info-color: "var(--accent-color)"
+      info-state-color: "var(--accent-color)"
+
+      # ============================================================
+      # VARIABLES RGB — format "R, G, B" pour usage rgba()
+      # ex : rgba(var(--rgb-primary-color), 0.3)
+      # ============================================================
+      rgb-primary-color: "212, 42, 255"
+      rgb-secondary-color: "96, 32, 208"
+      rgb-accent-color: "24, 136, 255"
+      rgb-dark-primary-color: "144, 10, 170"
+      rgb-state-active-color: "212, 42, 255"
+      rgb-text-primary-color: "210, 218, 240"
+      rgb-disabled-color: "36, 48, 78"
+      rgb-card-background-color: "4, 8, 22"
+
+      # ============================================================
+      # TEXTE — off-white légèrement bleuté (moniteurs de surveillance)
+      # ============================================================
+      primary-text-color: "#ffffff"               # White text
+      secondary-text-color: "#b8b8ff"             # Light purple-white
+      disabled-text-color: "#28304e"
+      text-primary-color: "var(--primary-text-color)"
+      text-disabled-color: "var(--disabled-text-color)"
+
+      # ============================================================
+      # TYPOGRAPHY
+      # ============================================================
+      primary-font-family: "'Rajdhani', 'Share Tech Mono', 'Roboto', system-ui, sans-serif"
+      paper-font-common-base_-_font-family: "var(--primary-font-family)"
+      paper-font-body1_-_font-family: "var(--primary-font-family)"
+      paper-font-headline_-_font-family: "var(--primary-font-family)"
+      paper-font-title_-_font-family: "var(--primary-font-family)"
+      ha-card-header-font-family: "var(--primary-font-family)"
+      mdc-typography-font-family: "var(--primary-font-family)"
+
+      # ============================================================
+      # BACKGROUNDS — bleu-indigo-noir (ciel nocturne image 2 & 3)
+      # ============================================================
+      primary-background-color: "#020510"
+      secondary-background-color: "#060c1e"
+      card-background-color: "rgba(4, 8, 22, 0.82)"
+      paper-card-background-color: "var(--card-background-color)"
+      paper-listbox-background-color: "var(--card-background-color)"
+      paper-dialog-background-color: "rgba(3, 6, 18, 0.94)"
+      code-editor-background-color: "#010408"
+      divider-color: "rgba(var(--rgb-accent-color), 0.15)"
+      # lovelace-background: "center / cover no-repeat fixed url('/local/votre-image.jpg')"
+
+      # ============================================================
+      # CARD STYLING
+      # Bordure bleu (glow structurel), shadow magenta très subtil
+      # ============================================================
+      ha-card-border-radius: "14px"
+      ha-card-border-width: "1px"
+      ha-card-border-color: "rgba(var(--rgb-accent-color), 0.20)"
+      ha-card-box-shadow: "0 4px 28px rgba(0, 0, 0, 0.70), 0 0 12px rgba(var(--rgb-primary-color), 0.07)"
+
+      # ============================================================
+      # VARIABLES DE TUNING — intensité globale
+      # ============================================================
+      glow-opacity-idle: "0.10"
+      glow-opacity-hover: "0.25"
+      glow-opacity-active: "0.45"
+      border-opacity-idle: "0.18"
+      border-opacity-hover: "0.38"
+      blur-strength: "14px"
+      blur-strength-heavy: "20px"
+
+      # ============================================================
+      # SIDEBAR
+      # ============================================================
+      sidebar-background-color: "rgba(4, 8, 22, 0.40)" #"#0a0118"
+      sidebar-icon-color: "#b8b8ff"
+      sidebar-text-color: "#b8b8ff"
+      sidebar-selected-background-color: "#1a0f2e"
+      sidebar-selected-icon-color: "#ff10f0"
+      sidebar-selected-text-color: "#ffffff"
+
+      # ============================================================
+      # HEADER / TOOLBAR
+      # ============================================================
+      app-header-background-color: "rgba(2, 5, 16, 0.90)"
+      app-header-text-color: "var(--primary-text-color)"
+      app-header-selection-bar-color: "var(--primary-color)"
+      app-header-edit-background-color: "#050c22"
+      app-header-edit-text-color: "var(--primary-color)"
+
+      # ============================================================
+      # STATES & ICONS
+      # idle = bleu (glow structurel) / actif = magenta (enseigne néon)
+      # ============================================================
+      state-icon-color: "var(--accent-color)"
+      state-icon-active-color: "var(--state-active-color)"
+      state-icon-unavailable-color: "var(--disabled-text-color)"
+      state-unavailable-color: "#1a2238"
+      icon-color: "var(--accent-color)"
+      # icon-primary-color: "var(--state-active-color)"
+      active-icon-color: "var(--state-active-color)"
+      disabled-icon-color: "var(--disabled-text-color)"
+
+      # ============================================================
+      # CLIMATE STATES
+      # ============================================================
+      state-climate-auto-color: "var(--success-color)"
+      state-climate-cool-color: "var(--accent-color)"
+      state-climate-heat-color: "var(--dark-primary-color)"
+      state-climate-dry-color: "var(--warning-color)"
+      state-climate-fan_only-color: "var(--secondary-color)"
+      state-climate-eco-color: "var(--success-color)"
+      state-climate-idle-color: "var(--disabled-text-color)"
+      state-climate-manual-color: "var(--primary-color)"
+      state-climate-off-color: "var(--state-inactive-color)"
+
+      # ============================================================
+      # SWITCHES
+      # ============================================================
+      switch-checked-button-color: "var(--state-active-color)"
+      switch-checked-track-color: "rgba(var(--rgb-state-active-color), 0.50)"
+      switch-checked-color: "var(--state-active-color)"
+      switch-unchecked-button-color: "#203060"
+      switch-unchecked-track-color: "rgba(32, 48, 96, 0.50)"
+      switch-unchecked-color: "rgba(32, 48, 96, 0.50)"
+
+      # ============================================================
+      # SLIDERS — knob/fill bleu, secondary magenta
+      # ============================================================
+      paper-slider-knob-color: "var(--accent-color)"
+      paper-slider-knob-start-color: "var(--accent-color)"
+      paper-slider-pin-color: "var(--accent-color)"
+      paper-slider-active-color: "var(--accent-color)"
+      paper-slider-container-color: "rgba(var(--rgb-accent-color), 0.30)"
+      paper-slider-secondary-color: "var(--primary-color)"
+
+      # ============================================================
+      # DIALOGS
+      # ============================================================
+      dialog-background-color: "rgba(3, 6, 18, 0.94)"
+      #paper-dialog-background-color: "var(--dialog-background-color)"
+      mdc-dialog-scrim-color: "rgba(1, 2, 8, 0.90)"
+      mdc-dialog-content-ink-color: "var(--secondary-text-color)"
+      mdc-dialog-heading-ink-color: "var(--primary-text-color)"
+      ha-dialog-border-radius: "12px"
+
+      # ============================================================
+      # LABEL BADGES
+      # ============================================================
+      label-badge-border-color: "var(--state-active-color)"
+      label-badge-text-color: "var(--primary-text-color)"
+      label-badge-red: "var(--error-color)"
+      label-badge-blue: "var(--accent-color)"
+      label-badge-green: "var(--success-color)"
+      label-badge-yellow: "var(--warning-color)"
+      label-badge-grey: "var(--disabled-text-color)"
+
+      # ============================================================
+      # MARKDOWN
+      # ============================================================
+      markdown-text-color: "#a8b8d8"
+      markdown-link-color: "var(--accent-color)"
+      markdown-code-background-color: "rgba(var(--rgb-accent-color), 0.12)"
+
+      # ============================================================
+      # BUTTONS
+      # ============================================================
+      ha-button-neutral-color: "var(--primary-color)"
+      mdc-button-outline-color: "var(--primary-color)"
+      mdc-button-disabled-ink-color: "var(--disabled-text-color)"
+      mdc-button-disabled-outline-color: "var(--disabled-text-color)"
+      mdc-text-button-ripple-color: "rgba(var(--rgb-accent-color), 0.25)"
+      mdc-outlined-button-ripple-color: "rgba(var(--rgb-accent-color), 0.25)"
+      mdc-contained-button-ripple-color: "rgba(var(--rgb-state-active-color), 0.40)"
+
+      # ============================================================
+      # CHIPS & TABLES
+      # ============================================================
+      chip-background-color: "rgba(var(--rgb-accent-color), 0.18)"
+      table-row-background-color: "rgba(4, 8, 22, 0.80)"
+      table-row-alternative-background-color: "rgba(6, 12, 28, 0.70)"
+
+      # ============================================================
+      # PAPER COMPONENTS
+      # ============================================================
+      paper-item-icon-color: "var(--accent-color)"
+      paper-item-icon-active-color: "var(--state-active-color)"
+      paper-item-selected: "var(--state-active-color)"
+      paper-tabs-selection-bar-color: "var(--primary-color)"
+      paper-tab-ink: "var(--state-active-color)"
+      paper-input-container-color: "var(--accent-color)"
+      paper-input-container-focus-color: "var(--primary-color)"
+      paper-input-container-input-color: "var(--primary-text-color)"
+
+      # ============================================================
+      # FORM INPUTS
+      # ============================================================
+      input-idle-line-color: "rgba(var(--rgb-accent-color), 0.35)"
+      input-hover-line-color: "var(--accent-color)"
+      input-fill-color: "rgba(var(--rgb-card-background-color), 0.80)"
+      input-ink-color: "var(--primary-text-color)"
+      input-label-ink-color: "var(--secondary-text-color)"
+      input-disabled-fill-color: "rgba(var(--rgb-disabled-color), 0.20)"
+      input-disabled-ink-color: "var(--disabled-text-color)"
+      input-disabled-line-color: "rgba(var(--rgb-disabled-color), 0.25)"
+      ha-input-border-color: "rgba(var(--rgb-accent-color), 0.35)"
+      ha-input-hover-border-color: "var(--accent-color)"
+      ha-input-focus-border-color: "var(--primary-color)"
+
+      # ============================================================
+      # MATERIAL DESIGN
+      # ============================================================
+      material-background-color: "var(--primary-background-color)"
+      material-primary-color: "var(--primary-color)"
+      material-secondary-color: "var(--accent-color)"
+
+      # ============================================================
+      # MDC COMPONENTS
+      # ============================================================
+      mdc-tab-text-label-color-default: "var(--secondary-text-color)"
+      mdc-tab-color-default: "var(--accent-color)"
+      mdc-icon-color: "var(--accent-color)"
+      mdc-icon-button-color: "var(--accent-color)"
+      mdc-checkbox-unchecked-color: "var(--accent-color)"
+      mdc-radio-unchecked-color: "var(--accent-color)"
+      mdc-ripple-color: "var(--primary-color)"
+      mdc-select-dropdown-icon-color: "var(--accent-color)"
+      mdc-select-fill-color: "var(--card-background-color)"
+      mdc-select-ink-color: "var(--primary-text-color)"
+      mdc-select-label-ink-color: "var(--accent-color)"
+      mdc-select-disabled-dropdown-icon-color: "var(--disabled-text-color)"
+      mdc-select-disabled-fill-color: "rgba(var(--rgb-disabled-color), 0.20)"
+      mdc-select-disabled-ink-color: "var(--disabled-text-color)"
+      mdc-text-field-fill-color: "var(--card-background-color)"
+      mdc-text-field-ink-color: "var(--primary-text-color)"
+      mdc-text-field-label-ink-color: "var(--accent-color)"
+      mdc-text-field-disabled-fill-color: "rgba(var(--rgb-disabled-color), 0.20)"
+      mdc-text-field-disabled-ink-color: "var(--disabled-text-color)"
+      mdc-theme-on-primary: "#020510"
+      mdc-theme-on-secondary: "#020510"
+      mdc-theme-on-surface: "var(--primary-text-color)"
+      mdc-theme-text-primary-on-background: "var(--primary-text-color)"
+      mdc-theme-primary: "var(--primary-color)"
+      mdc-theme-secondary: "var(--accent-color)"
+      mdc-theme-surface: "var(--card-background-color)"
+      mdc-theme-background: "var(--primary-background-color)"
+      mdc-theme-error: "var(--error-color)"
+
+      # ============================================================
+      # HA COLOR SYSTEM
+      # ============================================================
+      ha-color-fill-neutral-quiet-resting: "rgba(4, 8, 22, 0.92)"
+      ha-color-surface-default: "rgba(4, 8, 22, 0.92)"
+      ha-color-fill-neutral-quiet: "rgba(6, 12, 28, 0.85)"
+      ha-color-on-neutral-quiet: "var(--primary-text-color)"
+      ha-color-on-neutral-normal: "var(--primary-text-color)"
+      ha-color-on-primary-normal: "var(--primary-text-color)"
+
+      # ============================================================
+      # ENERGY DASHBOARD
+      # ============================================================
+      #energy-gas-color: "#c04020"
+      #cenergy-water-color: "#2080c8"
+      energy-grid-consumption-color: "#1F7FFF"
+      energy-grid-return-color: "#00E8FF"
+      energy-solar-color: "#FFD050"
+      energy-battery-in-color: "#FF9500"
+      energy-battery-out-color: "#AAFF00"
+
+      # ============================================================
+      # HACS INTEGRATION
+      # ============================================================
+      hacs-error-color: "var(--error-color)"
+      hacs-warning-color: "var(--warning-color)"
+      hacs-update-color: "var(--accent-color)"
+      hacs-new-color: "var(--accent-color)"
+      hacs-default-icon-color: "var(--accent-color)"
+      
+      success-color: "#00FFAA"
+      rgb-success-color: 0, 255, 170;
+
+      warning-color: "#FFB800"
+      rgb-warning-color: 255, 184, 0;
+
+      error-color: "#FF2D6B"
+      rgb-error-color: 255, 45, 107;
+
+      # ============================================================
+      # KIOSK MODE — iPad wall mount
+      # ============================================================
+      kiosk-glow-intensity: "1.2"
+      kiosk-touch-scale: "0.97"
+      kiosk-card-spacing: "16px"
+      kiosk-min-touch-target: "44px"
+      
+      # ============================================================
+      # PERFORMANCE VARIABLES (Animation Tuning)
+      # ============================================================
+      animation-speed-card: "4s"
+      animation-speed-sidebar: "3s"
+      animation-speed-header: "5s"
+      animation-speed-badge: "2.5s"
+      animation-speed-rain: "2s"
+
+  # ============================================================
+  # CARD-MOD — hooks CSS a completer
+  # ============================================================
+  card-mod-theme: neo-tokyo
+# Neon Glow Effects (card-mod integration)
+  # Apply authentic neon text glow throughout the UI
+  card-mod-card: |
+    ha-card {
+      box-shadow: 0 2px 8px #00000080, 0 0 10px #ff10f020;
+    }
+  card-mod-root: |
+    /* ========== ICON COLORS ========== */
+    app-header ha-icon,
+    app-header ha-svg-icon,
+    app-header ha-icon-button ha-icon,
+    app-header ha-icon-button ha-svg-icon,
+    app-toolbar ha-icon,
+    app-toolbar ha-svg-icon,
+    app-toolbar ha-icon-button ha-icon,
+    app-toolbar ha-icon-button ha-svg-icon,
+    mwc-tab-bar ha-icon,
+    mwc-tab-bar ha-svg-icon,
+    .header ha-icon,
+    .header ha-svg-icon,
+    ha-icon, 
+    ha-svg-icon, 
+    ha-icon-button {
+    color: var(--accent-color);
+    filter: drop-shadow(0 0 8px currentColor) saturate(1.3) brightness(1.1);
+    contain: layout style;
+    }
+    
+    /* State badges with neon glow */
+    .state-badge {
+      filter: drop-shadow(0 0 3px #00fff9) drop-shadow(0 0 6px #00fff9);
+    }
+    
+    /* Entity names with subtle glow */
+    .name {
+      text-shadow: 0 0 3px rgba(255,255,255,0.3), 0 0 8px rgba(0,255,249,0.2);
+    }
+    
+    /* Active/on state text glow */
+    hui-generic-entity-row[state="on"] .name,
+    hui-generic-entity-row.state-on .name {
+      text-shadow: 0 0 5px #fff, 0 0 10px #00fff9, 0 0 15px #00fff9;
+    }
+    
+    /* Numeric values with cyan glow */
+    .state,
+    .value {
+      text-shadow: 0 0 3px rgba(255,255,255,0.5), 0 0 8px rgba(0,255,249,0.4);
+    }
+    
+    /* Buttons with neon effect */
+    mwc-button,
+    paper-button {
+      text-shadow: 0 0 5px rgba(255,255,255,0.5), 0 0 10px currentColor;
+      box-shadow: 0 0 5px currentColor, 0 0 10px currentColor, inset 0 0 5px rgba(255,255,255,0.1);
+    }
+    
+    /* Icons with neon drop-shadow */
+    ha-icon,
+    ha-state-icon {
+      filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 4px currentColor);
+    }
+    
+    /* Sidebar text with subtle glow */
+    .item-text {
+      text-shadow: 0 0 3px rgba(255,255,255,0.2);
+    }
+    
+    /* Selected sidebar with hot pink glow */
+    .iron-selected .item-text {
+      text-shadow: 0 0 5px #fff, 0 0 10px #ff10f0, 0 0 15px #ff10f0;
+    }
+    
+    /* Graph/chart elements with cyan glow */
+    .graph,
+    .graph-line {
+      filter: drop-shadow(0 0 1px #00fff9) drop-shadow(0 0 3px #00fff9);
+    }
+    
+    /* Title bars with neon underline effect */
+    .card-header {
+      text-shadow: 0 0 5px rgba(255,255,255,0.8), 0 0 10px rgba(255,16,240,0.3);
+      border-bottom: 1px solid #ff10f0;
+      box-shadow: 0 2px 8px rgba(255,16,240,0.3);
+    }
+    
+    /* Input fields with cyan glow on focus */
+    paper-input-container input:focus,
+    mwc-textfield:focus-within {
+      text-shadow: 0 0 3px rgba(0,255,249,0.6);
+      box-shadow: 0 0 5px #00fff9, 0 0 10px #00fff9;
+    }
+    
+    /* Labels with subtle white glow */
+    paper-input-container label,
+    mwc-textfield label {
+      text-shadow: 0 0 3px rgba(255,255,255,0.2);
+    }
+
+    /* ========== iPad — allègement GPU ========== */
+    @media (min-width: 768px) and (min-height: 1000px) and (hover: none) and (pointer: coarse) {
+      /* background-attachment: fixed = catastrophique sur iOS Safari */
+      hui-root, ha-panel-lovelace {
+        background-attachment: fixed !important;
+      }
+      app-header ha-icon,
+      app-header ha-svg-icon,
+      app-header ha-icon-button ha-icon,
+      app-header ha-icon-button ha-svg-icon,
+      app-toolbar ha-icon,
+      app-toolbar ha-svg-icon,
+      app-toolbar ha-icon-button ha-icon,
+      app-toolbar ha-icon-button ha-svg-icon,
+      mwc-tab-bar ha-icon,
+      mwc-tab-bar ha-svg-icon,
+      .header ha-icon,
+      .header ha-svg-icon,
+      ha-icon,
+      ha-svg-icon,
+      ha-icon-button {
+        filter: drop-shadow(0 0 4px currentColor);
+      }
+      ha-icon,
+      ha-state-icon {
+        filter: drop-shadow(0 0 3px currentColor);
+      }
+      .name {
+        text-shadow: 0 0 6px rgba(0,255,249,0.25);
+      }
+      hui-generic-entity-row[state="on"] .name,
+      hui-generic-entity-row.state-on .name {
+        text-shadow: 0 0 8px #00fff9;
+      }
+      .state,
+      .value {
+        text-shadow: 0 0 6px rgba(0,255,249,0.35);
+      }
+      .card-header {
+        text-shadow: 0 0 8px rgba(255,16,240,0.4);
+      }
+      mwc-button,
+      paper-button {
+        text-shadow: 0 0 6px rgba(255,255,255,0.4);
+        box-shadow: 0 0 6px currentColor;
+      }
+    }
+      
+  card-mod-sidebar: |
+    /* ========== KEYFRAMES ========== */
+    @keyframes edge-pulse {
+      0%   { box-shadow: 0 0 12px var(--primary-color), 0 0 28px var(--secondary-color); }
+      50%  { box-shadow: 0 0 28px var(--primary-color), 0 0 56px var(--secondary-color), 0 0 80px var(--accent-color); }
+      100% { box-shadow: 0 0 12px var(--primary-color), 0 0 28px var(--secondary-color); }
+    }
+    @keyframes title-glitch-rgb {
+      0%,  9%   { text-shadow:  0 0 5px #fff, 0 0 12px #ff10f0, 0 0 28px #ff10f0,  1px 0 rgba(0,255,249,0.5); letter-spacing: 2px; }
+      10%        { text-shadow:  0 0 5px #fff, 0 0 12px #ff10f0, 0 0 28px #ff10f0, -5px 0 rgba(255,16,240,1.0), 5px 0 rgba(0,255,249,1.0); letter-spacing: 3px; transform: skewX(-2deg); }
+      11%        { text-shadow:  0 0 5px #fff, 0 0 12px #ff10f0, 0 0 28px #ff10f0,  1px 0 rgba(0,255,249,0.5); letter-spacing: 2px; transform: skewX(0); }
+      12%,  39%  { text-shadow:  0 0 5px #fff, 0 0 12px #ff10f0, 0 0 28px #ff10f0,  1px 0 rgba(0,255,249,0.5); letter-spacing: 2px; }
+      40%        { text-shadow:  0 0 8px #fff, 0 0 18px #ff10f0, 0 0 48px #ff10f0,  8px 0 rgba(255,16,240,1.0), -8px 0 rgba(0,255,249,1.0); letter-spacing: 5px; transform: skewX(3deg); }
+      41%        { text-shadow:  0 0 2px #fff, 0 0 6px  #ff10f0, 0 0 14px #ff10f0, -2px 0 rgba(0,255,249,0.7); letter-spacing: 1px; transform: skewX(-1deg); }
+      42%,  71%  { text-shadow:  0 0 5px #fff, 0 0 12px #ff10f0, 0 0 28px #ff10f0,  1px 0 rgba(0,255,249,0.5); letter-spacing: 2px; transform: skewX(0); }
+      72%        { text-shadow:  0 0 5px #fff, 0 0 12px #ff10f0, 0 0 28px #ff10f0, -4px 0 rgba(255,16,240,0.9), 4px 0 rgba(0,255,249,0.9); letter-spacing: 2px; }
+      73%,  100% { text-shadow:  0 0 5px #fff, 0 0 12px #ff10f0, 0 0 28px #ff10f0,  1px 0 rgba(0,255,249,0.5); letter-spacing: 2px; }
+    }
+    @keyframes title-flicker {
+      0%,  14%  { opacity: 1;    filter: brightness(1.1) saturate(1.4); }
+      15%        { opacity: 0.4;  filter: brightness(0.5) saturate(0.8); }
+      16%        { opacity: 1;    filter: brightness(1.5) saturate(1.6); }
+      17%,  44%  { opacity: 1;    filter: brightness(1.1) saturate(1.4); }
+      45%        { opacity: 0.7;  filter: brightness(0.7) saturate(0.9); }
+      46%        { opacity: 1;    filter: brightness(1.4) saturate(1.5); }
+      47%        { opacity: 0.85; filter: brightness(0.9) saturate(1.2); }
+      48%,  79%  { opacity: 1;    filter: brightness(1.1) saturate(1.4); }
+      80%        { opacity: 0.15; filter: brightness(0.2) saturate(0.5); }
+      81%        { opacity: 1;    filter: brightness(1.7) saturate(1.8); }
+      82%,  100% { opacity: 1;    filter: brightness(1.1) saturate(1.4); }
+    }
+    @keyframes scanlines-move {
+      0%   { background-position: 0 0; }
+      100% { background-position: 0 120px; }
+    }
+    @keyframes neon-flicker {
+      0%,  17%   { box-shadow: 0 0 8px rgba(255,16,240,0.5),  inset 0 0 12px rgba(255,16,240,0.15); }
+      18%         { box-shadow: 0 0 2px rgba(255,16,240,0.1),  inset 0 0 2px  rgba(255,16,240,0.03); }
+      19%         { box-shadow: 0 0 8px rgba(255,16,240,0.5),  inset 0 0 12px rgba(255,16,240,0.15); }
+      20%         { box-shadow: 0 0 2px rgba(255,16,240,0.1),  inset 0 0 2px  rgba(255,16,240,0.03); }
+      21%,  74%   { box-shadow: 0 0 8px rgba(255,16,240,0.5),  inset 0 0 12px rgba(255,16,240,0.15); }
+      75%         { box-shadow: 0 0 22px rgba(255,16,240,0.9), inset 0 0 20px rgba(255,16,240,0.25); }
+      76%         { box-shadow: 0 0 2px rgba(255,16,240,0.1),  inset 0 0 2px  rgba(255,16,240,0.03); }
+      77%,  100%  { box-shadow: 0 0 8px rgba(255,16,240,0.5),  inset 0 0 12px rgba(255,16,240,0.15); }
+    }
+
+    :host {
+      background: var(--sidebar-background-color);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* ========== SCANLINES ========== */
+    :host::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        180deg,
+        transparent 0px, transparent 3px,
+        rgba(0, 255, 249, 0.015) 3px, rgba(0, 255, 249, 0.015) 4px
+      );
+      background-size: 100% 120px;
+      animation: scanlines-move 8s linear infinite;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* ========== EDGE GLOW ========== */
+    :host::before {
+      content: "";
+      position: absolute;
+      top: 0; right: 0;
+      width: 3px; height: 100%;
+      background: linear-gradient(180deg,
+                  transparent 0%, var(--primary-color) 30%,
+                  var(--accent-color) 50%, var(--state-active-color) 70%,
+                  transparent 100%);
+      animation: edge-pulse 3s ease-in-out infinite;
+      z-index: 10;
+      contain: strict;
+      filter: saturate(2) brightness(1.4);
+    }
+
+    /* ========== TITLE GLITCH ========== */
+    .menu .title {
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #fff;
+      text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color);
+      animation:
+        title-glitch-rgb 11s step-end infinite,
+        title-flicker    7s step-end infinite;
+    }
+
+    /* ========== ITEM HOVER ========== */
+    ha-md-list-item {
+      transition: transform 0.2s ease, background 0.2s ease;
+      border-radius: 8px;
+    }
+    ha-md-list-item:hover {
+      transform: translateX(4px);
+      background: rgba(0, 255, 249, 0.06) !important;
+      box-shadow: inset 0 0 12px rgba(0,255,249,0.08);
+    }
+
+    /* ========== ITEM SÉLECTIONNÉ ========== */
+    ha-md-list-item.selected {
+      background: rgba(255, 16, 240, 0.07) !important;
+      border-left: 2px solid var(--secondary-color);
+      border-radius: 8px;
+      animation: neon-flicker 7s step-end infinite;
+    }
+    ha-md-list-item.selected .item-text {
+      color: #fff;
+      text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color);
+    }
+
+    /* ========== ICON EFFECTS ========== */
+    ha-md-list-item ha-icon,
+    ha-md-list-item ha-svg-icon {
+      filter: drop-shadow(0 0 4px currentColor);
+      transition: all 0.3s ease;
+      contain: layout style;
+    }
+    ha-md-list-item:hover ha-icon,
+    ha-md-list-item:hover ha-svg-icon {
+      filter: drop-shadow(0 0 8px currentColor) saturate(1.5) brightness(1.2);
+      transform: scale(1.1);
+    }
+
+    /* ========== iPad — allègement GPU ========== */
+    @media (min-width: 768px) and (min-height: 1000px) and (hover: none) and (pointer: coarse) {
+      /* Scanlines statiques — suppression de l'animation continue */
+      :host::after {
+        animation: none;
+        background-size: auto;
+      }
+      /* Edge-pulse — opacity seule au lieu de box-shadow animé */
+      @keyframes edge-pulse {
+        0%   { opacity: 0.6; }
+        50%  { opacity: 1.0; }
+        100% { opacity: 0.6; }
+      }
+      :host::before {
+        will-change: opacity;
+      }
+      /* Titre — glitch supprimé, flicker seul conservé */
+      .menu .title {
+        text-shadow: 0 0 5px #fff, 0 0 14px var(--primary-color);
+        animation: title-flicker 7s step-end infinite;
+        will-change: opacity, filter;
+      }
+      /* Neon-flicker — opacity seule au lieu de box-shadow animé */
+      @keyframes neon-flicker {
+        0%,  17%  { opacity: 1; }
+        18%        { opacity: 0.5; }
+        19%        { opacity: 1; }
+        20%        { opacity: 0.6; }
+        21%,  74%  { opacity: 1; }
+        75%         { opacity: 0.85; }
+        76%         { opacity: 0.4; }
+        77%,  100% { opacity: 1; }
+      }
+      /* Item sélectionné — text-shadow allégé */
+      ha-md-list-item.selected .item-text {
+        text-shadow: 0 0 8px var(--primary-color);
+      }
+      /* Icons sidebar — filtre simplifié */
+      ha-md-list-item ha-icon,
+      ha-md-list-item ha-svg-icon {
+        filter: drop-shadow(0 0 3px currentColor);
+      }
+      ha-md-list-item:hover ha-icon,
+      ha-md-list-item:hover ha-svg-icon {
+        filter: drop-shadow(0 0 6px currentColor);
+        transform: scale(1.05);
+      }
+    }

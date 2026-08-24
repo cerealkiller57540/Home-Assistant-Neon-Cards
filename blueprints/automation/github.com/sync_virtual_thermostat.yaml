@@ -1,0 +1,88 @@
+blueprint:
+  name: Sync Room Temperature to Ecodan
+  description: >
+    Synchronise la température mesurée (sensor principal + fallback optionnel)
+    vers le number input du Virtual Thermostat Ecodan.
+    Si une source secondaire est définie, utilise la valeur la plus récente des deux.
+    N'envoie rien si le target est unavailable.
+  domain: automation
+  input:
+    source_entity:
+      name: Source température principale
+      description: Capteur principal (sensor ou climate).
+      selector:
+        entity:
+          domain: [climate, sensor]
+    source_fallback:
+      name: Source température secondaire (optionnel)
+      description: Capteur de secours — sa valeur est utilisée si plus récente que la principale.
+      default: ""
+      selector:
+        entity:
+          domain: [sensor]
+    target_input:
+      name: Target feedback (number)
+      description: number.ecodan_heatpump_virtual_thermostat_input_z1
+      selector:
+        entity:
+          domain: [number]
+
+  source_url: https://github.com/gekkekoe/esphome-ecodan-hp/raw/main/asgard/ha_blueprints/sync_virtual_thermostat.yaml
+
+variables:
+  source: !input source_entity
+  fallback: !input source_fallback
+  target: !input target_input
+
+trigger:
+  - platform: state
+    entity_id: !input source_entity
+  - platform: state
+    entity_id: !input source_fallback
+
+action:
+  - variables:
+      temp_main: >-
+        {% if states[source].domain == 'climate' %}
+          {{ state_attr(source, 'current_temperature') | float(None) }}
+        {% else %}
+          {{ states(source) | float(None) }}
+        {% endif %}
+      temp_fallback: >-
+        {% if fallback != '' and states(fallback) not in ('unavailable','unknown','none') %}
+          {{ states(fallback) | float(None) }}
+        {% else %}
+          {{ None }}
+        {% endif %}
+      last_main: >-
+        {{ as_timestamp(states[source].last_updated) if source in states else 0 }}
+      last_fallback: >-
+        {% if fallback != '' and fallback in states %}
+          {{ as_timestamp(states[fallback].last_updated) }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+      current_temp: >-
+        {% if temp_main is not none %}
+          {{ temp_main }}
+        {% elif temp_fallback is not none %}
+          {{ temp_fallback }}
+        {% else %}
+          {{ None }}
+        {% endif %}
+
+  - condition: template
+    value_template: >-
+      {{ current_temp is not none
+         and states(target) not in ('unavailable', 'unknown', 'none')
+         and current_temp != states(target) | float(0) }}
+
+  - service: number.set_value
+    target:
+      entity_id: !input target_input
+    data:
+      value: "{{ current_temp }}"
+
+  - delay: "00:01:00"
+
+mode: single

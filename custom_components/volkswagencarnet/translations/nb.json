@@ -1,0 +1,78 @@
+{
+  "title": "Volkswagen Connect",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Volkswagen Connect konfigurasjon",
+        "description": "Fyll inn Volkswagen Connect informasion\n\nS-PIN er nødvendig for enkelte valg som å låse opp/igjen, og starte/stoppe oppvarming med drivstoff",
+        "data": {
+          "username": "E-post",
+          "password": "Passord",
+          "mutable": "Fjern hake for å bare lese verdier. Hak av dersom du vil sende kommandoer til bilen",
+          "region": "Landkode for landet der bilen ble solgt (ISO 3166-1 alpha-2)",
+          "spin": "S-PIN",
+          "name": "Gi bilen et kallenavn (Standard er VIN number)",
+          "debug": "Aktiver full debug-logg fra API (krever feilsøkingslogging aktivert i config)",
+          "convert": "Velg om du vil gjøre noen avstandsenhetskonverteringer",
+          "scan_interval": "Sensorenes oppdateringsintervall (minutter)",
+          "fake_user_agent": "Forfalsk nettleser-identitet (aktiver hvis pålogging er blokkert)"
+        }
+      },
+      "select_vehicle": {
+        "title": "Kjøretøy",
+        "description": "Følgende kjøretøy ble funnet. Velg kjøretøyet du ønsker å overvåke",
+        "data": {
+          "vehicle": "VIN nummer"
+        }
+      },
+      "select_instruments": {
+        "title": "Instrumenter",
+        "description": "Velg instrumenter som skal overvåkes",
+        "data": {
+          "resources": "Velg ressurser som skal overvåkes"
+        }
+      },
+      "reauth_confirm": {
+        "data": {
+          "description": "Autentiser på nytt med Volkswagen Connect-kontoen din. Sørg for å godta enhver ny EULA i Volkswagen Connect-portalen før du fortsetter.",
+          "username": "E-post",
+          "password": "Passord"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Bil med dette VIN-nummeret er allerede konfigurert",
+      "reauth_successful": "Re-autentisering var vellykket"
+    },
+    "error": {
+      "cannot_connect": "Kunne ikke logge på Volkswagen Connect, sjekk legitimasjonen din og bekreft at tjenesten fungerer",
+      "cannot_update": "Kunne ikke søke etter oppdatering fra Volkswagen Connect",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
+    },
+    "progress": {
+      "task_login": "Logger på Volkswagen Connect",
+      "task_update": "Henter kjøretøy"
+    }
+  },
+  "options": {
+    "step": {
+      "user": {
+        "title": "Alternativer for Volkswagen Connect",
+        "description": "Konfigurer oppdateringsintervaller",
+        "data": {
+          "scan_interval": "Sensorenes oppdateringsintervall (minutter)",
+          "region": "Region (landet der bilen ble solgt)",
+          "debug": "Aktiver fullstendige feilsøkingslogger fra API (krever feilsøkingslogging aktivert i config)",
+          "convert": "Velg om du vil gjøre noen avstandsenhetskonverteringer"
+        }
+      },
+      "select_instruments": {
+        "title": "Instrumenter",
+        "description": "Velg instrumenter som skal overvåkes",
+        "data": {
+          "resources": "Velg ressurser som skal overvåkes"
+        }
+      }
+    }
+  }
+}

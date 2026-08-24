@@ -1,0 +1,34 @@
+# HA runtime
+.ha_run.lock
+home-assistant_v2.db
+home-assistant_v2.db-shm
+home-assistant_v2.db-wal
+home-assistant.log
+home-assistant.log.1
+home-assistant.log.fault
+
+# Cache & secrets
+.cache/
+.storage/
+secrets.yaml
+pyscript/secrets.py
+
+# Large/binary
+*.db
+*.db-shm
+*.db-wal
+
+# Claude internal
+.claude/
+
+# HACS frontend bundlé (reconstruit à l'install, pas du code à nous)
+custom_components/hacs/hacs_frontend/
+# Caches Python
+**/__pycache__/
+*.pyc
+# Données générées (pas du code)
+www/dreame/
+# Secrets pyscript (clés API en clair — jamais sur un remote public)
+pyscript/modules/ha_secrets.py
+# Logs applicatifs (grossissent en continu, pas du code à versionner)
+logs/

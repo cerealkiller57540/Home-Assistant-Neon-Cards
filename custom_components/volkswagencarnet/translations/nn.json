@@ -1,0 +1,78 @@
+{
+  "title": "Volkswagen Connect",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Volkswagen Connect konfigurasjon",
+        "description": "Fyll inn Volkswagen Connect informasjon\n\nS-PIN er påkrevd for nokre val som for eksempel låsing/opplåsing og start/stopp av motorvarmar",
+        "data": {
+          "username": "E-post",
+          "password": "Passord",
+          "mutable": "Ta vekk krysset for å gjere bilen 'read only'. Behald krysset om du vil gjere endringar mot bilen",
+          "region": "Landskode der bilen vart solgt (ISO 3166-1 alpha-2)",
+          "spin": "S-PIN",
+          "name": "Gje bilen ditt eit navn (elles blir navnet det same som VIN nummeret)",
+          "debug": "Skru på debug logger frå API (krev at debug logging er skrudd på i konfigurasjonen",
+          "convert": "Velg denne om du vil ha omrekning av distanse",
+          "scan_interval": "Oppdateringsintervall for sensorar (minutt)",
+          "fake_user_agent": "Forfalsk nettlesar-identitet (aktiver dersom innlogging er blokkert)"
+        }
+      },
+      "select_vehicle": {
+        "title": "Køyretøy",
+        "description": "Desse køyretøya vart funne. Velg køyretøyet du ønskjer å overvåke",
+        "data": {
+          "vehicle": "VIN nummer"
+        }
+      },
+      "select_instruments": {
+        "title": "Instrument",
+        "description": "Velg instrument du ønskjer å overvåke",
+        "data": {
+          "resources": "Ressursar som skal overvåkast"
+        }
+      },
+      "reauth_confirm": {
+        "data": {
+          "description": "Autentiser deg på nytt med Volkswagen Connect-kontoen din. Pass på at du godtar einkvar ny EULA i Volkswagen Connect-portalen før du går vidare.",
+          "username": "E-post",
+          "password": "Passord"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Ein bil med dette VIN-nummeret er allereie konfigurert",
+      "reauth_successful": "Re-autentisering var vellykka"
+    },
+    "error": {
+      "cannot_connect": "Klarte ikkje å logge inn på Volkswagen Connect, sjekk brukarnamn/passord og verifiser at tenesta fungerer",
+      "cannot_update": "Klarte ikkje å hente oppdatering frå Volkswagen Connect",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
+    },
+    "progress": {
+      "task_login": "Loggar inn på Volkswagen Connect",
+      "task_update": "Hentar køyretøy"
+    }
+  },
+  "options": {
+    "step": {
+      "user": {
+        "title": "Val for Volkswagen Connect",
+        "description": "Konfigurer oppdateringsintervall",
+        "data": {
+          "scan_interval": "Oppdateringsintervall for sensorar (minutt)",
+          "region": "Region (landet der bilen vart solgt)",
+          "debug": "Skru på debug logger frå API (krev at debug logging er skrudd på i konfigurasjonen",
+          "convert": "Velg denne viss du vil ha omrekning av distanse"
+        }
+      },
+      "select_instruments": {
+        "title": "Instrument",
+        "description": "Velg instrument du ønskjer å overvåke",
+        "data": {
+          "resources": "Ressursar som skal overvåkast"
+        }
+      }
+    }
+  }
+}

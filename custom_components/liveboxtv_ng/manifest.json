@@ -1,0 +1,21 @@
+{
+  "domain": "liveboxtv_ng",
+  "name": "Orange Livebox TV UHD",
+  "version": "0.1.0",
+  "documentation": "https://github.com/cerealkiller57540/liveboxtv_ng",
+  "issue_tracker": "https://github.com/cerealkiller57540/liveboxtv_ng/issues",
+  "codeowners": ["@cerealkiller57540"],
+  "config_flow": true,
+  "iot_class": "local_polling",
+  "integration_type": "device",
+  "requirements": ["async-upnp-client>=0.36.0"],
+  "dependencies": [],
+  "after_dependencies": ["ssdp"],
+  "ssdp": [
+    { "st": "urn:schemas-orange-com:service:X_OrangeSTBRemoteControl:3" },
+    { "manufacturer": "SoftAtHome", "deviceType": "urn:schemas-upnp-org:device:MediaRenderer:1" }
+  ],
+  "dhcp": [
+    { "macaddress": "209A7D*" }
+  ]
+}

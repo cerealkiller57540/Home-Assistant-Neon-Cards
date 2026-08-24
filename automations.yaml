@@ -1,0 +1,2716 @@
+- id: 1769595764303_optimized
+  alias: "\U0001F50C Voiture - Charge Heures Creuses (Smart)"
+  description: Démarre la charge automatiquement en heures creuses
+  triggers:
+  - trigger: state
+    entity_id: sensor.lixee_current_price
+    to: HEURE CREUSE
+  conditions:
+  - condition: state
+    entity_id: input_boolean.car_smart_charging
+    state: 'on'
+  - condition: state
+    entity_id: binary_sensor.wvwzzze18sp049976_charging_cable_connected
+    state: 'on'
+  - condition: template
+    value_template: '{{ states(''sensor.wvwzzze18sp049976_battery_level'') | float(0)
+      < states(''input_number.car_battery_max'') | float(80) }}'
+  - condition: state
+    entity_id: switch.wvwzzze18sp049976_charging
+    state: 'off'
+  actions:
+  - action: switch.turn_on
+    target:
+      entity_id: switch.wvwzzze18sp049976_charging
+  - action: persistent_notification.create
+    data:
+      notification_id: car_charge
+      title: "\U0001F50C Charge Voiture"
+      message: Début de charge HC ({{ states('sensor.wvwzzze18sp049976_battery_level')
+        }}%)
+  - action: switch.turn_on
+    target:
+      entity_id: switch.wvwzzze18sp049976_force_data_refresh
+  mode: single
+- id: 1769595822723_optimized
+  alias: ⏸ Voiture - Stop Charge Heures Pleines/Batterie Max
+  description: Arrête la charge HC en heures pleines, sauf si surplus solaire suffisant
+  triggers:
+  - trigger: state
+    entity_id: sensor.lixee_current_price
+    to: HEURE PLEINE
+  - trigger: numeric_state
+    entity_id: sensor.wvwzzze18sp049976_battery_level
+    above: input_number.car_battery_max
+  conditions:
+  - condition: state
+    entity_id: switch.wvwzzze18sp049976_charging
+    state: 'on'
+  - condition: or
+    conditions:
+    - condition: trigger
+      id:
+      - '0'
+    - condition: numeric_state
+      entity_id: sensor.wvwzzze18sp049976_battery_level
+      above: input_number.car_battery_max
+  - condition: not
+    conditions:
+    - condition: numeric_state
+      entity_id: sensor.surplus_solaire_moyen_5_min
+      above: input_number.solar_surplus_min
+  - condition: state
+    entity_id: input_boolean.car_smart_charging
+    state:
+    - 'on'
+  actions:
+  - action: switch.turn_off
+    target:
+      entity_id: switch.wvwzzze18sp049976_charging
+  - action: persistent_notification.create
+    data:
+      notification_id: car_charge
+      title: ⏸ Charge Voiture
+      message: '{% if trigger.entity_id == ''sensor.wvwzzze18sp049976_battery_level''
+        %} Batterie pleine ({{ states(''sensor.wvwzzze18sp049976_battery_level'')
+        }}%) {% else %} Fin des heures creuses ({{ states(''sensor.wvwzzze18sp049976_battery_level'')
+        }}%) {% endif %}'
+  - action: switch.turn_on
+    target:
+      entity_id: switch.wvwzzze18sp049976_force_data_refresh
+- id: 1769596927583_optimized
+  alias: ☀ Voiture - Charge Surplus Solaire
+  description: Active la charge quand surplus solaire suffisant
+  triggers:
+  - trigger: numeric_state
+    entity_id: sensor.surplus_solaire_moyen_5_min
+    above: input_number.solar_surplus_min
+    for: 00:05:00
+  conditions:
+  - condition: state
+    entity_id: input_boolean.car_solar_charging
+    state: 'on'
+  - condition: state
+    entity_id: binary_sensor.wvwzzze18sp049976_charging_cable_connected
+    state: 'on'
+  - condition: numeric_state
+    entity_id: number.wvwzzze18sp049976_battery_target_charge_level
+    above: sensor.wvwzzze18sp049976_battery_level
+  actions:
+  - action: switch.turn_on
+    target:
+      entity_id: switch.wvwzzze18sp049976_charging
+  - action: persistent_notification.create
+    data:
+      notification_id: car_charge
+      title: ☀ Charge Voiture
+      message: Charge sur surplus solaire activée ({{ states('sensor.surplus_solaire_moyen_5_min')
+        | int }}W)
+  mode: single
+- id: 1769596986165_optimized
+  alias: "\U0001F325 Voiture - Stop Charge Surplus Solaire"
+  description: Arrête la charge si surplus insuffisant
+  triggers:
+  - trigger: numeric_state
+    entity_id:
+    - sensor.surplus_solaire_moyen_5_min
+    below: 10
+    for: 00:05:00
+  conditions:
+  - condition: state
+    entity_id: switch.wvwzzze18sp049976_charging
+    state: 'on'
+  - condition: state
+    entity_id: input_boolean.car_solar_charging
+    state: 'on'
+  actions:
+  - action: switch.turn_off
+    target:
+      entity_id: switch.wvwzzze18sp049976_charging
+  - action: persistent_notification.create
+    data:
+      notification_id: car_charge
+      title: "\U0001F325 Charge Voiture"
+      message: Surplus insuffisant, charge arrêtée ({{ states('sensor.surplus_solaire_moyen_5_min')
+        | int }}W)
+  - action: switch.turn_on
+    target:
+      entity_id: switch.wvwzzze18sp049976_force_data_refresh
+  mode: single
+- id: prise_ev_charge_surplus_solaire
+  alias: ☀ Prise EV - Charge Surplus Solaire
+  description: Active la prise EV quand surplus solaire suffisant (clone ID3, action
+    = prise Tuya)
+  triggers:
+  - trigger: numeric_state
+    entity_id: sensor.surplus_solaire_moyen_5_min
+    above: input_number.solar_surplus_min
+    for: 00:05:00
+  conditions:
+  - condition: state
+    entity_id: input_boolean.car_solar_charging
+    state: 'on'
+  - condition: state
+    entity_id: switch.sunology_socket_1
+    state: 'off'
+  actions:
+  - action: switch.turn_on
+    target:
+      entity_id: switch.sunology_socket_1
+  - action: persistent_notification.create
+    data:
+      notification_id: prise_ev_charge
+      title: ☀ Charge Voiture (prise)
+      message: Charge sur surplus solaire activee ({{ states('sensor.surplus_solaire_moyen_5_min')
+        | int }}W)
+  mode: single
+- id: prise_ev_stop_charge_surplus_solaire
+  alias: "\U0001F325 Prise EV - Stop Charge Surplus Solaire"
+  description: Coupe la prise EV si surplus insuffisant (clone ID3, action = prise
+    Tuya)
+  triggers:
+  - trigger: numeric_state
+    id: surplus_faible
+    entity_id:
+    - sensor.surplus_solaire_moyen_5_min
+    below: 10
+    for: 00:05:00
+  - trigger: numeric_state
+    id: batterie_decharge
+    entity_id:
+    - sensor.battery_power_lisse
+    below: -300
+    for: 00:03:00
+  conditions:
+  - condition: state
+    entity_id: switch.sunology_socket_1
+    state: 'on'
+  - condition: state
+    entity_id: input_boolean.car_solar_charging
+    state: 'on'
+  actions:
+  - action: switch.turn_off
+    target:
+      entity_id: switch.sunology_socket_1
+  - action: persistent_notification.create
+    data:
+      notification_id: prise_ev_charge
+      title: "\U0001F325 Charge Voiture (prise)"
+      message: '{% if trigger.id == ''batterie_decharge'' %}Batterie qui decharge
+        ({{ (states(''sensor.battery_power_lisse'') | float(0)) | round(0) }}W) -
+        charge voiture arretee pour ne pas vider la batterie.{% else %}Surplus insuffisant,
+        charge arretee ({{ states(''sensor.surplus_solaire_moyen_5_min'') | int }}W).{%
+        endif %}'
+  mode: single
+- id: '1769597036707'
+  alias: "\U0001F4A1 Lumières - Allumage Coucher Soleil (Smart)"
+  description: ''
+  triggers:
+  - entity_id:
+    - sensor.luminosite_moyenne_5_min
+    below: 200
+    trigger: numeric_state
+  conditions:
+  - condition: state
+    entity_id: input_boolean.lights_auto_sunset
+    state: 'on'
+  - condition: sun
+    after: sunset
+    enabled: false
+  actions:
+  - target:
+      entity_id:
+      - light.smart_plug_mini_mss110_main_channel
+    data:
+      brightness_pct: 100
+    action: light.turn_on
+  - target:
+      entity_id: light.floor_lamp_basic_2
+    data:
+      brightness_pct: 100
+      transition: 5
+    action: light.turn_on
+  - target:
+      entity_id: light.leds_salon
+    data:
+      brightness_pct: 80
+      transition: 5
+      profile: perso
+      effect: perso
+    action: light.turn_on
+  - target:
+      entity_id: light.leds_cuisine
+    data:
+      brightness_pct: 80
+      profile: perso
+      effect: perso
+    action: light.turn_on
+  mode: single
+- id: '1769597114684'
+  alias: "\U0001F305 Lumières - Extinction Lever Soleil (Smart)"
+  description: Éteint les lumières au lever du soleil OU si luminosité > 200 lx
+  triggers:
+  - trigger: sun
+    event: sunrise
+    offset: 00:05:00
+    enabled: false
+  - trigger: numeric_state
+    entity_id:
+    - sensor.capteur_temperature_capteur_de_luminosite_luminance
+    above: 100
+    for:
+      minutes: 5
+  conditions:
+  - condition: state
+    entity_id: input_boolean.lights_auto_sunset
+    state: 'on'
+  actions:
+  - action: light.turn_off
+    target:
+      entity_id:
+      - light.smart_plug_mini_mss110_main_channel
+      - light.shelly1minig4_98a316797018
+      - light.chambre
+      - light.floor_lamp_basic_2
+      - light.leds_cuisine
+      - light.leds_salon
+    data:
+      transition: 3
+  mode: single
+- id: '1769599071009'
+  alias: "\U0001F6CC Lumières - Extinction 23h"
+  description: Éteint toutes les lumières à 23h (sauf si désactivé)
+  triggers:
+  - trigger: time
+    at: input_datetime.lights_off_time
+  conditions:
+  - condition: state
+    entity_id: input_boolean.lights_auto_sunset
+    state: 'on'
+  actions:
+  - action: light.turn_off
+    target:
+      entity_id:
+      - light.smart_plug_mini_mss110_main_channel
+      - light.shelly1minig4_98a316797018
+  mode: single
+- id: '1771264012960'
+  alias: "\U0001F4A1 Lumières - Réveil Matin"
+  description: Allume chats et cuisine au réveil avant le lever du soleil
+  triggers:
+  - trigger: state
+    entity_id: media_player.chambre
+    to: playing
+  conditions:
+  - condition: time
+    after: 06:00:00
+    before: 09:00:00
+  - condition: sun
+    before: sunrise
+  actions:
+  - action: light.turn_on
+    target:
+      area_id: chats
+  - action: light.turn_on
+    target:
+      entity_id: light.shelly1minig4_98a316797018
+  mode: single
+- id: '1769597380760'
+  alias: "\U0001F6A8 Alerte Porte Garage Ouverte"
+  description: Alerte si porte garage ouverte > 5min sans présence
+  triggers:
+  - trigger: state
+    entity_id:
+    - binary_sensor.zigbee_47614_1_contact
+    to: 'on'
+    for:
+      minutes: 5
+    from:
+  conditions:
+  - condition: state
+    entity_id: device_tracker.wvwzzze18sp049976_position
+    state: away
+  actions:
+  - variables:
+      heure: '{{ now().strftime("%H:%M") }}'
+  - action: notify.mobile_app_pixel_9a
+    continue_on_error: true
+    data:
+      title: "\U0001F6A8 Porte de garage ouverte"
+      message: Le garage est ouvert depuis {{ heure }} et la voiture est partie.
+      data:
+        tag: alerte_garage_ouvert
+        channel: Sécurité
+        importance: high
+        color: '#ef4444'
+        notification_icon: mdi:garage-alert
+        actions:
+        - action: FERMER_GARAGE
+          title: Fermer le garage
+        - action: URI
+          title: Ouvrir Home Assistant
+          uri: http://192.168.1.60:8123
+  - action: smtp.send_message
+    target:
+      entity_id: notify.email
+    continue_on_error: true
+    data:
+      title: "\U0001F6A8 Porte de garage ouverte"
+      message: Le garage est ouvert depuis {{ heure }} et la voiture est partie.
+      html: "<!DOCTYPE html><html lang=\"fr\"><head><meta charset=\"utf-8\"><meta
+        name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"></head>
+        <body style=\"margin:0;padding:0;background:#0d1117;font-family:-apple-system,BlinkMacSystemFont,'Segoe
+        UI',Roboto,Helvetica,Arial,sans-serif;\"> <table role=\"presentation\" width=\"100%\"
+        cellpadding=\"0\" cellspacing=\"0\" style=\"background:#0d1117;padding:32px
+        16px;\"><tr><td align=\"center\"> <table role=\"presentation\" width=\"100%\"
+        cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:480px;background:#161b22;border-radius:20px;overflow:hidden;border:1px
+        solid #232a33;\"> <tr><td style=\"background:linear-gradient(135deg,#ef4444
+        0%,#f97316 100%);padding:36px 32px 30px 32px;text-align:center;\"> <div style=\"font-size:64px;line-height:1;margin-bottom:8px;\">\U0001F6A8</div>
+        <div style=\"color:#ffffff;font-size:24px;font-weight:700;letter-spacing:-.4px;\">Garage
+        resté ouvert</div> <div style=\"color:rgba(255,255,255,.85);font-size:14px;margin-top:6px;\">La
+        voiture est partie et la porte est toujours ouverte</div></td></tr> <tr><td
+        style=\"padding:28px 32px 8px 32px;\"> <table role=\"presentation\" width=\"100%\"
+        cellpadding=\"0\" cellspacing=\"0\"><tr> <td style=\"background:#1c2530;border-radius:14px;padding:18px
+        20px;\"> <div style=\"color:#8b98a8;font-size:13px;padding-bottom:4px;\">\U0001F551&nbsp;&nbsp;Ouvert
+        depuis</div> <div style=\"color:#e6edf3;font-size:22px;font-weight:600;\">{{
+        heure }}</div> </td></tr></table></td></tr> <tr><td style=\"padding:24px 32px
+        8px 32px;\" align=\"center\"> <a href=\"http://192.168.1.60:8123\" style=\"display:inline-block;background:linear-gradient(135deg,#ef4444,#f97316);color:#fff;text-decoration:none;font-size:15px;font-weight:600;padding:14px
+        34px;border-radius:12px;\">Ouvrir Home Assistant</a></td></tr> <tr><td style=\"padding:18px
+        32px 28px 32px;text-align:center;\"> <div style=\"color:#5b6573;font-size:12px;\">Détecteur
+        de contact garage · {{ now().strftime(\"%d/%m/%Y\") }}</div> <div style=\"color:#3d4654;font-size:11px;margin-top:4px;\">Home
+        Assistant · Burthecourt-aux-Chênes</div></td></tr> </table></td></tr></table></body></html>"
+  mode: single
+- id: '1769597449388'
+  alias: "\U0001F50A Sonos - Reset Volume"
+  description: Réduit le volume du Sonos le soir
+  triggers:
+  - trigger: time
+    at: input_datetime.sonos_volume_time
+    enabled: false
+  - trigger: media_player.stopped_playing
+    target:
+      device_id: a44ba2ea7952c7beb3f6f0c98bf1186c
+    options:
+      behavior: each
+  actions:
+  - action: media_player.volume_set
+    target:
+      entity_id: media_player.chambre
+    data:
+      volume_level: '{{ states(''input_number.sonos_night_volume'') | float }}'
+  mode: single
+- id: '1770189160996'
+  alias: "\U0001F3B5 Sonos - Playlist Automatique"
+  description: 'Amorçage shuffle (NE PAS "corriger"). À l''heure programmée : lance
+    le favori + active le shuffle, puis media_stop volontaire. Le but est de précharger
+    la file en aléatoire pour qu''au coucher la lecture démarre instantanément sur
+    une chanson différente à chaque fois, sans temps de chargement. Le media_stop
+    final est intentionnel, ce n''est pas un bug.'
+  triggers:
+  - trigger: time
+    at: '11:00:00'
+  conditions: []
+  actions:
+  - alias: Run playlist
+    action: media_player.play_media
+    target:
+      entity_id: media_player.chambre
+    data:
+      media:
+        media_content_id: FV:2/6
+        media_content_type: favorite_item_id
+        metadata:
+          title: $uicideboy$ Sleeping Playlist
+          thumbnail: https://mosaic.scdn.co/640/ab67616d00001e022417400ddf7445276814eeb6ab67616d00001e026ab3bdfc661f121231cd4f78ab67616d00001e02a3abea866819645928a0b3f2ab67616d00001e02fed01cae4350805103c24cc7
+          media_class: playlist
+          children_media_class:
+          navigateIds:
+          - {}
+          - media_content_type: favorites
+            media_content_id: ''
+          - media_content_type: favorites_folder
+            media_content_id: object.container.playlistContainer
+          browse_entity_id: media_player.chambre
+  - action: media_player.shuffle_set
+    target:
+      device_id: a44ba2ea7952c7beb3f6f0c98bf1186c
+    data:
+      shuffle: true
+  - action: media_player.media_stop
+    target:
+      entity_id: media_player.chambre
+  mode: single
+- id: 39167df8710a4bf1ba48d0ddf39a4e65
+  alias: "\U0001F514 Sonos - Alarmes mutuellement exclusives"
+  triggers:
+  - trigger: state
+    entity_id: switch.sonos_alarm_1
+    to: 'on'
+  - trigger: state
+    entity_id: switch.sonos_alarm_3
+    to: 'on'
+  actions:
+  - action: switch.turn_off
+    target:
+      entity_id: "{% if trigger.entity_id == 'switch.sonos_alarm_1' %}\n  switch.sonos_alarm_3\n{%
+        else %}\n  switch.sonos_alarm_1\n{% endif %}\n"
+- id: e73dee7c0d8f4851a2c71efeed0494b8
+  alias: "\U0001F4CA Ajout 1Wh abonnement EDF"
+  triggers:
+  - trigger: time
+    at: 00:05:00
+  actions:
+  - action: input_number.increment
+    target:
+      entity_id: input_number.compteur_abonnement_edf
+  mode: single
+- id: 75eb7ff5bed84eca9a0bff9feef4687f
+  alias: ⚡ Alerte Pic de Puissance
+  triggers:
+  - trigger: numeric_state
+    entity_id: sensor.buanderie_lixee_puissance_app_instantanee_soutiree
+    above: 5000
+    for:
+      minutes: 2
+  actions:
+  - action: notify.mobile_app_pixel_9a
+    data:
+      title: ⚡ Pic de consommation
+      message: 'Puissance instantanée élevée : {{ states(''sensor.buanderie_lixee_puissance_app_instantanee_soutiree'')
+        }} VA'
+      data:
+        tag: pic_puissance
+        channel: Énergie
+        color: '#ef4444'
+        notification_icon: mdi:flash-alert
+        actions:
+        - action: URI
+          title: Voir l'énergie
+          uri: http://192.168.1.60:8123
+  mode: single
+- id: smart_heat_pump_bias_control
+  alias: "\U0001F9E0 Smart Heat Pump - Dynamic Setpoint Bias"
+  description: 'Gestion bias HC/HP pour PAC Ecodan (compatible AA + Smart Boost).
+    v6 — Lixee = source de vérité complète HC↔HP. Transitions 00h20, 06h20, 14h20,
+    16h20 : double déclenchement horloge + confirmation Lixee (timeout 10min). HC
+    Nuit et HC Après-midi ont des réglages de bias distincts.
+
+    '
+  triggers:
+  - trigger: homeassistant
+    event: start
+    id: restart
+  - trigger: state
+    entity_id: sensor.lixee_current_price
+    to:
+    - HEURE PLEINE
+    - HEURE CREUSE
+    for:
+      seconds: 10
+  - trigger: time
+    at: 00:20:00
+    id: transition_hc_night
+  - trigger: time
+    at: 06:20:00
+    id: transition_hp_morning
+  - trigger: time
+    at: '14:20:00'
+    id: transition_hc_afternoon
+  - trigger: time
+    at: '16:20:00'
+    id: transition_hp_evening
+  - trigger: time
+    at: 00:00:00
+  - trigger: time
+    at: 08:00:00
+  - trigger: time
+    at: '17:00:00'
+  - trigger: time
+    at: '21:00:00'
+  - trigger: time
+    at: '23:50:00'
+  - trigger: state
+    id: manual_adjust
+    entity_id:
+    - input_number.heat_pump_bias_off_peak
+    - input_number.heat_pump_bias_peak
+    - input_number.heat_pump_bias_journee
+    - input_number.heat_pump_bias_soiree_tardive
+    - input_number.heat_pump_bias_pre_offpeak
+    - input_number.heat_pump_bias_post_afternoon_hc
+    - input_number.heat_pump_bias_afternoon_hc
+    - input_number.heat_pump_room_temp_cutoff
+    for:
+      seconds: 2
+  - trigger: time_pattern
+    minutes: /15
+  conditions:
+  - condition: state
+    entity_id: input_boolean.heat_pump_smart_bias_enabled
+    state: 'on'
+  - condition: template
+    value_template: "{{ trigger.id in ['restart', 'transition_hc_night', 'transition_hp_morning',\n
+      \                 'transition_hc_afternoon', 'transition_hp_evening']\n   or
+      states('sensor.lixee_current_price') in ['HEURE PLEINE', 'HEURE CREUSE'] }}\n"
+  actions:
+  - if:
+    - condition: trigger
+      id: restart
+    then:
+    - action: switch.turn_on
+      target:
+        entity_id: switch.ecodan_heatpump_server_control_zone_1_prohibit_heating
+    - wait_template: "{{ states('sensor.lixee_current_price') in ['HEURE PLEINE',
+        'HEURE CREUSE']\n   and has_value('sensor.thermometre_salon_temperature')\n
+        \  and has_value('number.ecodan_heatpump_auto_adaptive_setpoint_bias')\n   and
+        has_value('sensor.heat_pump_outdoor_temp_fused') }}\n"
+      timeout:
+        minutes: 10
+      continue_on_timeout: true
+    - if:
+      - condition: template
+        value_template: '{{ wait.completed }}'
+      then:
+      - delay:
+          minutes: 1
+      - action: switch.turn_off
+        target:
+          entity_id: switch.ecodan_heatpump_server_control_zone_1_prohibit_heating
+      else:
+      - action: switch.turn_off
+        target:
+          entity_id: switch.ecodan_heatpump_server_control_zone_1_prohibit_heating
+      - action: persistent_notification.create
+        data:
+          notification_id: pac_demarrage_ha
+          title: ⚠️ PAC - Démarrage HA
+          message: Capteurs Zigbee non disponibles après 10 min. Chauffage débloqué
+            sans correction bias.
+  - if:
+    - condition: trigger
+      id:
+      - transition_hc_night
+      - transition_hp_morning
+      - transition_hc_afternoon
+      - transition_hp_evening
+    then:
+    - variables:
+        expected_price: "{% if trigger.id in ['transition_hc_night', 'transition_hc_afternoon']
+          %}\n  HEURE CREUSE\n{% else %}\n  HEURE PLEINE\n{% endif %}\n"
+    - wait_template: '{{ is_state(''sensor.lixee_current_price'', expected_price)
+        }}'
+      timeout:
+        minutes: 10
+      continue_on_timeout: false
+    - action: logbook.log
+      data:
+        name: Heat Pump Smart Control
+        message: "\U0001F504 Transition {{ trigger.id }} confirmée par Lixee → {{
+          expected_price }}\n"
+  - choose:
+    - conditions:
+      - condition: time
+        after: '23:50:00'
+        before: '23:59:59'
+      sequence:
+      - variables:
+          target_bias: '{{ (pre_offpeak_ramp | float + humidity_correction | float)
+            | round(1) }}'
+          limited_bias: '{% set delta = (target_bias | float) - current_bias %} {%
+            if   delta >  max_bias_change %} {{ current_bias + max_bias_change }}
+            {% elif delta < -max_bias_change %} {{ current_bias - max_bias_change
+            }} {% else %}                          {{ target_bias }} {% endif %}
+
+            '
+      - condition: template
+        value_template: '{{ (limited_bias | float - current_bias) | abs > 0.05 }}'
+      - action: number.set_value
+        continue_on_error: true
+        target:
+          entity_id: number.ecodan_heatpump_auto_adaptive_setpoint_bias
+        data:
+          value: '{{ limited_bias }}'
+      - action: logbook.log
+        data:
+          name: Heat Pump Smart Control
+          message: "\U0001F504 Pré-HC Nuit ramp (23h50) → {{ limited_bias|round(1)
+            }}°C (hum.corr. {{ '%+.1f'|format(humidity_correction|float) }}°C)\n"
+    - conditions:
+      - condition: time
+        after: 00:00:00
+        before: 00:20:00
+      sequence:
+      - variables:
+          target_bias: '{{ (pre_offpeak_ramp | float + humidity_correction | float)
+            | round(1) }}'
+          limited_bias: '{% set delta = (target_bias | float) - current_bias %} {%
+            if   delta >  max_bias_change %} {{ current_bias + max_bias_change }}
+            {% elif delta < -max_bias_change %} {{ current_bias - max_bias_change
+            }} {% else %}                          {{ target_bias }} {% endif %}
+
+            '
+      - condition: template
+        value_template: '{{ (limited_bias | float - current_bias) | abs > 0.05 }}'
+      - action: number.set_value
+        continue_on_error: true
+        target:
+          entity_id: number.ecodan_heatpump_auto_adaptive_setpoint_bias
+        data:
+          value: '{{ limited_bias }}'
+      - action: logbook.log
+        data:
+          name: Heat Pump Smart Control
+          message: "\U0001F504 Pré-HC Nuit ramp (00h00) → {{ limited_bias|round(1)
+            }}°C (hum.corr. {{ '%+.1f'|format(humidity_correction|float) }}°C)\n"
+    - conditions:
+      - condition: template
+        value_template: '{{ is_hp }}'
+      - condition: time
+        after: 05:00:00
+        before: 08:00:00
+      sequence:
+      - variables:
+          base_bias: '{% if is_state(''binary_sensor.good_solar_day_expected'', ''on'')
+            %} 0.3 {% else %} 0.5 {% endif %}
+
+            '
+          target_bias: '{{ (base_bias|float + humidity_correction|float) | round(1)
+            }}'
+          limited_bias: '{% set delta = (target_bias | float) - current_bias %} {%
+            if   delta >  max_bias_change %} {{ current_bias + max_bias_change }}
+            {% elif delta < -max_bias_change %} {{ current_bias - max_bias_change
+            }} {% else %}                          {{ target_bias }} {% endif %}
+
+            '
+      - condition: template
+        value_template: '{{ (limited_bias | float - current_bias) | abs > 0.05 }}'
+      - action: number.set_value
+        continue_on_error: true
+        target:
+          entity_id: number.ecodan_heatpump_auto_adaptive_setpoint_bias
+        data:
+          value: '{{ limited_bias }}'
+      - action: switch.turn_off
+        target:
+          entity_id: switch.ecodan_heatpump_server_control_zone_1_prohibit_heating
+      - action: logbook.log
+        data:
+          name: Heat Pump Smart Control
+          message: "\U0001F305 Shoulder matin (Lixee → HP) → {{ limited_bias|round(1)
+            }}°C {% if is_state('binary_sensor.good_solar_day_expected','on') %} (bonne
+            journée solaire) {% else %} (faible solaire){% endif %} (hum.corr. {{
+            '%+.1f'|format(humidity_correction|float) }}°C)\n"
+    - conditions:
+      - condition: template
+        value_template: '{{ is_hc }}'
+      - condition: time
+        after: 00:20:00
+        before: 08:00:00
+      sequence:
+      - variables:
+          room_temp: '{{ states(''sensor.thermometre_salon_temperature'') | float(19)
+            }}'
+          cutoff: '{{ states(''input_number.heat_pump_room_temp_cutoff'') | float(21)
+            }}'
+          strategy: '{{ states(''sensor.heat_pump_tomorrow_strategy'') }}'
+          adjusted_boost: '{% set b = off_peak_boost %} {% if   strategy == ''Journée
+            difficile'' %} {{ b + 0.3 }} {% elif ''Économie'' in strategy          %}
+            {{ b - 0.3 }} {% else                                 %} {{ b }} {% endif
+            %}
+
+            '
+          target_bias: '{% if   room_temp >= cutoff + 0.5 %} 0.0 {% elif room_temp
+            >= cutoff        %} {{ (adjusted_boost|float * 0.5 + humidity_correction|float)
+            | round(1) }} {% else                            %} {{ (adjusted_boost|float      +
+            humidity_correction|float) | round(1) }} {% endif %}
+
+            '
+          limited_bias: '{% set delta = (target_bias | float) - current_bias %} {%
+            if   delta >  max_bias_change %} {{ current_bias + max_bias_change }}
+            {% elif delta < -max_bias_change %} {{ current_bias - max_bias_change
+            }} {% else %}                          {{ target_bias }} {% endif %}
+
+            '
+      - condition: template
+        value_template: '{{ (limited_bias | float - current_bias) | abs > 0.05 }}'
+      - action: number.set_value
+        continue_on_error: true
+        target:
+          entity_id: number.ecodan_heatpump_auto_adaptive_setpoint_bias
+        data:
+          value: '{{ limited_bias }}'
+      - action: switch.turn_off
+        target:
+          entity_id: switch.ecodan_heatpump_server_control_zone_1_prohibit_heating
+      - action: logbook.log
+        data:
+          name: Heat Pump Smart Control
+          message: "\U0001F319 HC Nuit → {% if   room_temp >= cutoff + 0.5 %} Pièce
+            chaude ({{ room_temp|round(1) }}°C) → Bias 0 {% elif room_temp >= cutoff
+            \       %} Pièce OK → Demi-boost {% else                            %}
+            Boost plein {% endif %} {{ limited_bias|round(1) }}°C {% if   strategy
+            == 'Journée difficile' %} ❄ (+0.3) {% elif 'Économie' in strategy          %}
+            ☀ coast (-0.3) {% elif 'Préchauffage' in strategy      %} \U0001F321 préchauffage
+            {% endif %} (hum.corr. {{ '%+.1f'|format(humidity_correction|float) }}°C)\n"
+    - conditions:
+      - condition: template
+        value_template: '{{ is_hc }}'
+      - condition: time
+        after: '13:00:00'
+        before: '18:00:00'
+      sequence:
+      - variables:
+          base_bias: '{{ [hc_afternoon_bias|float, 2.5] | min }}'
+          temp_multiplier: '{{ states(''sensor.temperature_advantage_multiplier'')
+            | float(1.0) }}
+
+            '
+          temp_optimized: '{{ (base_bias|float * temp_multiplier) | round(1) }}'
+          defrost_boost: '{% if defrost_risk %} {{ temp_optimized|float + 0.3 }} {%
+            else            %} {{ temp_optimized }} {% endif %}
+
+            '
+          target_bias: '{{ (defrost_boost|float + humidity_correction|float) | round(1)
+            }}'
+          limited_bias: '{% set delta = (target_bias | float) - current_bias %} {%
+            if   delta >  max_bias_change %} {{ current_bias + max_bias_change }}
+            {% elif delta < -max_bias_change %} {{ current_bias - max_bias_change
+            }} {% else %}                          {{ target_bias }} {% endif %}
+
+            '
+      - condition: template
+        value_template: '{{ (limited_bias | float - current_bias) | abs > 0.05 }}'
+      - action: number.set_value
+        continue_on_error: true
+        target:
+          entity_id: number.ecodan_heatpump_auto_adaptive_setpoint_bias
+        data:
+          value: '{{ limited_bias }}'
+      - action: switch.turn_off
+        target:
+          entity_id: switch.ecodan_heatpump_server_control_zone_1_prohibit_heating
+      - action: logbook.log
+        data:
+          name: Heat Pump Smart Control
+          message: "☀ HC PM (Lixee → HC) → {{ limited_bias|round(1) }}°C (☁{{ cloud_cover|round(0)
+            }}%, ×{{ temp_multiplier }}, hum.corr. {{ '%+.1f'|format(humidity_correction|float)
+            }}°C) {% if freeze_risk              %} \U0001F976 Gel! {% elif high_heat_loss
+            \        %} \U0001F4A8 Vent fort {% elif poor_solar_conditions  %} ☔ Mauvais
+            solaire {% elif defrost_risk           %} ❄ Défrost probable {% else                        %}
+            ✓ OK {% endif %}\n"
+    - conditions:
+      - condition: template
+        value_template: '{{ is_hp }}'
+      - condition: time
+        after: 08:00:00
+        before: '14:00:00'
+      sequence:
+      - variables:
+          target_bias: '{{ (journee_bias + humidity_correction|float) | round(1) }}'
+          limited_bias: '{% set delta = (target_bias | float) - current_bias %} {%
+            if   delta >  max_bias_change %} {{ current_bias + max_bias_change }}
+            {% elif delta < -max_bias_change %} {{ current_bias - max_bias_change
+            }} {% else %}                          {{ target_bias }} {% endif %}
+
+            '
+      - condition: template
+        value_template: '{{ (limited_bias | float - current_bias) | abs > 0.05 }}'
+      - action: number.set_value
+        continue_on_error: true
+        target:
+          entity_id: number.ecodan_heatpump_auto_adaptive_setpoint_bias
+        data:
+          value: '{{ limited_bias }}'
+      - action: logbook.log
+        data:
+          name: Heat Pump Smart Control
+          message: "\U0001F3E0 Journée HP → {{ limited_bias|round(1) }}°C (coasting,
+            hum.corr. {{ '%+.1f'|format(humidity_correction|float) }}°C)\n"
+    - conditions:
+      - condition: template
+        value_template: '{{ is_hp }}'
+      - condition: time
+        after: '15:00:00'
+        before: '17:00:00'
+      sequence:
+      - variables:
+          target_bias: '{{ (post_afternoon_hc|float + humidity_correction|float) |
+            round(1) }}'
+          limited_bias: '{% set delta = (target_bias | float) - current_bias %} {%
+            if   delta >  max_bias_change %} {{ current_bias + max_bias_change }}
+            {% elif delta < -max_bias_change %} {{ current_bias - max_bias_change
+            }} {% else %}                          {{ target_bias }} {% endif %}
+
+            '
+      - condition: template
+        value_template: '{{ (limited_bias | float - current_bias) | abs > 0.05 }}'
+      - action: number.set_value
+        continue_on_error: true
+        target:
+          entity_id: number.ecodan_heatpump_auto_adaptive_setpoint_bias
+        data:
+          value: '{{ limited_bias }}'
+      - action: logbook.log
+        data:
+          name: Heat Pump Smart Control
+          message: "\U0001F50B Post-HC PM (Lixee → HP) → {{ limited_bias|round(1)
+            }}°C (hum.corr. {{ '%+.1f'|format(humidity_correction|float) }}°C)\n"
+    - conditions:
+      - condition: template
+        value_template: '{{ is_hp }}'
+      - condition: time
+        after: '14:00:00'
+        before: '15:00:00'
+      sequence:
+      - variables:
+          base_bias: '{% set high_solar = is_state(''binary_sensor.high_afternoon_solar_expected'',''on'')
+            %} {% set potential  = states(''sensor.afternoon_hc_solar_potential'')
+            | float(0) %} {% if high_solar and potential > 2 %} 0.8 {% elif potential
+            > 1.5            %} 0.6 {% else                            %} 0.5 {% endif
+            %}
+
+            '
+          target_bias: '{{ (base_bias|float + humidity_correction|float) | round(1)
+            }}'
+          limited_bias: '{% set delta = (target_bias | float) - current_bias %} {%
+            if   delta >  max_bias_change %} {{ current_bias + max_bias_change }}
+            {% elif delta < -max_bias_change %} {{ current_bias - max_bias_change
+            }} {% else %}                          {{ target_bias }} {% endif %}
+
+            '
+      - condition: template
+        value_template: '{{ (limited_bias | float - current_bias) | abs > 0.05 }}'
+      - action: number.set_value
+        continue_on_error: true
+        target:
+          entity_id: number.ecodan_heatpump_auto_adaptive_setpoint_bias
+        data:
+          value: '{{ limited_bias }}'
+      - action: logbook.log
+        data:
+          name: Heat Pump Smart Control
+          message: "\U0001F504 Pré-HC PM ramp (HP) → {{ limited_bias|round(1) }}°C
+            ({{ states('sensor.afternoon_hc_solar_potential')|float|round(1) }}kWh
+            attendu, hum.corr. {{ '%+.1f'|format(humidity_correction|float) }}°C)\n"
+    - conditions:
+      - condition: template
+        value_template: '{{ is_hp }}'
+      - condition: time
+        after: '17:00:00'
+        before: '21:00:00'
+      sequence:
+      - variables:
+          target_bias: '{% if room_temp_global < 17.5 %} 0.0 {% else %} {{ (peak_reduction
+            + humidity_correction|float) | round(1) }} {% endif %}
+
+            '
+          limited_bias: '{% set delta = (target_bias | float) - current_bias %} {%
+            if   delta >  max_bias_change %} {{ current_bias + max_bias_change }}
+            {% elif delta < -max_bias_change %} {{ current_bias - max_bias_change
+            }} {% else %}                          {{ target_bias }} {% endif %}
+
+            '
+      - condition: template
+        value_template: '{{ (limited_bias | float - current_bias) | abs > 0.05 }}'
+      - action: number.set_value
+        continue_on_error: true
+        target:
+          entity_id: number.ecodan_heatpump_auto_adaptive_setpoint_bias
+        data:
+          value: '{{ limited_bias }}'
+      - action: logbook.log
+        data:
+          name: Heat Pump Smart Control
+          message: "⚡ Peak hours → {{ limited_bias|round(1) }}°C {% if room_temp_global
+            < 17.5 %} \U0001F6A8 Rescue froid ({{ room_temp_global|round(1) }}°C)
+            → bias 0 {% else %} (coasting, hum. {{ states('sensor.thermometre_salon_humidity')|round(0)
+            }}%, corr. {{ '%+.1f'|format(humidity_correction|float) }}°C) {% endif
+            %}\n"
+    - conditions:
+      - condition: template
+        value_template: '{{ is_hp }}'
+      - condition: time
+        after: '21:00:00'
+        before: '23:50:00'
+      sequence:
+      - variables:
+          base_bias: '{% if   room_temp_global < 17.5 %} {{ (off_peak_boost * 0.5)
+            | round(1) }} {% elif room_temp_global < 19.0 %} {{ (off_peak_boost *
+            0.5) | round(1) }} {% else                         %} {{ soiree_tardive_bias
+            | round(1) }} {% endif %}
+
+            '
+          target_bias: '{{ (base_bias|float + humidity_correction|float) | round(1)
+            }}'
+          limited_bias: '{% set delta = (target_bias | float) - current_bias %} {%
+            if   delta >  max_bias_change %} {{ current_bias + max_bias_change }}
+            {% elif delta < -max_bias_change %} {{ current_bias - max_bias_change
+            }} {% else %}                          {{ target_bias }} {% endif %}
+
+            '
+      - condition: template
+        value_template: '{{ (limited_bias | float - current_bias) | abs > 0.05 }}'
+      - action: number.set_value
+        continue_on_error: true
+        target:
+          entity_id: number.ecodan_heatpump_auto_adaptive_setpoint_bias
+        data:
+          value: '{{ limited_bias }}'
+      - action: logbook.log
+        data:
+          name: Heat Pump Smart Control
+          message: "\U0001F319 Soirée tardive — pièce {{ room_temp_global|round(1)
+            }}°C {% if   room_temp_global < 17.5 %} → \U0001F6A8 Rescue froid, demi-boost
+            +{{ limited_bias|round(1) }}°C {% elif room_temp_global < 19.0 %} → Sous
+            19°C, demi-boost +{{ limited_bias|round(1) }}°C {% else                         %}
+            → Confortable, coasting {{ soiree_tardive_bias|round(1) }}°C {% endif
+            %} (hum.corr. {{ '%+.1f'|format(humidity_correction|float) }}°C)\n"
+    default:
+    - variables:
+        target_bias: 0
+        limited_bias: '{% set delta = (target_bias | float) - current_bias %} {% if   delta
+          >  max_bias_change %} {{ current_bias + max_bias_change }} {% elif delta
+          < -max_bias_change %} {{ current_bias - max_bias_change }} {% else %}                          {{
+          target_bias }} {% endif %}
+
+          '
+    - condition: template
+      value_template: '{{ (limited_bias | float - current_bias) | abs > 0.05 }}'
+    - action: number.set_value
+      continue_on_error: true
+      target:
+        entity_id: number.ecodan_heatpump_auto_adaptive_setpoint_bias
+      data:
+        value: '{{ limited_bias }}'
+    - action: logbook.log
+      data:
+        name: Heat Pump Smart Control
+        message: ✓ Hors créneau / Lixee non disponible. Bias → 0.0°C (AA full control)
+  variables:
+    is_hc: '{{ is_state(''sensor.lixee_current_price'', ''HEURE CREUSE'') }}'
+    is_hp: '{{ is_state(''sensor.lixee_current_price'', ''HEURE PLEINE'') }}'
+    off_peak_boost: '{{ states(''input_number.heat_pump_bias_off_peak'')           |
+      float(1.5) }}'
+    peak_reduction: '{{ states(''input_number.heat_pump_bias_peak'')               |
+      float(-1.5) }}'
+    pre_offpeak_ramp: '{{ states(''input_number.heat_pump_bias_pre_offpeak'')        |
+      float(0.3) }}'
+    post_afternoon_hc: '{{ states(''input_number.heat_pump_bias_post_afternoon_hc'')  |
+      float(0.2) }}'
+    journee_bias: '{{ states(''input_number.heat_pump_bias_journee'')            |
+      float(-0.5) }}'
+    soiree_tardive_bias: '{{ states(''input_number.heat_pump_bias_soiree_tardive'')     |
+      float(-1.0) }}'
+    hc_afternoon_bias: '{{ states(''input_number.heat_pump_bias_afternoon_hc'')       |
+      float(1.5) }}'
+    cloud_cover: '{{ states(''sensor.burthecourt_aux_chenes_cloud_cover'')       |
+      float(0) }}'
+    freeze_risk: '{{ is_state(''binary_sensor.freeze_risk_expected'', ''on'') }}'
+    high_heat_loss: '{{ is_state(''binary_sensor.high_heat_loss_expected'', ''on'')
+      }}'
+    poor_solar_conditions: '{{ is_state(''binary_sensor.poor_solar_conditions_expected'',
+      ''on'') }}'
+    defrost_risk: '{{ is_state(''binary_sensor.defrost_likely_soon'', ''on'') }}'
+    current_bias: '{{ states(''number.ecodan_heatpump_auto_adaptive_setpoint_bias'')
+      | float(0) }}
+
+      '
+    room_temp_global: '{{ states(''sensor.thermometre_salon_temperature'') | float(20)
+      }}
+
+      '
+    humidity_correction: '{% set h = states(''sensor.thermometre_salon_humidity'')
+      | float(50) %} {% if   h < 35 %}  0.3 {% elif h < 45 %}  0.1 {% elif h > 65
+      %} -0.1 {% else %}         0.0 {% endif %}
+
+      '
+    max_bias_change: "{% if trigger is defined and trigger.id == 'manual_adjust' %}\n
+      \ 3.0\n{% else %}\n  {% set mins = (now() - states.number.ecodan_heatpump_auto_adaptive_setpoint_bias.last_changed).total_seconds()
+      / 60 %}\n  {% if   mins > 90 %} 2.0\n  {% elif mins > 30 %} 1.0\n  {% else            %}
+      0.5\n  {% endif %}\n{% endif %}\n"
+  mode: restart
+- id: '1773561904170'
+  alias: "\U0001F321️ Pompe à Chaleur - Synchronisation Température Salon"
+  description: Synchronise la température salon (Zigbee principal, BLE tp393 en fallback
+    si indisponible) vers le thermostat virtuel Ecodan.
+  use_blueprint:
+    path: github.com/sync_virtual_thermostat.yaml
+    input:
+      source_entity: sensor.thermometre_salon_temperature
+      source_fallback: sensor.tp393_69fa_temperature
+      target_input: number.ecodan_heatpump_virtual_thermostat_input_z1
+- id: '1772817363385'
+  alias: "\U0001F4EB Alerte Courrier"
+  description: 'Notifie à l''arrivée de courrier (vibration boîte aux lettres). Filtre
+    les reconnexions Zigbee, le vent fort, hors plage horaire facteur, et anti-flooding
+    (vent/pluie/tracteurs).
+
+    '
+  triggers:
+  - trigger: state
+    entity_id:
+    - binary_sensor.capteur_vibrations_vibration
+  conditions:
+  - condition: time
+    after: 07:00:00
+    before: '20:00:00'
+  - condition: template
+    value_template: '{{ (states(''sensor.burthecourt_aux_chenes_wind_gust'') | float(0))
+      <= 40 }}'
+  - condition: template
+    value_template: "{{ this.attributes.last_triggered is none\n   or (now() - this.attributes.last_triggered).total_seconds()
+      > 720 }}"
+  actions:
+  - variables:
+      heure: '{{ now().strftime("%H:%M") }}'
+      date_fr: "{{ now().strftime(\"%A %-d %B %Y\").capitalize()\n   if now().strftime(\"%-d\")
+        else now().strftime(\"%A %d %B %Y\").capitalize() }}"
+      vent: '{{ states("sensor.burthecourt_aux_chenes_wind_speed") | int(0) }}'
+      temp_ext: "{{ states(\"sensor.heat_pump_outdoor_temp_fused\") | float(0) | round(1)\n
+        \  if has_value(\"sensor.heat_pump_outdoor_temp_fused\")\n   else states(\"sensor.burthecourt_aux_chenes_temperature\")
+        | default(\"—\") }}"
+  - action: notify.mobile_app_pixel_9a
+    continue_on_error: true
+    data:
+      title: "\U0001F4EC Du courrier est arrivé !"
+      message: Activité détectée sur la boîte aux lettres à {{ heure }}.
+      data:
+        tag: alerte_courrier
+        channel: Courrier
+        importance: high
+        color: '#3b82f6'
+        notification_icon: mdi:mailbox-up
+        actions:
+        - action: URI
+          title: Ouvrir Home Assistant
+          uri: http://192.168.1.60:8123
+  - action: smtp.send_message
+    target:
+      entity_id: notify.email
+    continue_on_error: true
+    data:
+      title: "\U0001F4EC Du courrier est arrivé !"
+      message: Une activité a été détectée sur la boîte aux lettres à {{ heure }}.
+      html: "<!DOCTYPE html><html lang=\"fr\"><head><meta charset=\"utf-8\"><meta
+        name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"></head>
+        <body style=\"margin:0;padding:0;background:#0d1117;font-family:-apple-system,BlinkMacSystemFont,'Segoe
+        UI',Roboto,Helvetica,Arial,sans-serif;\"> <table role=\"presentation\" width=\"100%\"
+        cellpadding=\"0\" cellspacing=\"0\" style=\"background:#0d1117;padding:32px
+        16px;\"><tr><td align=\"center\"> <table role=\"presentation\" width=\"100%\"
+        cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:480px;background:#161b22;border-radius:20px;overflow:hidden;border:1px
+        solid #232a33;\"> <tr><td style=\"background:linear-gradient(135deg,#3b82f6
+        0%,#06b6d4 100%);padding:36px 32px 30px 32px;text-align:center;\"> <div style=\"font-size:64px;line-height:1;margin-bottom:8px;\">\U0001F4EC</div>
+        <div style=\"color:#ffffff;font-size:24px;font-weight:700;letter-spacing:-.4px;\">Du
+        courrier est arrivé&nbsp;!</div> <div style=\"color:rgba(255,255,255,.82);font-size:14px;margin-top:6px;\">Une
+        activité a été détectée sur la boîte aux lettres</div></td></tr> <tr><td style=\"padding:28px
+        32px 8px 32px;\"> <table role=\"presentation\" width=\"100%\" cellpadding=\"0\"
+        cellspacing=\"0\"><tr> <td style=\"background:#1c2530;border-radius:14px;padding:18px
+        20px;\"> <div style=\"color:#8b98a8;font-size:13px;padding-bottom:4px;\">\U0001F551&nbsp;&nbsp;Heure
+        de détection</div> <div style=\"color:#e6edf3;font-size:22px;font-weight:600;\">{{
+        heure }}</div> </td></tr></table></td></tr> <tr><td style=\"padding:14px 32px
+        4px 32px;\"> <table role=\"presentation\" width=\"100%\" cellpadding=\"0\"
+        cellspacing=\"0\"><tr> <td width=\"48%\" style=\"background:#1c2530;border-radius:14px;padding:14px
+        16px;\"> <div style=\"color:#8b98a8;font-size:12px;\">\U0001F32C️ Vent</div>
+        <div style=\"color:#e6edf3;font-size:17px;font-weight:600;margin-top:2px;\">{{
+        vent }} km/h</div></td> <td width=\"4%\"></td> <td width=\"48%\" style=\"background:#1c2530;border-radius:14px;padding:14px
+        16px;\"> <div style=\"color:#8b98a8;font-size:12px;\">\U0001F321️ Extérieur</div>
+        <div style=\"color:#e6edf3;font-size:17px;font-weight:600;margin-top:2px;\">{{
+        temp_ext }} °C</div></td></tr></table></td></tr> <tr><td style=\"padding:24px
+        32px 8px 32px;\" align=\"center\"> <a href=\"http://192.168.1.60:8123\" style=\"display:inline-block;background:linear-gradient(135deg,#3b82f6,#06b6d4);color:#fff;text-decoration:none;font-size:15px;font-weight:600;padding:14px
+        34px;border-radius:12px;\">Ouvrir Home Assistant</a></td></tr> <tr><td style=\"padding:18px
+        32px 28px 32px;text-align:center;\"> <div style=\"color:#5b6573;font-size:12px;\">Détecté
+        par le capteur de vibrations · {{ date_fr }}</div> <div style=\"color:#3d4654;font-size:11px;margin-top:4px;\">Home
+        Assistant · Burthecourt-aux-Chênes</div></td></tr> </table></td></tr></table></body></html>"
+  mode: single
+- id: hp_notify_states
+  alias: "\U0001F514 Heat Pump - Alertes État (Booster / Lockout / Gel)"
+  description: 'Notifications persistantes pour booster actif, short cycle lockout
+    et risque de gel. Dismiss automatique à la résolution.
+
+    '
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.ecodan_heatpump_booster_heater
+    id: booster
+  - trigger: state
+    entity_id: binary_sensor.freeze_risk_expected
+    id: gel
+  actions:
+  - choose:
+    - conditions:
+      - condition: trigger
+        id: booster
+      - condition: state
+        entity_id: binary_sensor.ecodan_heatpump_booster_heater
+        state: 'on'
+      sequence:
+      - action: persistent_notification.create
+        data:
+          notification_id: hp_booster_active
+          title: "\U0001F525 Booster électrique actif"
+          message: 'La résistance d''appoint est active depuis {{ now().strftime(''%H:%M'')
+            }}. Consommation élevée — vérifier les conditions extérieures.
+
+            '
+    - conditions:
+      - condition: trigger
+        id: booster
+      - condition: state
+        entity_id: binary_sensor.ecodan_heatpump_booster_heater
+        state: 'off'
+      sequence:
+      - action: persistent_notification.dismiss
+        data:
+          notification_id: hp_booster_active
+    - conditions:
+      - condition: trigger
+        id: lockout
+      - condition: state
+        entity_id: binary_sensor.ecodan_heatpump_short_cycle_lockout
+        state: 'on'
+      sequence:
+      - action: persistent_notification.create
+        data:
+          notification_id: hp_short_cycle_lockout
+          title: "\U0001F512 Short cycle lockout"
+          message: 'Verrouillage court-cycle déclenché à {{ now().strftime(''%H:%M'')
+            }}. La PAC est temporairement bloquée. Fréquence compresseur: {{ states(''sensor.ecodan_heatpump_compressor_frequency'')
+            | round(0) }}Hz
+
+            '
+    - conditions:
+      - condition: trigger
+        id: lockout
+      - condition: state
+        entity_id: binary_sensor.ecodan_heatpump_short_cycle_lockout
+        state: 'off'
+      sequence:
+      - action: persistent_notification.dismiss
+        data:
+          notification_id: hp_short_cycle_lockout
+      - action: persistent_notification.create
+        data:
+          notification_id: hp_short_cycle_lockout
+          title: ✅ Lockout PAC levé
+          message: Short cycle lockout terminé à {{ now().strftime('%H:%M') }}.
+    - conditions:
+      - condition: trigger
+        id: gel
+      - condition: state
+        entity_id: binary_sensor.freeze_risk_expected
+        state: 'on'
+      sequence:
+      - action: persistent_notification.create
+        data:
+          notification_id: hp_freeze_risk
+          title: "\U0001F976 Risque de gel détecté"
+          message: 'Risque de gel à {{ now().strftime(''%H:%M'') }}. Ext: {{ states(''sensor.heat_pump_outdoor_temp_fused'')
+            | round(1) }}°C · Chance gel: {{ states(''sensor.burthecourt_aux_chenes_freeze_chance'')
+            | round(0) }}% · Vérifier que la PAC est en mode protection.
+
+            '
+    - conditions:
+      - condition: trigger
+        id: gel
+      - condition: state
+        entity_id: binary_sensor.freeze_risk_expected
+        state: 'off'
+      sequence:
+      - action: persistent_notification.dismiss
+        data:
+          notification_id: hp_freeze_risk
+  mode: queued
+  max: 10
+- id: hp_notify_errors
+  alias: "\U0001F514 Heat Pump - Alertes Erreurs Capteurs"
+  description: 'Vérifie toutes les 15 min que les capteurs critiques sont disponibles.
+    Notifie et crée une notification persistante si problème. Dismiss automatique
+    quand tout est revenu.
+
+    '
+  triggers:
+  - trigger: time_pattern
+    minutes: /15
+  variables:
+    thermo_ok: '{{ not is_state(''sensor.thermometre_salon_temperature'', ''unavailable'')
+      and not is_state(''sensor.thermometre_salon_temperature'', ''unknown'') }}'
+    bias_ok: '{{ not is_state(''number.ecodan_heatpump_auto_adaptive_setpoint_bias'',
+      ''unavailable'') and not is_state(''number.ecodan_heatpump_auto_adaptive_setpoint_bias'',
+      ''unknown'') }}'
+    outdoor_ok: '{{ not is_state(''sensor.heat_pump_outdoor_temp_fused'', ''unavailable'')
+      and not is_state(''sensor.heat_pump_outdoor_temp_fused'', ''unknown'') }}'
+    all_ok: '{{ thermo_ok and bias_ok and outdoor_ok }}'
+  actions:
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: '{{ not all_ok }}'
+      sequence:
+      - variables:
+          error_list: '{% set errors = [] %} {% if not thermo_ok %}{% set errors =
+            errors + [''❌ Thermomètre salon indisponible''] %}{% endif %} {% if not
+            bias_ok %}{% set errors = errors + [''❌ Capteur bias PAC indisponible'']
+            %}{% endif %} {% if not outdoor_ok %}{% set errors = errors + [''❌ Sonde
+            température extérieure indisponible''] %}{% endif %} {{ errors | join(''\n'')
+            }}
+
+            '
+      - action: persistent_notification.create
+        data:
+          notification_id: hp_sensor_error
+          title: ⚠️ Erreur capteur PAC
+          message: 'Capteur(s) critique(s) indisponible(s) à {{ now().strftime(''%H:%M'')
+            }}:
+
+            {{ error_list }}
+
+            L''automation Smart Bias peut ne pas fonctionner correctement.
+
+            '
+      - action: persistent_notification.create
+        data:
+          notification_id: hp_sensor_error
+          title: ⚠️ Erreur capteur PAC
+          message: '{{ error_list }}'
+    - conditions:
+      - condition: template
+        value_template: '{{ all_ok }}'
+      sequence:
+      - action: persistent_notification.dismiss
+        data:
+          notification_id: hp_sensor_error
+  mode: single
+- id: '1774337561905'
+  alias: "\U0001F50A Sonos - Playlist"
+  description: Lance une playlist aléatoire avec minuteur de veille et fondu des lumières
+    quand la musique est lancée la nuit
+  triggers:
+  - device_id: a44ba2ea7952c7beb3f6f0c98bf1186c
+    domain: media_player
+    entity_id: 4250b159aa86eda74c1d54f308e53fc8
+    type: playing
+    trigger: device
+    for:
+      hours: 0
+      minutes: 0
+      seconds: 0
+  conditions:
+  - condition: template
+    value_template: '{{ (now() - state_attr(''automation.sonos_minuteur_de_veille_lecture'',
+      ''last_triggered'')).seconds > 10 }}
+
+      '
+  - condition: time
+    after: '22:00:00'
+    before: 02:00:00
+  actions:
+  - alias: Run playlist
+    action: media_player.play_media
+    target:
+      entity_id: media_player.chambre
+    data:
+      media:
+        media_content_id: '{% set ids = [''FV:2/6'', ''FV:2/19'', ''FV:2/17''] %}
+          {{ ids[now().microsecond % ids | length] }}
+
+          '
+        media_content_type: favorite_item_id
+  - action: media_player.shuffle_set
+    target:
+      device_id: a44ba2ea7952c7beb3f6f0c98bf1186c
+    data:
+      shuffle: true
+  - variables:
+      sleep_duration: 7200
+      brightness_start: '{{ state_attr(''light.chambre'', ''brightness'') | int(255)
+        }}'
+      steps: 120
+  - action: sonos.set_sleep_timer
+    target:
+      device_id: a44ba2ea7952c7beb3f6f0c98bf1186c
+    data:
+      sleep_time: '{{ sleep_duration }}'
+  - action: media_player.volume_set
+    target:
+      device_id: a44ba2ea7952c7beb3f6f0c98bf1186c
+    data:
+      volume_level: 0.08
+  - repeat:
+      count: '{{ steps }}'
+      sequence:
+      - delay:
+          seconds: '{{ (sleep_duration / steps) | int }}'
+      - action: light.turn_on
+        target:
+          entity_id: light.chambre
+        data:
+          brightness: '{{ [((brightness_start - (brightness_start / steps * repeat.index))
+            | int), 1] | max }}
+
+            '
+  - action: light.turn_off
+    target:
+      entity_id: light.chambre
+  mode: single
+- id: '1774986409455'
+  alias: "\U0001F305 Chambre - Réveil effet Morning"
+  description: Allume la chambre en effet Morning au réveil
+  triggers:
+  - trigger: state
+    entity_id: media_player.chambre
+    to: playing
+  conditions:
+  - condition: time
+    after: 06:00:00
+    before: 09:00:00
+  - condition: sun
+    before: sunrise
+  actions:
+  - action: light.turn_on
+    target:
+      entity_id: light.chambre
+    data:
+      brightness_pct: 1
+      effect: Morning
+  - action: light.turn_on
+    target:
+      entity_id: light.chambre
+    data:
+      brightness_pct: 80
+      transition: 300
+  mode: single
+- id: '1774986471797'
+  alias: ✨ Chambre - theme par défaut
+  description: Applique Aurora 6% à chaque allumage sauf réveil
+  triggers:
+  - trigger: state
+    entity_id: light.chambre
+    to: 'on'
+  conditions:
+  - condition: time
+    after: 09:00:00
+    before: 06:00:00
+  actions:
+  - action: light.turn_on
+    target:
+      entity_id: light.chambre
+    data:
+      effect: xXx~CraftLord~xXx
+      brightness_pct: 8
+      transition: 5
+  mode: single
+- id: '1775068081925'
+  alias: "\U0001F4A1 Lampe - Allumage 22h45"
+  description: Allume la chambre à 22h45 avec effet personnalisé et faible luminosité
+  triggers:
+  - trigger: time
+    at: '22:45:00'
+  conditions: []
+  actions:
+  - action: light.turn_on
+    target:
+      entity_id: light.chambre
+    data:
+      brightness_pct: 10
+      effect: xXx~CraftLord~xXx
+      transition: 5
+  mode: single
+- id: '1775156253836'
+  alias: "\U0001F319 Extinction lumières salon 23h15"
+  description: Éteint les lumières à 23h15, attend que la TV soit éteinte (retry toutes
+    les 10 min, abandon à 2h)
+  triggers:
+  - at: '23:15:00'
+    trigger: time
+  actions:
+  - repeat:
+      while:
+      - condition: state
+        entity_id: media_player.salon_samsung_55_oled
+        state:
+        - 'on'
+      - condition: time
+        after: '23:00:00'
+        before: 02:00:00
+      sequence:
+      - delay:
+          minutes: 10
+  - action: light.turn_off
+    target:
+      entity_id:
+      - light.floor_lamp_basic_2
+      - light.leds_salon
+- id: '1775318690534'
+  alias: ❄️ Clim Chambre - Gestion ouverture porte
+  description: Coupe la clim si porte ouverte 5min, relance si elle était allumée
+  triggers:
+  - entity_id: binary_sensor.ouverture_porte_fenetre_contact
+    to: 'on'
+    id: porte_ouverte
+    trigger: state
+    for:
+      minutes: 5
+  - entity_id: binary_sensor.ouverture_porte_fenetre_contact
+    to: 'off'
+    id: porte_fermee
+    trigger: state
+    for:
+      minutes: 10
+  actions:
+  - choose:
+    - conditions:
+      - condition: trigger
+        id: porte_ouverte
+      - condition: not
+        conditions:
+        - condition: state
+          entity_id: climate.clim_chambre_control
+          state: 'off'
+      sequence:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.clim_chambre_etat_avant
+        data:
+          value: '{{ states(''climate.clim_chambre_control'') }}'
+      - action: climate.turn_off
+        target:
+          entity_id: climate.clim_chambre_control
+    - conditions:
+      - condition: trigger
+        id: porte_fermee
+      - condition: not
+        conditions:
+        - condition: state
+          entity_id: input_text.clim_chambre_etat_avant
+          state: 'off'
+      - condition: state
+        entity_id: climate.clim_chambre_control
+        state: 'off'
+      sequence:
+      - action: climate.set_hvac_mode
+        target:
+          entity_id: climate.clim_chambre_control
+        data:
+          hvac_mode: '{{ states(''input_text.clim_chambre_etat_avant'') }}'
+  mode: single
+- id: '1775496079688'
+  alias: "\U0001F4A1 Salon - Allumage 23h15"
+  description: Allume la lumière d'ambiance du salon à 23h15 avec une luminosité de
+    30%.
+  triggers:
+  - trigger: time
+    at: '23:15:00'
+  conditions: []
+  actions:
+  - action: light.turn_on
+    data:
+      rgb_color:
+      - 100
+      - 0
+      - 180
+      brightness_pct: 8
+    target:
+      entity_id: light.leds_cuisine
+  - action: light.turn_on
+    target:
+      entity_id: light.leds_salon
+    data:
+      brightness_pct: 8
+      rgb_color:
+      - 100
+      - 0
+      - 180
+  mode: single
+- id: '1775600957034'
+  alias: "\U0001F4A1 Cascades LEDs - Cuisine & Salon"
+  description: Gère l'allumage et l'extinction en cascade pour les deux zones
+  triggers:
+  - trigger: state
+    entity_id: light.leds_cuisine
+    from: 'off'
+    to: 'on'
+    id: cuisine_on
+  - trigger: state
+    entity_id: light.leds_cuisine
+    from: 'on'
+    to: 'off'
+    id: cuisine_off
+  - trigger: state
+    entity_id: light.leds_salon
+    from: 'off'
+    to: 'on'
+    id: salon_on
+  - trigger: state
+    entity_id: light.leds_salon
+    from: 'on'
+    to: 'off'
+    id: salon_off
+  actions:
+  - choose:
+    - conditions:
+      - condition: trigger
+        id: cuisine_on
+      sequence:
+      - repeat:
+          for_each:
+          - light.smart_led_bulb_1
+          - light.smart_led_bulb_2_2
+          - light.smart_led_bulb_3
+          - light.smart_led_bulb_4
+          sequence:
+          - action: light.turn_on
+            target:
+              entity_id: '{{ repeat.item }}'
+            data:
+              rgb_color: '{{ state_attr(trigger.entity_id, ''rgb_color'') | default([255,255,255])
+                }}'
+              brightness: '{{ state_attr(trigger.entity_id, ''brightness'') | int(204)
+                }}'
+              transition: 1
+          - delay:
+              milliseconds: 400
+    - conditions:
+      - condition: trigger
+        id: cuisine_off
+      sequence:
+      - repeat:
+          for_each:
+          - light.smart_led_bulb_4
+          - light.smart_led_bulb_3
+          - light.smart_led_bulb_2_2
+          - light.smart_led_bulb_1
+          sequence:
+          - action: light.turn_off
+            target:
+              entity_id: '{{ repeat.item }}'
+          - delay:
+              milliseconds: 400
+    - conditions:
+      - condition: trigger
+        id: salon_on
+      sequence:
+      - repeat:
+          for_each:
+          - light.smart_led_bulb_2
+          - light.smart_led_bulb
+          sequence:
+          - action: light.turn_on
+            target:
+              entity_id: '{{ repeat.item }}'
+            data:
+              rgb_color: '{{ state_attr(trigger.entity_id, ''rgb_color'') | default([255,255,255])
+                }}'
+              brightness: '{{ state_attr(trigger.entity_id, ''brightness'') | int(204)
+                }}'
+              transition: 1
+          - delay:
+              milliseconds: 400
+    - conditions:
+      - condition: trigger
+        id: salon_off
+      sequence:
+      - repeat:
+          for_each:
+          - light.smart_led_bulb
+          - light.smart_led_bulb_2
+          sequence:
+          - action: light.turn_off
+            target:
+              entity_id: '{{ repeat.item }}'
+          - delay:
+              milliseconds: 400
+  mode: parallel
+- id: '1776624031101'
+  alias: "\U0001F33F Robot Tondeuse - Rue + Jardin"
+  description: Tonte zones Rue (#1) + Zone3 (#3) à 12h si météo OK et ≥3 jours depuis
+    dernière tonte
+  triggers:
+  - platform: time
+    at: '12:00:00'
+  conditions:
+  - condition: state
+    entity_id: input_boolean.tondeuse_pause
+    state: 'off'
+  - condition: template
+    value_template: '{{ (now().date() - (states(''input_datetime.tondeuse_derniere_tonte'')
+      | as_datetime | as_local).date()).days >= 3 }}
+
+      '
+  - condition: state
+    entity_id: lawn_mower.mova_1000
+    state: docked
+  - condition: numeric_state
+    entity_id: sensor.burthecourt_aux_chenes_daily_precipitation
+    below: 5
+  - condition: template
+    value_template: "{{ states('sensor.burthecourt_aux_chenes_daily_original_condition')
+      not in [\n  'Averses faibles', 'Averses', 'Averses fortes',\n  'Pluie faible',
+      'Pluie', 'Pluie forte',\n  'Orages', 'Orages forts', 'Brouillard'\n] }}\n"
+  - condition: template
+    value_template: "{{ state_attr('sensor.54_weather_alert', 'Canicule') not in ['Orange',
+      'Rouge']\n   and state_attr('sensor.54_weather_alert', 'Orages') not in ['Orange',
+      'Rouge'] }}\n"
+  - condition: numeric_state
+    entity_id: sensor.temperature_exterieure
+    below: 28
+    above: 10
+  actions:
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.tondeuse_rattrapage_needed
+  - action: input_datetime.set_datetime
+    target:
+      entity_id: input_datetime.tondeuse_derniere_tonte
+    data:
+      date: '{{ now().strftime(''%Y-%m-%d'') }}'
+  - action: persistent_notification.create
+    data:
+      notification_id: tondeuse
+      title: "\U0001F33F Tondeuse"
+      message: Tonte démarrée (Rue + Zone3)
+  - action: dreame_mower.start_zone_mowing
+    target:
+      entity_id: lawn_mower.mova_1000
+    data:
+      zone_ids:
+      - 3
+      - 1
+  - wait_template: '{{ is_state(''lawn_mower.mova_1000'', ''docked'') }}'
+    timeout: 04:00:00
+    continue_on_timeout: true
+  - choose:
+    - conditions:
+      - condition: state
+        entity_id: lawn_mower.mova_1000
+        state: docked
+      sequence:
+      - action: persistent_notification.create
+        data:
+          notification_id: tondeuse
+          title: "\U0001F33F Tondeuse"
+          message: Tonte terminée ✅
+    - conditions:
+      - condition: template
+        value_template: '{{ true }}'
+      sequence:
+      - action: persistent_notification.create
+        data:
+          notification_id: tondeuse
+          title: "\U0001F33F Tondeuse"
+          message: ⚠️ Tonte timeout (>4h) — vérifier l'état du robot
+  mode: single
+- id: tondeuse_flag_rattrapage
+  alias: "\U0001F33F Robot Tondeuse - Marquer rattrapage nécessaire"
+  description: Met le flag rattrapage si météo mauvaise et ≥3 jours depuis dernière
+    tonte
+  triggers:
+  - trigger: time
+    at: '12:00:00'
+  conditions:
+  - condition: template
+    value_template: '{{ (now().date() - (states(''input_datetime.tondeuse_derniere_tonte'')
+      | as_datetime | as_local).date()).days >= 3 }}
+
+      '
+  - condition: or
+    conditions:
+    - condition: not
+      conditions:
+      - condition: state
+        entity_id: sensor.burthecourt_aux_chenes_next_rain
+        state: unknown
+    - condition: template
+      value_template: "{{ states('sensor.burthecourt_aux_chenes_daily_original_condition')
+        in [\n  'Averses faibles', 'Averses', 'Averses fortes',\n  'Pluie faible',
+        'Pluie', 'Pluie forte',\n  'Orages', 'Orages forts', 'Brouillard'\n] }}\n"
+    - condition: numeric_state
+      entity_id: sensor.burthecourt_aux_chenes_daily_precipitation
+      above: 5
+    - condition: template
+      value_template: "{{ state_attr('sensor.54_weather_alert', 'Canicule') in ['Orange',
+        'Rouge']\n   or state_attr('sensor.54_weather_alert', 'Orages') in ['Orange',
+        'Rouge'] }}\n"
+  actions:
+  - action: input_boolean.turn_on
+    target:
+      entity_id: input_boolean.tondeuse_rattrapage_needed
+  mode: single
+- id: tondeuse_rattrapage_meteo
+  alias: "\U0001F33F Robot Tondeuse - Rattrapage météo"
+  description: Déclenche la tonte dès que météo OK si rattrapage nécessaire (hors
+    créneaux habituels)
+  triggers:
+  - platform: state
+    entity_id: sensor.burthecourt_aux_chenes_daily_original_condition
+  - platform: numeric_state
+    entity_id: sensor.burthecourt_aux_chenes_daily_precipitation
+    below: 5
+  conditions:
+  - condition: state
+    entity_id: input_boolean.tondeuse_pause
+    state: 'off'
+  - condition: state
+    entity_id: input_boolean.tondeuse_rattrapage_needed
+    state: 'on'
+  - condition: state
+    entity_id: lawn_mower.mova_1000
+    state: docked
+  - condition: template
+    value_template: "{{ states('sensor.burthecourt_aux_chenes_daily_original_condition')
+      not in [\n  'Averses faibles', 'Averses', 'Averses fortes',\n  'Pluie faible',
+      'Pluie', 'Pluie forte',\n  'Orages', 'Orages forts', 'Brouillard'\n] }}\n"
+  - condition: numeric_state
+    entity_id: sensor.burthecourt_aux_chenes_daily_precipitation
+    below: 5
+  - condition: numeric_state
+    entity_id: sensor.temperature_exterieure
+    below: 28
+    above: 10
+  - condition: template
+    value_template: "{{ state_attr('sensor.54_weather_alert', 'Canicule') not in ['Orange',
+      'Rouge']\n   and state_attr('sensor.54_weather_alert', 'Orages') not in ['Orange',
+      'Rouge'] }}\n"
+  - condition: time
+    after: 09:00:00
+    before: '20:00:00'
+  - condition: not
+    conditions:
+    - condition: time
+      weekday:
+      - mon
+      - wed
+      - sat
+  actions:
+  - action: input_boolean.turn_off
+    target:
+      entity_id: input_boolean.tondeuse_rattrapage_needed
+  - action: input_datetime.set_datetime
+    target:
+      entity_id: input_datetime.tondeuse_derniere_tonte
+    data:
+      date: '{{ now().strftime(''%Y-%m-%d'') }}'
+  - action: persistent_notification.create
+    data:
+      notification_id: tondeuse
+      title: "\U0001F33F Tondeuse"
+      message: Rattrapage météo — tonte démarrée
+  - action: dreame_mower.start_zone_mowing
+    target:
+      entity_id: lawn_mower.mova_1000
+    data:
+      zone_ids:
+      - 3
+      - 1
+  - wait_template: '{{ is_state(''lawn_mower.mova_1000'', ''docked'') }}'
+    timeout: 08:00:00
+    continue_on_timeout: true
+  - choose:
+    - conditions:
+      - condition: state
+        entity_id: lawn_mower.mova_1000
+        state: docked
+      sequence:
+      - action: persistent_notification.create
+        data:
+          notification_id: tondeuse
+          title: "\U0001F33F Tondeuse"
+          message: Rattrapage terminé ✅
+    - conditions:
+      - condition: template
+        value_template: '{{ true }}'
+      sequence:
+      - action: persistent_notification.create
+        data:
+          notification_id: tondeuse
+          title: "\U0001F33F Tondeuse"
+          message: ⚠️ Rattrapage timeout — vérifier le robot
+  mode: single
+- id: voiture_api_watchdog
+  alias: "\U0001F504 Voiture - Watchdog API VW"
+  description: Secoue l'API VW si pas de données depuis >1h et voiture branchée
+  triggers:
+  - trigger: time_pattern
+    minutes: /15
+  conditions:
+  - condition: state
+    entity_id: binary_sensor.wvwzzze18sp049976_charging_cable_connected
+    state: 'on'
+  - condition: template
+    value_template: "{{ not has_value('sensor.wvwzzze18sp049976_last_data_refresh')\n
+      \  or (now() - states('sensor.wvwzzze18sp049976_last_data_refresh')\n       |
+      as_datetime(now())).total_seconds() > 3600 }}"
+  actions:
+  - action: homeassistant.reload_config_entry
+    target:
+      entity_id: sensor.wvwzzze18sp049976_last_data_refresh
+  mode: single
+- id: '1779456797266'
+  alias: "\U0001F305 Volets - Ouverture Lever Soleil"
+  description: ''
+  triggers:
+  - trigger: sun
+    event: sunrise
+    offset: 0
+  conditions: []
+  actions:
+  - repeat:
+      until:
+      - condition: or
+        conditions:
+        - condition: state
+          entity_id: cover.s_so_rs100_io_low_speed
+          state: open
+        - condition: template
+          value_template: '{{ repeat.index >= 3 }}'
+      sequence:
+      - continue_on_error: true
+        action: cover.open_cover
+        target:
+          entity_id: cover.s_so_rs100_io_low_speed
+      - delay:
+          seconds: 30
+  mode: single
+- id: '1779456867156'
+  alias: "\U0001F319 Volets - Fermeture 23h"
+  description: Ferme un volet roulant tous les soirs à 23h00.
+  triggers:
+  - trigger: time
+    at: '23:00:00'
+  conditions: []
+  actions:
+  - device_id: de59a7d08004ed1a1204ebf3ecc3d547
+    domain: cover
+    entity_id: a99dbe849f714a98fedf22a2e5ec21a7
+    type: close
+  mode: single
+- id: depart_demande
+  alias: "\U0001F697 Départ — AA connecté → 'Tu pars ?'"
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.pixel_9a_android_auto
+    from: 'off'
+    to: 'on'
+  conditions:
+  - condition: state
+    entity_id: device_tracker.pixel_9a
+    state: home
+  actions:
+  - parallel:
+    - action: notify.mobile_app_pixel_9a
+      data:
+        title: "\U0001F697 Départ"
+        message: Tu pars ? J'ouvre garage + portail ?
+        data:
+          ttl: 0
+          priority: high
+          car_ui: true
+          channel: Portail Garage
+          importance: high
+          notification_icon: mdi:garage-open
+          tag: depart_garage
+          actions:
+          - action: DEPART_OUI
+            title: Oui, ouvre
+          - action: DEPART_NON
+            title: Non
+    - action: telegram_bot.send_message
+      data:
+        config_entry_id: 01KV0GBSBGNVQCHFJGRFERM7TY
+        title: "\U0001F697 Départ"
+        message: Tu pars ? J'ouvre garage + portail ?
+        inline_keyboard:
+        - Oui:/DEPART_OUI, Non:/DEPART_NON
+  mode: single
+- id: depart_ouvre
+  alias: "\U0001F697 Départ — Oui → ouvre garage + portail"
+  triggers:
+  - trigger: event
+    event_type: mobile_app_notification_action
+    event_data:
+      action: DEPART_OUI
+  - trigger: event
+    event_type: telegram_callback
+    event_data:
+      data: /DEPART_OUI
+  conditions: []
+  actions:
+  - parallel:
+    - if:
+      - condition: state
+        entity_id: binary_sensor.zigbee_47614_1_contact
+        state: 'off'
+      then:
+      - action: switch.turn_on
+        target:
+          entity_id: switch.switch_porte_garage
+      - delay:
+          milliseconds: 10000
+      - action: switch.turn_off
+        target:
+          entity_id: switch.switch_porte_garage
+    - if:
+      - condition: state
+        entity_id: binary_sensor.0x449fdafffe34178a_contact
+        state: 'off'
+      then:
+      - action: switch.turn_on
+        target:
+          entity_id: switch.0x98a316fffe752710
+      - delay:
+          milliseconds: 10000
+      - action: switch.turn_off
+        target:
+          entity_id: switch.0x98a316fffe752710
+  mode: single
+- id: depart_ferme_garage
+  alias: "\U0001F697 Départ — éloigné >60 m → ferme garage"
+  description: '24-06 : le radar ne fonctionnait pas pour fermer (porte ouverte =
+    radar mmWave collé ON, jamais ''off'' → le garage restait ouvert toute la journée,
+    et ça déclenchait ''Tu es rentré ?'' en se garant ailleurs). On ferme désormais
+    le garage sur la position GÉOCODÉE (MAJ ~27 s) dès >60 m du garage — tôt, car
+    la porte ne doit pas traîner ouverte. Gardé Android Auto + garage ouvert. Seuil
+    60 m < 120 m du portail → le garage ferme avant le portail.'
+  triggers:
+  - trigger: template
+    value_template: '{% set loc = state_attr(''sensor.pixel_9a_geocoded_location'',
+      ''location'') %}{{ loc is not none and distance(loc[0], loc[1], 48.582308, 6.248363)
+      | float(0) > 0.06 }}'
+  conditions:
+  - condition: state
+    entity_id: binary_sensor.pixel_9a_android_auto
+    state: 'on'
+  - condition: state
+    entity_id: binary_sensor.zigbee_47614_1_contact
+    state: 'on'
+  actions:
+  - action: switch.turn_on
+    target:
+      entity_id: switch.switch_porte_garage
+  - delay:
+      milliseconds: 10000
+  - action: switch.turn_off
+    target:
+      entity_id: switch.switch_porte_garage
+  mode: single
+- id: depart_ferme_garage_camera
+  alias: "\U0001F697 Départ — voiture sort du garage (radar) → ferme tôt"
+  description: '04-07 : ferme le garage DÈS que la voiture quitte physiquement le
+    garage, sans attendre les 60 m. Signal = binary_sensor.detecteur_presence_presence
+    (radar garage) qui passe on→off (trace 04-07 : radar off à 07:01:45 = voiture
+    sortie ; la porte se refermait à 07:03:26 sur la géoloc, soit ~1min40 trop tard).
+    Gardé Android Auto ON (= tu es en voiture, tu pars) + porte garage ouverte. Le
+    filet géoloc 60 m (depart_ferme_garage) reste actif si le radar rate.'
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.detecteur_presence_presence
+    from: 'on'
+    to: 'off'
+  conditions:
+  - condition: state
+    entity_id: binary_sensor.pixel_9a_android_auto
+    state: 'on'
+  - condition: state
+    entity_id: binary_sensor.zigbee_47614_1_contact
+    state: 'on'
+  actions:
+  - action: switch.turn_on
+    target:
+      entity_id: switch.switch_porte_garage
+  - delay:
+      milliseconds: 10000
+  - action: switch.turn_off
+    target:
+      entity_id: switch.switch_porte_garage
+  mode: single
+- id: depart_ferme_portail
+  alias: "\U0001F3E0 Départ — éloigné >120 m → ferme portail"
+  triggers:
+  - trigger: template
+    value_template: "{{ distance('device_tracker.pixel_9a', 48.582308, 6.248363) |
+      float(0) > 0.12\n   and state_attr('device_tracker.pixel_9a', 'gps_accuracy')
+      | float(999) < 100 }}\n"
+    for:
+      seconds: 30
+  conditions:
+  - condition: state
+    entity_id: binary_sensor.pixel_9a_android_auto
+    state: 'on'
+  - condition: state
+    entity_id: binary_sensor.0x449fdafffe34178a_contact
+    state: 'on'
+  actions:
+  - action: switch.turn_on
+    target:
+      entity_id: switch.0x98a316fffe752710
+  - delay:
+      milliseconds: 10000
+  - action: switch.turn_off
+    target:
+      entity_id: switch.0x98a316fffe752710
+  - wait_template: "{{ is_state('binary_sensor.zigbee_47614_1_contact', 'off')\n   and
+      is_state('binary_sensor.0x449fdafffe34178a_contact', 'off') }}\n"
+    timeout:
+      seconds: 90
+    continue_on_timeout: true
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: '{{ wait.completed }}'
+      sequence:
+      - action: notify.mobile_app_pixel_9a
+        data:
+          title: "\U0001F3E0 Maison sécurisée"
+          message: Tout est fermé. Bonne route.
+          data:
+            car_ui: true
+            ttl: 0
+            priority: high
+            channel: Portail Garage
+    default:
+    - action: notify.mobile_app_pixel_9a
+      data:
+        title: ⚠️ Attention
+        message: 'Pas confirmé fermé : garage={{ states(''binary_sensor.zigbee_47614_1_contact'')
+          }}, portail={{ states(''binary_sensor.0x449fdafffe34178a_contact'') }}.'
+        data:
+          car_ui: true
+          ttl: 0
+          priority: high
+          channel: Portail Garage
+  mode: single
+- id: retour_maison_notif_test
+  alias: "\U0001F3E0 Retour — approche 800 m → ouvre portail"
+  description: '24-06 : passé sur la position GÉOCODÉE (attribut location, MAJ ~27
+    s tout le trajet) au lieu de device_tracker (qui sautait de 424 m direct à la
+    maison avec 63 s de trou → 0 anticipation). Seuil élargi 400→800 m. Gardé par
+    Android Auto (= en voiture) donc le jitter géocode à l''arrêt ne peut rien ouvrir.
+    Si on ne fait que traverser, il se referme à l''éloignement (depart_ferme_portail
+    >120 m).'
+  triggers:
+  - trigger: template
+    value_template: '{% set loc = state_attr(''sensor.pixel_9a_geocoded_location'',
+      ''location'') %}{{ loc is not none and distance(loc[0], loc[1], 48.582308, 6.248363)
+      | float(9999) < 0.80 }}'
+  conditions:
+  - condition: state
+    entity_id: binary_sensor.pixel_9a_android_auto
+    state: 'on'
+  - condition: state
+    entity_id: binary_sensor.0x449fdafffe34178a_contact
+    state: 'off'
+    for:
+      seconds: 45
+  actions:
+  - action: switch.turn_on
+    target:
+      entity_id: switch.0x98a316fffe752710
+  - delay:
+      milliseconds: 10000
+  - action: switch.turn_off
+    target:
+      entity_id: switch.0x98a316fffe752710
+  - action: notify.mobile_app_pixel_9a
+    data:
+      title: "\U0001F3E0 Portail"
+      message: Portail ouvert.
+      data:
+        car_ui: true
+        ttl: 0
+        priority: high
+        channel: Portail Garage
+  - action: switch.turn_off
+    target:
+      entity_id:
+      - switch.driveway_auto_retour_au_point_de_garde
+      - switch.driveway_suivi_automatique
+  - repeat:
+      count: 5
+      sequence:
+      - action: reolink.ptz_move
+        target:
+          entity_id: button.driveway_ptz_droit
+        data:
+          speed: 16
+      - delay:
+          milliseconds: 1000
+      - action: button.press
+        target:
+          entity_id: button.driveway_arret_ptz
+      - delay:
+          milliseconds: 1000
+  - repeat:
+      count: 4
+      sequence:
+      - action: reolink.ptz_move
+        target:
+          entity_id: button.driveway_ptz_haut
+        data:
+          speed: 16
+      - delay:
+          milliseconds: 1000
+      - action: button.press
+        target:
+          entity_id: button.driveway_arret_ptz
+      - delay:
+          milliseconds: 1000
+  - repeat:
+      count: 2
+      sequence:
+      - action: reolink.ptz_move
+        target:
+          entity_id: button.driveway_ptz_gauche
+        data:
+          speed: 11
+      - delay:
+          milliseconds: 1000
+      - action: button.press
+        target:
+          entity_id: button.driveway_arret_ptz
+      - delay:
+          milliseconds: 1000
+  - wait_for_trigger:
+    - trigger: state
+      entity_id: binary_sensor.zigbee_47614_1_contact
+      from: 'off'
+      to: 'on'
+    timeout:
+      minutes: 5
+    continue_on_timeout: true
+  - action: switch.turn_on
+    target:
+      entity_id:
+      - switch.driveway_auto_retour_au_point_de_garde
+      - switch.driveway_suivi_automatique
+  - action: button.press
+    target:
+      entity_id: button.driveway_retour_au_point_de_garde
+  mode: single
+- id: retour_maison_ouverture_garage
+  alias: "\U0001F697 Ouverture garage au retour"
+  description: 'RETOUR 2/3 — Ouvre le GARAGE à l''approche. 04-07 : passé sur la CAMÉRA
+    driveway (la géoloc ne gère plus que le portail). Trigger = binary_sensor.driveway_vehicule
+    off→on : la caméra te voit entrer dans l''allée après le portail franchi (trace
+    04-07 : CAM véhicule on à 12:31:46, porte s''ouvre 8 s après, avant d''arriver
+    au garage). 05-07 FIX faux positifs : 2 réouvertures fantômes (12:44 et 12:55)
+    car AA restait ''on'' pendant que Chris manœuvrait/repartait après être rentré
+    → chaque flash caméra rouvrait. Ajout garde « en APPROCHE » : device_tracker PAS
+    home) + AA on + anti-rafale garage fermé 120 s. ⚠️ 05-07 PREUVE LOGBOOK : le garage
+    s''est ouvert à 12:55:38 alors que Chris était à HOUDEMONT (~15 km, en route vers
+    Commercy) — un flash driveway_vehicule (voiture qui passe dans la rue) + AA encore
+    on tout le trajet (12:41→13:34) a suffi. La garde « not_home » ne bloque RIEN
+    ici (il ÉTAIT not_home). ⇒ AJOUT CONDITION DÉCISIVE : distance géocodée < 300
+    m du garage (loc = state_attr geocoded_location). La caméra ne peut plus ouvrir
+    que si Chris est réellement dans le coin. Retiré door.is_open (UI, contradictoire).'
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.driveway_vehicule
+    from: 'off'
+    to: 'on'
+    id: cam_vehicule
+  conditions:
+  - condition: template
+    value_template: '{% set loc = state_attr(''sensor.pixel_9a_geocoded_location'',
+      ''location'') %}{{ loc is not none and distance(loc[0], loc[1], 48.582308, 6.248363)
+      | float(9999) < 0.30 }}'
+  - condition: state
+    entity_id: binary_sensor.pixel_9a_android_auto
+    state: 'on'
+  - condition: state
+    entity_id: binary_sensor.zigbee_47614_1_contact
+    state: 'off'
+    for:
+      seconds: 120
+  actions:
+  - action: switch.turn_on
+    target:
+      entity_id: switch.switch_porte_garage
+  - delay:
+      milliseconds: 10000
+  - action: switch.turn_off
+    target:
+      entity_id: switch.switch_porte_garage
+  - action: notify.mobile_app_pixel_9a
+    data:
+      title: "\U0001F697 Garage"
+      message: Garage ouvert, bienvenue.
+      data:
+        car_ui: true
+        ttl: 0
+        priority: high
+        channel: Portail Garage
+  mode: single
+- id: retour_demande
+  alias: "\U0001F697 Retour — moteur coupé au garage → 'Tu es rentré ?'"
+  description: '08-06 FIX : se déclenche sur Android Auto qui se COUPE (= tu viens
+    de te garer et couper le moteur), à condition que la voiture soit dans le garage
+    (radar) et le garage ouvert. Avant, ça se déclenchait sur le radar pendant que
+    AA était encore ON (moteur tournant à l''arrivée) → la condition AA-off échouait,
+    la notif ne venait jamais. Trace 08-06 : radar on à 16:12:14 mais AA encore on
+    jusqu''à 16:12:47 → le bon signal est AA→off.'
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.pixel_9a_android_auto
+    from: 'on'
+    to: 'off'
+  conditions:
+  - condition: state
+    entity_id: device_tracker.pixel_9a
+    state: home
+  - condition: state
+    entity_id: binary_sensor.detecteur_presence_presence
+    state: 'on'
+  - condition: state
+    entity_id: binary_sensor.zigbee_47614_1_contact
+    state: 'on'
+  actions:
+  - parallel:
+    - action: notify.mobile_app_pixel_9a
+      data:
+        title: "\U0001F3E0 Retour"
+        message: Tu es rentré ? Je ferme tout ?
+        data:
+          ttl: 0
+          priority: high
+          car_ui: true
+          channel: Portail Garage
+          importance: high
+          notification_icon: mdi:garage
+          tag: retour_garage
+          actions:
+          - action: RETOUR_OUI
+            title: Oui, ferme tout
+          - action: RETOUR_NON
+            title: Non
+    - action: telegram_bot.send_message
+      data:
+        config_entry_id: 01KV0GBSBGNVQCHFJGRFERM7TY
+        title: "\U0001F3E0 Retour"
+        message: Tu es rentré ? Je ferme tout ?
+        inline_keyboard:
+        - Oui:/RETOUR_OUI, Non:/RETOUR_NON
+  mode: single
+- id: retour_ferme_tout
+  alias: "\U0001F3E0 Retour — Oui → ferme tout ouvert"
+  triggers:
+  - trigger: event
+    event_type: mobile_app_notification_action
+    event_data:
+      action: RETOUR_OUI
+  - trigger: event
+    event_type: telegram_callback
+    event_data:
+      data: /RETOUR_OUI
+  conditions: []
+  actions:
+  - parallel:
+    - if:
+      - condition: state
+        entity_id: binary_sensor.zigbee_47614_1_contact
+        state: 'on'
+      then:
+      - action: switch.turn_on
+        target:
+          entity_id: switch.switch_porte_garage
+      - delay:
+          milliseconds: 10000
+      - action: switch.turn_off
+        target:
+          entity_id: switch.switch_porte_garage
+    - if:
+      - condition: state
+        entity_id: binary_sensor.0x449fdafffe34178a_contact
+        state: 'on'
+      then:
+      - action: switch.turn_on
+        target:
+          entity_id: switch.0x98a316fffe752710
+      - delay:
+          milliseconds: 10000
+      - action: switch.turn_off
+        target:
+          entity_id: switch.0x98a316fffe752710
+  mode: single
+- id: '1779788023430'
+  alias: "\U0001F464 Garage - Lumière (Présence)"
+  description: Allume à la détection, éteint 2 min après la fin de présence.
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.detecteur_presence_presence
+  actions:
+  - if:
+    - condition: state
+      entity_id: binary_sensor.detecteur_presence_presence
+      state: 'on'
+    then:
+    - action: light.turn_on
+      target:
+        entity_id: light.eclairage_garage
+    else:
+    - delay: 00:00:20
+    - condition: state
+      entity_id: binary_sensor.detecteur_presence_presence
+      state: 'off'
+    - action: light.turn_off
+      target:
+        entity_id: light.eclairage_garage
+  mode: restart
+- id: handler_action_fermer_garage
+  alias: "\U0001F6A8 Action notif — Fermer le garage"
+  description: 'Ferme le garage (impulsion Shelly) quand on appuie sur le bouton «
+    Fermer le garage » d''une notification mobile.
+
+    '
+  triggers:
+  - trigger: event
+    event_type: mobile_app_notification_action
+    event_data:
+      action: FERMER_GARAGE
+  conditions:
+  - condition: state
+    entity_id: binary_sensor.zigbee_47614_1_contact
+    state: 'on'
+  actions:
+  - action: switch.turn_on
+    target:
+      entity_id: switch.shelly1minig4_98a3167a02d4
+  - delay:
+      milliseconds: 10000
+  - action: switch.turn_off
+    target:
+      entity_id: switch.shelly1minig4_98a3167a02d4
+  - action: notify.mobile_app_pixel_9a
+    data:
+      title: "\U0001F697 Garage"
+      message: Fermeture du garage commandée.
+      data:
+        channel: Sécurité
+        tag: alerte_garage_ouvert
+  mode: single
+- id: cyber_intrusion_lan
+  alias: "\U0001F6A8 Intrusion LAN — appareil inconnu"
+  description: Notifie le téléphone quand NetAlertX détecte un nouvel appareil inconnu
+    sur le réseau (sensor.cyber_station_lan_nouveaux passe à >=1). Anti-spam via for
+    + mode single.
+  triggers:
+  - trigger: numeric_state
+    entity_id: sensor.cyber_station_lan_nouveaux
+    above: 0
+    for:
+      seconds: 90
+  conditions: []
+  actions:
+  - action: notify.mobile_app_pixel_9a
+    data:
+      title: "\U0001F6A8 Nouvel appareil sur le LAN"
+      message: '{{ states(''sensor.lan_nouvel_appareil_detail'') }}'
+      data:
+        priority: high
+        ttl: 0
+        channel: Sécurité
+        importance: high
+        color: '#FF2D6B'
+        notification_icon: mdi:lan-pending
+        tag: cyber_intrusion_lan
+        actions:
+        - action: CYBER_VALIDER_LAN
+          title: ✅ Valider (connu)
+        - action: URI
+          title: "\U0001F50D NetAlertX"
+          uri: http://192.168.1.51:20211
+  mode: single
+- id: cyber_intrusion_lan_valider
+  alias: ✅ Cyber — valider appareil LAN (action notif)
+  description: Réagit au bouton "Valider" de la notif intrusion LAN -> publie la MAC
+    du nouvel appareil sur le canal de commande du Pi (devIsNew=0). Plus besoin d'ouvrir
+    NetAlertX.
+  triggers:
+  - trigger: event
+    event_type: mobile_app_notification_action
+    event_data:
+      action: CYBER_VALIDER_LAN
+  conditions: []
+  actions:
+  - action: script.cyber_valider_appareil_lan
+  - action: notify.mobile_app_pixel_9a
+    data:
+      message: clear_notification
+      data:
+        tag: cyber_intrusion_lan
+  - delay:
+      seconds: 1
+  - action: notify.mobile_app_pixel_9a
+    data:
+      title: ✅ Appareil validé
+      message: '{{ states(''sensor.lan_nouvel_appareil_mac'') }} ajouté aux appareils
+        connus.'
+      data:
+        channel: Sécurité
+        tag: cyber_lan_valide
+        ttl: 0
+  mode: single
+- id: '1769700000001'
+  alias: "\U0001F4F8 Driveway - Notif Pixel (détection IA)"
+  description: Notifie le Pixel avec snapshot quand personne/animal détecté (véhicule
+    retiré - trop spam)
+  triggers:
+  - trigger: state
+    entity_id:
+    - binary_sensor.driveway_personne
+    - binary_sensor.driveway_animal
+    from: 'off'
+    to: 'on'
+  conditions: []
+  variables:
+    kind: "{% if trigger.entity_id == 'binary_sensor.driveway_personne' %}Personne
+      \U0001F464 {% elif trigger.entity_id == 'binary_sensor.driveway_vehicule' %}Véhicule
+      \U0001F697 {% else %}Animal \U0001F43E{% endif %}"
+  actions:
+  - action: persistent_notification.create
+    data:
+      notification_id: driveway_detection
+      title: "\U0001F6A8 Allée — {{ kind }}"
+      message: Détection {{ kind }} à {{ now().strftime('%H:%M:%S') }} — [Voir la
+        caméra](/dashboard-test/3)
+  mode: single
+  max_exceeded: silent
+- id: '1769700000002'
+  alias: "\U0001F4A1 Driveway - Projecteur auto la nuit (personne)"
+  description: Allume le projecteur quand une personne est détectée la nuit (capteur
+    jour/nuit caméra), extinction après 2 min
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.driveway_personne
+    from: 'off'
+    to: 'on'
+  conditions:
+  - condition: state
+    entity_id: sensor.driveway_etat_jour_nuit
+    state: night
+  actions:
+  - action: light.turn_on
+    target:
+      entity_id: light.driveway_projecteur
+  - delay: 00:02:00
+  - action: light.turn_off
+    target:
+      entity_id: light.driveway_projecteur
+  mode: restart
+- id: '1769700000003'
+  alias: "\U0001F3A5 Driveway - Mini-clip sur détection (personne/animal)"
+  description: Enregistre un clip de ~14s (4s avant + 10s) dans media/driveway si
+    personne détectée ; enregistre en clips de 10s chaînés tant que binary_sensor.driveway_animal
+    reste actif si animal détecté, puis notifie
+  triggers:
+  - trigger: state
+    entity_id:
+    - binary_sensor.driveway_personne
+    - binary_sensor.driveway_animal
+    from: 'off'
+    to: 'on'
+  conditions: []
+  actions:
+  - choose:
+    - conditions:
+      - condition: template
+        value_template: '{{ kind == ''animal'' }}'
+      sequence:
+      - repeat:
+          while:
+          - condition: state
+            entity_id: binary_sensor.driveway_animal
+            state: 'on'
+          sequence:
+          - action: camera.record
+            target:
+              entity_id: camera.driveway_fluide
+            data:
+              filename: /media/driveway/{{ fname }}_p{{ repeat.index }}.mp4
+              duration: 10
+              lookback: '{{ 4 if repeat.index == 1 else 2 }}'
+    default:
+    - action: camera.record
+      target:
+        entity_id: camera.driveway_net
+      data:
+        filename: /media/driveway/{{ fname }}.mp4
+        duration: 10
+        lookback: 4
+    - delay: 00:00:15
+  - action: persistent_notification.create
+    data:
+      notification_id: driveway_clip
+      title: "\U0001F3A5 Clip {{ kind }} enregistré"
+      message: Allée — {{ kind }} à {{ now().strftime('%H:%M:%S') }}. Clip dispo dans
+        [Médias](/media-browser).
+  variables:
+    kind: '{% if trigger.entity_id == ''binary_sensor.driveway_personne'' %}personne{%
+      else %}animal{% endif %}'
+    stamp: '{{ now().strftime(''%Y%m%d_%H%M%S'') }}'
+    fname: driveway_{{ kind }}_{{ stamp }}
+  mode: single
+  max_exceeded: silent
+- id: '1769700000004'
+  alias: "\U0001F9F9 Driveway - Purge clips 48h"
+  description: Supprime chaque jour les clips de media/driveway plus vieux que 48h
+    (service pyscript.driveway_cleanup)
+  triggers:
+  - trigger: time
+    at: 04:30:00
+  conditions: []
+  actions:
+  - action: pyscript.driveway_cleanup
+  mode: single
+- id: '1769700000005'
+  alias: "\U0001F6F0️ Driveway - Alerte caméra HS (brouillage WiFi ?)"
+  description: Si la caméra Driveway devient injoignable >2 min (coupure ou jammer
+    WiFi), alerte via Telegram (canal hors-WiFi)
+  triggers:
+  - trigger: state
+    entity_id: camera.driveway_fluide
+    to: unavailable
+    for:
+      minutes: 2
+  conditions: []
+  actions:
+  - action: notify.send_message
+    target:
+      entity_id: notify.maison_maison_chris
+    data:
+      message: '⚠️ Caméra ALLÉE injoignable depuis 2 min ({{ now().strftime(''%H:%M:%S'')
+        }}). Coupure WiFi/courant ou brouillage possible. Dernier signal connu : {{
+        states(''sensor.driveway_signal_wi_fi'') }} dBm.'
+  mode: single
+- id: '1769700000006'
+  alias: ✅ Driveway - Caméra de nouveau en ligne
+  description: Confirme via Telegram quand la caméra Driveway redevient joignable
+    après une coupure
+  triggers:
+  - trigger: state
+    entity_id: camera.driveway_fluide
+    from: unavailable
+  conditions: []
+  actions:
+  - action: notify.send_message
+    target:
+      entity_id: notify.maison_maison_chris
+    data:
+      message: '✅ Caméra ALLÉE de nouveau en ligne ({{ now().strftime(''%H:%M:%S'')
+        }}). Signal : {{ states(''sensor.driveway_signal_wi_fi'') }} dBm.'
+  mode: single
+- id: '1783110540450'
+  alias: "\U0001F50A Sonos - Allumage auto apres extinction TV"
+  description: SONOS - Allumage auto apres extinction TV
+  triggers:
+  - trigger: state
+    entity_id:
+    - switch.samsung_55_oled_power
+    to:
+    - 'off'
+    from:
+    - 'on'
+    for:
+      hours: 0
+      minutes: 0
+      seconds: 0
+  - trigger: media_player.turned_off
+    target:
+      entity_id: media_player.decodeur_tv_uhd_3
+    options:
+      behavior: each
+      for: 00:00:00
+  conditions:
+  - condition: time
+    after: '22:00:00'
+    before: 02:00:00
+  actions:
+  - action: media_player.media_play
+    metadata: {}
+    target:
+      device_id: a44ba2ea7952c7beb3f6f0c98bf1186c
+    data: {}
+  mode: single
+- id: '1779700000001'
+  alias: "\U0001F6A8 Freezer - Alerte Panne"
+  description: Alerte Telegram si le congélateur signale une panne/déconnexion, un
+    problème matériel, ou une température > -15°C pendant 30 min.
+  triggers:
+  - trigger: state
+    entity_id: sensor.freezer
+    to:
+    - not_connected
+    - failure
+    - service
+    for:
+      minutes: 5
+    id: etat
+  - trigger: state
+    entity_id: binary_sensor.freezer_probleme
+    to: 'on'
+    for:
+      minutes: 2
+    id: probleme
+  - trigger: numeric_state
+    entity_id: sensor.freezer_temperature
+    above: -15
+    for:
+      minutes: 30
+    id: temperature
+  conditions: []
+  actions:
+  - variables:
+      cause: '{% if trigger.id == "etat" %}État appareil : {{ states("sensor.freezer")
+        }}{% elif trigger.id == "probleme" %}Problème matériel signalé par le congélateur{%
+        else %}Température trop haute : {{ states("sensor.freezer_temperature") }}°C
+        depuis 30 min (consigne {{ state_attr("climate.freezer", "temperature") }}°C){%
+        endif %}'
+  - action: notify.send_message
+    target:
+      entity_id: notify.maison_maison_chris
+    data:
+      message: "\U0001F6A8 Congélateur : possible panne ({{ now().strftime('%H:%M')
+        }}). {{ cause }}."
+  mode: single
+- id: '1784714870965'
+  alias: "\U0001F4A1 Couloir - Lumière (Présence)"
+  description: Allume la lumière du couloir lors de la détection de présence et l'éteint
+    dès que la zone est libre.
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.detecteur_couloir_chambre_occupancy
+  conditions:
+  - condition: illuminance.is_value
+    target:
+      entity_id: sensor.capteur_temperature_capteur_de_luminosite_luminance
+    options:
+      behavior: any
+      for:
+        hours: 0
+        minutes: 2
+        seconds: 0
+      threshold:
+        type: below
+        value:
+          active_choice: number
+          number: 500
+    enabled: true
+  actions:
+  - if:
+    - condition: state
+      entity_id: binary_sensor.detecteur_couloir_chambre_occupancy
+      state: 'on'
+    then:
+    - action: light.turn_on
+      target:
+        entity_id: light.leds_couloir
+      data:
+        transition: 1
+    else:
+    - condition: state
+      entity_id: binary_sensor.detecteur_couloir_chambre_occupancy
+      state: 'off'
+    - action: light.turn_off
+      target:
+        entity_id: light.leds_couloir
+      data:
+        transition: 2
+  mode: restart

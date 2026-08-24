@@ -1,0 +1,172 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Escolha o tipo de conta",
+        "description": "Selecione seu tipo de conta para a integração do cortador de sonho.",
+        "data": {
+          "account_type": "Tipo de conta"
+        }
+      },
+      "dreame": {
+        "data": {
+          "username": "Nome de usuário",
+          "password": "Senha",
+          "country": "País do servidor"
+        },
+        "description": "Faça login na nuvem Dreamehome."
+      },
+      "mova": {
+        "data": {
+          "username": "Nome de usuário",
+          "password": "Senha",
+          "country": "País do servidor"
+        },
+        "description": "Faça login na nuvem movehome."
+      },
+      "devices": {
+        "data": {
+          "devices": "Dispositivos suportados"
+        },
+        "description": "Selecione o dispositivo de cortador de sonho que você deseja configurar."
+      },
+      "options": {
+        "data": {
+          "name": "Nome do dispositivo",
+          "notify": "Tipos de notificação"
+        },
+        "description": "Configure o nome do dispositivo do cortador de sonho e as preferências de notificação."
+      }
+    },
+    "error": {
+      "cannot_connect": "Falha na ligação. Verifique a sua rede e tente novamente. Consulte os registos do Home Assistant para mais detalhes.",
+      "unsupported": "Este modelo de dispositivo não é suportado por esta integração.",
+      "credentials_incomplete": "Nome de utilizador, palavra-passe e país são obrigatórios.",
+      "login_error": "Falha no início de sessão. Verifique o nome de utilizador e a palavra-passe. Certifique-se de que selecionou o tipo de conta correto (Dreamehome vs MOVAhome).",
+      "no_devices": "Nenhum corta-relva compatível encontrado nesta conta. Certifique-se de que escolheu o tipo de conta correto — MOVAhome para dispositivos MOVA, Dreamehome para Dreame — e de que o dispositivo foi adicionado a essa aplicação. Também pode tentar outro país de servidor.",
+      "invalid_account_type": "Tipo de conta inválido selecionado."
+    },
+    "abort": {
+      "cannot_connect": "Falhou em conectar.",
+      "already_configured": "Este dispositivo já está configurado."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opções",
+        "description": "Configurar configurações de notificação para a integração do cortador de cortinas de sonho.",
+        "data": {
+          "notify": "Tipos de notificação",
+          "map_rotation": "Rotação do mapa",
+          "map_show_title": "Mostrar título do mapa",
+          "map_show_legend": "Mostrar legenda do mapa",
+          "map_padding": "Margem do mapa (píxeis)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "no_status": "Sem status",
+          "mowing": "Cortando",
+          "standby": "Espera",
+          "paused": "Parou",
+          "paused_due_to_errors": "Parado devido a erros",
+          "returning_to_station_to_charge": "Retornando à estação para carregar",
+          "charging": "Carregamento",
+          "mapping": "Mapeamento",
+          "charging_complete": "Cobrança completa",
+          "updating": "Atualização",
+          "charging_paused_high_temperature": "Carregamento pausado: temperatura da bateria muito alta",
+          "charging_paused_low_temperature": "Carregamento pausado: temperatura da bateria muito baixa",
+          "maintenance_paused": "Pausado no ponto de manutenção"
+        }
+      },
+      "charging_status": {
+        "name": "Status de carregamento",
+        "state": {
+          "not_docked": "Não atracado",
+          "charging": "Carregamento",
+          "not_charging": "Não cobrar",
+          "charging_completed": "Cobrança concluída",
+          "return_to_charge": "Retornar à cobrança",
+          "charging_paused_high_temperature": "Carregamento pausado: temperatura da bateria muito alta",
+          "charging_paused_low_temperature": "Carregamento pausado: temperatura da bateria muito baixa"
+        }
+      },
+      "mowing_progress": {
+        "name": "Progresso da corte"
+      },
+      "bluetooth_connection": {
+        "name": "Bluetooth"
+      },
+      "dnd_status": {
+        "name": "Não incomodar"
+      },
+      "charging_schedule": {
+        "name": "Cronograma de cobrança"
+      },
+      "timezone": {
+        "name": "Fuso horário"
+      },
+      "device_code": {
+        "name": "Código do dispositivo"
+      },
+      "current_task": {
+        "name": "Tarefa atual",
+        "state": {
+          "idle": "Sem tarefa",
+          "starting": "Iniciando",
+          "mowing": "Cortando",
+          "paused": "Pausada",
+          "finished": "Concluída",
+          "failed": "Falhou",
+          "exit": "Parada",
+          "returning_to_dock": "Retornando à estação"
+        }
+      },
+      "consumable_blade_health": {
+        "name": "Estado das lâminas"
+      },
+      "consumable_brush_health": {
+        "name": "Estado da escova"
+      },
+      "consumable_robot_health": {
+        "name": "Estado de manutenção"
+      }
+    },
+    "binary_sensor": {
+      "firmware_update_available": {
+        "name": "Atualização de firmware disponível"
+      }
+    },
+    "camera": {
+      "map_camera": {
+        "name": "Mapa"
+      }
+    },
+    "button": {
+      "reset_blade": {
+        "name": "Repor contador de lâminas"
+      },
+      "reset_brush": {
+        "name": "Repor contador de escova"
+      },
+      "reset_robot_maintenance": {
+        "name": "Repor contador de manutenção"
+      },
+      "dock_without_stopping": {
+        "name": "Regressar à base sem parar a tarefa"
+      }
+    },
+    "number": {
+      "cutting_height": {
+        "name": "Altura de corte"
+      }
+    }
+  }
+}

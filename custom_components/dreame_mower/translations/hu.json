@@ -1,0 +1,172 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Válassza a Fiók típusát",
+        "description": "Válassza ki a fiók típusát a Dreame fűnyíró integrációjához.",
+        "data": {
+          "account_type": "Számla típus"
+        }
+      },
+      "dreame": {
+        "data": {
+          "username": "Felhasználónév",
+          "password": "Jelszó",
+          "country": "Szerver ország"
+        },
+        "description": "Jelentkezzen be a DreameHome felhőbe."
+      },
+      "mova": {
+        "data": {
+          "username": "Felhasználónév",
+          "password": "Jelszó",
+          "country": "Szerver ország"
+        },
+        "description": "Jelentkezzen be a Movahome felhőbe."
+      },
+      "devices": {
+        "data": {
+          "devices": "Támogatott eszközök"
+        },
+        "description": "Kérjük, válassza ki a beállítani kívánt Dreame fűnyíró eszközt."
+      },
+      "options": {
+        "data": {
+          "name": "Eszköz neve",
+          "notify": "Értesítési típusok"
+        },
+        "description": "Konfigurálja a Dreame fűnyíró eszköz nevét és értesítési preferenciáit."
+      }
+    },
+    "error": {
+      "cannot_connect": "Kapcsolódás sikertelen. Ellenőrizze a hálózatát, és próbálja újra. Részletekért tekintse meg a Home Assistant naplóit.",
+      "unsupported": "Ezt az eszközmodellt az integráció nem támogatja.",
+      "credentials_incomplete": "Felhasználónév, jelszó és ország megadása kötelező.",
+      "login_error": "Bejelentkezés sikertelen. Ellenőrizze felhasználónevét és jelszavát. Győződjön meg arról, hogy a megfelelő fióktípust választotta (Dreamehome vs MOVAhome).",
+      "no_devices": "Nem található támogatott fűnyíró ebben a fiókban. Győződjön meg arról, hogy a megfelelő fióktípust választotta — MOVAhome a MOVA-eszközökhöz, Dreamehome a Dreame-hez —, és hogy az eszköz hozzá van adva az adott alkalmazáshoz. Kipróbálhat egy másik szerverországot is.",
+      "invalid_account_type": "Érvénytelen fióktípus van kiválasztva."
+    },
+    "abort": {
+      "cannot_connect": "Nem sikerült csatlakozni.",
+      "already_configured": "Ez az eszköz már konfigurálva van."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Lehetőségek",
+        "description": "Konfigurálja a Dreame fűnyíró integráció értesítési beállításait.",
+        "data": {
+          "notify": "Értesítési típusok",
+          "map_rotation": "Térkép elforgatása",
+          "map_show_title": "Térképcím megjelenítése",
+          "map_show_legend": "Térképjelmagyarázat megjelenítése",
+          "map_padding": "Térkép kitöltés (képpont)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Állapot",
+        "state": {
+          "no_status": "Nincs státusz",
+          "mowing": "Kaszálás",
+          "standby": "Készenlétben lévő",
+          "paused": "Megállt",
+          "paused_due_to_errors": "A hibák miatt szüneteltetés",
+          "returning_to_station_to_charge": "Visszatérve az állomásra, hogy töltse fel",
+          "charging": "Töltés",
+          "mapping": "Feltérképezés",
+          "charging_complete": "Töltés teljes",
+          "updating": "Frissítés",
+          "charging_paused_high_temperature": "Töltés szüneteltetve: az akkumulátor hőmérséklete túl magas",
+          "charging_paused_low_temperature": "Töltés szüneteltetve: az akkumulátor hőmérséklete túl alacsony",
+          "maintenance_paused": "Szüneteltetve a karbantartási ponton"
+        }
+      },
+      "charging_status": {
+        "name": "Töltési állapot",
+        "state": {
+          "not_docked": "Nem dokkolt",
+          "charging": "Töltés",
+          "not_charging": "Nem töltés",
+          "charging_completed": "A töltés befejeződött",
+          "return_to_charge": "Visszatérés a töltéshez",
+          "charging_paused_high_temperature": "Töltés szüneteltetve: az akkumulátor hőmérséklete túl magas",
+          "charging_paused_low_temperature": "Töltés szüneteltetve: az akkumulátor hőmérséklete túl alacsony"
+        }
+      },
+      "mowing_progress": {
+        "name": "Kaszálási haladás"
+      },
+      "bluetooth_connection": {
+        "name": "Bluetooth"
+      },
+      "dnd_status": {
+        "name": "Ne zavarjon"
+      },
+      "charging_schedule": {
+        "name": "Töltési ütemterv"
+      },
+      "timezone": {
+        "name": "Időzóna"
+      },
+      "device_code": {
+        "name": "Eszközkód"
+      },
+      "current_task": {
+        "name": "Aktuális feladat",
+        "state": {
+          "idle": "Nincs feladat",
+          "starting": "Indítás",
+          "mowing": "Kaszálás",
+          "paused": "Szüneteltetve",
+          "finished": "Befejezve",
+          "failed": "Sikertelen",
+          "exit": "Leállítva",
+          "returning_to_dock": "Visszatérés az állomásra"
+        }
+      },
+      "consumable_blade_health": {
+        "name": "Penge állapota"
+      },
+      "consumable_brush_health": {
+        "name": "Kefe állapota"
+      },
+      "consumable_robot_health": {
+        "name": "Karbantartási állapot"
+      }
+    },
+    "binary_sensor": {
+      "firmware_update_available": {
+        "name": "Firmware-frissítés elérhető"
+      }
+    },
+    "camera": {
+      "map_camera": {
+        "name": "Térkép"
+      }
+    },
+    "button": {
+      "reset_blade": {
+        "name": "Pengeszámláló visszaállítása"
+      },
+      "reset_brush": {
+        "name": "Kefeszámláló visszaállítása"
+      },
+      "reset_robot_maintenance": {
+        "name": "Karbantartási számláló visszaállítása"
+      },
+      "dock_without_stopping": {
+        "name": "Dokkolás feladat leállítása nélkül"
+      }
+    },
+    "number": {
+      "cutting_height": {
+        "name": "Vágási magasság"
+      }
+    }
+  }
+}

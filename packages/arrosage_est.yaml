@@ -1,0 +1,627 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  ARROSAGE EST — Vanne Zigbee SONOFF SWV (gazon 20 m² orienté est)
+#  Archi : "Hermes cerveau, HA muscles".
+#    · Hermes (cron ~/.hermes) DÉCIDE chaque jour (arroser ? dose ? moment ?)
+#      selon météo + saison + température, et LANCE l'arrosage.
+#    · HA (ce package) est le MUSCLE + le GARDE-FOU déterministe (T0) :
+#      il coupe la vanne quoi qu'il arrive → si Hermes crashe, l'eau se coupe.
+#
+#  ENTITÉS Z2M (via MQTT discovery) :
+#    switch.arrosage_est                         → ON/OFF de la vanne
+#    sensor.arrosage_est_daily_irrigation_volume → volume cumulé du jour (L)
+#    sensor.arrosage_est_real_time_irrigation_volume → volume de la salve en cours (L)
+#    sensor.arrosage_est_battery                 → batterie (%)
+#    binary_sensor.arrosage_est_valve_work_state → vanne active
+#
+#  LOGIQUE AGRONOMIQUE (4 sources concordantes, profil INTERMÉDIAIRE) :
+#    Fréquence : <25°C 1×/sem · 25-28°C 2×/sem · >28°C tous les 2 jours (jamais 2j de suite)
+#    Moment    : printemps/automne = milieu de matinée · été = tard le soir/nuit
+#    Dose      : printemps/automne ~80 L (4 L/m²) · été normal ~60 L · canicule plafonnée ~70 L
+#                (on accepte le jaunissement estival plutôt que gaspiller — sur-irriguer = néfaste)
+#    Skip si   : pluie prévue > 3 mm OU pluie récente 24h > 5 mm
+#
+#  GARDE-FOU (filet anti-fuite, indépendant d'Hermes) :
+#    coupe si volume jour ≥ 280 L  OU  vanne ON > 35 min  OU  volume DE LA SESSION
+#    (delta depuis arrosage_est_volume_debut_session) ≥ cible. Le sensor Zigbee est
+#    cumulé JOUR (ne repart pas à 0 par pression de bouton) → triggers en `state`
+#    (tout changement) + condition, jamais en `numeric_state: above` seul (qui ne
+#    se redéclenche que sur un franchissement et rate toute 2e session du jour).
+#
+#  Canal notif : persistent_notification.create (id fixe par garde-fou)
+#  Helpers/automations préfixés `arrosage_est_` / « 💧 ».
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── Helpers (état partagé Hermes ↔ HA) ───────────────────────────────────────
+input_number:
+  arrosage_est_volume_cible:
+    name: 💧 Arrosage EST — volume cible
+    icon: mdi:water-pump
+    min: 0
+    max: 300
+    step: 1
+    unit_of_measurement: L
+  arrosage_est_debit_lmin:
+    name: 💧 Arrosage EST — débit mesuré
+    icon: mdi:speedometer
+    min: 0
+    max: 60
+    step: 0.1
+    unit_of_measurement: L/min
+  # Dose (L) décidée par Hermes à 22h30, mémorisée jusqu'au déclenchement au creux de la nuit.
+  arrosage_est_dose_programmee:
+    name: 💧 Arrosage EST — dose programmée
+    icon: mdi:water-check
+    min: 0
+    max: 300
+    step: 1
+    unit_of_measurement: L
+  # Compteur d'eau TOTAL cumulatif (persistant, ne fait qu'augmenter) —
+  # alimente le dashboard Énergie (section Eau). En litres.
+  arrosage_est_eau_totale:
+    name: 💧 Arrosage EST — eau totale cumulée
+    icon: mdi:counter
+    min: 0
+    max: 100000000
+    step: 0.001
+    unit_of_measurement: L
+    mode: box
+  # Repère : valeur de sensor.arrosage_est_daily_irrigation_volume au moment où
+  # la vanne s'ouvre. Le compteur du device est cumulé sur la JOURNÉE (ne repart
+  # pas à 0 par session) ; sans ce repère, une 2e ouverture le même jour ne peut
+  # jamais recalculer "combien versé DANS CETTE session" → coupure cible impossible.
+  arrosage_est_volume_debut_session:
+    name: 💧 Arrosage EST — volume début de session (interne)
+    icon: mdi:water-plus
+    min: 0
+    max: 100000000
+    step: 0.001
+    unit_of_measurement: L
+    mode: box
+
+input_boolean:
+  arrosage_est_calibre:
+    name: 💧 Arrosage EST — calibré (débit connu)
+    icon: mdi:check-decagram
+
+input_datetime:
+  arrosage_est_dernier:
+    name: 💧 Arrosage EST — dernier arrosage
+    icon: mdi:calendar-clock
+    has_date: true
+    has_time: true
+  # Heure de déclenchement programmée par Hermes (creux de fraîcheur de la nuit).
+  # Posée à 22h30 par le script `programmer`, lue par l'automation `heure_creux_atteinte`.
+  # Persistant → survit à un reboot HA entre 22h30 et l'heure d'arrosage.
+  arrosage_est_heure_creux:
+    name: 💧 Arrosage EST — heure programmée (creux nuit)
+    icon: mdi:clock-time-four-outline
+    has_date: false
+    has_time: true
+
+# ── Point d'entrée unique pour Hermes ───────────────────────────────────────
+# Hermes appelle script.arrosage_est_lancer avec un champ `volume` (L).
+# Le script pose la cible puis ouvre la vanne. HA se charge de couper.
+script:
+  arrosage_est_lancer:
+    alias: 💧 Arrosage EST — lancer
+    icon: mdi:sprinkler
+    mode: single
+    fields:
+      volume:
+        description: Volume cible en litres (0 = ne pas arroser)
+        example: 60
+    sequence:
+      - variables:
+          # `volume | default(0)` protège de l'UndefinedError si le script est
+          # appelé SANS le champ `volume` (le `| float(0)` seul ne rattrape pas
+          # une variable non définie, seulement une valeur non numérique).
+          v: "{{ volume | default(0) | float(0) }}"
+      - choose:
+          # Sécurité : refuse une cible aberrante ou nulle
+          - conditions: "{{ v <= 0 or v > 280 }}"
+            sequence:
+              - service: system_log.write
+                data:
+                  level: warning
+                  logger: arrosage_est
+                  message: "Cible refusée (hors bornes 1-280 L) : {{ v }}"
+        default:
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.arrosage_est_volume_cible
+            data:
+              value: "{{ v }}"
+          - service: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.arrosage_est_dernier
+            data:
+              datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+          - service: switch.turn_on
+            target:
+              entity_id: switch.arrosage_est
+
+  # ── Point d'entrée ÉTÉ : PROGRAMMER l'arrosage au creux de fraîcheur ────────
+  # Hermes (cron nuit_ete, 22h30) appelle ce script avec la dose décidée.
+  # Au lieu d'arroser tout de suite, on vise l'heure la plus fraîche de la nuit
+  # (sensor.arrosage_est_creux_nuit, calculé sur le forecast HORAIRE réel).
+  #   · creux valide (temp mini < 25°C) → pose l'heure ; l'automation
+  #     `heure_creux_atteinte` ouvrira la vanne à ce moment-là.
+  #   · nuit qui reste ≥ 25°C au plus frais → SKIP (évaporation encore trop forte).
+  #   · sensor en REPLI (forecast indispo / heure déjà passée) → arrose maintenant
+  #     (on ne saute JAMAIS une nuit d'arrosage décidée).
+  arrosage_est_programmer:
+    alias: 💧 Arrosage EST — programmer au creux (été)
+    icon: mdi:clock-star-four-points
+    mode: single
+    fields:
+      volume:
+        description: Volume cible en litres décidé par Hermes
+        example: 60
+    sequence:
+      - variables:
+          # `volume | default(0)` protège de l'UndefinedError si Hermes appelle
+          # le script sans le champ `volume` (cf. même garde dans `arrosage_est_lancer`).
+          v: "{{ volume | default(0) | float(0) }}"
+          creux: "{{ states('sensor.arrosage_est_creux_nuit') }}"
+          tmin: "{{ state_attr('sensor.arrosage_est_creux_nuit', 'temp_min') | float(99) }}"
+      - choose:
+          # a) Dose aberrante → on refuse (même garde que `lancer`)
+          - conditions: "{{ v <= 0 or v > 280 }}"
+            sequence:
+              - service: system_log.write
+                data:
+                  level: warning
+                  logger: arrosage_est
+                  message: "programmer : dose refusée (hors 1-280 L) : {{ v }}"
+          # b) Nuit trop chaude (creux ≥ 25°C) → SKIP, on n'arrose pas
+          - conditions: "{{ tmin >= 25 }}"
+            sequence:
+              - service: system_log.write
+                data:
+                  level: info
+                  logger: arrosage_est
+                  message: "programmer : SKIP, nuit trop chaude (creux {{ tmin }}°C ≥ 25)."
+          # c) REPLI (forecast indispo / fenêtre passée) → arrose immédiatement
+          - conditions: "{{ creux in ['REPLI','unknown','unavailable','none',''] }}"
+            sequence:
+              - service: script.arrosage_est_lancer
+                data:
+                  volume: "{{ v }}"
+              - service: system_log.write
+                data:
+                  level: info
+                  logger: arrosage_est
+                  message: "programmer : creux indisponible → arrosage immédiat {{ v }} L (repli)."
+        # d) Cas nominal : mémorise dose + heure du creux ; l'automation fera le reste
+        default:
+          - service: input_number.set_value
+            target:
+              entity_id: input_number.arrosage_est_dose_programmee
+            data:
+              value: "{{ v }}"
+          - service: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.arrosage_est_heure_creux
+            data:
+              time: "{{ creux }}:00"
+          - service: system_log.write
+            data:
+              level: info
+              logger: arrosage_est
+              message: >
+                programmer : arrosage {{ v }} L planifié à {{ creux }}
+                (creux {{ tmin }}°C).
+
+automation:
+  # ── 1. CIBLE ATTEINTE : coupe dès que le volume du jour ≥ cible ───────────
+  # ⚠️ 2026-07-14 : RESTAURÉ tel qu'au 2026-07-07. Fable avait basculé ce trigger
+  # sur `sensor.arrosage_est_real_time_irrigation_volume` le 13, croyant que ce
+  # capteur donnait des litres de la salve en cours. IL NE DONNE PAS DES LITRES
+  # (compteur interne de la vanne SONOFF/Zigbee : affichait 1187 pour 85 L). Résultat :
+  # la coupure "cible" ne s'est jamais déclenchée, et le 2026-07-14 la vanne a
+  # coulé jusqu'à 171 L (seul le garde-fou volume l'a arrêtée). On recompare donc
+  # au VRAI volume litres = daily_irrigation_volume.
+  # ── 0. REPÈRE DÉBUT DE SESSION : capture le volume cumulé du jour à l'ouverture
+  # de la vanne. Le sensor Zigbee est cumulé JOUR (ne repart pas à 0 par pression
+  # de bouton) ; sans ce repère, "cible atteinte" ne peut comparer que le total du
+  # jour à la cible, ce qui casse dès la 2e session du jour. Couvre TOUTES les
+  # ouvertures (script lancer/programmer/heure creux ET bouton ON/OFF manuel),
+  # vu que toutes finissent par switch.turn_on.
+  - id: arrosage_est_capture_debut_session
+    alias: 💧 Arrosage EST — capture volume début de session
+    mode: single
+    trigger:
+      # `for: 2s` (pas juste `to: "on"`) : le compteur Zigbee de la vanne ne
+      # réinitialise pas sa valeur JOUR à minuit local comme le reste du package,
+      # mais ~500ms APRÈS l'ouverture de la vanne. Capturer instantanément à
+      # l'ouverture attrapait donc parfois le reliquat de la veille (ex. 306 L)
+      # au lieu de 0, rendant le delta de session négatif pour toute la durée
+      # de l'arrosage → la coupure "cible atteinte" ne se déclenchait jamais
+      # (bug vécu 2026-08-03 : cible 210 L jamais atteinte, seul le garde-fou
+      # absolu 280 L a coupé à 281 L). Le délai laisse le temps au reset de se
+      # propager avant la capture.
+      - platform: state
+        entity_id: switch.arrosage_est
+        to: "on"
+        for:
+          seconds: 2
+    action:
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.arrosage_est_volume_debut_session
+        data:
+          value: "{{ states('sensor.arrosage_est_daily_irrigation_volume') | float(0) }}"
+
+  # ── 1. CIBLE ATTEINTE : coupe quand le volume VERSÉ DANS LA SESSION (delta
+  # depuis arrosage_est_volume_debut_session, pas le cumul du jour) atteint la
+  # cible. Trigger sur CHAQUE changement du sensor (pas numeric_state "above")
+  # car un trigger "above" ne se redéclenche que sur un franchissement — si le
+  # cumul du jour dépasse déjà la cible avant l'ouverture (quasi systématique
+  # après un 1er arrosage le même jour), il ne franchit plus rien et ne coupe
+  # jamais. Le delta, recalculé à chaque tick, n'a pas ce problème.
+  - id: arrosage_est_cible_atteinte
+    alias: 💧 Arrosage EST — cible atteinte → OFF
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: sensor.arrosage_est_daily_irrigation_volume
+    condition:
+      - condition: state
+        entity_id: switch.arrosage_est
+        state: "on"
+      - condition: numeric_state
+        entity_id: input_number.arrosage_est_volume_cible
+        above: 0
+      - condition: template
+        value_template: >
+          {{ (states('sensor.arrosage_est_daily_irrigation_volume') | float(0)
+              - states('input_number.arrosage_est_volume_debut_session') | float(0))
+             >= states('input_number.arrosage_est_volume_cible') | float(0) }}
+    action:
+      - service: switch.turn_off
+        target:
+          entity_id: switch.arrosage_est
+      - service: system_log.write
+        data:
+          level: info
+          logger: arrosage_est
+          message: >
+            Arrosage terminé (cible atteinte) : {{ (states('sensor.arrosage_est_daily_irrigation_volume') | float(0)
+            - states('input_number.arrosage_est_volume_debut_session') | float(0)) | round(1) }} L versés cette session
+            / cible {{ states('input_number.arrosage_est_volume_cible') }} L
+            (cumul jour {{ states('sensor.arrosage_est_daily_irrigation_volume') }} L).
+
+  # ── 2. GARDE-FOU VOLUME : plafond absolu 280 L cumulé/jour (filet anti-fuite).
+  # Trigger sur CHAQUE changement (pas numeric_state "above") pour la même raison
+  # que ci-dessus : si le cumul du jour est déjà > 280 (ex. 1ère session a déjà
+  # consommé le budget), une 2e ouverture le même jour doit couper IMMÉDIATEMENT,
+  # pas rester sans protection faute de nouveau franchissement.
+  - id: arrosage_est_gardefou_volume
+    alias: 💧 Arrosage EST — GARDE-FOU volume (280 L)
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: sensor.arrosage_est_daily_irrigation_volume
+    condition:
+      - condition: state
+        entity_id: switch.arrosage_est
+        state: "on"
+      - condition: numeric_state
+        entity_id: sensor.arrosage_est_daily_irrigation_volume
+        above: 280
+    action:
+      - service: switch.turn_off
+        target:
+          entity_id: switch.arrosage_est
+      - service: persistent_notification.create
+        data:
+          notification_id: arrosage_est_gardefou_volume
+          title: 🚱 Arrosage EST — garde-fou volume
+          message: >
+            Plafond 280 L dépassé
+            ({{ states('sensor.arrosage_est_daily_irrigation_volume') }} L) → vanne coupée.
+            Vérifie qu'il n'y a pas de fuite ou de cible aberrante.
+
+  # ── 3. GARDE-FOU DURÉE : vanne ON > 35 min → coupe ────────────────────────
+  - id: arrosage_est_gardefou_duree
+    alias: 💧 Arrosage EST — GARDE-FOU durée (35 min)
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: switch.arrosage_est
+        to: "on"
+        for:
+          minutes: 35
+    action:
+      - service: switch.turn_off
+        target:
+          entity_id: switch.arrosage_est
+      - service: persistent_notification.create
+        data:
+          notification_id: arrosage_est_gardefou_duree
+          title: 🚱 Arrosage EST — garde-fou durée
+          message: >
+            Vanne ouverte depuis 35 min → coupée.
+            Volume du jour : {{ states('sensor.arrosage_est_daily_irrigation_volume') }} L.
+            (Pression faible, débit anormal, ou la vanne ne se ferme pas ?)
+
+  # ── 4. CALIBRATION : au 1er arrosage, mesure le débit (L/min) ─────────────
+  # Déclenchée quand la vanne s'ouvre ET qu'on n'est pas encore calibré.
+  # On échantillonne le volume de salve à t0 puis +60 s → débit = Δvolume.
+  - id: arrosage_est_calibration
+    alias: 💧 Arrosage EST — calibration débit
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: switch.arrosage_est
+        to: "on"
+    condition:
+      - condition: state
+        entity_id: input_boolean.arrosage_est_calibre
+        state: "off"
+    action:
+      - variables:
+          v0: "{{ states('sensor.arrosage_est_real_time_irrigation_volume') | float(0) }}"
+      - delay:
+          seconds: 60
+      - variables:
+          v1: "{{ states('sensor.arrosage_est_real_time_irrigation_volume') | float(0) }}"
+          debit: "{{ [ (v1 - v0), 0 ] | max }}"
+      - choose:
+          - conditions: "{{ debit > 0 }}"
+            sequence:
+              - service: input_number.set_value
+                target:
+                  entity_id: input_number.arrosage_est_debit_lmin
+                data:
+                  value: "{{ debit | round(1) }}"
+              - service: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.arrosage_est_calibre
+              - service: persistent_notification.create
+                data:
+                  notification_id: arrosage_est_calibration
+                  title: 💧 Arrosage EST — calibré
+                  message: >
+                    Débit ≈ {{ debit | round(1) }} L/min.
+                    (Ex. 60 L ≈ {{ (60 / debit) | round(0) }} min d'arrosage.)
+
+  # ── 5. RESET quotidien à minuit (nouvelle journée d'arrosage) ─────────────
+  # La cible est remise à 0 pour éviter qu'une salve résiduelle rouvre la vanne.
+  - id: arrosage_est_reset_minuit
+    alias: 💧 Arrosage EST — reset cible à minuit
+    mode: single
+    trigger:
+      - platform: time
+        at: "00:05:00"
+    action:
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.arrosage_est_volume_cible
+        data:
+          value: 0
+
+  # ── 7. CREUX ATTEINT : à l'heure programmée, lance l'arrosage avec la dose ──
+  # Se déclenche quand l'heure courante == input_datetime.arrosage_est_heure_creux.
+  # Robuste au reboot : l'heure et la dose sont persistantes ; si HA redémarre
+  # entre 22h30 et le creux, le trigger `time` re-vise la même heure.
+  # La dose est remise à 0 après usage pour ne pas re-déclencher le lendemain
+  # si l'heure n'est pas reprogrammée.
+  - id: arrosage_est_heure_creux_atteinte
+    alias: 💧 Arrosage EST — heure du creux atteinte → arrose
+    mode: single
+    trigger:
+      - platform: time
+        at: input_datetime.arrosage_est_heure_creux
+    condition:
+      # Ne rien faire si aucune dose n'a été programmée (heure neutre résiduelle)
+      - condition: numeric_state
+        entity_id: input_number.arrosage_est_dose_programmee
+        above: 0
+    action:
+      - service: script.arrosage_est_lancer
+        data:
+          volume: "{{ states('input_number.arrosage_est_dose_programmee') | float(0) }}"
+      - service: system_log.write
+        data:
+          level: info
+          logger: arrosage_est
+          message: >
+            Creux atteint ({{ now().strftime('%H:%M') }}) → arrosage
+            {{ states('input_number.arrosage_est_dose_programmee') }} L lancé.
+      # Consomme la programmation : dose à 0 → l'automation ne se re-déclenchera
+      # pas tant qu'Hermes n'aura pas reprogrammé une nouvelle nuit.
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.arrosage_est_dose_programmee
+        data:
+          value: 0
+
+  # ── 6. COMPTEUR EAU TOTAL : accumule chaque incrément du volume journalier ──
+  # Quand daily_irrigation_volume augmente, on ajoute le delta au total cumulé.
+  # Robuste : capte le volume RÉEL mesuré par la vanne (précis), et le total ne
+  # fait que croître → éligible dashboard Énergie (via sensor.arrosage_est_eau_totale_m3).
+  - id: arrosage_est_compteur_total
+    alias: 💧 Arrosage EST — incrément compteur eau total
+    mode: queued
+    trigger:
+      - platform: state
+        entity_id: sensor.arrosage_est_daily_irrigation_volume
+    condition:
+      # Ne traiter que les vraies valeurs numériques croissantes
+      - condition: template
+        value_template: >
+          {{ trigger.to_state.state not in ['unknown','unavailable','none']
+             and trigger.from_state is not none
+             and trigger.from_state.state not in ['unknown','unavailable','none']
+             and (trigger.to_state.state | float(0)) > (trigger.from_state.state | float(0)) }}
+    action:
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.arrosage_est_eau_totale
+        data:
+          value: >
+            {{ (states('input_number.arrosage_est_eau_totale') | float(0))
+               + ((trigger.to_state.state | float(0)) - (trigger.from_state.state | float(0))) }}
+
+# ── Sensors dérivés ─────────────────────────────────────────────────────────
+template:
+  # 1) EAU TOTALE en m³ pour le DASHBOARD ÉNERGIE (device_class water, cumulatif)
+  #    Le dashboard Énergie accepte L ou m³ ; on l'expose en m³ (unité "propre").
+  - sensor:
+      - name: "Arrosage EST eau totale"
+        unique_id: arrosage_est_eau_totale_m3
+        icon: mdi:water
+        unit_of_measurement: "m³"
+        device_class: water
+        state_class: total_increasing
+        state: >
+          {{ (states('input_number.arrosage_est_eau_totale') | float(0) / 1000) | round(3) }}
+
+  # 2) MÉTÉO PRÉ-MÂCHÉE POUR HERMES (évite l'appel weather.get_forecasts qui
+  #    renvoie 400 via le skill). HA fait l'appel, Hermes lit ces sensors simples.
+  - trigger:
+      - platform: time_pattern
+        minutes: "/10"
+      - platform: homeassistant
+        event: start
+      # Re-calcul dès que la météo bouge (peuple aussi après un template.reload)
+      - platform: state
+        entity_id: weather.forecast_maison
+    action:
+      - service: weather.get_forecasts
+        data:
+          type: daily
+        target:
+          entity_id: weather.forecast_maison
+        response_variable: previ
+    sensor:
+      - name: "Arrosage météo temp jour"
+        unique_id: arrosage_meteo_temp_jour
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state: "{{ previ['weather.forecast_maison'].forecast[0].temperature | float(0) }}"
+      - name: "Arrosage météo pluie jour"
+        unique_id: arrosage_meteo_pluie_jour
+        unit_of_measurement: "mm"
+        device_class: precipitation
+        state: "{{ previ['weather.forecast_maison'].forecast[0].precipitation | float(0) }}"
+      - name: "Arrosage météo temp demain"
+        unique_id: arrosage_meteo_temp_demain
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state: "{{ previ['weather.forecast_maison'].forecast[1].temperature | float(0) }}"
+      - name: "Arrosage météo pluie demain"
+        unique_id: arrosage_meteo_pluie_demain
+        unit_of_measurement: "mm"
+        device_class: precipitation
+        state: "{{ previ['weather.forecast_maison'].forecast[1].precipitation | float(0) }}"
+      - name: "Arrosage météo condition jour"
+        unique_id: arrosage_meteo_condition_jour
+        state: "{{ previ['weather.forecast_maison'].forecast[0].condition }}"
+      - name: "Arrosage météo canicule"
+        unique_id: arrosage_meteo_canicule
+        icon: mdi:weather-sunny-alert
+        # ON si aujourd'hui ET demain > 30°C (canicule installée MAINTENANT → dormance)
+        state: >
+          {{ (previ['weather.forecast_maison'].forecast[0].temperature | float(0) > 30)
+             and (previ['weather.forecast_maison'].forecast[1].temperature | float(0) > 30) }}
+
+      # ── TENDANCE sur 4 jours (anticipation : voir la canicule ARRIVER) ──
+      - name: "Arrosage météo temp max 4j"
+        unique_id: arrosage_meteo_tmax_4j
+        unit_of_measurement: "°C"
+        device_class: temperature
+        # pic de température sur les 4 prochains jours
+        state: >
+          {% set fc = previ['weather.forecast_maison'].forecast[:4] %}
+          {{ fc | map(attribute='temperature') | map('float', 0) | max }}
+      - name: "Arrosage météo jours chauds 4j"
+        unique_id: arrosage_meteo_jours_chauds_4j
+        unit_of_measurement: "j"
+        icon: mdi:weather-sunny-alert
+        # nombre de jours > 30°C dans les 4 prochains jours
+        state: >
+          {% set fc = previ['weather.forecast_maison'].forecast[:4] %}
+          {{ fc | map(attribute='temperature') | map('float', 0) | select('gt', 30) | list | count }}
+      - name: "Arrosage météo pluie cumul 4j"
+        unique_id: arrosage_meteo_pluie_4j
+        unit_of_measurement: "mm"
+        device_class: precipitation
+        # pluie totale prévue sur les 4 prochains jours
+        state: >
+          {% set fc = previ['weather.forecast_maison'].forecast[:4] %}
+          {{ (fc | map(attribute='precipitation') | map('float', 0) | sum) | round(1) }}
+      - name: "Arrosage météo tendance"
+        unique_id: arrosage_meteo_tendance
+        icon: mdi:trending-up
+        # Résumé lisible de la tendance pour qu'Hermes raisonne d'un coup d'œil.
+        # Valeurs : "canicule_installee" / "canicule_arrive" / "chaud_sec" / "normal" / "pluvieux"
+        state: >
+          {% set fc = previ['weather.forecast_maison'].forecast[:4] %}
+          {% set t0 = fc[0].temperature | float(0) %}
+          {% set t1 = fc[1].temperature | float(0) %}
+          {% set tmax = fc | map(attribute='temperature') | map('float',0) | max %}
+          {% set chauds = fc | map(attribute='temperature') | map('float',0) | select('gt',30) | list | count %}
+          {% set pluie = fc | map(attribute='precipitation') | map('float',0) | sum %}
+          {% if pluie > 8 %}pluvieux
+          {% elif t0 > 30 and t1 > 30 %}canicule_installee
+          {% elif tmax > 32 or chauds >= 2 %}canicule_arrive
+          {% elif tmax > 27 and pluie < 3 %}chaud_sec
+          {% else %}normal{% endif %}
+
+  # 3) CREUX DE FRAÎCHEUR DE LA NUIT (forecast HORAIRE) — pour l'arrosage d'été.
+  #    État = heure "HH:MM" du minimum de température dans la fenêtre 22h30→5h,
+  #    ou "REPLI" si le forecast horaire ne couvre pas la fenêtre.
+  #    Attribut temp_min = ce minimum (°C) → le script décide skip si ≥ 25°C.
+  #    Recalculé toutes les 30 min (assez frais à 22h30) + au démarrage HA.
+  - trigger:
+      - platform: time_pattern
+        minutes: "/30"
+      - platform: homeassistant
+        event: start
+    action:
+      - service: weather.get_forecasts
+        data:
+          type: hourly
+        target:
+          entity_id: weather.forecast_maison
+        response_variable: fh
+    sensor:
+      - name: "Arrosage EST creux nuit"
+        unique_id: arrosage_est_creux_nuit
+        icon: mdi:weather-night
+        # Heure (HH:MM) du minimum de température entre 22h30 aujourd'hui et 5h demain.
+        state: >
+          {% set fc = fh['weather.forecast_maison'].forecast %}
+          {% set start = today_at('22:30') %}
+          {% set end = today_at('05:00') + timedelta(days=1) %}
+          {% set ns = namespace(best=None, tmin=999) %}
+          {% for e in fc %}
+            {% set dt = e.datetime | as_datetime | as_local %}
+            {% if start <= dt <= end %}
+              {% set t = e.temperature | float(99) %}
+              {% if t < ns.tmin %}
+                {% set ns.tmin = t %}
+                {% set ns.best = dt %}
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.best.strftime('%H:%M') if ns.best else 'REPLI' }}
+        attributes:
+          temp_min: >
+            {% set fc = fh['weather.forecast_maison'].forecast %}
+            {% set start = today_at('22:30') %}
+            {% set end = today_at('05:00') + timedelta(days=1) %}
+            {% set ns = namespace(tmin=999, found=false) %}
+            {% for e in fc %}
+              {% set dt = e.datetime | as_datetime | as_local %}
+              {% if start <= dt <= end %}
+                {% set t = e.temperature | float(99) %}
+                {% if t < ns.tmin %}
+                  {% set ns.tmin = t %}
+                  {% set ns.found = true %}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.tmin if ns.found else 'unknown' }}

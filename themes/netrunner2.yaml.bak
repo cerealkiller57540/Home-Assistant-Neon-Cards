@@ -1,0 +1,719 @@
+cyberpunk-2077-netrunner2:
+  # ===== PALETTE =====
+  cyan-color: "#00F0FF"
+  ice-blue-color: "#8CFFFF"
+  dark-purple-color: "#0A0E1A"
+  dark-blue-color: "#0F1923"
+  accent-cyan: "#00FFCC"
+  red-color: "#FF1744"
+  warning-color: "#FFB300"
+  
+  # Effects
+  cp-blur-strong: "blur(8px) saturate(140%)"
+  cp-bounce-easing: "cubic-bezier(0.68, -0.55, 0.265, 1.55)"
+  cp-smooth-easing: "cubic-bezier(0.34, 1.56, 0.64, 1)"
+  
+  # Font
+  primary-font-family: "'Rajdhani','Orbitron','Share Tech Mono','Courier New','monospace'"
+
+  # ===== COULEURS DE BASE =====
+  primary-color: "var(--cyan-color)"
+  primary-background-color: "var(--dark-purple-color)"
+  primary-text-color: "var(--cyan-color)"
+
+  # ===== WALLPAPER =====
+  lovelace-background: "center / cover no-repeat fixed url('/local/netrunner.jpeg')"
+  
+  # ===== MODE DARK =====
+  modes:
+    dark:
+      # Backgrounds
+      primary-background-color: "#050810"
+      secondary-background-color: "#0A0E1A"
+      
+      # Colors
+      primary-color: "var(--cyan-color)"
+      secondary-color: "var(--ice-blue-color)"
+      accent-color: "var(--accent-cyan)"
+      secondary-text-color: "var(--cyan-color)"
+
+      # App header
+      app-header-background-color: "rgba(10,14,26,0.60)"
+      app-header-text-color: "var(--cyan-color)"
+      app-header-selection-bar-color: "var(--accent-cyan)"
+      app-header-edit-background-color: "var(--dark-purple-color)"
+      app-header-edit-text-color: "var(--cyan-color)"
+
+      # Disabled states
+      disabled-color: "var(--dark-blue-color)"
+      disabled-text-color: "rgba(0,240,255,0.35)"
+      
+      # Surface colors
+      ha-color-surface-default: "var(--dark-purple-color)"
+      ha-color-on-neutral-quiet: "var(--cyan-color)"
+      ha-color-on-neutral-normal: "var(--cyan-color)"
+
+      # Sidebar
+      sidebar-background-color: "rgba(10,14,26,0.75)"
+      sidebar-text-color: "var(--cyan-color)"
+      sidebar-icon-color: "var(--cyan-color)"
+      sidebar-selected-color: "var(--accent-cyan)"
+      sidebar-selected-icon-color: "var(--accent-cyan)"
+      sidebar-selected-text-color: "var(--accent-cyan)"
+      ha-sidebar * {font-family: var(--primary-font-family) !important;}
+
+      # Cards
+      card-background-color: "rgba(10,14,26,0.85)"
+      ha-card-background: "rgba(10,14,26,0.85)"
+
+      # States
+      state-icon-color: "var(--cyan-color)"
+      state-icon-active-color: "var(--accent-cyan)"
+      state-color: "var(--cyan-color)"
+      state-inactive-color: "rgba(0,240,255,0.40)"
+      
+      # Media player
+      state-media_player-active-color: "var(--accent-cyan)"
+      state-media_player-off-color: "rgba(0,240,255,0.25)"
+      state-media_player-idle-color: "var(--dark-blue-color)"
+      state-media_player-unavailable-color: "#1A1A1A"
+      
+      # Alerts
+      error-color: "var(--red-color)"
+      success-color: "var(--accent-cyan)"
+      info-color: "var(--cyan-color)"
+      
+      # Dividers
+      divider-color: "rgba(0,240,255,0.20)"
+      
+      # Tiles
+      ha-tile-background: "var(--dark-purple-color)"
+      ha-tile-info-background-color: "rgba(10,14,26,0.15)"
+      
+      # Inputs
+      input-ink-color: "var(--cyan-color)"
+      input-label-ink-color: "rgba(140,255,255,0.70)"
+      input-dropdown-icon-color: "var(--accent-cyan)"
+
+      # Switches
+      switch-checked-button-color: "var(--accent-cyan)"
+      switch-checked-color: "var(--accent-cyan)"
+      switch-checked-track-color: "var(--accent-cyan)"
+      switch-unchecked-button-color: "rgba(0,240,255,0.40)"
+      switch-unchecked-color: "var(--dark-blue-color)"
+      switch-unchecked-track-color: "rgba(0,240,255,0.10)"
+
+      # Sliders
+      slider-color: "var(--cyan-color)"
+      slider-secondary-color: "var(--accent-cyan)"
+      slider-track-color: "rgba(0,240,255,0.25)"
+      
+      # Progress
+      paper-progress-container-color: "rgba(0,240,255,0.15)"
+      paper-progress-active-color: "var(--accent-cyan)"
+      paper-progress-secondary-color: "var(--cyan-color)"
+      mdc-linear-progress-buffer-color: "rgba(0,240,255,0.10)"
+
+      # Fonts
+      mdc-typography-font-family: "var(--primary-font-family)"
+      ha-card-header-font-family: "var(--primary-font-family)"
+      font-family: "var(--primary-font-family)"
+
+      # RGB
+      rgb-primary-text-color: "0, 240, 255"
+      rgb-primary-background-color: "10, 14, 26"
+      rgb-card-background-color: "10, 14, 26"
+
+      # Badges
+      label-badge-color: "var(--cyan-color)"
+      label-badge-background-color: "rgba(0,240,255,0.15)"
+      label-badge-text-color: "var(--cyan-color)"
+      
+      # Buttons
+      ha-button-neutral-color: "var(--cyan-color)"
+      
+      # Quick Fixes
+      paper-item-icon-active-color: "var(--accent-cyan)"
+      material-background-color: "var(--dark-purple-color)"
+      material-secondary-background-color: "var(--dark-blue-color)"
+      markdown-code-background-color: "rgba(0,240,255,0.10)"
+      code-editor-background-color: "rgba(10,14,26,0.95)"
+      
+      # Dialogs
+      dialog-background-color: "rgba(10,14,26,0.95)"
+      dialog-surface-position: "relative"
+      mdc-dialog-scrim-color: "rgba(0,0,0,0.7)"
+      
+      # Menu & Popups
+      menu-background-color: "rgba(10,14,26,0.95)"
+      menu-border-color: "rgba(0,240,255,0.35)"
+
+  # ===== HACS =====
+  hacs-error-color: "var(--red-color)"
+  hacs-warning-color: "var(--accent-cyan)"
+  hacs-update-color: "var(--cyan-color)"
+  hacs-new-color: "var(--ice-blue-color)"
+
+  # ===== CARD-MOD =====
+  card-mod-theme: cyberpunk-2077-netrunner2
+  
+  card-mod-card: | 
+    .container, ha-card {
+      font-family: var(--primary-font-family) !important;
+      transition: all 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      position: relative;
+      overflow: visible;
+    }
+    
+    @media (hover: hover) {
+      :host(:hover) .container,
+      :host(:hover) ha-card {
+        transform: translateY(-8px) scale(1.02);
+        animation: containerGlitch 0.8s ease;
+        will-change: transform;
+      }
+    }
+    
+    @keyframes containerGlitch {
+      0%, 100% { transform: translateY(-8px) scale(1.02); }
+      12% { transform: translateY(-8px) scale(1.02) translate(-3px, 2px); }
+      24% { transform: translateY(-8px) scale(1.02) translate(3px, -2px); }
+      36% { transform: translateY(-8px) scale(1.02) translate(-2px, -1px); }
+      48% { transform: translateY(-8px) scale(1.02) translate(2px, 1px); }
+      60% { transform: translateY(-8px) scale(1.02) translate(-1px, 0); }
+      72% { transform: translateY(-8px) scale(1.02) translate(1px, -0.5px); }
+      84% { transform: translateY(-8px) scale(1.02) translate(-0.5px, 0.5px); }
+    }
+    
+    @media (hover: hover) {
+      :host(:hover) ha-card {
+        box-shadow: 0 0 40px rgba(0,240,255,0.6),
+                    0 0 60px rgba(255,23,68,0.3) !important;
+        animation: glitchBorder 0.8s ease;
+      }
+    }
+    
+    @keyframes glitchBorder {
+      0%, 100% { box-shadow: 0 0 40px rgba(0,240,255,0.6), 0 0 60px rgba(255,23,68,0.3); }
+      15% { box-shadow: 6px 0 45px #00F0FF, -6px 0 45px #FF1744; }
+      30% { box-shadow: -6px 0 45px #00FFCC, 6px 0 45px #FF1744; }
+      45% { box-shadow: 4px 4px 45px #00F0FF, -4px -4px 45px #FF1744; }
+      60% { box-shadow: 0 0 50px rgba(0,240,255,0.7), 0 0 70px rgba(255,23,68,0.4); }
+      75% { box-shadow: 3px -3px 45px #00FFCC, -3px 3px 45px #FF1744; }
+      90% { box-shadow: 0 0 42px rgba(0,240,255,0.65), 0 0 65px rgba(255,23,68,0.35); }
+    }
+
+    /* Data flow animé */
+    ha-card::after {
+      content: "";
+      position: absolute;
+      top: -100%;
+      left: 0;
+      right: 0;
+      height: 200%;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,240,255,0.03) 2px,
+        rgba(0,240,255,0.03) 4px
+      );
+      pointer-events: none;
+      opacity: 0.6;
+      z-index: 0;
+    }
+
+    @media (hover: hover) {
+      ha-card:hover::after {
+        animation: dataFlow 20s linear infinite;
+      }
+    }
+
+    @keyframes dataFlow {
+      0% { transform: translateY(0); }
+      100% { transform: translateY(50%); }
+    }
+
+    /* Glow sur les icônes avec glitch */
+    state-badge, ha-state-icon, ha-icon {
+      filter: drop-shadow(0 0 4px currentColor);
+      transition: all 0.8s var(--cp-smooth-easing);
+    }
+
+    @media (hover: hover) {
+      state-badge:hover, ha-state-icon:hover, ha-icon:hover {
+        filter: drop-shadow(0 0 12px currentColor);
+        transform: scale(1.15);
+        transition: all 0.3s ease;
+        will-change: transform, filter;
+      }
+    }
+
+
+    /* Glitch sur les valeurs numériques */
+    .state, .value, 
+    [class*="state-"], [class*="value-"] {
+      position: relative;
+    }
+    
+    @media (hover: hover) {
+      ha-card:hover .state,
+      ha-card:hover .value {
+        text-shadow: 0 0 8px var(--cyan-color);
+        transition: text-shadow 0.3s ease;
+      }
+    }
+
+    /* Hover card lift effect */
+    @media (hover: hover) {
+      ha-card:hover {
+        transform: translateY(-5px);
+        will-change: transform;
+      }
+    }
+
+    /* Disable hover effects on mobile/touch devices */
+    @media (hover: none) {
+      ha-card:hover,
+      state-badge:hover, ha-state-icon:hover, ha-icon:hover {
+        transform: none !important;
+      }
+    }
+
+    /* Disable ALL animations on small screens */
+    @media (max-width: 768px) {
+      ha-card::before,
+      ha-card::after {
+        animation: none !important;
+      }
+      
+      ha-badge,
+      state-badge,
+      .badge,
+      .notification-badge {
+        animation: none !important;
+      }
+      
+      ha-card {
+        transition: none !important;
+      }
+      
+      state-badge, ha-state-icon, ha-icon {
+        transition: none !important;
+      }
+      
+      ha-card:hover {
+        transform: none !important;
+      }
+
+    }
+
+  card-mod-root-yaml: |
+    .: |
+      * {
+        font-family: var(--primary-font-family) !important;
+      }
+      
+      h1, h2, h3, .card-header {
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        font-family: var(--primary-font-family) !important;
+      }
+      
+      /* Glow on headers on hover */
+      @media (hover: hover) {
+        h1:hover, h2:hover, h3:hover, 
+        .card-header:hover {
+          text-shadow: 0 0 12px var(--cyan-color);
+          transition: text-shadow 0.3s ease;
+          will-change: text-shadow;
+        }
+      }
+      
+      /* Vignette d'écran */
+      body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background: radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.4) 100%);
+        pointer-events: none;
+        z-index: 9998;
+      }
+      
+      /* Scanlines */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background: repeating-linear-gradient(
+          0deg,
+          rgba(0,240,255,0.02) 0px,
+          transparent 1px,
+          transparent 2px,
+          rgba(0,240,255,0.02) 3px
+        );
+        pointer-events: none;
+        z-index: 9999;
+      }
+      
+      /* Disable scanlines and vignette on mobile */
+      @media (max-width: 768px) {
+        body::before,
+        body::after {
+          display: none !important;
+        }
+        
+        h1:hover, h2:hover, h3:hover,
+        .card-header:hover {
+          text-shadow: none !important;
+          transition: none !important;
+        }
+      }
+    
+    ha-app-layout$: |
+      #contentContainer {
+        padding-top: 0 !important;
+      }
+    
+    ha-drawer app-toolbar$: |
+      .main-title {
+        color: var(--cyan-color) !important;
+        font-family: var(--primary-font-family) !important;
+        font-weight: bold !important;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        text-shadow: 0 0 10px var(--cyan-color), 
+                     0 0 20px var(--cyan-color) !important;
+      }
+    
+    "ha-tabs$": |
+      #selectionBar {
+        background: var(--accent-cyan) !important;
+        box-shadow: 0 0 20px var(--accent-cyan),
+                    0 0 30px rgba(0,255,204,0.5) !important;
+        height: 3px !important;
+      }
+      
+      paper-tab {
+        color: var(--cyan-color) !important;
+        font-family: var(--primary-font-family) !important;
+        text-transform: uppercase !important;
+        letter-spacing: 1px !important;
+      }
+      
+      paper-tab.iron-selected {
+        color: var(--accent-cyan) !important;
+        font-weight: bold !important;
+        text-shadow: 0 0 15px var(--accent-cyan) !important;
+      }
+    
+    app-header:
+      .: |
+        app-header {
+          backdrop-filter: var(--cp-blur-strong) !important;
+          background: rgba(10,14,26,0.75) !important;
+          position: relative !important;
+          box-shadow: inset 0 -3px 0 rgba(0,240,255,0.60),
+                      inset 0 -25px 50px rgba(0,0,0,0.50),
+                      0 5px 40px rgba(0,240,255,0.15) !important;
+        }
+        
+        app-header::before {
+          content: "";
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: 3px;
+          background: linear-gradient(90deg, 
+                      transparent 0%, 
+                      var(--cyan-color) 50%, 
+                      transparent 100%);
+          box-shadow: 0 0 20px var(--cyan-color);
+          animation: headerPulse 3s ease-in-out infinite;
+          z-index: 10;
+          pointer-events: none;
+        }
+        
+        @keyframes headerPulse {
+          0%, 100% {
+            opacity: 0.6;
+            box-shadow: 0 0 20px var(--cyan-color);
+          }
+          50% {
+            opacity: 1;
+            box-shadow: 0 0 40px var(--cyan-color),
+                        0 0 60px rgba(0,255,204,0.5);
+          }
+        }
+        
+        app-header::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 2px,
+            rgba(0,240,255,0.03) 2px,
+            rgba(0,240,255,0.03) 4px
+          );
+          pointer-events: none;
+          opacity: 0.5;
+        }
+        
+        @media (max-width: 768px) {
+          app-header::before {
+            animation: none !important;
+          }
+        }
+      
+      app-toolbar:
+        $: |
+          .main-title {
+            color: var(--cyan-color) !important;
+            font-family: var(--primary-font-family) !important;
+            font-weight: bold !important;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px var(--cyan-color), 
+                         0 0 20px var(--cyan-color) !important;
+          }
+          
+          ha-icon, ha-svg-icon {
+            color: var(--cyan-color) !important;
+            filter: drop-shadow(0 0 6px var(--cyan-color)) !important;
+          }
+        
+        .: |
+          app-toolbar {
+            font-family: var(--primary-font-family) !important;
+          }
+          
+          ha-icon-button, mwc-icon-button, paper-icon-button {
+            color: var(--cyan-color) !important;
+          }
+          
+          @media (hover: hover) {
+            ha-icon-button:hover ha-icon,
+            mwc-icon-button:hover ha-icon,
+            paper-icon-button:hover ha-icon {
+              filter: drop-shadow(0 0 15px var(--accent-cyan))
+                      drop-shadow(0 0 25px rgba(0,255,204,0.5)) !important;
+              transform: scale(1.2) rotate(-5deg);
+            }
+          }
+  card-mod-sidebar: |
+    host, ha-sidebar {
+      backdrop-filter: var(--cp-blur-strong) !important;
+      background: var(--sidebar-background-color) !important;
+      color: var(--cyan-color) !important;
+      position: relative;
+      box-shadow: inset -3px 0 0 rgba(0,240,255,0.60),
+                  inset -25px 0 50px rgba(0,0,0,0.50),
+                  5px 0 40px rgba(0,240,255,0.15);
+      font-family: var(--primary-font-family) !important;
+    }
+    
+    /* Animated border pulse */
+    host::before, ha-sidebar::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 3px;
+      height: 100%;
+      background: linear-gradient(180deg, 
+                  transparent 0%, 
+                  var(--cyan-color) 50%, 
+                  transparent 100%);
+      box-shadow: 0 0 20px var(--cyan-color);
+      animation: sidebarPulse 3s ease-in-out infinite;
+      z-index: 10;
+    }
+    
+    @keyframes sidebarPulse {
+      0%, 100% {
+        opacity: 0.6;
+        box-shadow: 0 0 20px var(--cyan-color);
+      }
+      50% {
+        opacity: 1;
+        box-shadow: 0 0 40px var(--cyan-color),
+                    0 0 60px rgba(0,255,204,0.5);
+      }
+    }
+    
+    /* Scanlines overlay */
+    host::after, ha-sidebar::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,240,255,0.03) 2px,
+        rgba(0,240,255,0.03) 4px
+      );
+      pointer-events: none;
+      opacity: 0.5;
+    }
+    
+    :host *, ha-sidebar * {
+      font-family: var(--primary-font-family) !important;
+    }
+    
+    /* User profile/header */
+    .menu .title {
+      color: var(--cyan-color);
+      font-family: var(--primary-font-family);
+      font-weight: bold;
+      margin-top: 4px;
+      text-shadow: 0 0 10px var(--cyan-color), 
+                   0 0 20px var(--cyan-color);
+      text-transform: uppercase;
+    }
+    
+    /* Navigation items */
+    ha-sidebar mwc-list mwc-list-item {
+      position: relative;
+      transition: all 0.4s var(--cp-bounce-easing);
+      margin: 4px 8px;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    ha-sidebar mwc-list mwc-list-item::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 0;
+      background: linear-gradient(90deg, 
+                  rgba(0,240,255,0.2) 0%, 
+                  transparent 100%);
+      transition: width 0.4s var(--cp-bounce-easing);
+    }
+    
+    /* Target ALL icons in sidebar */
+    ha-sidebar ha-icon,
+    ha-sidebar iron-icon,
+    ha-sidebar ha-svg-icon,
+    ha-svg-icon[slot="start"],
+    ha-md-list-item ha-icon,
+    ha-md-list-item ha-svg-icon,
+    ha-md-list-item ha-svg-icon[slot="start"] {
+      color: var(--cyan-color) !important;
+      filter: drop-shadow(0 0 6px var(--cyan-color)) !important;
+      transition: all 0.4s ease;
+    }
+    
+    /* Hover effects */
+    @media (hover: hover) {
+      ha-md-list-item:hover {
+        background: rgba(0,240,255,0.08) !important;
+        transform: translateX(8px);
+      }
+      
+      ha-md-list-item:hover ha-icon,
+      ha-md-list-item:hover iron-icon,
+      ha-md-list-item:hover ha-svg-icon,
+      ha-md-list-item:hover ha-svg-icon[slot="start"] {
+        filter: drop-shadow(0 0 15px var(--accent-cyan))
+                drop-shadow(0 0 25px rgba(0,255,204,0.5)) !important;
+        transform: scale(1.25) translateX(5px) rotate(-5deg);
+        transition: all 0.3s ease;
+        will-change: transform, filter;
+      }
+      
+      ha-md-list-item:hover span {
+        color: var(--accent-cyan) !important;
+        text-shadow: 0 0 10px var(--accent-cyan);
+      }
+    }
+    
+    /* Active/selected item */
+    ha-md-list-item.selected {
+      color: var(--accent-cyan) !important;
+      background: linear-gradient(90deg, 
+                  rgba(0,255,204,0.20) 0%, 
+                  rgba(0,240,255,0.08) 100%) !important;
+      border-left: 4px solid var(--accent-cyan);
+      border-radius: 0 8px 8px 0;
+      box-shadow: 0 0 25px rgba(0,240,255,0.4),
+                  inset 0 0 20px rgba(0,255,204,0.1);
+      animation: selectedPulse 3s ease-in-out infinite;
+    }
+    
+    @keyframes selectedPulse {
+      0%, 100% {
+        box-shadow: 0 0 25px rgba(0,240,255,0.4),
+                    inset 0 0 20px rgba(0,255,204,0.1);
+      }
+      50% {
+        box-shadow: 0 0 35px rgba(0,240,255,0.6),
+                    inset 0 0 30px rgba(0,255,204,0.2);
+      }
+    }
+    
+    ha-md-list-item.selected ha-icon,
+    ha-md-list-item.selected iron-icon,
+    ha-md-list-item.selected ha-svg-icon {
+      color: var(--accent-cyan) !important;
+      filter: drop-shadow(0 0 12px var(--accent-cyan))
+              drop-shadow(0 0 20px rgba(0,255,204,0.6)) !important;
+      animation: selectedIconPulse 2s ease-in-out infinite;
+    }
+    
+    @keyframes selectedIconPulse {
+      0%, 100% {
+        transform: scale(1.1);
+      }
+      50% {
+        transform: scale(1.2);
+      }
+    }
+    
+    ha-md-list-item.selected span {
+      color: var(--accent-cyan) !important;
+      font-weight: bold !important;
+      text-shadow: 0 0 10px var(--accent-cyan);
+    }
+    
+    /* Divider styling */
+    ha-sidebar .divider {
+      background: linear-gradient(90deg,
+                  transparent 0%,
+                  rgba(0,240,255,0.4) 50%,
+                  transparent 100%);
+      height: 2px;
+      margin: 12px 16px;
+      box-shadow: 0 0 10px rgba(0,240,255,0.3);
+    }
+    
+    /* Disable sidebar animations on mobile */
+    @media (max-width: 768px) {
+      host::before, 
+      ha-sidebar::before,
+      ha-md-list-item.selected,
+      ha-md-list-item.selected ha-icon,
+      ha-md-list-item.selected ha-svg-icon {
+        animation: none !important;
+      }
+      
+      ha-sidebar ha-icon,
+      ha-sidebar ha-svg-icon {
+        transition: none !important;
+      }
+      
+      ha-md-list-item:hover {
+        transform: none !important;
+      }
+      
+      ha-md-list-item:hover ha-icon,
+      ha-md-list-item:hover ha-svg-icon {
+        transform: scale(1.1) !important;
+      }
+    }

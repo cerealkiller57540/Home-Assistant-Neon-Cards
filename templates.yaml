@@ -1,0 +1,516 @@
+# TEMPLATES
+- sensor:
+
+  # ── Abonnement EDF — 1 Wh fictif/jour depuis le 2026-02-19, prix 610€/kWh ──
+  - name: "Energie Abonnement EDF"
+    unique_id: energie_abonnement_edf
+    unit_of_measurement: Wh
+    device_class: energy
+    state_class: total_increasing
+    state: >
+      {% set start = strptime('2026-02-18', '%Y-%m-%d') %}
+      {% set jours = ((now().date() - start.date()).days) %}
+      {{ [jours, 0] | max }}
+
+  # ── Forecast.Solar multi-orientation — somme Est+Sud+Ouest ─────────────────
+  - name: "Solar Forecast Today Multi"
+    unique_id: solar_forecast_today_multi
+    unit_of_measurement: kWh
+    device_class: energy
+    icon: mdi:solar-power
+    availability: >
+      {{ has_value('sensor.solar_forecast_est')
+         and has_value('sensor.solar_forecast_sud')
+         and has_value('sensor.solar_forecast_ouest') }}
+    state: >
+      {% set today = now().strftime('%Y-%m-%d') %}
+      {% set est   = state_attr('sensor.solar_forecast_est',   'watt_hours_day') %}
+      {% set sud   = state_attr('sensor.solar_forecast_sud',   'watt_hours_day') %}
+      {% set ouest = state_attr('sensor.solar_forecast_ouest', 'watt_hours_day') %}
+      {{ ((est[today]   | default(0) | float
+         + sud[today]   | default(0) | float
+         + ouest[today] | default(0) | float) / 1000) | round(2) }}
+
+  - name: "Solar Forecast Tomorrow Multi"
+    unique_id: solar_forecast_tomorrow_multi
+    unit_of_measurement: kWh
+    device_class: energy
+    icon: mdi:solar-power
+    availability: >
+      {{ has_value('sensor.solar_forecast_est')
+         and has_value('sensor.solar_forecast_sud')
+         and has_value('sensor.solar_forecast_ouest') }}
+    state: >
+      {% set tomorrow = (now() + timedelta(days=1)).strftime('%Y-%m-%d') %}
+      {% set est   = state_attr('sensor.solar_forecast_est',   'watt_hours_day') %}
+      {% set sud   = state_attr('sensor.solar_forecast_sud',   'watt_hours_day') %}
+      {% set ouest = state_attr('sensor.solar_forecast_ouest', 'watt_hours_day') %}
+      {{ ((est[tomorrow]   | default(0) | float
+         + sud[tomorrow]   | default(0) | float
+         + ouest[tomorrow] | default(0) | float) / 1000) | round(2) }}
+
+  - name: "Surplus Solaire Disponible"
+    unique_id: surplus_solaire_dispo
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    icon: mdi:solar-power-variant
+    availability: >
+      {{ has_value('sensor.export_linky') }}
+    state: >
+      {% set export = states('sensor.export_linky') | float(0) %} {{ max(0, export * -1) | round(0) }}
+
+  # 2026-06-05 : doublon "Energie abonnement EDF" (manuel, input_number) RETIRÉ —
+  # même unique_id que la version auto (jours×1Wh) plus haut → était ignoré par HA.
+  # Bloc archivé dans _removed_config_archive.md.
+
+  - name: "export_linky_pos"
+    unique_id: export_linky_pos
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    icon: mdi:power-plug-export
+    availability: >
+      {{ has_value('sensor.export_linky') }}
+    state: >
+      {% set v = states('sensor.export_linky') | float(0) %} {{ -v if v < 0 else 0 }}
+
+  # =========================================================
+  # HEAT PUMP SMART BIAS - SENSORS
+  # =========================================================
+
+  - name: "Heat Pump Bias Status"
+    unique_id: heat_pump_bias_status
+    availability: >
+      {{ has_value('number.ecodan_heatpump_auto_adaptive_setpoint_bias') }}
+    state: >
+      {% set bias = states('number.ecodan_heatpump_auto_adaptive_setpoint_bias') | float(0) %} {% if bias > 1 %}
+        Pre-heating (Off-Peak)
+      {% elif bias > 0 %}
+        Slight Boost
+      {% elif bias < -1 %}
+        Coasting (Peak/Solar)
+      {% elif bias < 0 %}
+        Slight Reduction
+      {% else %}
+        Normal Operation
+      {% endif %}
+    icon: >
+      {% set bias = states('number.ecodan_heatpump_auto_adaptive_setpoint_bias') | float(0) %} {% if bias > 0 %}
+        mdi:fire
+      {% elif bias < 0 %}
+        mdi:leaf
+      {% else %}
+        mdi:minus-circle-outline
+      {% endif %}
+
+  - name: "Heat Pump Outdoor Temp Fused"
+    unique_id: heat_pump_outdoor_temp_fused
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    icon: mdi:thermometer-lines
+    # Fusion des deux sondes extérieures pour limiter le biais d'exposition soleil.
+    availability: >
+      {{ has_value('sensor.temperature_exterieure') or has_value('sensor.ecodan_heatpump_outside_temp') or has_value('sensor.burthecourt_aux_chenes_temperature') }}
+    state: >
+      {% set south = states('sensor.temperature_exterieure') | float(-999) %} {% set east = states('sensor.ecodan_heatpump_outside_temp') | float(-999) %} {% set fallback = states('sensor.burthecourt_aux_chenes_temperature') | float(10) %}
+
+      {% set south_ok = south > -30 and south < 55 %} {% set east_ok = east > -30 and east < 55 %}
+
+      {% if south_ok and east_ok %}
+        {% set low = [south, east] | min %}
+        {% set high = [south, east] | max %}
+        {% set spread = high - low %}
+        {% if spread <= 1.5 %}
+          {{ ((south + east) / 2) | round(1) }}
+        {% elif spread <= 4 %}
+          {{ (low + 0.6) | round(1) }}
+        {% else %}
+          {{ (low + 1.0) | round(1) }}
+        {% endif %}
+      {% elif south_ok %}
+        {{ south | round(1) }}
+      {% elif east_ok %}
+        {{ east | round(1) }}
+      {% else %}
+        {{ fallback | round(1) }}
+      {% endif %}
+
+  - name: "Heat Pump Active Mode"
+    unique_id: heat_pump_active_mode
+    state: >
+      {% set hour = now().hour %} {% set minute = now().minute %} {% set time_decimal = hour + (minute / 60.0) %} {% if time_decimal >= 0.333 and time_decimal < 6.333 %}
+        🌙 HC Nuit
+      {% elif time_decimal >= 6.333 and time_decimal < 8.0 %}
+        🌅 Morning Shoulder
+      {% elif time_decimal >= 14.0 and time_decimal < 14.333 %}
+        🔄 Pre-HC Après-midi
+      {% elif time_decimal >= 14.333 and time_decimal < 16.333 %}
+        ☀️ HC Après-midi
+      {% elif time_decimal >= 16.333 and time_decimal < 17.0 %}
+        🔋 Post-HC
+      {% elif time_decimal >= 17.0 and time_decimal < 21.0 %}
+        ⚡ Peak Coast
+      {% elif time_decimal >= 23.833 or time_decimal < 0.333 %}
+        🔄 Pre-HC Nuit
+      {% else %}
+        ✓ Normal
+      {% endif %}
+    icon: >
+      {% set hour = now().hour %} {% set minute = now().minute %} {% set time_decimal = hour + (minute / 60.0) %} {% if (time_decimal >= 0.333 and time_decimal < 6.333) or (time_decimal >= 14.333 and time_decimal < 16.333) %}
+        mdi:weather-night
+      {% elif time_decimal >= 17.0 and time_decimal < 21.0 %}
+        mdi:lightning-bolt
+      {% else %}
+        mdi:home-thermometer
+      {% endif %}
+
+  - name: "Afternoon HC Solar Potential"
+    unique_id: afternoon_hc_solar_potential
+    unit_of_measurement: "kWh"
+    state: >
+      {% set remaining = states('sensor.solar_forecast_today_multi') | float(0) %} {% set hour = now().hour %} {% set minute = now().minute %} {% set time_decimal = hour + (minute / 60.0) %} {% if time_decimal < 14.333 %}
+        {% if remaining > 8 %}
+          {{ (remaining * 0.35) | round(1) }}
+        {% elif remaining > 5 %}
+          {{ (remaining * 0.30) | round(1) }}
+        {% else %}
+          {{ (remaining * 0.20) | round(1) }}
+        {% endif %}
+      {% elif time_decimal >= 14.333 and time_decimal < 16.333 %}
+        {% set production = states('sensor.prod_totale_2') | float(0) %}
+        {% set elapsed_minutes = ((time_decimal - 14.333) * 60) | int %}
+        {% set remaining_minutes = 120 - elapsed_minutes %}
+        {{ (production * remaining_minutes / 60) | round(1) }}
+      {% else %}
+        0
+      {% endif %}
+    icon: mdi:solar-panel
+
+  - name: "Solar Forecast Summary"
+    unique_id: solar_forecast_summary
+    state: >
+      {% set today_remaining = states('sensor.solar_forecast_today_multi') | float(0) %}
+      {% set tomorrow = states('sensor.solar_forecast_tomorrow_multi') | float(0) %}
+      {% set hour = now().hour %}
+      {% if hour < 14 %}
+        {% if today_remaining > 8 %}
+          Excellent solaire restant ({{ today_remaining | round(0) }}kWh)
+        {% elif today_remaining > 4 %}
+          Bon solaire restant ({{ today_remaining | round(0) }}kWh)
+        {% elif today_remaining > 2 %}
+          Solaire modéré ({{ today_remaining | round(0) }}kWh)
+        {% else %}
+          Faible solaire ({{ today_remaining | round(0) }}kWh)
+        {% endif %}
+      {% else %}
+        {% if tomorrow > 20 %}
+          Demain: Excellent ({{ tomorrow | round(0) }}kWh)
+        {% elif tomorrow > 12 %}
+          Demain: Bon ({{ tomorrow | round(0) }}kWh)
+        {% elif tomorrow > 6 %}
+          Demain: Modéré ({{ tomorrow | round(0) }}kWh)
+        {% else %}
+          Demain: Faible ({{ tomorrow | round(0) }}kWh)
+        {% endif %}
+      {% endif %}
+    icon: mdi:weather-partly-cloudy
+
+  - name: "Weather Forecast Summary"
+    unique_id: weather_forecast_summary
+    state: >
+      {% set cloud = states('sensor.burthecourt_aux_chenes_cloud_cover') | float(0) %} {% set temp = states('sensor.burthecourt_aux_chenes_temperature') | float(5) %} {% set rain = states('sensor.burthecourt_aux_chenes_rain_chance') | float(0) %} {% set freeze = states('sensor.burthecourt_aux_chenes_freeze_chance') | float(0) %} {% set uv = states('sensor.burthecourt_aux_chenes_uv') | float(0) %} {% if freeze > 70 %}
+        Gel attendu ({{ temp|round(0) }}°C)
+      {% elif rain > 70 %}
+        Pluie probable (☁️{{ cloud|round(0) }}%)
+      {% elif cloud > 80 %}
+        Très nuageux (☁️{{ cloud|round(0) }}%)
+      {% elif cloud > 50 %}
+        Nuageux (UV{{ uv|round(0) }} ☁️{{ cloud|round(0) }}%)
+      {% elif cloud > 25 %}
+        Partiellement nuageux (UV{{ uv|round(0) }} ☁️{{ cloud|round(0) }}%)
+      {% else %}
+        Dégagé ☀️ (UV{{ uv|round(0) }} ☁️{{ cloud|round(0) }}%)
+      {% endif %}
+    icon: mdi:weather-cloudy
+
+  - name: "Heat Pump Peak Coasting Status"
+    # Indique si le coasting peak fonctionne vraiment
+    # Si la PAC consomme encore beaucoup pendant le peak → coasting pas effectif
+    unique_id: heat_pump_peak_coasting_status
+    availability: >
+      {{ has_value('sensor.nodon_capteur_power') and has_value('number.ecodan_heatpump_auto_adaptive_setpoint_bias') }}
+    icon: mdi:lightning-bolt
+    state: >
+      {% set hour = now().hour %} {% set minute = now().minute %} {% set time_decimal = hour + (minute / 60.0) %} {% set power = states('sensor.nodon_capteur_power') | float(0) %} {% set bias = states('number.ecodan_heatpump_auto_adaptive_setpoint_bias') | float(0) %} {% set is_peak = time_decimal >= 17.0 and time_decimal < 21.0 %} {% if not is_peak %}
+        Hors peak
+      {% elif bias >= -0.5 %}
+        ⚠️ Bias peak non actif
+      {% elif power > 1500 %}
+        🔴 Coasting inefficace ({{ power | round(0) }}W)
+      {% elif power > 800 %}
+        🟡 Coasting partiel ({{ power | round(0) }}W)
+      {% elif power > 100 %}
+        🟢 Coasting actif ({{ power | round(0) }}W)
+      {% else %}
+        ✅ PAC à l'arrêt
+      {% endif %}
+
+  - name: "Apparent Temperature Salon"
+    unique_id: apparent_temperature_salon
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    state: >
+      {% set t = states('sensor.thermometre_salon_temperature') | float(20) %} {% set h = states('sensor.thermometre_salon_humidity') | float(50) %} {% if t < 18 %}
+        {{ (t - 0.55 * (1 - h/100) * (t - 14.5)) | round(1) }}
+      {% elif t <= 24 %}
+        {{ (t + (h - 40) * 0.02) | round(1) }}
+      {% else %}
+        {{ (t + (h - 40) * 0.05) | round(1) }}
+      {% endif %}
+    availability: >
+      {{ has_value('sensor.thermometre_salon_temperature') and has_value('sensor.thermometre_salon_humidity') }}
+    icon: mdi:thermometer-water
+
+  - name: "Heat Pump Efficiency Window"
+    # Fenêtre d'efficacité basée sur température extérieure (proxy COP)
+    unique_id: hp_efficiency_window
+    availability: >
+      {{ has_value('sensor.heat_pump_outdoor_temp_fused') }}
+    state: >
+      {% set temp_ext = states('sensor.heat_pump_outdoor_temp_fused') | float(5) %} {% if temp_ext > 10 %}
+        Excellent
+      {% elif temp_ext > 7 %}
+        Très bon
+      {% elif temp_ext > 3 %}
+        Bon
+      {% elif temp_ext > 0 %}
+        Acceptable
+      {% else %}
+        Faible
+      {% endif %}
+    icon: >
+      {% set state_val = this.state %} {% if state_val in ['Excellent', 'Très bon'] %}
+        mdi:thumb-up
+      {% elif state_val == 'Bon' %}
+        mdi:thermometer-check
+      {% else %}
+        mdi:thermometer-alert
+      {% endif %}
+
+  - name: "Temperature Advantage Multiplier"
+    # Multiplicateur pour bias HC: température chaude = boost plus agressif
+    unique_id: temp_advantage_multiplier
+    icon: mdi:gauge
+    availability: >
+      {{ has_value('sensor.heat_pump_outdoor_temp_fused') }}
+    state: >
+      {% set temp_ext = states('sensor.heat_pump_outdoor_temp_fused') | float(5) %} {% if temp_ext > 12 %}
+        1.4
+      {% elif temp_ext > 8 %}
+        1.3
+      {% elif temp_ext > 5 %}
+        1.1
+      {% elif temp_ext > 2 %}
+        1.0
+      {% else %}
+        0.9
+      {% endif %}
+
+  - name: "Heat Pump Performance Score"
+    # Score de performance basé sur métriques observables (pas de COP)
+    unique_id: hp_performance_score
+    unit_of_measurement: "%"
+    state: >
+      {% set delta = states('sensor.ecodan_heatpump_delta_t') | float(0) %} {% set power = states('sensor.nodon_capteur_power') | float(5000) %} {% set freq = states('sensor.ecodan_heatpump_compressor_frequency') | float(0) %} {% set lockout = is_state('binary_sensor.ecodan_heatpump_short_cycle_lockout', 'on') %} {% set booster = is_state('binary_sensor.ecodan_heatpump_booster_heater', 'on') %}
+
+      {# Score sur 100 - basé sur métriques observables #} {% set delta_score = 40 if (delta >= 5 and delta <= 9) else (20 if delta > 0 else 0) %} {% set power_score = 30 if power < 2000 else (15 if power < 3000 else 0) %} {% set freq_score = 20 if (freq >= 30 and freq <= 80) else 10 %} {% set penalty = 20 if lockout else (15 if booster else 0) %}
+
+      {{ [[delta_score + power_score + freq_score - penalty, 0] | max, 100] | min }}
+    availability: >
+      {{ has_value('sensor.ecodan_heatpump_delta_t') and 
+         has_value('sensor.nodon_capteur_power') }}
+    icon: mdi:medal
+
+  - name: "Compressor Frequency Status"
+    unique_id: compressor_freq_status
+    availability: >
+      {{ has_value('sensor.ecodan_heatpump_compressor_frequency') and has_value('binary_sensor.ecodan_heatpump_compressor') }}
+    icon: mdi:sine-wave
+    state: >
+      {% set freq = states('sensor.ecodan_heatpump_compressor_frequency') | float(0) %} {% set comp_on = is_state('binary_sensor.ecodan_heatpump_compressor', 'on') %} {% if not comp_on %}
+        Arrêté
+      {% elif freq < 20 %}
+        Très faible
+      {% elif freq < 40 %}
+        Efficace bas
+      {% elif freq < 70 %}
+        Optimal
+      {% elif freq < 90 %}
+        Élevé
+      {% else %}
+        Très élevé
+      {% endif %}
+
+  - name: "Heat Pump Tomorrow Temp"
+    unique_id: heat_pump_tomorrow_temp
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    # Unified backend source for all tomorrow-temperature decisions.
+    state: >
+      {% set fc = state_attr('weather.burthecourt_aux_chenes', 'forecast') %} {% if fc and fc | length > 0 and fc[0].temperature is not none %}
+        {{ fc[0].temperature | float(10) | round(1) }}
+      {% else %}
+        {{ states('sensor.burthecourt_aux_chenes_temperature') | float(10) | round(1) }}
+      {% endif %}
+    icon: mdi:thermometer-chevron-up
+
+  - name: "Heat Pump Tomorrow Strategy"
+    # Stratégie pour demain basée sur prévisions météo
+    # Uses weather.burthecourt_aux_chenes forecast attribute for tomorrow temp
+    unique_id: hp_tomorrow_strategy
+    state: >
+      {% set temp_tom = states('sensor.heat_pump_tomorrow_temp') | float(10) %} {% set temp_today = states('sensor.heat_pump_outdoor_temp_fused') | float(10) %} {% set solar_tom = states('sensor.solar_forecast_tomorrow_multi') | float(0) %} {% set cloud_tom = states('sensor.burthecourt_aux_chenes_cloud_cover') | float(50) %}
+
+      {% if temp_tom < temp_today - 5 %}
+        Préchauffage agressif
+      {% elif temp_tom < temp_today - 2 %}
+        Préchauffage modéré
+      {% elif temp_tom > temp_today + 4 %}
+        Économie aujourd'hui
+      {% elif solar_tom > 15 and cloud_tom < 40 %}
+        Optimisation solaire
+      {% elif temp_tom < 3 and solar_tom < 8 %}
+        Journée difficile
+      {% else %}
+        Opération normale
+      {% endif %}
+    icon: mdi:strategy
+
+# =========================================================
+# HEAT PUMP SMART BIAS - BINARY SENSORS
+# =========================================================
+- binary_sensor:
+
+  - name: "Heat Pump In Off-Peak Period"
+    unique_id: heat_pump_in_off_peak
+    state: >
+      {% set hour = now().hour %} {% set minute = now().minute %} {% set time_decimal = hour + (minute / 60.0) %} {{ (time_decimal >= 0.333 and time_decimal < 6.333) or (time_decimal >= 14.333 and time_decimal < 16.333) }}
+    icon: >
+      {{ 'mdi:clock-check' if is_state('binary_sensor.heat_pump_in_off_peak', 'on') else 'mdi:clock-outline' }}
+
+  - name: "High Afternoon Solar Expected"
+    # UV ≥ 3 en confirmation pour éviter les faux positifs du forecast
+    unique_id: high_afternoon_solar_expected
+    availability: >
+      {{ has_value('sensor.solar_forecast_today_multi') and has_value('sensor.burthecourt_aux_chenes_uv') }}
+    state: >
+      {% set forecast = states('sensor.solar_forecast_today_multi') | float(0) %} {% set hour = now().hour %} {% set minute = now().minute %} {% set time_decimal = hour + (minute / 60.0) %} {% set uv = states('sensor.burthecourt_aux_chenes_uv') | float(0) %} {% if time_decimal < 14.333 %}
+        {{ forecast > 3 and uv >= 2 }}
+      {% else %}
+        {% set production = states('sensor.prod_totale_2') | float(0) %}
+        {{ production > 2.0 and uv >= 2 }}
+      {% endif %}
+    icon: >
+      {{ 'mdi:weather-sunny-alert' if is_state('binary_sensor.high_afternoon_solar_expected', 'on') else 'mdi:weather-partly-cloudy' }}
+
+  - name: "Good Solar Day Expected"
+    unique_id: good_solar_day_expected
+    availability: >
+      {{ has_value('sensor.solar_forecast_today_multi') }}
+    state: >
+      {% set forecast = states('sensor.solar_forecast_today_multi') | float(0) %} {% set hour = now().hour %} {% if hour < 12 %}
+        {{ forecast > 12 }}
+      {% else %}
+        {{ forecast > 6 }}
+      {% endif %}
+    icon: >
+      {{ 'mdi:white-balance-sunny' if is_state('binary_sensor.good_solar_day_expected', 'on') else 'mdi:weather-cloudy' }}
+
+  - name: "Freeze Risk Expected"
+    unique_id: freeze_risk_expected
+    availability: >
+      {{ has_value('sensor.burthecourt_aux_chenes_freeze_chance') and has_value('sensor.burthecourt_aux_chenes_temperature') }}
+    state: >
+      {% set freeze_chance = states('sensor.burthecourt_aux_chenes_freeze_chance') | float(0) %} {% set temp = states('sensor.burthecourt_aux_chenes_temperature') | float(5) %} {{ freeze_chance > 50 or temp < 2 }}
+    icon: >
+      {{ 'mdi:snowflake-alert' if is_state('binary_sensor.freeze_risk_expected', 'on') else 'mdi:thermometer' }}
+
+  - name: "Poor Solar Conditions Expected"
+    unique_id: poor_solar_conditions_expected
+    availability: >
+      {{ has_value('sensor.burthecourt_aux_chenes_cloud_cover') and has_value('sensor.burthecourt_aux_chenes_rain_chance') }}
+    state: >
+      {% set cloud_cover = states('sensor.burthecourt_aux_chenes_cloud_cover') | float(0) %} {% set rain_chance = states('sensor.burthecourt_aux_chenes_rain_chance') | float(0) %} {% set snow_chance = states('sensor.burthecourt_aux_chenes_snow_chance') | float(0) %} {% set uv = states('sensor.burthecourt_aux_chenes_uv') | float(0) %} {% set daytime = now().hour >= 8 and now().hour <= 18 %} {{ cloud_cover > 70 or rain_chance > 70 or snow_chance > 30 or (daytime and uv < 2 and cloud_cover > 60) }}
+    icon: >
+      {{ 'mdi:weather-pouring' if is_state('binary_sensor.poor_solar_conditions_expected', 'on') else 'mdi:white-balance-sunny' }}
+
+  - name: "High Heat Loss Expected"
+    unique_id: high_heat_loss_expected
+    availability: >
+      {{ has_value('sensor.burthecourt_aux_chenes_wind_speed') and has_value('sensor.burthecourt_aux_chenes_temperature') }}
+    state: >
+      {% set wind_speed = states('sensor.burthecourt_aux_chenes_wind_speed') | float(0) %} {% set temp = states('sensor.burthecourt_aux_chenes_temperature') | float(5) %} {{ (wind_speed > 30 and temp < 5) or temp < 0 }}
+    icon: >
+      {{ 'mdi:home-thermometer-outline' if is_state('binary_sensor.high_heat_loss_expected', 'on') else 'mdi:home-thermometer' }}
+
+  - name: "Defrost Likely Soon"
+    # Prédiction défrost pour anticiper avec buffer thermique (+0.3°C bias)
+    unique_id: defrost_likely_soon
+    availability: >
+      {{ has_value('sensor.heat_pump_outdoor_temp_fused') and has_value('sensor.ecodan_heatpump_feed_temp') and has_value('binary_sensor.ecodan_heatpump_compressor') }}
+    state: >
+      {% set temp_ext = states('sensor.heat_pump_outdoor_temp_fused') | float(10) %} {% set feed = states('sensor.ecodan_heatpump_feed_temp') | float(30) %} {% set comp_on = is_state('binary_sensor.ecodan_heatpump_compressor', 'on') %} {% set last_defrost = states('binary_sensor.ecodan_heatpump_defrost') %} {# Conditions: froid (<4°C), grand delta-T (>30°C), compresseur actif, pas en défrost #} {{ temp_ext < 4 and (feed - temp_ext) > 30 and comp_on and last_defrost == 'off' }}
+    icon: >
+      {{ 'mdi:snowflake-alert' if is_state('binary_sensor.defrost_likely_soon', 'on') else 'mdi:snowflake-off' }}
+
+  - name: "HP Delta-T Warning"
+    # Alerte si Delta-T hors plage optimale (4-12°C)
+    unique_id: hp_delta_t_warning
+    availability: >
+      {{ has_value('sensor.ecodan_heatpump_delta_t') and states('binary_sensor.ecodan_heatpump_compressor') not in ['unknown', 'unavailable'] }}
+    state: >
+      {% set delta = states('sensor.ecodan_heatpump_delta_t') | float(10) %} {% set comp_on = is_state('binary_sensor.ecodan_heatpump_compressor', 'on') %} {# Plage saine: 5-10°C. Hors plage = potentiel problème #} {{ comp_on and (delta < 4 or delta > 12) }}
+    icon: >
+      {{ 'mdi:alert-circle' if this.state == 'on' else 'mdi:check-circle' }}
+
+  - name: "HP Delta-T Optimal"
+    unique_id: hp_delta_t_optimal
+    availability: >
+      {{ has_value('sensor.ecodan_heatpump_delta_t') and states('binary_sensor.ecodan_heatpump_compressor') not in ['unknown', 'unavailable'] }}
+    state: >
+      {% set delta = states('sensor.ecodan_heatpump_delta_t') | float(0) %} {% set comp_on = is_state('binary_sensor.ecodan_heatpump_compressor', 'on') %} {{ comp_on and delta >= 5 and delta <= 9 }}
+    icon: >
+      {{ 'mdi:check-decagram' if this.state == 'on' else 'mdi:minus-circle-outline' }}
+
+  - name: "Low Humidity Alert"
+    unique_id: low_humidity_alert
+    state: >
+      {{ states('sensor.thermometre_salon_humidity') | float(50) < 35 }}
+    availability: >
+      {{ has_value('sensor.thermometre_salon_humidity') }}
+    icon: >
+      {{ 'mdi:water-alert' if is_state('binary_sensor.low_humidity_alert', 'on') else 'mdi:water-check' }}
+
+- binary_sensor:
+
+  - name: "Présence Maison"
+    unique_id: presence_maison
+    device_class: presence
+    state: >
+      {% set geo = states('sensor.pixel_9a_geocoded_location') %}
+      {% set home_addresses = [
+        '395 Chem. des Pâquis, 54210 Burthecourt-aux-Chênes, France',
+        '79 Chem. des Pâquis, 54210 Burthecourt-aux-Chênes, France',
+        '35 Grande Rue, 54210 Burthecourt-aux-Chênes, France'
+      ] %}
+      {{
+        is_state('device_tracker.pixel_9a', 'home') or
+        is_state('device_tracker.wvwzzze18sp049976_position', 'home') or
+        geo in home_addresses
+      }}
+    icon: >
+      {{ 'mdi:home-account' if this.state == 'on' else 'mdi:home-outline' }}

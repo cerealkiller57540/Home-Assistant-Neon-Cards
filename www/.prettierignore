@@ -1,0 +1,6 @@
+# Cards HACS — pas notre code
+community/
+
+# Sauvegardes
+*.backup.js
+*.js.gz

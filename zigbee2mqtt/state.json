@@ -1,0 +1,457 @@
+{
+    "0x58e6c5fffe33913c": {
+        "power": 3,
+        "current": 0.03,
+        "voltage": 242,
+        "ac_frequency": 49.95,
+        "energy": 70.66,
+        "produced_energy": 0,
+        "wifi_config": {
+            "enabled": true,
+            "ssid": "Livebox-"
+        },
+        "wifi_status": "got ip",
+        "ip_address": "192.168.1.36",
+        "dhcp_enabled": true,
+        "linkquality": 164,
+        "last_seen": "2026-08-23T16:08:17.051Z"
+    },
+    "0xd885acfffeef3f88": {
+        "power": 26,
+        "current": 0.26,
+        "voltage": 242.11,
+        "ac_frequency": 49.95,
+        "energy": 342.75,
+        "produced_energy": 0,
+        "wifi_config": {
+            "enabled": true,
+            "ssid": "Livebox-1"
+        },
+        "wifi_status": "connecting",
+        "ip_address": "0.0.0.0",
+        "dhcp_enabled": true,
+        "linkquality": 208,
+        "last_seen": "2026-08-23T16:08:51.055Z"
+    },
+    "0x98a316fffe752710": {
+        "state": "OFF",
+        "wifi_config": {
+            "enabled": true,
+            "ssid": "Livebox-"
+        },
+        "wifi_status": "got ip",
+        "ip_address": "192.168.1.35",
+        "dhcp_enabled": true,
+        "linkquality": 140,
+        "last_seen": "2026-08-23T16:04:53.752Z",
+        "update": {
+            "state": "idle",
+            "installed_version": 33554687,
+            "latest_version": 33554687,
+            "latest_source": null,
+            "latest_release_notes": null
+        }
+    },
+    "0x98a316fffe7a02d4": {
+        "state": "OFF",
+        "wifi_config": {
+            "enabled": true,
+            "ssid": "Livebox-"
+        },
+        "wifi_status": "got ip",
+        "ip_address": "192.168.1.11",
+        "dhcp_enabled": true,
+        "linkquality": 200,
+        "last_seen": "2026-08-23T16:04:06.352Z",
+        "update": {
+            "state": "idle",
+            "installed_version": 33554687,
+            "latest_version": 33554687,
+            "latest_source": null,
+            "latest_release_notes": null
+        }
+    },
+    "0xa4c138aeefefccdf": {
+        "target_distance": 0,
+        "maximum_range": 2.8,
+        "radar_sensitivity": 5,
+        "minimum_range": 0.6,
+        "detection_delay": 0.1,
+        "fading_time": 5.5,
+        "presence": false,
+        "illuminance": 1,
+        "linkquality": 192,
+        "last_seen": "2026-08-23T16:14:24.436Z"
+    },
+    "0x180df9fffe54fe82": {
+        "power": 14,
+        "current": 0.25,
+        "ac_frequency": 49.9,
+        "power_factor": 0.24,
+        "voltage": 239.51,
+        "power_apparent": 61,
+        "energy": 815.83,
+        "produced_energy": 0,
+        "linkquality": 255,
+        "update": {
+            "state": "idle",
+            "installed_version": 17,
+            "latest_version": 17,
+            "latest_source": "https://raw.githubusercontent.com/Koenkk/zigbee-OTA/master/images/NodOn/128b-0022-0011-nodon-SEM_4_1_00_v17.zigbee",
+            "latest_release_notes": "Add endpoint242 and Green Power Server Cluster. Fix the issue where devices are frozen after being online for 18 hours (first production series only)."
+        },
+        "last_seen": "2026-08-23T16:12:47.854Z"
+    },
+    "0xa4c138084cabffff": {
+        "current": 0.036,
+        "voltage": 241.32,
+        "power": 3.137,
+        "outlet_control_protect": false,
+        "overload_protection": {
+            "enable_max_voltage": "DISABLE",
+            "enable_min_current": "DISABLE",
+            "enable_min_power": "DISABLE",
+            "enable_min_voltage": "DISABLE",
+            "max_current": 0,
+            "max_power": 0,
+            "max_voltage": 0,
+            "min_current": 0,
+            "min_power": 0,
+            "min_voltage": 0
+        },
+        "state": "ON",
+        "power_on_behavior": "on",
+        "energy_yesterday": 0.04,
+        "energy_today": 0.03,
+        "energy_month": 0.93,
+        "energy": 7.24,
+        "linkquality": 84,
+        "update": {
+            "state": "idle",
+            "installed_version": 8195,
+            "latest_version": 8195,
+            "latest_source": "https://raw.githubusercontent.com/Koenkk/zigbee-OTA/master/images/Sonoff/SN-TLSR8656-S60-01-v2.0.3.ota",
+            "latest_release_notes": null
+        },
+        "last_seen": "2026-08-23T16:14:20.201Z",
+        "network_indicator": false
+    },
+    "0xa4c138861cf3b197": {
+        "battery": 100,
+        "sensitivity": 40,
+        "vibration": true,
+        "linkquality": 60,
+        "last_seen": "2026-08-23T16:03:30.363Z"
+    },
+    "0xa4c138099e8fffff": {
+        "battery": 90,
+        "temperature": 22.8,
+        "humidity": 39.7,
+        "comfort_temperature_min": 19,
+        "comfort_temperature_max": 27,
+        "comfort_humidity_min": 40,
+        "comfort_humidity_max": 60,
+        "temperature_units": "celsius",
+        "temperature_calibration": 0,
+        "humidity_calibration": 0,
+        "update": {
+            "state": "idle",
+            "installed_version": 4100,
+            "latest_version": 4100,
+            "latest_source": "https://raw.githubusercontent.com/Koenkk/zigbee-OTA/master/images/Sonoff/snzb-02dr2_v1.0.4.ota",
+            "latest_release_notes": null
+        },
+        "linkquality": 108,
+        "last_seen": "2026-08-23T16:13:31.778Z"
+    },
+    "0xa4c138059a82ffff": {
+        "current": 0,
+        "voltage": 239.09,
+        "power": 0,
+        "outlet_control_protect": false,
+        "overload_protection": {
+            "enable_max_voltage": "DISABLE",
+            "enable_min_current": "DISABLE",
+            "enable_min_power": "DISABLE",
+            "enable_min_voltage": "DISABLE",
+            "max_current": 0,
+            "max_power": 0,
+            "max_voltage": 0,
+            "min_current": 0,
+            "min_power": 0,
+            "min_voltage": 0
+        },
+        "state": "ON",
+        "power_on_behavior": "on",
+        "energy_yesterday": 0.32,
+        "energy_today": 0.13,
+        "energy_month": 9.34,
+        "energy": 40.41,
+        "update": {
+            "state": "idle",
+            "installed_version": 8195,
+            "latest_version": 8195,
+            "latest_source": "https://raw.githubusercontent.com/Koenkk/zigbee-OTA/master/images/Sonoff/SN-TLSR8656-S60-01-v2.0.3.ota",
+            "latest_release_notes": null
+        },
+        "linkquality": 184,
+        "last_seen": "2026-08-23T16:14:23.862Z",
+        "network_indicator": true
+    },
+    "0xa4c138059a6fffff": {
+        "current": 0.21,
+        "voltage": 239.85,
+        "power": 24.76,
+        "outlet_control_protect": false,
+        "overload_protection": {
+            "enable_max_voltage": "DISABLE",
+            "enable_min_current": "DISABLE",
+            "enable_min_power": "DISABLE",
+            "enable_min_voltage": "DISABLE",
+            "max_current": 0,
+            "max_power": 0,
+            "max_voltage": 0,
+            "min_current": 0,
+            "min_power": 0,
+            "min_voltage": 0
+        },
+        "state": "ON",
+        "power_on_behavior": "on",
+        "energy_yesterday": 0.23,
+        "energy_today": 0.12,
+        "energy_month": 6.99,
+        "energy": 48.28,
+        "linkquality": 196,
+        "update": {
+            "state": "idle",
+            "installed_version": 8195,
+            "latest_version": 8195,
+            "latest_source": "https://raw.githubusercontent.com/Koenkk/zigbee-OTA/master/images/Sonoff/SN-TLSR8656-S60-01-v2.0.3.ota",
+            "latest_release_notes": null
+        },
+        "last_seen": "2026-08-23T16:14:21.103Z",
+        "network_indicator": true
+    },
+    "0xa4c138845d3441a8": {
+        "state": "ON",
+        "power_on_behavior": "on",
+        "power": 70,
+        "current": 0.29,
+        "voltage": 242,
+        "energy": 292.66,
+        "linkquality": 120,
+        "last_seen": "2026-08-23T16:13:51.800Z"
+    },
+    "0xa4c1386caa89a18e": {
+        "state": "ON",
+        "power_on_behavior": "on",
+        "power": 81,
+        "current": 0.59,
+        "voltage": 239,
+        "energy": 30.82,
+        "linkquality": 108,
+        "last_seen": "2026-08-23T16:10:17.178Z"
+    },
+    "0xc09b9efffef1a5fd": {
+        "tamper": false,
+        "battery": 100,
+        "voltage": 3000,
+        "update": {
+            "state": "idle",
+            "installed_version": 8704,
+            "latest_version": 8704,
+            "latest_source": null,
+            "latest_release_notes": null
+        },
+        "contact": true,
+        "battery_low": false,
+        "linkquality": 84,
+        "last_seen": "2026-08-23T15:15:27.227Z"
+    },
+    "0xc02cedfffee885f9": {
+        "local_temperature": 22,
+        "occupied_heating_setpoint": 25,
+        "occupied_cooling_setpoint": 25,
+        "system_mode": "cool",
+        "ac_louver_position": "quarter_open",
+        "humidity": 52.1,
+        "fan_mode": "high",
+        "fan_state": "ON",
+        "update": {
+            "state": "idle",
+            "installed_version": 34040368,
+            "latest_version": 34040368,
+            "latest_source": "https://raw.githubusercontent.com/Koenkk/zigbee-OTA/master/images/NodOn/128b-4002-020700-nodon_irb-4-1-00_fw_V020700.zigbee",
+            "latest_release_notes": null
+        },
+        "last_seen": "2026-08-23T16:10:03.741Z",
+        "linkquality": 88
+    },
+    "0x449fdafffe34178a": {
+        "tamper": true,
+        "battery": 100,
+        "voltage": 3000,
+        "contact": true,
+        "battery_low": false,
+        "update": {
+            "state": "idle",
+            "installed_version": 8704,
+            "latest_version": 8704,
+            "latest_source": null,
+            "latest_release_notes": null
+        },
+        "last_seen": "2026-08-23T15:49:54.539Z",
+        "linkquality": 76
+    },
+    "0x48f6eefffed9f1cc": {
+        "wifi_config": {
+            "enabled": true,
+            "ssid": "Livebox-"
+        },
+        "wifi_status": "got ip",
+        "ip_address": "192.168.1.10",
+        "dhcp_enabled": true,
+        "last_seen": "2026-08-23T16:05:40.334Z",
+        "linkquality": 208,
+        "state": "OFF",
+        "update": {
+            "state": "idle",
+            "installed_version": 33554687,
+            "latest_version": 33554687,
+            "latest_source": null,
+            "latest_release_notes": null
+        },
+        "switch_type_sw1": "toggle",
+        "rpc_rxctl": 256,
+        "rpc_data": "{\"id\":1,\"src\":\"shelly1minig4-48f6eed9f1cc\",\"er{\"id\":1,\"src\":\"shelly1minig4-48f6eed9f1cc\",\"er{\"id\":1,\"src\":\"shelly1minig4-48f6eed9f1cc\",\"er{\"id\":1,\"src\":\"shelly1minig4-48f6eed9f1cc\",\"er{\"id\":1,\"src\":\"shelly1minig4-48f6eed9f1cc\",\"er{\"id\":1,\"src\":\"shelly1minig4-48f6eed9f1cc\",\"er"
+    },
+    "0x00158d000638e9c8": {
+        "current_tarif": "H PLEINE/CREUSE",
+        "current_price": "HEURE PLEINE",
+        "active_register_tier_delivered": "HEURE PLEINE",
+        "tariff_period": "HEURE PLEINE",
+        "status_register_breakout": {
+            "contact_sec": "ouvert",
+            "organe_coupure": "ferme",
+            "cache_borne_dist": "ferme",
+            "surtension_phase": 0,
+            "depassement_ref_pow": 0,
+            "producteur": 0,
+            "sens_energie_active": "negative",
+            "tarif_four": "index_2",
+            "tarif_dist": "index_2",
+            "horloge": "correcte",
+            "type_tic": "standard",
+            "comm_euridis": "activee avec securite",
+            "etat_cpl": "nouveau_verrouille",
+            "sync_cpl": "non_synchronise",
+            "tempo_jour": "UNDEF",
+            "tempo_demain": "UNDEF",
+            "preavis_pointe_mobile": "AUCUN",
+            "pointe_mobile": "AUCUN"
+        },
+        "status_register": "003A4601",
+        "rms_current": 2,
+        "current_summ_delivered": 54797.53,
+        "apparent_power": 456,
+        "rms_voltage": 240,
+        "current_index_tarif": 2,
+        "current_date": "E260824103850",
+        "message1": "PAS DE MESSAGE",
+        "message2": "",
+        "relais_breakout": {
+            "relais1": 0,
+            "relais2": 0,
+            "relais3": 0,
+            "relais4": 0,
+            "relais5": 0,
+            "relais6": 0,
+            "relais7": 0,
+            "relais8": 0
+        },
+        "relais": 0,
+        "drawn_v_a_max_n1": 805,
+        "site_id": "05145296573540",
+        "meter_serial_number": "031864704867",
+        "available_power": 9,
+        "power_threshold": 9,
+        "software_revision": 2,
+        "active_power_max": 783,
+        "last_seen": "2026-08-23T16:13:46.951Z",
+        "linkquality": 204,
+        "active_energy_out_d01": 12087.75,
+        "current_tier1_summ_delivered": 24333.37,
+        "active_power": 8,
+        "average_rms_voltage_meas_period": 240,
+        "active_power_ph_b": 12,
+        "active_energy_out_d02": 25436.1,
+        "current_tier2_summ_delivered": 30464.16,
+        "update": {
+            "state": "idle",
+            "installed_version": 17,
+            "latest_version": 17,
+            "latest_source": "https://raw.githubusercontent.com/Koenkk/zigbee-OTA/master/images/LiXee/ZLinky_router_v17.ota",
+            "latest_release_notes": "https://github.com/fairecasoimeme/Zlinky_TIC/releases/tag/v17.0"
+        }
+    },
+    "0xcc36bbfffed7a541": {
+        "current_device_status": "normal_state",
+        "state": "OFF",
+        "battery": 100,
+        "real_time_irrigation_duration": 1460,
+        "real_time_irrigation_volume": 6510,
+        "irrigation_start_time": 1787547600,
+        "irrigation_end_time": 1787548327,
+        "daily_irrigation_volume": 151,
+        "valve_work_state": "idle",
+        "update": {
+            "state": "idle",
+            "installed_version": 4100,
+            "latest_version": 4100,
+            "latest_source": "https://raw.githubusercontent.com/Koenkk/zigbee-OTA/master/images/Sonoff/zbswv_v1.0.4.ota",
+            "latest_release_notes": null
+        },
+        "last_seen": "2026-08-23T16:00:01.989Z",
+        "linkquality": 192,
+        "flow": 0,
+        "auto_close_when_water_shortage": "ENABLE"
+    },
+    "0x403802fffe0f5856": {
+        "current_device_status": "water_shortage",
+        "state": "OFF",
+        "battery": 100,
+        "real_time_irrigation_duration": 1970,
+        "real_time_irrigation_volume": 13,
+        "irrigation_start_time": 1787174790,
+        "irrigation_end_time": 1787419028,
+        "daily_irrigation_volume": 13,
+        "valve_work_state": "idle",
+        "update": {
+            "state": "idle",
+            "installed_version": 4100,
+            "latest_version": 4100,
+            "latest_source": "https://raw.githubusercontent.com/Koenkk/zigbee-OTA/master/images/Sonoff/zbswv_v1.0.4.ota",
+            "latest_release_notes": null
+        },
+        "flow": 0,
+        "last_seen": "2026-08-23T16:08:53.827Z",
+        "linkquality": 108,
+        "auto_close_when_water_shortage": "ENABLE"
+    },
+    "0xb40e060fffe255ff": {
+        "battery": 100,
+        "voltage": 3200,
+        "occupancy": false,
+        "tamper": false,
+        "battery_low": false,
+        "update": {
+            "state": "idle",
+            "installed_version": 79,
+            "latest_version": 79,
+            "latest_source": "https://raw.githubusercontent.com/Koenkk/zigbee-OTA/master/images/ThirdReality/Motion_Sensor_PROD_OTA_V79_v1.00.79.ota",
+            "latest_release_notes": null
+        },
+        "last_seen": "2026-08-23T16:04:40.333Z",
+        "linkquality": 116
+    }
+}

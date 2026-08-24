@@ -1,0 +1,2113 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Nastavit VW Group Connect",
+        "description": "Jak se chcete přihlásit?\n\n**Přihlášení přes prohlížeč (doporučeno)** — otevřete URL v telefonu nebo notebooku, přihlaste se ke svému účtu Brand ID a schvalte zařízení. V Home Assistant se nikdy neukládá žádné heslo. Dostupné pro Audi, SEAT a CUPRA.\n\n**E-mail + heslo (starší způsob)** — zadejte přihlašovací údaje Brand ID přímo. Vyžadováno pro Volkswagen EU, Škoda a Porsche.",
+        "menu_options": {
+          "browser_login": "Přihlášení přes prohlížeč (doporučeno)",
+          "email_password": "E-mail + heslo (starší způsob)",
+          "website_authproxy": "Web Volkswagen.de (beta — jen pro čtení)",
+          "mbb_login": "Volkswagen EU — Trvalé přihlášení (MBB, obousměrná alfa)"
+        }
+      },
+      "mbb_login": {
+        "title": "Volkswagen EU — Trvalé přihlášení (MBB, ALFA)",
+        "description": "**Experimentální, dobrovolné — pouze Volkswagen EU.** Potvrzení v prohlížeči (bez hesla uloženého v Home Assistant) vytvoří přes starší backend MBB trvalý, obnovitelný token. Na rozdíl od portálu jen pro čtení přečká restarty a podporuje obousměrné vzdálené zamykání/odemykání. **Zadejte svůj VIN** (token MBB neumí sám vypsat vaši garáž) a přidejte S-PIN pro zamykání/odemykání. Na další obrazovce uvidíte krátký kód a URL k otevření na libovolném zařízení.",
+        "data": {
+          "mbb_vins": "VIN (identifikační číslo vozidla)",
+          "spin": "S-PIN",
+          "scan_interval": "Interval aktualizace"
+        },
+        "data_description": {
+          "mbb_vins": "Váš 17místný VIN (na čelním skle / v technickém průkazu). Více vozů: oddělte čárkou. Povinné — trvalý token MBB funguje pro každý VIN zvlášť, ale neumí vypsat garáž.",
+          "spin": "Volitelný 4místný bezpečnostní PIN — vyžadován pro vzdálené zamykání/odemykání.",
+          "scan_interval": "Minuty mezi dotazy na data vozidla."
+        }
+      },
+      "website_authproxy": {
+        "title": "Web Volkswagen.de (BETA, jen pro čtení)",
+        "description": "**Experimental, opt-in.** Reads your Volkswagen via the volkswagen.de website login instead of the app backend. Volkswagen only, read-only (no remote commands). Sign in with your Volkswagen ID email and password. If your account uses email verification you will be asked for the code next. **Předpoklad:** tvé Volkswagen ID musí být hlavním uživatelem vozidla — jednou potvrď totožnost na volkswagen.de (myVolkswagen → tvé vozidlo). Bez toho web nevrací žádná data.",
+        "data": {
+          "username": "E-mailová adresa",
+          "password": "Heslo",
+          "scan_interval": "Interval aktualizace"
+        },
+        "data_description": {
+          "username": "E-mail vašeho účtu Volkswagen ID / myVolkswagen.",
+          "password": "Heslo k vašemu Volkswagen ID.",
+          "scan_interval": "Jak často se stahují data (v minutách). Minimum: 5."
+        }
+      },
+      "website_authproxy_otp": {
+        "title": "Ověřovací kód z e-mailu",
+        "description": "Na e-mail pro **{username}** byl odeslán ověřovací kód.\n\nZadejte kód a dokončete přihlášení ke kanálu webu Volkswagen.de (beta).",
+        "data": {
+          "mfa_code": "Ověřovací kód"
+        },
+        "data_description": {
+          "mfa_code": "Kód z vaší e-mailové schránky — platný několik minut."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Opětovné přihlášení — {brand}",
+        "description": "Platnost relace pro **{username}** vypršela.\n\nZadejte prosím znovu heslo.",
+        "data": {
+          "password": "Heslo",
+          "spin": "S-PIN"
+        }
+      },
+      "reconfigure": {
+        "title": "Znovu nakonfigurovat VW Group Connect",
+        "description": "Změňte přihlašovací údaje nebo nastavení bez odebrání integrace.",
+        "data": {
+          "brand": "Značka vozidla",
+          "username": "E-mailová adresa",
+          "password": "Heslo",
+          "spin": "S-PIN",
+          "country": "Region (pouze Volkswagen USA/Kanada)",
+          "scan_interval": "Interval aktualizace"
+        }
+      },
+      "mfa": {
+        "title": "Dvoufaktorové ověření",
+        "description": "Potvrzovací kód byl odeslán na **{username}**.\n\nZadejte kód z e-mailu nebo aplikace pro ověřování.",
+        "data": {
+          "mfa_code": "Potvrzovací kód"
+        },
+        "data_description": {
+          "mfa_code": "6místný kód — platný několik minut."
+        }
+      },
+      "email_password": {
+        "title": "Přihlášení e-mailem + heslem (starší způsob)",
+        "description": "Připojte své vozidlo k Home Assistantu.\n\nVyberte značku a zadejte přihlašovací údaje z aplikace výrobce.",
+        "data": {
+          "brand": "Značka vozidla",
+          "username": "E-mailová adresa",
+          "password": "Heslo",
+          "spin": "S-PIN",
+          "country": "Region (pouze Volkswagen USA/Kanada)",
+          "scan_interval": "Interval aktualizace",
+          "enable_mbb_commands": "Zapnout trvalé obousměrné příkazy (MBB) — Car-Net Volkswagen / starší Audi"
+        },
+        "data_description": {
+          "enable_mbb_commands": "Trvalý způsob, jak posílat vzdálené příkazy (zamknout/odemknout, klimatizace) do Volkswagenu — přes starší backend Car-Net/MBB, takže přežije restart. Pro vozy Car-Net (většina PHEV/spalovacích, před ID); novější modely ID/MEB nejsou způsobilé, u nich to nechte vypnuté. Čtení dat stále probíhá přes portál výše; toto pouze přidává příkazový kanál a jednorázové potvrzení v prohlížeči (žádné další heslo se neukládá).",
+          "brand": "Vyberte svou značku — myAudi, WeConnect ID, MyŠkoda, SEAT, CUPRA, VW US/CA nebo Porsche.",
+          "username": "E-mailová adresa z aplikace výrobce.",
+          "password": "Heslo z aplikace.",
+          "spin": "Potřebné jen pro zamykání. Aplikace → Zabezpečení → S-PIN.",
+          "scan_interval": "Jak často se stahují data. Výchozí: 5 min. Minimum: 3 min."
+        }
+      },
+      "browser_login": {
+        "title": "Přihlášení přes prohlížeč — vyberte značku",
+        "description": "Vyberte značku vozidla, které chcete připojit. Na další obrazovce uvidíte krátký kód a URL, kterou otevřete na libovolném zařízení s prohlížečem.",
+        "data": {
+          "brand": "Značka vozidla",
+          "spin": "S-PIN",
+          "scan_interval": "Interval aktualizace"
+        },
+        "data_description": {
+          "brand": "Zobrazují se pouze značky s podporou přihlášení přes prohlížeč. Pro Volkswagen EU a Porsche použijte „E-mail + heslo“.",
+          "scan_interval": "Minuty mezi dotazy na data vozidla.",
+          "spin": "Volitelný 4místný bezpečnostní PIN pro vzdálené akce (zamknout, odemknout, klimatizace)."
+        }
+      },
+      "browser_login_pending": {
+        "title": "Žádost o přihlašovací kód…",
+        "description": "Žádost o jednorázový kód zařízení od IDP."
+      },
+      "browser_login_approve": {
+        "title": "Potvrďte v prohlížeči",
+        "description": "Naskenujte QR kód telefonem nebo otevřete URL na libovolném zařízení. Pokud budete vyzváni, přihlaste se ke svému účtu Brand ID, potvrďte kód, poté zaškrtněte políčko níže a klikněte na Odeslat.",
+        "data": {
+          "qr_code": "Naskenujte fotoaparátem telefonu pro otevření přihlašovací stránky",
+          "verification_url": "Nebo otevřete tuto URL v libovolném prohlížeči",
+          "user_code": "Kód k potvrzení v prohlížeči",
+          "approved_in_browser": "Potvrdil jsem v prohlížeči"
+        },
+        "data_description": {
+          "qr_code": "Namiřte fotoaparát telefonu na QR kód. Přihlašovací stránka se otevře v prohlížeči telefonu s předvyplněným kódem níže.",
+          "verification_url": "Pokud nemůžete skenovat: zkopírujte tento odkaz, otevřete jej na libovolném zařízení a přihlaste se ke svému účtu Brand ID.",
+          "user_code": "Po přihlášení potvrďte tento kód v prohlížeči, čímž schválíte Home Assistant.",
+          "approved_in_browser": "Nechte zaškrtnuté. Na Odeslat klikněte až poté, co se přihlásíte a potvrdíte kód v prohlížeči."
+        }
+      },
+      "companion_adb": {
+        "title": "Doprovodný telefon (ADB) — experimentální",
+        "description": "Čtěte údaje o svém autě a ovládejte ho tak, že přes ADB řídíte oficiální aplikaci na náhradním telefonu s Androidem. Tato funkce je EXPERIMENTÁLNÍ a je nutné ji výslovně zapnout. Potřebujete druhý telefon, který zůstane přihlášený v aplikaci značky a má zapnuté ADB přes Wi-Fi. Starší telefon (Android 10 nebo starší) se sem připojí přímo; moderní telefon (Android 11+, bezdrátové ladění) vyžaduje doplněk „VW Group App ADB Bridge“, na který pak tuto integraci nasměrujete. Volkswagen je ověřený; ostatní značky jsou prozatím pouze pro čtení, dokud nebude potvrzena mapa obrazovek ze skutečného zařízení. Nevyžaduje se žádný root a nečtou se žádné tokeny aplikací — integrace pouze čte obrazovku a klepe na tlačítka.",
+        "data": {
+          "brand": "Značka vozidla",
+          "adb_host": "IP adresa telefonu",
+          "adb_port": "Port ADB",
+          "vin": "VIN (vozidlo zobrazené v aplikaci)",
+          "spin": "S-PIN (volitelné)",
+          "companion_use_addon": "Připojit přes doplněk ADB Bridge",
+          "companion_addon_token": "Token doplňku"
+        },
+        "data_description": {
+          "adb_host": "Adresa telefonu ve vaší síti, např. 192.168.1.42.",
+          "adb_port": "Obvykle 5555 pro ADB přes Wi-Fi.",
+          "vin": "17místný VIN vozidla zobrazeného v aplikaci.",
+          "companion_use_addon": "Zaškrtněte u telefonu s Androidem 11 nebo novějším, který nabízí pouze bezdrátové ladění. Poté výše zadejte adresu DOPLŇKU místo adresy telefonu.",
+          "companion_addon_token": "Potřebné pouze v případě, že jste v doplňku nastavili api_token."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Připojení selhalo. Zkontrolujte přihlašovací údaje a internet.",
+      "unknown": "Neznámá chyba. Zkontrolujte protokoly.",
+      "terms_and_conditions": "Je nutné přijmout obchodní podmínky. Přihlaste se v aplikaci.",
+      "marketing_consent": "Vyžadován nový souhlas. Aplikace → Profil → Souhlasy.",
+      "two_factor_required": "Vyžadováno dvoufázové ověření. Přihlaste se ručně v aplikaci.",
+      "email_two_factor_required": "Vyžadováno e-mailové 2FA. Zkontrolujte schránku (i spam), pak se přihlaste ručně v aplikaci.",
+      "too_many_requests": "Účet dočasně zablokován. Počkejte 15 minut.",
+      "invalid_credentials": "Nesprávná e-mailová adresa nebo heslo.",
+      "portal_interaction_required": "Portál EU Data Act vyžaduje jednorázovou akci ve vašem prohlížeči nebo aplikaci značky (např. přijmout podmínky, potvrdit souhlas, dokončit onboarding/výběr regionu), než začne fungovat bezhlavý přístup. Toto NENÍ problém se špatným heslem — otevřete portál jednou v prohlížeči, dokončete výzvu a zkuste to znovu.",
+      "upstream_unavailable": "Backend VW dočasně nedostupný. Toto je problém na straně serveru VW, NIKOLI chyba přihlášení. Počkejte 5–15 minut a zkuste to znovu. Integraci znovu NEKONFIGURUJTE.",
+      "na_signin_attestation": "Vaše e-mailová adresa a heslo jsou v pořádku — Volkswagen Severní Amerika nyní blokuje toto přihlášení kontrolou atestace zařízení od Googlu (Play Integrity), kterou dokáže projít pouze oficiální aplikace na opravdovém telefonu. Opětovné zadání hesla nepomůže; jde o zámek na straně serveru VW, nikoli o problém s přihlašovacími údaji. (Sledováno: #1165.)",
+      "brand_not_dag_eligible": "Vybraná značka nepodporuje přihlášení přes prohlížeč. Použijte místo toho přihlášení e-mailem + heslem.",
+      "skoda_qr_retired": "Bezheslové přihlášení Škoda (QR) společnost Volkswagen vypnula a už nefunguje. Vraťte se zpět a zvolte „E-mail + heslo (starší způsob)“, tam vyberte Škoda a přihlaste se svým e-mailem a heslem MyŠkoda.",
+      "still_waiting_browser": "Stále se čeká na potvrzení v prohlížeči. Otevřete URL výše, přihlaste se, potvrďte kód a poté znovu klikněte na Odeslat.",
+      "companion_cannot_connect": "Telefon se nepodařilo kontaktovat přes ADB. Zkontrolujte, že je v síti, že je zapnuté ADB přes Wi-Fi a že jste potvrdili výzvu k ladění.",
+      "companion_needs_addon": "Vypadá to na telefon s Androidem 11+ používající bezdrátové ladění, které zdejší přímé připojení neumí (vyžaduje TLS a párování). Nainstalujte doplněk 'VW Group App ADB Bridge' (github.com/its-me-prash/vwgroup-app-adb-bridge) a nasměrujte na něj companion. Starší telefony (Android 10 a starší) se připojí přímo zde.",
+      "companion_app_not_found": "Připojení k telefonu proběhlo, ale aplikace značky na něm není nainstalovaná.",
+      "companion_unknown_brand": "Pro tuto značku zatím není k dispozici žádná přednastavená konfigurace doprovodného telefonu."
+    },
+    "abort": {
+      "already_configured": "Tento účet je již nastaven.",
+      "reauth_successful": "Opětovné ověření bylo úspěšné.",
+      "reconfigure_successful": "Konfigurace byla úspěšně aktualizována.",
+      "mbb_not_eligible": "Vaše vozidlo není způsobilé pro trvalé přihlášení MBB — backend vrátil „Unknown user“. Jde o novější model ID / MEB (ID.3/4/5, e-up apod.), který nikdy nebyl registrován ve starém systému Car-Net/MBB, takže trvalé přihlášení a vzdálené příkazy se k němu nedostanou. Pro taková vozidla použijte kanál portálu EU Data Act (nebo přihlášení e-mailem a heslem). Přihlášení MBB je pro starší vozy Car-Net (většina plug-in hybridních / spalovacích modelů)."
+    },
+    "progress": {
+      "awaiting_browser_login": "Otevřete {verification_uri} v libovolném prohlížeči, přihlaste se pomocí účtu Brand ID a potvrďte kód {user_code}.",
+      "requesting_device_code": "Žádost o jednorázový přihlašovací kód od IDP…"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "VW Group Connect — Nastavení",
+        "data": {
+          "scan_interval": "Interval aktualizace",
+          "spin": "S-PIN",
+          "battery_nominal_kwh": "Jmenovitá kapacita baterie (kWh, pro State of Health)",
+          "enable_reverse_geocoding": "Reverzní geokódování (adresa parkování)",
+          "read_only_mode": "Režim jen pro čtení",
+          "companion_read_charge_detail": "Companion: číst cíl nabíjení (naviguje v aplikaci)",
+          "companion_wake_sleep": "Companion: probudit displej k dotazu, poté uspat",
+          "force_ppe_climate": "Audi PPE/PPC klima-tělo (Q6/A6 e-tron, RS e-tron GT Facelift, A3 2024+ PHEV)",
+          "enable_push_mqtt": "Push aktualizace Skoda (MQTT, EXPERIMENTÁLNÍ)",
+          "enable_push_fcm": "Push aktualizace CUPRA/SEAT (FCM, EXPERIMENTÁLNÍ)",
+          "enable_push_audi_vw": "Audi/VW push updates (Cariad FCM, EXPERIMENTAL)",
+          "client_id_override": "Přepsání OAuth client_id (pokročilí uživatelé)",
+          "eu_data_act_auto_kickoff": "EU Data Act: automatické spuštění Custom Data Request",
+          "supplementary_authproxy": "Přidat čtecí kanál Volkswagen.de (sloučit data)",
+          "hide_empty_entities": "Skrýt entity bez dat",
+          "supplementary_eu_portal": "Přidat čtecí kanál portálu EU Data Act",
+          "remove_supplementary_authproxy": "Odebrat čtecí kanál vw.de",
+          "remove_supplementary_eu_portal": "Odebrat čtecí kanál portálu EU Data Act",
+          "supplementary_tibber": "Přidat čtecí kanál Tibber (data o nabíjení elektromobilu)",
+          "remove_supplementary_tibber": "Odebrat čtecí kanál Tibber",
+          "abrp_enable": "Povolit odesílání telemetrie ABRP",
+          "abrp_api_key": "api_key ABRP (vývojářský klíč)",
+          "abrp_user_token": "Token ABRP (pro vozidlo)",
+          "keep_raw_datasets": "Uchovávat surová data EU Data Act (diagnostika)",
+          "test_cohort": "Pomozte vylepšit VW Group Connect (dobrovolná testovací skupina)",
+          "vweu_device_grant": "Přidat VW EU Two-Way — příkazy + živé čtení dat (BETA)",
+          "remove_vweu_twoway": "Odebrat VW EU Two-Way (n\u00e1vrat k p\u0159edchoz\u00edmu kan\u00e1lu)"
+        },
+        "data_description": {
+          "scan_interval": "Jak často se stahují data (minuty). Minimum: 3.",
+          "spin": "S-PIN pro zamykání dveří.",
+          "enable_reverse_geocoding": "Odesílá GPS parkování do OpenStreetMap Nominatim pro získání ulice/města. Výchozí: vypnuto (soukromí).",
+          "read_only_mode": "Když je povoleno, vytváří se pouze stavové senzory — žádné spínače, tlačítka, zámky, klima ani posuvníky odesílající příkazy. Užitečné, pokud chcete telemetrii vozidla bez rizika náhodného spuštění. Po přepnutí znovu načtěte integraci.",
+          "companion_read_charge_detail": "Pouze companion (ADB). Načítá navíc cíl nabíjení, výkon a zbývající čas, které jsou skryté za obrazovkou s detailem nabíjení. Kvůli tomu KLEPÁ do aplikace, aby se tam dostala (asi každých 15 minut), proto to zapínejte až po ověření, že postup na vašem telefonu funguje. Výchozí: vypnuto. Po přepnutí znovu načtěte integraci.",
+          "companion_wake_sleep": "Pouze companion (ADB). Před každým dotazem probudí displej telefonu a poté ho zase uspí, takže zamčený nebo spící telefon během čtení zobrazí aplikaci, aniž by displej svítil trvale. Výchozí: vypnuto. Po přepnutí znovu načtěte integraci.",
+          "force_ppe_climate": "Pouze Audi. Vynucuje nový PPE/PPC formát těla (climatisationMode povinný, targetTemperature vynechaný) při startu klimatizace. Zapnout pouze pokud vlastníš Q6 e-tron, A6 e-tron, RS e-tron GT Facelift nebo A3 2024+ PHEV — jinak API vrátí 400. Po zapnutí znovu načti integraci.",
+          "enable_push_mqtt": "EXPERIMENTÁLNÍ: pouze Skoda. Umožňuje push v reálném čase přes MQTT z backendu Skoda mysmob (vyžaduje Python balíčky aiomqtt + firebase-messaging — momentálně se načítají líně, nejsou předinstalované). Základní fáze ve verzi v1.18.0; ostré nasazení čeká na ověření komunitními testery. Pokud push není dostupný, integrace se tiše vrátí k dotazování (polling). Po přepnutí integraci znovu načtěte.",
+          "enable_push_fcm": "EXPERIMENTÁLNÍ: pouze CUPRA/SEAT. Umožňuje push v reálném čase přes Firebase Cloud Messaging z backendu OLA (vyžaduje Python balíček firebase-messaging — stejné líné načítání jako u přepínače Skoda MQTT ve verzi v1.18.0). Základní fáze ve verzi v1.19.0; ostré nasazení čeká na ověření komunitními testery. Pokud push není dostupný, integrace se tiše vrátí k dotazování (polling). Po přepnutí integraci znovu načtěte.",
+          "enable_push_audi_vw": "EXPERIMENTAL: Audi/VW only. Enables real-time push notifications from Cariad FCM channel (same one myAudi/WeConnect mobile apps use — covers lock/unlock results, charging-state, climate, alarm). Requires firebase-messaging Python package (same as Skoda MQTT + CUPRA/SEAT FCM). Foundation phase in v1.23.0; live activation pending community-tester validation. If push is unavailable, the integration silently falls back to polling. Reload the integration after toggling.",
+          "client_id_override": "Únikový poklop pro pokročilé uživatele pro případ, kdy komunita objeví nový OAuth client_id v nové APK skupiny VW dřív, než jej zachytí náš denní atlas builder. Vložte sem celý řetězec UUID@apps_vw-dilab_com a resolver jej při každém ověření vyzkouší JAKO PRVNÍ, přičemž všechny stávající client_id zůstanou v řetězci jako záloha. Ponechte prázdné pro výchozí chování. Formát: 8-4-4-4-12 hexadecimálních číslic následovaných @apps_vw-dilab_com. Chybně zadané hodnoty jsou tiše ignorovány.",
+          "eu_data_act_auto_kickoff": "Má smysl pouze tehdy, když integrace běží v režimu portálu EU Data Act jen pro čtení (živé strategie BFF selhaly). Pokud je zapnuto, koordinátor při spuštění kontroluje aktivní 15minutový Custom Data Request pro každé VIN a vytvoří jej, pokud žádný neexistuje. Toto spuštění znamená měsíční předplatné dat na vašem účtu na portálu, proto je volitelné (opt-in). Portál přijímá NEJVÝŠE JEDEN aktivní vlastní požadavek na VIN v daný okamžik. Ve výchozím stavu vypnuto.",
+          "abrp_enable": "Odesílat živou telemetrii do A Better Routeplanner. Vyžaduje api_key a token pro každé vozidlo. Vypnuto = žádná odchozí volání.",
+          "abrp_api_key": "Vývojářský/partnerský klíč, který si zaregistrujete u iternio (žádný nedodáváme). Identifikuje integraci. Nikdy se neloguje.",
+          "abrp_user_token": "Token 'Generic' z aplikace ABRP: Nastavení -> vaše auto -> Live Data. Nikdy se neloguje.",
+          "keep_raw_datasets": "Užitečné pouze na kanálu portálu EU Data Act. Po zapnutí se posledních několik surových ZIP souborů s daty, které portál dodá, uchová na disku (v .storage, na vozidlo a s limitem velikosti), aby bylo možné chybnou nebo chybějící hodnotu reprodukovat z přesně těch bajtů, které vůz odeslal. Tyto soubory obsahují vaši GPS polohu, VIN a telemetrii, proto je funkce ve výchozím nastavení vypnutá – zapněte ji jen při řešení potíží.",
+          "test_cohort": "Ve výchozím nastavení vypnuto. Když tuto možnost zapnete, integrace bude moci na vašem voze zkoušet experimentální čtení dat — třeba právě probíhající pokus o získání polohy GPS u vozů Volkswagen v EU — a občas vám zobrazí upozornění (které lze zavřít) s prosbou o sdílení diagnostického souboru, aby se pro váš model mohla potvrdit nová funkce. Vše, co sdílíte, se automaticky anonymizuje ještě předtím, než to opustí váš systém: nikdy to neobsahuje VIN, GPS, tokeny ani e-mail. Právě takto se odemykají nové funkce pro váš vůz i pro všechny, kdo jezdí stejným modelem — a kdykoli to zase můžete vypnout.",
+          "vweu_device_grant": "Pouze Volkswagen, BETA. Přidává obousměrné ovládání (zamknout/odemknout, klimatizace, nabíjení) a živé čtení dat z CARIAD po přihlášení pomocí vašeho Volkswagen ID. Volkswagen zde vydává pouze hodinový token, takže se vaše heslo uloží, aby jej integrace mohla automaticky obnovovat — odesílá se výhradně na přihlašovací server samotného Volkswagenu a nikdy se nezapisuje do logů ani diagnostiky. Pokud heslo raději ukládat nechcete, použijte místo toho kanály jen pro čtení. Zaškrtnutím této volby se otevře krok přihlášení."
+        }
+      },
+      "add_vwde": {
+        "title": "Web Volkswagen.de (BETA, jen pro čtení)",
+        "description": "**Experimental, opt-in.** Reads your Volkswagen via the volkswagen.de website login instead of the app backend. Volkswagen only, read-only (no remote commands). Sign in with your Volkswagen ID email and password. If your account uses email verification you will be asked for the code next. **Předpoklad:** tvé Volkswagen ID musí být hlavním uživatelem vozidla — jednou potvrď totožnost na volkswagen.de (myVolkswagen → tvé vozidlo). Bez toho web nevrací žádná data.",
+        "data": {
+          "username": "E-mailová adresa",
+          "password": "Heslo",
+          "scan_interval": "Interval aktualizace"
+        },
+        "data_description": {
+          "username": "E-mail vašeho účtu Volkswagen ID / myVolkswagen.",
+          "password": "Heslo k vašemu Volkswagen ID.",
+          "scan_interval": "Jak často se stahují data (v minutách). Minimum: 5."
+        }
+      },
+      "add_vwde_otp": {
+        "title": "Ověřovací kód z e-mailu",
+        "description": "Na e-mail pro **{username}** byl odeslán ověřovací kód.\n\nZadejte kód a dokončete přihlášení ke kanálu webu Volkswagen.de (beta).",
+        "data": {
+          "mfa_code": "Ověřovací kód"
+        },
+        "data_description": {
+          "mfa_code": "Kód z vaší e-mailové schránky — platný několik minut."
+        }
+      },
+      "add_portal": {
+        "title": "Portál EU Data Act — čtecí kanál",
+        "description": "Přihlas se k portálu EU Data Act (e-mail + heslo) pro přidání SoC, nabíjení, kilometrů a servisu, sloučených s hlavním kanálem.",
+        "data": {
+          "username": "E-mail",
+          "password": "Heslo"
+        }
+      },
+      "add_tibber": {
+        "title": "Tibber — čtecí kanál pro elektromobil (OAuth2)",
+        "description": "Přidej data o nabíjení svého elektromobilu z oficiálního Data API Tibberu jako zdroj jen pro čtení s nejnižší prioritou — pouze doplňuje mezery, které vlastní kanály tvého vozu nechají prázdné, a nikdy nepřepisuje čerstvější data. Jednorázové nastavení:\n\n1. Otevři {manage_url} a vytvoř OAuth2 klienta.\n2. Nastav jeho redirect URI přesně na `{redirect_uri}`.\n3. Uděl oprávnění pro čtení (user, homes, vehicles).\n4. Níže vlož client ID a client secret.\n\nJen pro čtení — Tibber tvé auto ovládat nemůže. Tvé auto už musí být spárované v aplikaci Tibber.",
+        "data": {
+          "tibber_client_id": "Client ID Tibberu",
+          "tibber_client_secret": "Client secret Tibberu"
+        }
+      },
+      "tibber_authorize": {
+        "title": "Tibber — autorizace přístupu",
+        "description": "Otevři tuto URL v prohlížeči, přihlas se k Tibberu a povol přístup:\n\n{authorize_url}\n\nJakmile přístup povolíš, prohlížeč tě přesměruje na stránku my.home-assistant.io. Zkopíruj CELOU adresu z adresního řádku (obsahuje ?code=…) a vlož ji níže.",
+        "data": {
+          "tibber_auth_response": "Přesměrovaná URL (nebo kód)"
+        }
+      },
+      "add_vweu_twoway": {
+        "title": "VW EU Two-Way (p\u0159\u00edkazy + \u017eiv\u00e9 \u010dten\u00ed dat, BETA)",
+        "description": "**Experimentální, dobrovolné — pouze Volkswagen.** Přidává obousměrné ovládání (zamknout/odemknout, klimatizace, nabíjení) a živé čtení dat z CARIAD po přihlášení pomocí vašeho Volkswagen ID. Protože Volkswagen na této cestě vydává pouze hodinový token, vaše heslo se **uloží**, aby jej integrace mohla automaticky obnovovat. Odesílá se výhradně na přihlašovací server samotného Volkswagenu a nikdy se nezapisuje do logů ani diagnostiky. Nechcete heslo ukládat? Použijte místo toho kanály jen pro čtení. **Předpoklad:** vaše Volkswagen ID musí být hlavním uživatelem vozidla.",
+        "data": {
+          "username": "Email Address",
+          "password": "Password"
+        },
+        "data_description": {
+          "username": "E-mail va\u0161eho \u00fa\u010dtu Volkswagen ID / myVolkswagen.",
+          "password": "Heslo k va\u0161emu Volkswagen ID. Pou\u017e\u00edv\u00e1 se pouze k obnoven\u00ed hodinov\u00e9ho p\u0159\u00edstupov\u00e9ho tokenu v\u016f\u010di p\u0159ihla\u0161ovac\u00edmu serveru Volkswagenu; nikdy se neloguje a z diagnostiky je odstran\u011bno."
+        }
+      }
+    },
+    "error": {
+      "abrp_credentials_required": "Pro povolení ABRP musíte zadat jak api_key, tak token vozidla.",
+      "invalid_auth": "P\u0159ihl\u00e1\u0161en\u00ed selhalo. Zkontrolujte e-mail a heslo sv\u00e9ho Volkswagen ID.",
+      "cannot_connect": "Volkswagen se nepoda\u0159ilo kontaktovat. Zkuste to pros\u00edm znovu.",
+      "vweu_mfa_unsupported": "Tento \u00fa\u010det vy\u017eaduje k\u00f3d z e-mailu nebo z ov\u011b\u0159ovac\u00ed aplikace, kter\u00fd VW EU Two-Way zat\u00edm neum\u00ed zpracovat. Pou\u017eijte m\u00edsto toho kan\u00e1ly jen pro \u010dten\u00ed.",
+      "vweu_no_bff_data": "P\u0159ihl\u00e1\u0161en\u00ed prob\u011bhlo, ale Volkswagen pro tento v\u016fz na modern\u00edm backendu zat\u00edm nevr\u00e1til \u017e\u00e1dn\u00e1 \u017eiv\u00e1 data, tak\u017ee VW EU Two-Way nebyl zapnut a v\u00e1\u0161 st\u00e1vaj\u00edc\u00ed kan\u00e1l z\u016fst\u00e1v\u00e1 beze zm\u011bny. Zkuste to pros\u00edm pozd\u011bji, nebo sd\u00edlejte diagnostiku, abychom se na to mohli pod\u00edvat."
+    },
+    "abort": {
+      "not_volkswagen": "Tento kan\u00e1l je dostupn\u00fd pouze pro Volkswagen.",
+      "vweu_twoway_vw_disabled": "Volkswagen dne 18. 8. 2026 vypnul přihlášení, které tento kanál používal, takže jej už nelze nastavit. Živé čtení dat dál funguje přes portál EU Data Act a trvalý příkazový kanál přes klasický backend Car-Net je v betě — viz issue #584."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "fuel_level": {
+        "name": "Hladina paliva"
+      },
+      "battery_soc": {
+        "name": "Stav baterie"
+      },
+      "range_km": {
+        "name": "Dojezd"
+      },
+      "electric_range_km": {
+        "name": "Elektrický dojezd"
+      },
+      "combustion_range_km": {
+        "name": "Dojezd na palivo"
+      },
+      "total_range_km": {
+        "name": "Celkový dojezd"
+      },
+      "odometer_km": {
+        "name": "Nájezd"
+      },
+      "charging_state": {
+        "name": "Stav nabíjení"
+      },
+      "plug_state": {
+        "name": "Nabíjecí konektor"
+      },
+      "target_soc": {
+        "name": "Cíl nabíjení"
+      },
+      "charging_power_kw": {
+        "name": "Výkon nabíjení"
+      },
+      "charging_rate_kmh": {
+        "name": "Rychlost nabíjení"
+      },
+      "charge_complete_eta": {
+        "name": "Konec nabíjení"
+      },
+      "charging_type": {
+        "name": "Typ nabíjení"
+      },
+      "climatisation_state": {
+        "name": "Klimatizace"
+      },
+      "target_temperature": {
+        "name": "Cílová teplota"
+      },
+      "outside_temp": {
+        "name": "Venkovní teplota"
+      },
+      "service_km": {
+        "name": "Příští servisní prohlídka"
+      },
+      "service_due_at": {
+        "name": "Datum servisní prohlídky"
+      },
+      "service_due_in_days": {
+        "name": "Servis za"
+      },
+      "oil_service_km": {
+        "name": "Příští výměna oleje"
+      },
+      "oil_service_at": {
+        "name": "Datum výměny oleje"
+      },
+      "oil_service_due_in_days": {
+        "name": "Výměna oleje za"
+      },
+      "lights_count": {
+        "name": "Rozsvícená světla (počet)"
+      },
+      "max_charge_current_a": {
+        "name": "Max. nabíjecí proud"
+      },
+      "vehicle_state": {
+        "name": "Stav vozu"
+      },
+      "connection_state": {
+        "name": "Stav připojení"
+      },
+      "parking_address": {
+        "name": "Zaparkováno"
+      },
+      "parking_city": {
+        "name": "Město"
+      },
+      "battery_temp": {
+        "name": "Teplota baterie"
+      },
+      "voltage_12v": {
+        "name": "Baterie 12V"
+      },
+      "wake_count_today": {
+        "name": "Probuzení dnes"
+      },
+      "last_trip_distance_km": {
+        "name": "Poslední Jízda — Vzdálenost"
+      },
+      "last_trip_avg_speed_kmh": {
+        "name": "Poslední Jízda — Prům. Rychlost"
+      },
+      "last_trip_avg_fuel_consumption_l_100km": {
+        "name": "Poslední Jízda — Prům. Spotřeba Paliva"
+      },
+      "last_trip_avg_electric_consumption_kwh_100km": {
+        "name": "Poslední Jízda — Prům. Spotřeba Elektřiny"
+      },
+      "software_version": {
+        "name": "Verze Softwaru"
+      },
+      "total_charged_energy_kwh": {
+        "name": "Celkem Nabitá Energie"
+      },
+      "last_charging_session_kwh": {
+        "name": "Poslední Relace — Energie"
+      },
+      "last_charging_session_duration_min": {
+        "name": "Poslední Relace — Doba"
+      },
+      "last_charging_session_start": {
+        "name": "Poslední nabíjení, začátek"
+      },
+      "last_charging_session_current_type": {
+        "name": "Poslední nabíjení, typ proudu"
+      },
+      "last_charging_power_curve_points": {
+        "name": "Poslední nabíjení, body křivky výkonu"
+      },
+      "active_charging_profile_name": {
+        "name": "Aktivní Profil Nabíjení"
+      },
+      "active_charging_profile_target_soc_pct": {
+        "name": "Aktivní Profil — Cílové Nabití"
+      },
+      "next_charging_time": {
+        "name": "Další Nabíjení"
+      },
+      "charging_profiles_count": {
+        "name": "Počet Profilů"
+      },
+      "battery_care_target_soc_pct": {
+        "name": "Péče o Baterii — Cílové Nabití"
+      },
+      "driving_score": {
+        "name": "Skóre Jízdy"
+      },
+      "driving_score_class": {
+        "name": "Třída Skóre Jízdy"
+      },
+      "departure_timer_1_time": {
+        "name": "Časovač odjezdu 1"
+      },
+      "departure_timer_2_time": {
+        "name": "Časovač odjezdu 2"
+      },
+      "departure_timer_3_time": {
+        "name": "Časovač odjezdu 3"
+      },
+      "last_updated_at": {
+        "name": "Naposledy aktualizováno"
+      },
+      "last_seen_at": {
+        "name": "Vozidlo naposledy nahlášeno"
+      },
+      "adblue_range_km": {
+        "name": "Dojezd AdBlue"
+      },
+      "api_observer_findings": {
+        "name": "Pozorovatel API"
+      },
+      "raw_api_fields": {
+        "name": "Nezpracovaná pole API"
+      },
+      "data_source_channel": {
+        "name": "Kanál zdroje dat"
+      },
+      "error_reporter_count": {
+        "name": "Hlásič chyb"
+      },
+      "requests_remaining_today": {
+        "name": "Zbývající API požadavky"
+      },
+      "license_plate": {
+        "name": "Registrační značka"
+      },
+      "equipment_count": {
+        "name": "Počet výbavy"
+      },
+      "secondary_engine_range_km": {
+        "name": "Dojezd sekundárního motoru"
+      },
+      "secondary_engine_type": {
+        "name": "Typ sekundárního motoru"
+      },
+      "secondary_engine_fuel_level_pct": {
+        "name": "Hladina paliva sekundárního motoru"
+      },
+      "subscription_expiry_at": {
+        "name": "Předplatné vyprší"
+      },
+      "subscription_days_remaining": {
+        "name": "Předplatné zbývá dní"
+      },
+      "battery_temp_max": {
+        "name": "Teplota baterie (Max)"
+      },
+      "departure_timer_enabled_count": {
+        "name": "Aktivované odjezdové časovače"
+      },
+      "fuel_tank_capacity_liters": {
+        "name": "Objem nádrže"
+      },
+      "climate_running_requests_count": {
+        "name": "Čekající klima-požadavky"
+      },
+      "active_warning_lights_count": {
+        "name": "Aktivní výstražné kontrolky"
+      },
+      "last_lock_action": {
+        "name": "Poslední akce zamčení"
+      },
+      "last_lock_action_at": {
+        "name": "Čas poslední akce zamčení"
+      },
+      "maintenance_report_captured_at": {
+        "name": "Servisní zpráva aktualizována"
+      },
+      "primary_engine_fuel_level_pct": {
+        "name": "Hladina paliva (primární)"
+      },
+      "car_type": {
+        "name": "Typ vozidla"
+      },
+      "climate_timer_enabled_count": {
+        "name": "Aktivované klima-časovače"
+      },
+      "primary_engine_type": {
+        "name": "Typ primárního motoru"
+      },
+      "steering_wheel_position": {
+        "name": "Pozice volantu"
+      },
+      "primary_engine_soc_pct": {
+        "name": "Nabití baterie 12V"
+      },
+      "next_charging_timer_id": {
+        "name": "Další časovač (ID)"
+      },
+      "next_charging_timer_target_soc_reachable": {
+        "name": "Další časovač — Cílové nabití dosažitelné"
+      },
+      "capabilities_count": {
+        "name": "Počet funkcí"
+      },
+      "tire_pressure_front_left_bar": {
+        "name": "Tlak Pneumatik Přední Levá"
+      },
+      "tire_pressure_front_right_bar": {
+        "name": "Tlak Pneumatik Přední Pravá"
+      },
+      "tire_pressure_rear_left_bar": {
+        "name": "Tlak Pneumatik Zadní Levá"
+      },
+      "tire_pressure_rear_right_bar": {
+        "name": "Tlak Pneumatik Zadní Pravá"
+      },
+      "lifetime_distance_km": {
+        "name": "Celková Vzdálenost"
+      },
+      "lifetime_avg_fuel_consumption_l_100km": {
+        "name": "Průměrná Spotřeba Paliva (Celkem)"
+      },
+      "lifetime_avg_electric_consumption_kwh_100km": {
+        "name": "Průměrná Spotřeba Energie (Celkem)"
+      },
+      "last_alarm_at": {
+        "name": "Poslední Alarm"
+      },
+      "heater_source": {
+        "name": "Zdroj Topení"
+      },
+      "climate_ready_at": {
+        "name": "Klima Připravená Do"
+      },
+      "warning_messages": {
+        "name": "Varování vozidla"
+      },
+      "service_campaigns": {
+        "name": "Servisní akce"
+      },
+      "auxiliary_heating_remaining_min": {
+        "name": "Nezávislé topení, zbývající čas"
+      },
+      "auxiliary_heating_status": {
+        "name": "Stav nezávislého topení"
+      },
+      "brake_fluid_change_due_at": {
+        "name": "Výměna brzdové kapaliny"
+      },
+      "brake_pads_front_inspection_due_at": {
+        "name": "Kontrola předních brzdových destiček"
+      },
+      "brake_pads_rear_inspection_due_at": {
+        "name": "Kontrola zadních brzdových destiček"
+      },
+      "preferred_workshop_address": {
+        "name": "Adresa preferovaného servisu"
+      },
+      "preferred_workshop_name": {
+        "name": "Preferovaný servis"
+      },
+      "preferred_workshop_phone": {
+        "name": "Telefon preferovaného servisu"
+      },
+      "adblue_level_pct": {
+        "name": "Hladina AdBlue"
+      },
+      "cng_level_pct": {
+        "name": "Hladina nádrže CNG"
+      },
+      "cng_range_km": {
+        "name": "Dojezd na CNG"
+      },
+      "primary_engine_range_km": {
+        "name": "Dojezd hlavního motoru"
+      },
+      "charging_preferred_mode": {
+        "name": "Preferovaný režim nabíjení"
+      },
+      "pending_action_id": {
+        "name": "ID čekající akce"
+      },
+      "pending_action_type": {
+        "name": "Typ čekající akce"
+      },
+      "pending_action_status": {
+        "name": "Stav čekající akce"
+      },
+      "refuel_trip_distance_km": {
+        "name": "Vzdálenost od tankování"
+      },
+      "refuel_trip_duration_min": {
+        "name": "Doba jízdy od tankování"
+      },
+      "refuel_trip_avg_speed_kmh": {
+        "name": "Prům. rychlost od tankování"
+      },
+      "refuel_trip_avg_fuel_consumption_l_100km": {
+        "name": "Prům. spotřeba paliva od tankování"
+      },
+      "refuel_trip_avg_electric_consumption_kwh_100km": {
+        "name": "Prům. spotřeba energie od tankování"
+      },
+      "refuel_trip_total_fuel_consumption_l": {
+        "name": "Celkové palivo od tankování"
+      },
+      "refuel_trip_total_electric_consumption_kwh": {
+        "name": "Celková energie od nabíjení"
+      },
+      "refuel_trip_recuperation_kwh": {
+        "name": "Rekuperace od nabíjení"
+      },
+      "refuel_trip_timestamp": {
+        "name": "Začátek cyklu tankování"
+      },
+      "actual_charge_rate_kw": {
+        "name": "Aktuální nabíjecí výkon"
+      },
+      "hv_battery_min_temperature_c": {
+        "name": "Teplota HV baterie (min.)"
+      },
+      "hv_battery_max_temperature_c": {
+        "name": "Teplota HV baterie (max.)"
+      },
+      "charge_max_ac_setting": {
+        "name": "Max. AC proud (nastavení)"
+      },
+      "charge_max_ac_ampere": {
+        "name": "Max. AC proud (dodávaný)"
+      },
+      "auto_release_ac_connector_state": {
+        "name": "Stav automatického uvolnění konektoru"
+      },
+      "active_ventilation_state": {
+        "name": "Aktivní větrání"
+      },
+      "active_ventilation_remaining_time_min": {
+        "name": "Zbývající aktivní větrání"
+      },
+      "battery_support_state": {
+        "name": "Podpora 12V baterie"
+      },
+      "evcc_charge_status": {
+        "name": "evcc stav nabíjení"
+      },
+      "connection_state_battery_power_level": {
+        "name": "Úroveň nabití baterie 12V"
+      },
+      "last_trip_total_fuel_consumption_l": {
+        "name": "Poslední jízda, celkové palivo"
+      },
+      "last_trip_total_electric_consumption_kwh": {
+        "name": "Poslední jízda, celková energie"
+      },
+      "notifications_count": {
+        "name": "Počet oznámení"
+      },
+      "last_notification_subject": {
+        "name": "Poslední oznámení, předmět"
+      },
+      "last_notification_severity": {
+        "name": "Poslední oznámení, závažnost"
+      },
+      "engine_oil_temperature_c": {
+        "name": "Teplota motorového oleje"
+      },
+      "engine_coolant_temperature_c": {
+        "name": "Teplota chladicí kapaliny"
+      },
+      "last_trip_reset_at": {
+        "name": "Poslední vynulování jízdy"
+      },
+      "battery_temp_c": {
+        "name": "Teplota baterie"
+      },
+      "charging_settings_pending": {
+        "name": "Nastavení nabíjení čeká"
+      },
+      "charging_status_pending": {
+        "name": "Příkazy nabíjení čekají"
+      },
+      "charging_mode_pending": {
+        "name": "Změny režimu nabíjení čekají"
+      },
+      "charging_care_pending": {
+        "name": "Změny péče o baterii čekají"
+      },
+      "climate_remaining_time_min": {
+        "name": "Klimatizace – zbývající čas"
+      },
+      "climate_without_external_power": {
+        "name": "Klimatizace bez externího napájení"
+      },
+      "climate_zone_front_left": {
+        "name": "Klimatická zóna vpředu vlevo"
+      },
+      "climate_zone_front_right": {
+        "name": "Klimatická zóna vpředu vpravo"
+      },
+      "climate_zone_rear_left": {
+        "name": "Klimatická zóna vzadu vlevo"
+      },
+      "climate_zone_rear_right": {
+        "name": "Klimatická zóna vzadu vpravo"
+      },
+      "climatisation_settings_pending": {
+        "name": "Nastavení klimatizace čeká"
+      },
+      "climatisation_status_pending": {
+        "name": "Příkazy klimatizace čekají"
+      },
+      "connection_active": {
+        "name": "Připojení aktivní"
+      },
+      "connection_battery_power_level": {
+        "name": "Úroveň baterie (připojení)"
+      },
+      "daily_power_budget_warning": {
+        "name": "Varování denního energetického limitu"
+      },
+      "insufficient_battery_level_warning": {
+        "name": "Varování nedostatečné úrovně baterie"
+      },
+      "nav_target_soc_pct": {
+        "name": "Cílová úroveň nabití (navigace)"
+      },
+      "parking_map_url_dark": {
+        "name": "URL mapy parkování (tmavá)"
+      },
+      "parking_map_url_light": {
+        "name": "URL mapy parkování (světlá)"
+      },
+      "plug_led_color": {
+        "name": "Barva LED konektoru"
+      },
+      "remaining_charge_time_nav_min": {
+        "name": "Zbývající čas nabíjení (navigace)"
+      },
+      "vehicle_nickname": {
+        "name": "Přezdívka vozidla"
+      },
+      "lifetime_avg_speed_kmh": {
+        "name": "Průměrná rychlost (celkem)"
+      },
+      "lifetime_travel_time_min": {
+        "name": "Doba jízdy (celkem)"
+      },
+      "monthly_mileage_km": {
+        "name": "Měsíční nájezd"
+      },
+      "remaining_charge_time_min": {
+        "name": "Zbývající čas nabíjení"
+      },
+      "charging_scenario": {
+        "name": "Scénář nabíjení"
+      },
+      "immediate_charge_action_state": {
+        "name": "Stav okamžitého nabíjení"
+      },
+      "profile_charge_reason": {
+        "name": "Důvod nabíjení"
+      },
+      "charge_session_energy_kwh": {
+        "name": "Nabitá energie"
+      },
+      "remaining_charge_time_bulk_min": {
+        "name": "Zbývající čas do 80 % (rychlé nabíjení)"
+      },
+      "odometer_state": {
+        "name": "Stav tachometru"
+      },
+      "instrument_cluster_time": {
+        "name": "Hodiny vozidla"
+      },
+      "hv_battery_state": {
+        "name": "Stav VN baterie"
+      },
+      "data_error_detail": {
+        "name": "Chyba dat"
+      },
+      "external_power_supply_state": {
+        "name": "Externí napájení"
+      },
+      "charging_reason": {
+        "name": "Důvod nabíjení"
+      },
+      "charging_error_code": {
+        "name": "Kód chyby nabíjení"
+      },
+      "remaining_time_target_soc": {
+        "name": "Cíl nabití (zbývající čas)"
+      },
+      "charge_led_color": {
+        "name": "Barva LED nabíjecího portu"
+      },
+      "charge_led_pattern": {
+        "name": "Vzor LED nabíjecího portu"
+      },
+      "last_report_id": {
+        "name": "ID hlášení"
+      },
+      "climate_energy_consumption_kwh": {
+        "name": "Spotřeba klimatizace"
+      },
+      "residual_energy_consumption_kwh": {
+        "name": "Spotřeba palubní sítě"
+      },
+      "battery_climatization_energy_kwh": {
+        "name": "Energie klimatizace baterie"
+      },
+      "last_trip_avg_recuperation_kwh_100km": {
+        "name": "Rekuperace jízdy (prům.)"
+      },
+      "lifetime_avg_recuperation_kwh_100km": {
+        "name": "Rekuperace celkem (prům.)"
+      },
+      "last_trip_avg_aux_consumption_kwh_100km": {
+        "name": "Spotřeba pomocných spotřebičů poslední jízda (prům.)"
+      },
+      "lifetime_avg_aux_consumption_kwh_100km": {
+        "name": "Spotřeba pomocných spotřebičů celkem (prům.)"
+      },
+      "lifetime_avg_gas_consumption_kg_100km": {
+        "name": "Spotřeba plynu celkem (prům.)"
+      },
+      "lifetime_range_gain_km": {
+        "name": "Získaný dojezd celkem"
+      },
+      "lifetime_zero_emission_km": {
+        "name": "Bezemisní vzdálenost celkem"
+      },
+      "last_trip_avg_gas_consumption_kg_100km": {
+        "name": "Spotřeba plynu poslední jízda (prům.)"
+      },
+      "last_trip_range_gain_km": {
+        "name": "Získaný dojezd poslední jízda"
+      },
+      "last_trip_zero_emission_km": {
+        "name": "Bezemisní vzdálenost poslední jízda"
+      },
+      "charger_update_trigger": {
+        "name": "Spouštěč aktualizace nabíječky"
+      },
+      "report_trigger": {
+        "name": "Spouštěč hlášení"
+      },
+      "climate_mode": {
+        "name": "Režim klimatizace"
+      },
+      "active_target_soc": {
+        "name": "Aktivní cíl nabíjení"
+      },
+      "charge_time_display": {
+        "name": "Detaily doby nabíjení"
+      },
+      "charging_plug1_flap_lock_state": {
+        "name": "Zámek dvířek nabíjení 1"
+      },
+      "charging_plug1_flap_state": {
+        "name": "Dvířka nabíjení 1"
+      },
+      "charging_plug1_infrastructure_state": {
+        "name": "Stav nabíjecího bodu 1"
+      },
+      "charging_plug1_lock_state": {
+        "name": "Zámek konektoru nabíjení 1"
+      },
+      "charging_plug2_connectionstate": {
+        "name": "Připojení nabíjecího portu 2"
+      },
+      "charging_plug2_flap_lock_state": {
+        "name": "Zámek dvířek nabíjení 2"
+      },
+      "charging_plug2_flap_state": {
+        "name": "Dvířka nabíjení 2"
+      },
+      "charging_plug2_infrastructure_state": {
+        "name": "Stav nabíjecího bodu 2"
+      },
+      "charging_plug2_lock_state": {
+        "name": "Zámek konektoru nabíjení 2"
+      },
+      "battery_available_kwh": {
+        "name": "Dostupná energie baterie"
+      },
+      "battery_cap_kwh": {
+        "name": "Kapacita baterie (energie)"
+      },
+      "battery_soh_pct": {
+        "name": "Kondice baterie (State of Health)"
+      },
+      "trip_total_cost": {
+        "name": "Celkové náklady jízdy"
+      },
+      "trip_fuel_cost": {
+        "name": "Náklady na palivo jízdy"
+      },
+      "trip_electricity_cost": {
+        "name": "Náklady na elektřinu jízdy"
+      },
+      "trip_cng_cost": {
+        "name": "Náklady na CNG jízdy"
+      },
+      "oil_level_pct": {
+        "name": "Stav oleje (procenta)"
+      },
+      "dataset_key": {
+        "name": "Klíč datové sady"
+      },
+      "charge_mode_selection": {
+        "name": "Zvolený režim nabíjení"
+      },
+      "max_charge_current_ac": {
+        "name": "Max. nabíjecí proud AC"
+      },
+      "auto_unlock_charge_port": {
+        "name": "Auto-odemknutí nabíjecího portu"
+      },
+      "charge_bulk_threshold_pct": {
+        "name": "Práh rychlonabíjení"
+      },
+      "charge_rate_unit": {
+        "name": "Jednotka rychlosti nabíjení"
+      },
+      "lifetime_trip_distance_km": {
+        "name": "Vzdálenost dlouhodobé jízdy"
+      },
+      "lifetime_trip_start_odometer_km": {
+        "name": "Stav tachometru na začátku (dlouhodobě)"
+      },
+      "last_trip_start_odometer_km": {
+        "name": "Stav tachometru na začátku poslední jízdy"
+      },
+      "oil_level_liters": {
+        "name": "Hladina oleje (litry)"
+      },
+      "oil_level_additional_pct": {
+        "name": "Dodatečná hladina oleje"
+      },
+      "tyre_pressure_diff_fl": {
+        "name": "Odchylka tlaku pneu přední levá"
+      },
+      "tyre_pressure_diff_fr": {
+        "name": "Odchylka tlaku pneu přední pravá"
+      },
+      "tyre_pressure_diff_rl": {
+        "name": "Odchylka tlaku pneu zadní levá"
+      },
+      "tyre_pressure_diff_rr": {
+        "name": "Odchylka tlaku pneu zadní pravá"
+      },
+      "tyre_pressure_diff_spare": {
+        "name": "Odchylka tlaku rezervního kola"
+      },
+      "tyre_pressure_actual_fl": {
+        "name": "Tlak v pneumatice vpředu vlevo"
+      },
+      "tyre_pressure_actual_fr": {
+        "name": "Tlak v pneumatice vpředu vpravo"
+      },
+      "tyre_pressure_actual_rl": {
+        "name": "Tlak v pneumatice vzadu vlevo (skutečný)"
+      },
+      "tyre_pressure_actual_rr": {
+        "name": "Tlak v pneumatice vzadu vpravo (skutečný)"
+      },
+      "tyre_pressure_actual_spare": {
+        "name": "Tlak v rezervním kole (skutečný)"
+      },
+      "tyre_pressure_required_fl": {
+        "name": "Tlak v pneumatice vpředu vlevo (cílový)"
+      },
+      "tyre_pressure_required_fr": {
+        "name": "Tlak v pneumatice vpředu vpravo (cílový)"
+      },
+      "tyre_pressure_required_rl": {
+        "name": "Tlak v pneumatice vzadu vlevo (cílový)"
+      },
+      "tyre_pressure_required_rr": {
+        "name": "Tlak v pneumatice vzadu vpravo (cílový)"
+      },
+      "tyre_pressure_required_spare": {
+        "name": "Tlak v rezervním kole (cílový)"
+      },
+      "parking_lights_state": {
+        "name": "Parkovací světla"
+      },
+      "aux_battery_energy_pct": {
+        "name": "Úroveň pomocné baterie"
+      },
+      "aux_battery_bem_alert_at": {
+        "name": "Čas výstrahy pomocné baterie"
+      },
+      "current_speed_kmh": {
+        "name": "Rychlost"
+      },
+      "ignition_state": {
+        "name": "Zapalování"
+      },
+      "brake_pressure_indication": {
+        "name": "Indikace tlaku brzd"
+      },
+      "dashboard_warnings_raw": {
+        "name": "Výstražné kontrolky (surová data)"
+      },
+      "climate_error_code": {
+        "name": "Chybový kód klimatizace"
+      },
+      "window_heating_error_code": {
+        "name": "Chybový kód vyhřívání oken"
+      },
+      "lpg_range_km": {
+        "name": "Dojezd LPG"
+      },
+      "engine_status": {
+        "name": "Stav motoru"
+      },
+      "trip_avg_aux_consumption_kwh": {
+        "name": "Prům. vedlejší spotřeba"
+      },
+      "departure_charge_kwh": {
+        "name": "Nabití do odjezdu"
+      },
+      "tire_pressure_fl_state": {
+        "name": "Stav pneumatiky vlevo vpředu"
+      },
+      "tire_pressure_fl_errorcode": {
+        "name": "Chybový kód pneumatiky vlevo vpředu"
+      },
+      "tire_pressure_fr_state": {
+        "name": "Stav pneumatiky vpravo vpředu"
+      },
+      "tire_pressure_fr_errorcode": {
+        "name": "Chybový kód pneumatiky vpravo vpředu"
+      },
+      "tire_pressure_rl_state": {
+        "name": "Stav pneumatiky vlevo vzadu"
+      },
+      "tire_pressure_rl_errorcode": {
+        "name": "Chybový kód pneumatiky vlevo vzadu"
+      },
+      "tire_pressure_rr_state": {
+        "name": "Stav pneumatiky vpravo vzadu"
+      },
+      "tire_pressure_rr_errorcode": {
+        "name": "Chybový kód pneumatiky vpravo vzadu"
+      },
+      "next_charge_timer_start_at": {
+        "name": "Příští začátek nabíjení"
+      },
+      "next_charge_timer_finish_at": {
+        "name": "Příští konec nabíjení"
+      },
+      "next_charge_target_reachability": {
+        "name": "Dosažitelnost cíle nabíjení"
+      },
+      "next_charge_timer_number": {
+        "name": "Číslo dalšího časovače nabíjení"
+      },
+      "ascent_slope_consumption": {
+        "name": "Spotřeba ve stoupání (do kopce)"
+      },
+      "descent_slope_consumption": {
+        "name": "Spotřeba ve stoupání (z kopce)"
+      },
+      "report_type": {
+        "name": "Typ zprávy"
+      },
+      "result_app": {
+        "name": "Výsledek dat aplikace"
+      },
+      "result_master": {
+        "name": "Výsledek kmenových dat"
+      },
+      "update_reason": {
+        "name": "Důvod poslední aktualizace"
+      },
+      "start_stop_action": {
+        "name": "Akce spuštění/zastavení nabíjení"
+      },
+      "start_stop_modification": {
+        "name": "Úprava start/stop"
+      },
+      "bidi_max_charge_level_pct": {
+        "name": "Obousměrné nabíjení max. úroveň nabití"
+      },
+      "bidi_min_charge_level_pct": {
+        "name": "Obousměrné nabíjení min. úroveň nabití"
+      },
+      "bidi_energy_used": {
+        "name": "Spotřebovaná energie obousměrného nabíjení"
+      },
+      "bidi_energy_used_threshold": {
+        "name": "Limit spotřebované energie obousměrného nabíjení"
+      },
+      "bidi_cycles": {
+        "name": "Cykly obousměrného nabíjení"
+      },
+      "bidi_cycles_threshold": {
+        "name": "Limit cyklů obousměrného nabíjení"
+      },
+      "bidi_operating_hours": {
+        "name": "Provozní hodiny obousměrného nabíjení"
+      },
+      "bidi_operating_hours_threshold": {
+        "name": "Limit provozních hodin obousměrného nabíjení"
+      },
+      "bidi_quota": {
+        "name": "Kvóta obousměrného nabíjení"
+      },
+      "bidi_quota_threshold": {
+        "name": "Limit kvóty obousměrného nabíjení"
+      },
+      "sunroof_position_pct": {
+        "name": "Poloha střešního okna"
+      },
+      "spoiler_position_pct": {
+        "name": "Poloha spoileru"
+      },
+      "battery_care_score": {
+        "name": "Skóre šetření baterie"
+      },
+      "battery_care_score_threshold": {
+        "name": "Prahové skóre šetření baterie"
+      },
+      "cabin_temp": {
+        "name": "Teplota v kabině"
+      },
+      "charge_target_time": {
+        "name": "Čas dosažení cíle nabíjení"
+      },
+      "max_number_users": {
+        "name": "Maximální počet uživatelů"
+      },
+      "charging_profiles_pending": {
+        "name": "Změny profilu nabíjení čekají"
+      },
+      "climatisation_timers_pending": {
+        "name": "Změny časovače klimatizace čekají"
+      },
+      "calibration_need_detected": {
+        "name": "Nutná kalibrace baterie"
+      },
+      "calibration_request_initial": {
+        "name": "Žádost o kalibraci"
+      },
+      "calibration_request_escalation_1": {
+        "name": "Připomenutí kalibrace"
+      },
+      "calibration_request_escalation_2": {
+        "name": "Poslední připomenutí kalibrace"
+      },
+      "calibration_request_method": {
+        "name": "Metoda kalibrace"
+      },
+      "calibration_failure": {
+        "name": "Chyba kalibrace"
+      },
+      "calibration_failure_reason": {
+        "name": "Důvod chyby kalibrace"
+      },
+      "preferred_charge_mode": {
+        "name": "Preferovaný režim nabíjení"
+      },
+      "last_refuel_quantity": {
+        "name": "Množství posledního tankování"
+      },
+      "last_refuel_cost": {
+        "name": "Cena posledního tankování"
+      },
+      "last_refuel_currency": {
+        "name": "Měna posledního tankování"
+      },
+      "last_refuel_fuel_type": {
+        "name": "Poslední palivo"
+      },
+      "last_refuel_station": {
+        "name": "Poslední čerpací stanice"
+      },
+      "last_refuel_at": {
+        "name": "Čas posledního tankování"
+      },
+      "parking_location": {
+        "name": "Místo parkování"
+      },
+      "parking_cost": {
+        "name": "Cena parkování"
+      },
+      "parking_currency": {
+        "name": "Měna parkování"
+      },
+      "parking_started_at": {
+        "name": "Začátek parkování"
+      },
+      "parking_ended_at": {
+        "name": "Konec parkování"
+      },
+      "reminder_technical_inspection": {
+        "name": "Připomínka technické prohlídky"
+      },
+      "reminder_seasonal_tyre_change": {
+        "name": "Připomínka přezutí pneumatik"
+      },
+      "reminder_first_aid_kit": {
+        "name": "Připomínka lékárničky"
+      },
+      "reminder_tyre_repair_kit": {
+        "name": "Připomínka opravné sady"
+      }
+    },
+    "binary_sensor": {
+      "mbb_two_way_available": {
+        "name": "MBB obousměrný dostupný"
+      },
+      "doors_locked": {
+        "name": "Dveře zamčeny"
+      },
+      "doors_open": {
+        "name": "Dveře otevřeny"
+      },
+      "driver_braking_active": {
+        "name": "Řidič brzdí"
+      },
+      "windows_open": {
+        "name": "Okna otevřena"
+      },
+      "plug_connected": {
+        "name": "Nabíjecí kabel připojen"
+      },
+      "is_charging": {
+        "name": "Nabíjí se"
+      },
+      "climatisation_active": {
+        "name": "Klimatizace aktivní"
+      },
+      "is_driving": {
+        "name": "Na cestě"
+      },
+      "is_online": {
+        "name": "Vůz dostupný"
+      },
+      "connector_locked": {
+        "name": "Konektor uzamčen"
+      },
+      "trunk_locked": {
+        "name": "Zavazadlový prostor zamčen"
+      },
+      "sunroof_open": {
+        "name": "Střešní okno"
+      },
+      "window_heating_front": {
+        "name": "Vyhřívání čelního skla"
+      },
+      "window_heating_back": {
+        "name": "Vyhřívání zadního skla"
+      },
+      "lights_on": {
+        "name": "Světla rozsvícena"
+      },
+      "warning_active": {
+        "name": "Aktivní varování vozidla"
+      },
+      "warning_engine": {
+        "name": "Varování motoru"
+      },
+      "warning_oil": {
+        "name": "Varování hladiny oleje"
+      },
+      "warning_tyre": {
+        "name": "Varování tlaku pneumatik"
+      },
+      "warning_brakes": {
+        "name": "Varování brzd"
+      },
+      "warning_12v_low": {
+        "name": "Slabá baterie 12V"
+      },
+      "ota_update_available": {
+        "name": "Dostupná aktualizace softwaru"
+      },
+      "battery_care_enabled": {
+        "name": "Péče o Baterii Aktivní"
+      },
+      "auto_unlock_when_charged": {
+        "name": "Automatické odemknutí po nabití"
+      },
+      "climate_at_unlock": {
+        "name": "Klimatizace při odemknutí"
+      },
+      "window_heating_enabled": {
+        "name": "Vyhřívání oken zapnuto"
+      },
+      "air_conditioning_without_external_power": {
+        "name": "Klimatizace bez externího napájení"
+      },
+      "subscription_active": {
+        "name": "Předplatné aktivní"
+      },
+      "ignition_on": {
+        "name": "Zapalování"
+      },
+      "daily_power_budget_available": {
+        "name": "Denní rozpočet energie dostupný"
+      },
+      "vehicle_at_saved_location": {
+        "name": "Na uloženém místě"
+      },
+      "battery_protection_limit_on": {
+        "name": "Ochrana 12V baterie"
+      },
+      "tire_pressure_warning": {
+        "name": "Varování Tlaku Pneumatik"
+      },
+      "departure_timer_1_enabled": {
+        "name": "Časovač Odjezdu 1 Aktivní"
+      },
+      "departure_timer_2_enabled": {
+        "name": "Časovač Odjezdu 2 Aktivní"
+      },
+      "departure_timer_3_enabled": {
+        "name": "Časovač Odjezdu 3 Aktivní"
+      },
+      "alarm_active": {
+        "name": "Alarm Aktivní"
+      },
+      "siren_active": {
+        "name": "Siréna Aktivní"
+      },
+      "camping_mode": {
+        "name": "Režim kempování"
+      },
+      "oil_level_warning": {
+        "name": "Stav oleje"
+      },
+      "seat_heating": {
+        "name": "Vyhřívání sedadel"
+      },
+      "parking_light": {
+        "name": "Parkovací světlo"
+      },
+      "external_power": {
+        "name": "Externí napájení dostupné"
+      },
+      "battery_care": {
+        "name": "Režim šetření baterie"
+      },
+      "energy_flow": {
+        "name": "Tok energie aktivní"
+      },
+      "area_alarm": {
+        "name": "Alarm geofence"
+      },
+      "auto_release_ac_connector": {
+        "name": "Automatické uvolnění AC konektoru"
+      },
+      "optimised_battery_use": {
+        "name": "Optimalizované využití baterie"
+      },
+      "sunroof_rear_closed": {
+        "name": "Zadní střešní okno"
+      },
+      "roof_cover_closed": {
+        "name": "Střecha kabrioletu"
+      },
+      "permission_is_owner": {
+        "name": "Účet je hlavní vlastník"
+      },
+      "permission_can_command": {
+        "name": "Účet může odesílat příkazy"
+      },
+      "external_power_available": {
+        "name": "Externí napájení k dispozici"
+      },
+      "hood_open": {
+        "name": "Kapota otevřená"
+      },
+      "trunk_open": {
+        "name": "Kufr otevřený"
+      },
+      "warning_inspection": {
+        "name": "Nutná prohlídka"
+      },
+      "parking_brake_engaged": {
+        "name": "Parkovací brzda"
+      },
+      "parking_light_left": {
+        "name": "Parkovací světlo (levé)"
+      },
+      "parking_light_right": {
+        "name": "Parkovací světlo (pravé)"
+      },
+      "energy_flow_active": {
+        "name": "Tok energie"
+      },
+      "battery_care_mode_active": {
+        "name": "Režim šetření baterie"
+      },
+      "bonnet_locked": {
+        "name": "Kapota zamčena"
+      },
+      "closures_secured": {
+        "name": "Všechny otvory zajištěny"
+      },
+      "service_hatch_open": {
+        "name": "Servisní dvířka otevřena"
+      },
+      "spoiler_open": {
+        "name": "Spoiler vysunut"
+      },
+      "oil_dipstick_active": {
+        "name": "Olejová měrka aktivní"
+      },
+      "fuel_level_estimated": {
+        "name": "Hladina paliva odhadnuta"
+      },
+      "climatisation_at_unlock": {
+        "name": "Klimatizace při odemknutí"
+      },
+      "mirror_heating_enabled": {
+        "name": "Vyhřívání zrcátek"
+      },
+      "climate_zone_front_left_enabled": {
+        "name": "Klimatická zóna vpředu vlevo"
+      },
+      "climate_zone_front_right_enabled": {
+        "name": "Klimatická zóna vpředu vpravo"
+      },
+      "mirror_heating_active": {
+        "name": "Vyhřívání zrcátek aktivní"
+      },
+      "climate_zone_active_front_left": {
+        "name": "Klimatická zóna vpředu vlevo aktivní"
+      },
+      "climate_zone_active_front_right": {
+        "name": "Klimatická zóna vpředu vpravo aktivní"
+      },
+      "climate_zone_active_rear_left": {
+        "name": "Klimatická zóna vzadu vlevo aktivní"
+      },
+      "climate_zone_active_rear_right": {
+        "name": "Klimatická zóna vzadu vpravo aktivní"
+      },
+      "abrp_data_changed": {
+        "name": "Data ABRP změněna"
+      },
+      "climatisation_without_hv_power": {
+        "name": "Klimatizace bez externího napájení"
+      },
+      "door_front_left": {
+        "name": "Dveře přední levé"
+      },
+      "door_front_right": {
+        "name": "Dveře přední pravé"
+      },
+      "door_rear_left": {
+        "name": "Dveře zadní levé"
+      },
+      "door_rear_right": {
+        "name": "Dveře zadní pravé"
+      },
+      "door_trunk": {
+        "name": "Kufr"
+      },
+      "door_bonnet": {
+        "name": "Kapota"
+      },
+      "light_left": {
+        "name": "Světlo vlevo"
+      },
+      "light_right": {
+        "name": "Světlo vpravo"
+      },
+      "window_front_left": {
+        "name": "Okno přední levé"
+      },
+      "window_front_right": {
+        "name": "Okno přední pravé"
+      },
+      "window_rear_left": {
+        "name": "Okno zadní levé"
+      },
+      "window_rear_right": {
+        "name": "Okno zadní pravé"
+      },
+      "climate_zone_front_left": {
+        "name": "Klimatická zóna vpředu vlevo"
+      },
+      "climate_zone_front_right": {
+        "name": "Klimatická zóna vpředu vpravo"
+      },
+      "climate_zone_rear_left": {
+        "name": "Klimatická zóna vzadu vlevo"
+      },
+      "climate_zone_rear_right": {
+        "name": "Klimatická zóna vzadu vpravo"
+      },
+      "climate_without_external_power": {
+        "name": "Klimatizace bez externího napájení"
+      },
+      "connection_active": {
+        "name": "Připojení aktivní"
+      },
+      "daily_power_budget_warning": {
+        "name": "Varování denního energetického limitu"
+      },
+      "insufficient_battery_level_warning": {
+        "name": "Varování nedostatečné úrovně baterie"
+      },
+      "mandatory_consent_given": {
+        "name": "Povinný souhlas udělen"
+      },
+      "marketing_consent_given": {
+        "name": "Marketingový souhlas udělen"
+      }
+    },
+    "switch": {
+      "lock_switch": {
+        "name": "Zámek dveří"
+      },
+      "climatisation_switch": {
+        "name": "Klimatizace"
+      },
+      "charging_switch": {
+        "name": "Nabíjení"
+      },
+      "window_heating_switch": {
+        "name": "Vyhřívání skel"
+      },
+      "ventilation_switch": {
+        "name": "Ventilace Kabiny"
+      },
+      "aux_heating_switch": {
+        "name": "Nezávislé Topení (Webasto)"
+      },
+      "departure_timer_1_switch": {
+        "name": "Časovač odjezdu 1"
+      },
+      "departure_timer_2_switch": {
+        "name": "Časovač odjezdu 2"
+      },
+      "departure_timer_3_switch": {
+        "name": "Časovač odjezdu 3"
+      },
+      "battery_care_switch": {
+        "name": "Ochrana baterie"
+      },
+      "camping_switch": {
+        "name": "Režim kempování"
+      },
+      "auto_unlock_plug_switch": {
+        "name": "Automatické odemknutí nabíjecí zástrčky"
+      },
+      "active_ventilation_switch": {
+        "name": "Aktivní větrání"
+      }
+    },
+    "number": {
+      "target_soc_number": {
+        "name": "Cíl nabíjení"
+      },
+      "climate_temp_number": {
+        "name": "Teplota klimatizace"
+      },
+      "target_soc": {
+        "name": "Cíl nabíjení"
+      },
+      "target_temperature": {
+        "name": "Teplota klimatizace"
+      },
+      "min_soc": {
+        "name": "Minimální nabití (PHEV)"
+      },
+      "max_charge_current": {
+        "name": "Max. nabíjecí proud"
+      },
+      "auxheat_duration": {
+        "name": "Doba nezávislého topení"
+      },
+      "auxheat_target_temp": {
+        "name": "Cílová teplota nezávislého topení"
+      },
+      "battery_care_target": {
+        "name": "Cíl ochrany baterie"
+      },
+      "scan_interval": {
+        "name": "Interval dotazování"
+      }
+    },
+    "button": {
+      "flash_button": {
+        "name": "Blikání světel"
+      },
+      "refresh_button": {
+        "name": "Aktualizovat data"
+      },
+      "wake_button": {
+        "name": "Probudit vozidlo"
+      },
+      "data_act_request_button": {
+        "name": "Vytvořit žádost o data EU Data Act"
+      },
+      "companion_reset_button": {
+        "name": "Resetovat spojení companion"
+      }
+    },
+    "climate": {
+      "climate": {
+        "name": "Klimatizace"
+      }
+    },
+    "device_tracker": {
+      "position": {
+        "name": "Poloha"
+      }
+    },
+    "select": {
+      "charge_mode_select": {
+        "name": "Režim nabíjení",
+        "state": {
+          "manual": "Ruční",
+          "timer": "Časovač",
+          "preferred_charging_times": "Preferované časy nabíjení",
+          "only_own_current": "Pouze vlastní energie",
+          "immediate_discharging": "Vybít nyní",
+          "timer_charging_climatization": "Časované nabíjení s klimatizací"
+        }
+      },
+      "skoda_charge_current_select": {
+        "name": "Max. nabíjecí proud",
+        "state": {
+          "maximum": "Maximální",
+          "reduced": "Snížený"
+        }
+      }
+    },
+    "time": {
+      "departure_timer_1_time_set": {
+        "name": "Časovač Odjezdu 1 — Čas"
+      },
+      "departure_timer_2_time_set": {
+        "name": "Časovač Odjezdu 2 — Čas"
+      },
+      "departure_timer_3_time_set": {
+        "name": "Časovač Odjezdu 3 — Čas"
+      }
+    },
+    "image": {
+      "render_icon": {
+        "name": "Pohled 3/4 ikona"
+      },
+      "render_small": {
+        "name": "Pohled 3/4 malý"
+      },
+      "render_medium": {
+        "name": "Pohled 3/4 střední"
+      },
+      "render_side_sm": {
+        "name": "Boční pohled malý"
+      },
+      "render_side_lg": {
+        "name": "Boční pohled velký"
+      },
+      "render_angle_hd": {
+        "name": "Pohled 3/4 HD"
+      },
+      "render_angle_lg": {
+        "name": "Pohled 3/4 velký"
+      },
+      "vehicle_render": {
+        "name": "Vykreslení vozidla"
+      }
+    },
+    "lock": {
+      "door_lock": {
+        "name": "Zámek dveří"
+      }
+    },
+    "event": {
+      "push_event": {
+        "name": "Push událost",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "operation-request": "Požadavek operace",
+              "service-event": "Servisní událost",
+              "account-event": "Událost účtu",
+              "vehicle-event": "Událost vozidla",
+              "alarm": "Alarm",
+              "other": "Ostatní",
+              "lock_state": "Stav zamčení",
+              "charging_state": "Stav nabíjení",
+              "climate_state": "Stav klimatizace"
+            }
+          }
+        }
+      }
+    },
+    "update": {
+      "software_update": {
+        "name": "Aktualizace softwaru"
+      }
+    },
+    "calendar": {
+      "charging_schedule": {
+        "name": "Plán nabíjení"
+      },
+      "service": {
+        "name": "Plán servisu"
+      }
+    }
+  },
+  "issues": {
+    "vweu_twoway_disabled": {
+      "title": "VW EU Two-Way: vypnuto Volkswagenem",
+      "description": "Dne 18. 8. 2026 Volkswagen vypnul p\u0159ihl\u00e1\u0161en\u00ed, kter\u00e9 kan\u00e1l VW EU Two-Way (modern\u00ed backend CARIAD) pou\u017e\u00edval, tak\u017ee jeho hodinov\u00fd token u\u017e nelze obnovit a obousm\u011brn\u00e9 p\u0159\u00edkazy p\u0159es tento kan\u00e1l p\u0159estaly fungovat. Jde o zm\u011bnu na stran\u011b Volkswagenu \u2014 na va\u0161\u00ed stran\u011b nen\u00ed nic \u0161patn\u011b nastaveno a v\u00e1\u0161 \u00fa\u010det nen\u00ed ohro\u017een (selh\u00e1n\u00ed nast\u00e1v\u00e1 je\u0161t\u011b p\u0159edt\u00edm, ne\u017e se ode\u0161le jak\u00e9koli heslo).\n\n**Va\u0161e \u017eiv\u00e9 \u010dten\u00ed dat funguje d\u00e1l** p\u0159es port\u00e1l EU Data Act, tak\u017ee va\u0161e senzory to nijak neovlivn\u00ed.\n\n**Pro obousm\u011brn\u00e9 p\u0159\u00edkazy (zamknout/odemknout, klimatizace, nab\u00edjen\u00ed):** trval\u00e1 n\u00e1hrada p\u0159es klasick\u00fd backend Car-Net (MBB) \u2014 kter\u00fd Volkswagen NEVYPNUL \u2014 je nyn\u00ed v bet\u011b. Postup, jak ji zapnout a otestovat, najdete v issue #584.\n\nNyn\u00ed neaktivn\u00ed kan\u00e1l m\u016f\u017eete kdykoli odebrat v nastaven\u00ed integrace (VW EU Two-Way \u2192 odebrat). Tato zpr\u00e1va je pouze informativn\u00ed; integrace b\u011b\u017e\u00ed d\u00e1l p\u0159es va\u0161e \u010dtec\u00ed kan\u00e1ly.\n\n**Tip:** pro dan\u00fd v\u016fz m\u011bjte sou\u010dasn\u011b zapnutou v\u017edy jen JEDNU obousm\u011brnou integraci. VW omezuje po\u010det po\u017eadavk\u016f a m\u016f\u017ee do\u010dasn\u011b zablokovat \u00fa\u010det, na kter\u00fd n\u011bkolik aplikac\u00ed \u00fato\u010d\u00ed najednou \u2014 kdy\u017e k tomu dojde, nedok\u00e1\u017ee v\u016fz ovl\u00e1dat ani ofici\u00e1ln\u00ed aplikace VW, co\u017e je sign\u00e1l, \u017ee jde o zablokov\u00e1n\u00ed \u00fa\u010dtu, nikoli o chybu t\u00e9to integrace."
+    },
+    "two_factor_required": {
+      "title": "Vyžadováno dvoufázové ověření — {brand}",
+      "description": "Váš účet {brand} ({username}) vyžaduje e-mailový ověřovací kód.\n\n**Jednorázová oprava:**\n1. Otevřete v telefonu aplikaci **{brand}**\n2. Přihlaste se ručně\n3. Potvrďte kód zaslaný e-mailem\n4. Restartujte Home Assistant\n\nPo tomto jednorázovém kroku si integrace uloží přihlašovací token — už to nebudete muset opakovat."
+    },
+    "email_two_factor_required": {
+      "title": "E-mailové 2FA — zkontrolujte schránku",
+      "description": "Váš účet {brand} ({username}) vyžaduje **e-mailový ověřovací kód**.\n\n**Jednorázová oprava:**\n1. **Zkontrolujte e-mail** (i spam) — 6místný kód od VAG IDP\n2. Otevřete aplikaci **{brand}**\n3. Přihlaste se ručně a zadejte kód\n4. Restartujte Home Assistant"
+    },
+    "terms_and_conditions": {
+      "title": "Přijmout podmínky — {brand}",
+      "description": "Pro účet {brand} ({username}) jsou nové obchodní podmínky.\n\n1. Otevřete aplikaci {brand}\n2. Přihlaste se a přijměte podmínky\n3. Restartujte Home Assistant"
+    },
+    "marketing_consent": {
+      "title": "Vyžadován souhlas — {brand}",
+      "description": "Pro účet {brand} ({username}) je vyžadován nový souhlas se zpracováním údajů.\n\nAplikace → Profil → Souhlasy → potvrdit → restartovat HA."
+    },
+    "too_many_requests": {
+      "title": "Účet dočasně zablokován — {brand}",
+      "description": "Účet {brand} ({username}) je dočasně zablokován kvůli příliš mnoha požadavkům.\n\n**Počkejte 15 minut** a restartujte Home Assistant.\nTip: Zvyšte interval aktualizace alespoň na 15 minut."
+    },
+    "auth_failed": {
+      "title": "Přihlášení selhalo — {brand}",
+      "description": "Připojení k účtu {brand} ({username}) selhalo.\n\nNastavení → Zařízení a služby → VW Group Connect → ⋮ → Znovu nakonfigurovat."
+    },
+    "vehicle_data_scout_findings": {
+      "title": "Pozorovatel API — {count} nových polí v {brand}",
+      "description": "Pozorovatel API našel **{count}** nových polí v odpovědi API {brand}, která VW Group Connect zatím nečte.\n\nObvykle to znamená, že vaše vozidlo má funkci nebo verzi firmwaru, kterou jsme ještě nepřiřadili — a **přeposlání tohoto hlášení je přesně to, co nám umožní přidat pro ni podporu**, pro vaše auto i pro všechny se stejným modelem.\n\n**Hlášení jedním kliknutím:** klikněte níže na **Více informací** a otevřete předvyplněný GitHub issue.\n\n**Ještě užitečnější:** přiložte diagnostiku — Nastavení → Zařízení a služby → VW Group Connect → ⋮ → **Stáhnout diagnostiku**. Nově obsahuje kompletní odpověď API s novými poli v kontextu, což je přesně to, co potřebujeme k jejich převedení na entity.\n\n_Vše se anonymizuje automaticky: VINy maskované, GPS odstraněno, tokeny, ID uživatelů, e-maily a registrační značky odstraněny. Nic se nikdy nesdílí, dokud to sami nepřiložíte._"
+    },
+    "error_reporter_findings": {
+      "title": "Hlásič chyb — {count} nedávných chyb v {brand}",
+      "description": "Hlásič chyb zachytil **{count}** nedávných chyb integrace s {brand}.\n\nNahlášení nám pomáhá najít chyby, které se objevují pouze u konkrétních vozidel nebo verzí firmwaru.\n\n**Hlášení jedním kliknutím:**\n📤 Klikněte níže na **Více informací** a otevřete předvyplněný GitHub issue.\n\n**Pro Facebook / fórum:** Nastavení → Zařízení → VW Group Connect → Diagnostika → Stáhnout — zpráva je obsažena, VINy a tokeny maskované.\n\n_Soukromí: VINy maskované, tokeny Bearer/JWT/UUID/e-mail odstraněny ze zpráv a tracebacků. Žádná přihlašovací data._"
+    },
+    "quota_low": {
+      "title": "Nízká kvóta API — dnes zbývá {remaining} požadavků",
+      "description": "Váš účet VAG se blíží dennímu limitu požadavků API (zbývá {remaining} z {limit}, {pct} %).\n\nAby nedošlo k zablokování kvůli vyčerpané kvótě (backend výrobce může účet dočasně pozastavit při dosažení denního limitu), zvažte:\n\n1. **Zvýšit interval aktualizace** — Nastavení → Zařízení a služby → VW Group Connect → Konfigurovat → Interval aktualizace (aktuálně obvykle 5–10 min)\n2. **Omezit další integrace VAG** běžící na stejném účtu (každá se započítává do stejné kvóty)\n3. **Počkat na denní reset** — obvykle kolem půlnoci v domácím časovém pásmu výrobce\n\nToto varování automaticky zmizí, jakmile se počet zbývajících požadavků obnoví."
+    },
+    "quota_critical": {
+      "title": "KRITICKÁ kvóta API — dnes zbývá {remaining} požadavků",
+      "description": "Vašemu účtu VAG dnes zbývá méně než 25 požadavků API ({remaining} z {limit}, {pct} %). Backend výrobce může účet dočasně pozastavit, pokud rozpočet vyčerpáte.\n\n**Okamžitá akce:**\n1. **Pozastavte dotazování** — Nastavení → Zařízení a služby → VW Group Connect → Konfigurovat → Interval aktualizace → nastavte na 30 min nebo více\n2. Vyhněte se ručním aktualizacím / probouzení vozidla, dokud se rozpočet neobnoví\n\nToto varování automaticky zmizí, jakmile se počet zbývajících požadavků obnoví."
+    },
+    "account_locked": {
+      "title": "Účet {brand} je zřejmě dočasně zablokován",
+      "description": "Backend značky vrátil za posledních 30 minut **3 autentizační odpovědi třídy „zablokováno“** (naposledy HTTP {last_status}). To obvykle znamená, že VW dočasně zablokoval příslušný účet značky po příliš mnoha neúspěšných pokusech o obnovení tokenu.\n\nZablokování obvykle pomine během **několika hodin až 24 hodin**. Integrace přestala opakovat pokusy, aby se doba blokace neprodlužovala.\n\n**Zatímco čekáte**:\n\n1. **Nepřihlašujte se** opakovaně do aplikace výrobce a neodhlašujte se z ní — prodlužuje to blokaci.\n2. Počkejte alespoň 1–2 hodiny, poté otevřete oficiální aplikaci výrobce v telefonu. Pokud vás aplikace bez problémů přihlásí, backend váš účet odblokoval.\n3. Po odblokování zvyšte `scan_interval` v Nastavení → Zařízení a služby → VW Group Connect → Konfigurovat na 15–30 minut, abyste snížili budoucí zátěž.\n4. Volitelně: aktivujte režim portálu EU Data Act jen pro čtení přes OptionsFlow, aby během budoucích incidentů dál proudila alespoň nějaká data.\n\nToto varování automaticky zmizí, jakmile poprvé úspěšně proběhne další obnovení tokenu."
+    },
+    "data_act_no_data": {
+      "title": "Portál EU Data Act: zatím žádná data vozidla ({brand})",
+      "description": "Portál EU Data Act se přihlásil pro {brand}, ale zatím nevrací žádná data vozidla.\n\nPrůběžný požadavek na data za vás integrace vytváří automaticky, takže obvyklé příčiny prázdného přísunu dat jsou:\n\n1. **Pro toto auto nebyl udělen souhlas se sdílením dat.** Na portálu udělujete souhlas se sdílením dat podle EU Data Act pro každé vozidlo, jednorázově. Dokud to neuděláte, požadavek se sice vytvoří, ale zůstává prázdný – to je nejčastější příčina.\n2. **Auto zatím neodeslalo nic nového.** Nová sada dat se zveřejní až poté, co auto jelo, nabíjelo se nebo bylo zamčeno/odemčeno, takže úplně nový požadavek se může začít plnit až za 15–60 minut (nebo po krátké jízdě).\n3. **Výpadek na straně VW.** VW od konce května 2026 hlásí výpadek portálu EU Data Act napříč všemi značkami; dokud trvá, portál vrací prázdná data pro každý nástroj a postupně se obnovuje značku po značce.\n\n**Nejrychlejší kontrola:** otevřete `eu-data-act.drivesomethinggreater.com`, přihlaste se a ověřte, že (a) je pro toto auto udělen souhlas se sdílením dat a (b) existuje aktivní průběžný (15minutový) požadavek na data se zaškrtnutými všemi datovými clustery. Pokud ani tam nevidíte žádná data, je problém na straně VW – integrace nic nezmůže, dokud to VW neobnoví.\n\nToto je beta portálu pouze pro čtení – upozornění zmizí samo, jakmile dorazí data."
+    },
+    "data_act_browser_missing": {
+      "description": "Zapnul jsi zálohu přes headless prohlížeč pro portál EU Data Act, ale balíček Pythonu `playwright` není v tvém kontejneru Home Assistant nainstalovaný.\n\n**Instalace:** otevři shell kontejneru HA (Doplňky → Terminal & SSH, nebo `docker exec` pro ruční instalaci) a spusť:\n\n```\npip install playwright\nplaywright install chromium\n```\n\nStahování chromia je velké (kolem 100 MB), proto je tato závislost volitelná a není součástí integrace. Po instalaci restartuj Home Assistant.\n\nPřípadně vypni přepínač v Nastavení → Zařízení a služby → VW Group Connect → Konfigurovat → 'Portál EU Data Act: záloha přes headless prohlížeč'.",
+      "title": "Portál EU Data Act: chybí volitelný balíček 'playwright'"
+    },
+    "data_act_session_expired": {
+      "description": "Portál {brand} na adrese `eu-data-act.drivesomethinggreater.com` vrátil na volání API Custom Data Request chybu HTTP 401, což znamená, že vypršela platnost relačních cookies. Portál nepodporuje obnovu tokenu na pozadí, takže Home Assistant to nedokáže opravit automaticky.\n\n**Co dělat:** Nastavení → Zařízení a služby → VW Group Connect → nabídka se 3 tečkami → Překonfigurovat → znovu zadej přihlašovací údaje. Další konfigurační cyklus znovu otevře relaci portálu a integrace obnoví dotazování na aktivní Custom Data Request.\n\nToto upozornění zmizí samo, jakmile další volání API portálu uspěje.",
+      "title": "Relace portálu EU Data Act vypršela – přihlas se znovu"
+    },
+    "ola_headers_outdated": {
+      "description": "Backend online služeb VW Group (OLA) odmítl **{count}** požadavků za sebou pro {brand} s chybou HTTP 403 Forbidden.\n\nJde o **blokaci na straně serveru VW** — neopraví to aktualizace, změna hlavičky ani opětovné přihlášení. VW nyní vyžaduje token atestace zařízení podepsaný Googlem (Firebase App Check / Play Integrity) plus token aplikačního firewallu na backendu SEAT/CUPRA — oficiální aplikace je generuje z zpevněného, Googlem podepsaného buildu, který open-source klient nedokáže napodobit. Vzdálené **příkazy** pro {brand} (a SEAT) se proto pravděpodobně nevrátí.\n\n**Data** vozidla stále chodí přes portál EU Data Act (jen pro čtení), kde jsou dostupná — to je cesta vpřed pro tyto značky. Je to zcela na straně VW; na vaší straně není co opravovat. (Sledováno: #464.)",
+      "title": "Příkazy {brand} zablokovány VW (atestace zařízení) — {count} po sobě jdoucích chyb 403"
+    },
+    "vw_na_data_forbidden": {
+      "title": "Volkswagen US/CA: data vozidla zablokována (HTTP 403)",
+      "description": "Vaše konto Volkswagen se přihlásilo a vaše garáž byla načtena, ale požadavky na data jednotlivých vozidel (stav, nabíjení, klimatizace) jsou odmítány s chybou HTTP 403 Forbidden.\n\nČastou příčinou je neaktivní předplatné Car-Net / VW Connect. Stává se to ale i v případě, že je předplatné aktivní a aplikace MyVW zobrazuje aktuální data. V takovém případě VW tomuto klientovi třetí strany jednoduše nepovoluje čtení vozidla a na vaší straně není co měnit.\n\n**Co dělat:**\n\n1. Otevřete oficiální aplikaci MyVW a ověřte, že vaše předplatné Remote Access / Car-Net je pro toto auto aktivní.\n2. Pokud vypršelo, obnovte ho u VW a pak počkejte na další dotaz.\n\nIntegrace dál zobrazuje poslední data uložená v mezipaměti. Toto upozornění zmizí samo, jakmile požadavek na data opět uspěje."
+    },
+    "vw_na_data_forbidden_attestation": {
+      "title": "Volkswagen US/CA: data vozidla zablokována ze strany VW (atestace zařízení)",
+      "description": "Vaše konto Volkswagen se přihlásilo a vaše garáž byla načtena, ale požadavky na data jednotlivých vozidel (stav, nabíjení, klimatizace) jsou odmítány s chybou HTTP 403 Forbidden a odpověď nese značku **atestace zařízení**.\n\nJde o **uzamčení na straně serveru ze strany VW**, nikoli o problém s předplatným ani o něco, co by vyřešilo opětovné přihlášení — obnovení Car-Net tedy nepomůže. VW nyní vyžaduje token atestace zařízení podepsaný Googlem (Firebase App Check / Play Integrity), který oficiální aplikace vytváří ze zpevněného sestavení a který open-source klient nedokáže napodobit.\n\nIntegrace dál zobrazuje poslední data uložená v mezipaměti. Toto upozornění zmizí samo, pokud VW datovou vrstvu opět zpřístupní."
+    },
+    "supplementary_reauth": {
+      "title": "Čtecí kanál Volkswagen.de vyžaduje opětovné přihlášení",
+      "description": "Doplňkový čtecí kanál volkswagen.de nemohl obnovit relaci (Volkswagen znovu žádá o jednorázový kód e-mailem). Hlavní data vozidla nejsou ovlivněna. Otevři možnosti této integrace a znovu spusť „Přidat čtecí kanál Volkswagen.de“ pro obnovení doplňkových dat vw.de."
+    },
+    "meb_commands_unavailable": {
+      "title": "Vzdálené příkazy nejsou pro toto auto k dispozici ({brand})",
+      "description": "Při nastavování {brand} jste zapnuli vzdálené příkazy MBB, ale tohle je vůz z rodiny MEB / ID (ID.3/4/5/7, Enyaq, Born, Q4). Backend MEB od VW nepodporuje trvalou příkazovou cestu Car-Net — trvalé přihlášení odpovědělo „Unknown user“ — takže příkazy zamykání, klimatizace a nabíjení nelze odeslat.\n\nZáznam zůstává **jen pro čtení**: data vozidla stále chodí přes portál EU Data Act, jen neuvidíte příkazové entity. Jde o známé omezení platformy MEB od VW, nikoli o chybu nastavení — toto upozornění můžete zavřít."
+    },
+    "refresh_interval_too_frequent": {
+      "title": "{brand}: příliš častý interval aktualizace",
+      "description": "{brand} vydává krátce platné přístupové tokeny, takže při vašem aktuálním intervalu aktualizace **{current} minut** musí token obnovit téměř každé dotazování. To spustí ochranu proti návalu obnovení (refresh-storm) — limit toho, jak často smí integrace obnovovat token, který má zabránit zablokování účtu značky — a data se přestanou aktualizovat, dokud se ochrana neresetuje.\n\nJde o problém s frekvencí dotazování, ne o problém s přihlášením: opětovné ověření to nevyřeší.\n\n**Řešení:** zvyšte interval aktualizace na **{recommended} minut** nebo více v Nastavení → Zařízení a služby → VW Group Connect → Konfigurovat. Tím udržíte obnovování tokenů pod limitem a data budou dál proudit.\n\nToto varování automaticky zmizí, jakmile obnovení tokenu opět proběhne úspěšně."
+    },
+    "mandatory_consent_missing": {
+      "title": "Škoda: povinný souhlas nebyl přijat",
+      "description": "Váš účet {brand} nepřijal povinný servisní souhlas, takže některá data nebo funkce nemusí být dostupné. Otevřete aplikaci MyŠkoda a přijměte požadovaný souhlas — toto upozornění poté samo zmizí."
+    },
+    "test_cohort_share_request": {
+      "title": "Pomozte potvrdit novou funkci — podělíte se o výsledek testu?",
+      "description": "Děkujeme, že jste se přidali do dobrovolné testovací skupiny. Váš vůz je zařazen do jednoho či více experimentů — například do pokusu získat polohu GPS nebo kondici baterie (State of Health) u vozů Volkswagen v EU přes kanál volkswagen.de, nebo do zachycení toho, jak přesně backend vašeho vozu odpovídá na příkaz. Abychom výsledek mohli potvrdit napříč různými modely a platformami, moc by nám pomohlo, kdybyste sdíleli diagnostický soubor: přejděte do Settings → Devices & Services → VW Group Connect → nabídka se třemi tečkami → Stáhnout diagnostiku a soubor pak připojte k příslušnému GitHub issue pro testery.\n\nExport se automaticky anonymizuje ještě předtím, než si ho stáhnete — neobsahuje VIN, GPS, tokeny ani e-mail —, takže ho můžete klidně zveřejnit. Tuto zprávu vidíte jen proto, že jste se sami přihlásili; můžete ji zavřít a vypnutím testovací skupiny v nastavení integrace tato upozornění úplně zastavíte. Děkujeme, že pomáháte odemykat funkce pro všechny, kdo jezdí stejným modelem jako vy."
+    },
+    "stale_data": {
+      "title": "{vin}: data vozidla se {age} h neaktualizovala",
+      "description": "Poslední data, která vaše auto nahlásilo, byla zaznamenána zhruba **před {age} hodinami**, přestože samotné dotazování stále probíhá úspěšně. Můžou za tím být dvě věci: auto je nejspíš jen zaparkované a spí (normální stav — není třeba nic dělat), nebo jeho přísun dat podle EU Data Act vypršel a přestal dodávat čerstvé hodnoty.\n\nHodnoty, které teď vidíte, jsou poslední známé, ne aktuální. Pokud jste od té doby s autem jeli nebo ho připojili k nabíjení a toto upozornění nezmizí, nejspíš vypršel přísun dat: otevřete volkswagen.de → nastavení dat vašeho vozu a obnovte/znovu vyžádejte sdílení dat, nebo kanál přidejte znovu.\n\nToto upozornění zmizí samo ve chvíli, kdy dorazí čerstvější údaj."
+    }
+  },
+  "services": {
+    "start_climate_control": {
+      "name": "Spustit klimatizaci (rozšířené)",
+      "description": "Spustí předtemperování s jednotlivými vyhříváními sedadel, vyhříváním skel, režimem klimatizace a chováním při odemčení. Platí pouze pro Audi a VW EU (CARIAD BFF). U ostatních značek se použije základní služba `start_climatisation`. Všechna pole payloadu kromě `device_id` jsou volitelná – vynechaná pole zachovají výchozí nastavení značky.",
+      "fields": {
+        "device_id": {
+          "name": "Vozidlo",
+          "description": "Vozidlo, které obdrží příkaz k předtemperování."
+        },
+        "temp_c": {
+          "name": "Cílová teplota (°C)",
+          "description": "Cílová teplota kabiny ve stupních Celsia (15 až 30, krok 0,5)."
+        },
+        "glass_heating": {
+          "name": "Vyhřívání skel",
+          "description": "Zapne vyhřívání čelního a zadního skla spolu s předtemperováním kabiny."
+        },
+        "seat_fl": {
+          "name": "Vyhřívání levého předního sedadla",
+          "description": "Zapne vyhřívání levého předního sedadla."
+        },
+        "seat_fr": {
+          "name": "Vyhřívání pravého předního sedadla",
+          "description": "Zapne vyhřívání pravého předního sedadla."
+        },
+        "seat_rl": {
+          "name": "Vyhřívání levého zadního sedadla",
+          "description": "Zapne vyhřívání levého zadního sedadla."
+        },
+        "seat_rr": {
+          "name": "Vyhřívání pravého zadního sedadla",
+          "description": "Zapne vyhřívání pravého zadního sedadla."
+        },
+        "climatisation_at_unlock": {
+          "name": "Pokračovat v klimatizaci po odemčení",
+          "description": "Ponechá předtemperování zapnuté i po odemčení vozidla."
+        },
+        "climatisation_mode": {
+          "name": "Režim klimatizace",
+          "description": "Komfortní (plný výkon) nebo úsporný (snížený výkon, delší doba běhu)."
+        }
+      }
+    },
+    "update_charging_settings": {
+      "name": "Aktualizovat nastavení nabíjení (SEAT/CUPRA)",
+      "description": "Aktualizuje plán nabíjení SEAT/CUPRA v jednom volání. Nastaví libovolnou kombinaci cílového stavu nabití, maximálního nabíjecího proudu AC a příznaku automatického odemčení po nabití. Ostatní značky jsou odmítnuty na úrovni dispečinku koordinátoru.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "VIN vozidla, které se má aktualizovat."
+        },
+        "target_soc": {
+          "name": "Cílový stav nabití (%)",
+          "description": "Cílový stav nabití mezi 20 a 100 procenty."
+        },
+        "max_charge_current": {
+          "name": "Maximální nabíjecí proud AC",
+          "description": "Enum backendu, maximum nebo snížený."
+        },
+        "auto_unlock_charge": {
+          "name": "Automatické odemčení konektoru po plném nabití",
+          "description": "Pokud je zapnuto, konektor se po dokončení nabíjení sám odemkne."
+        }
+      }
+    },
+    "execute_vehicle_action": {
+      "name": "Provést akci vozidla",
+      "description": "Jednotná služba, která odešle akci vozidla vybranou z rozbalovací nabídky. Odpovídá volání samostatné služby stejného názvu, ale snáze se hledá ve výběru služeb v Home Assistant Lovelace. Všechny stávající samostatné služby (vag_connect.lock, vag_connect.start_climatisation atd.) fungují beze změny dál.",
+      "fields": {
+        "device_id": {
+          "name": "Vozidlo",
+          "description": "Zařízení vozidla, na kterém se má akce provést."
+        },
+        "action": {
+          "name": "Akce",
+          "description": "Kterou akci odeslat."
+        }
+      }
+    },
+    "open_app": {
+      "description": "Spustí událost `vag_connect_open_app` na sběrnici událostí HA s poli payloadu `vin`, `brand`, `deeplink_url` a `action`, aby karta Lovelace mohla otevřít nativní mobilní aplikaci značky (myAudi, WeConnect, MyŠkoda, MySEAT, MyCUPRA, My Porsche nebo VW US) na zařízení, které ji volá. Integrace sama o sobě nedokáže otevřít URL na telefonu; za navigaci `window.location.href = deeplink_url` v iOS / Android odpovídá karta dashboardu.",
+      "fields": {
+        "action": {
+          "description": "Volitelný segment cesty připojený k deeplinku, aby aplikace značky přešla přímo do sekce. Výchozí `open` otevře aplikaci na domovské obrazovce.",
+          "name": "Akce aplikace"
+        },
+        "vin": {
+          "description": "VIN vozidla, jehož aplikace značky se má otevřít.",
+          "name": "VIN"
+        }
+      },
+      "name": "Otevřít nativní aplikaci značky (deeplink)"
+    },
+    "abrp_send": {
+      "name": "Odeslat telemetrii do ABRP",
+      "description": "Sestaví a odešle aktuální telemetrii vozidla do A Better Routeplanner.",
+      "fields": {
+        "device_id": {
+          "name": "Vozidlo",
+          "description": "Vozidlo k odeslání (nebo použijte VIN)."
+        },
+        "vin": {
+          "name": "VIN",
+          "description": "VIN vozidla (alternativa k zařízení)."
+        },
+        "api_key": {
+          "name": "Přepsat api_key",
+          "description": "Volitelné. Přepíše uložený vývojářský klíč. Nikdy se neloguje."
+        },
+        "token": {
+          "name": "Přepsat token",
+          "description": "Volitelné. Přepíše uložený token vozidla. Nikdy se neloguje."
+        }
+      }
+    },
+    "set_location_target_soc": {
+      "name": "Nastavit cílové nabití podle polohy",
+      "description": "Nastaví cílové nabití konkrétního nabíjecího profilu (Škoda, podle polohy).",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "VIN vozidla."
+        },
+        "profile_id": {
+          "name": "ID profilu",
+          "description": "ID nabíjecího profilu (ze senzoru nabíjecích profilů)."
+        },
+        "target": {
+          "name": "Cílové nabití (%)",
+          "description": "Cílové nabití mezi 20 a 100 procenty."
+        }
+      }
+    },
+    "set_seat_heating": {
+      "name": "Nastavit vyhřívání sedadel",
+      "description": "Zapne vyhřívání jednotlivých sedadel (Škoda). Změní se jen zadaná sedadla.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "VIN vozidla."
+        },
+        "front_left": {
+          "name": "Přední levé"
+        },
+        "front_right": {
+          "name": "Přední pravé"
+        },
+        "rear_left": {
+          "name": "Zadní levé"
+        },
+        "rear_right": {
+          "name": "Zadní pravé"
+        }
+      }
+    },
+    "ask_assistant": {
+      "name": "Zeptat se AI asistenta Škoda (Laura)",
+      "description": "Odešle textový prompt AI asistentovi MyŠkoda „Laura\" (jen Škoda) a vrátí odpověď přes response_variable (summary = text odpovědi, session_id pro navazující dotazy). Pouze poradní — plánování tras + dotazy na produkt, žádné ovládání vozidla.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "VIN z účtu."
+        },
+        "prompt": {
+          "name": "Dotaz / prompt",
+          "description": "Volný text pro asistenta."
+        },
+        "timezone": {
+          "name": "Časové pásmo",
+          "description": "Volitelné (IANA, např. Europe/Zurich). Výchozí = časové pásmo systému HA."
+        },
+        "session_id": {
+          "name": "ID relace",
+          "description": "Volitelné. Z předchozí odpovědi, pro pokračování ve stejném kontextu."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "vehicle_not_found": {
+      "message": "Vozidlo s VIN {vin} nebylo nalezeno."
+    },
+    "spin_required": {
+      "message": "Pro tuto akci je vyžadován S-PIN. Nastavte ho v Nastavení → Zařízení a služby → VW Group Connect → Konfigurovat."
+    },
+    "feature_not_supported": {
+      "message": "Funkce {feature} není podporována vaším vozidlem nebo aktuálním API klientem. Akce nebyla odeslána."
+    },
+    "wake_budget_exhausted": {
+      "message": "Vyčerpán denní limit probuzení ({count}/{budget}). K ochraně 12V baterie nebudou do půlnoci UTC odesílána žádná další probuzení. Viz sensor.wake_count_today."
+    },
+    "wake_cooldown_active": {
+      "message": "Cooldown probuzení aktivní (zbývá {remaining_s}s). K ochraně 12V baterie jsou probuzení omezena na jedno každých {cooldown_min} minut na vozidlo."
+    },
+    "read_only_mode_active": {
+      "message": "Režim jen pro čtení je povolen v možnostech integrace. Vypněte jej v Nastavení → Zařízení a služby → VW Group Connect → Konfigurovat, abyste mohli odesílat příkazy do vozidla."
+    },
+    "read_only_portal_active": {
+      "message": "Toto vozidlo se připojuje přes portál EU Data Act od VW určený jen pro čtení, takže vzdálené příkazy (zamykání, klimatizace, nabíjení) pro něj nejsou dostupné. Není to nastavení, které byste mohli přepnout — kanál portálu nemá žádnou cestu pro příkazy."
+    },
+    "read_only_attestation_blocked": {
+      "message": "VW blokuje vzdálené příkazy pro SEAT/CUPRA za ověřením zařízení od Googlu (Play Integrity / App Check), kterým projde jen oficiální aplikace na skutečném telefonu. Zamýkání, klimatizaci ani nabíjení proto odsud nelze odeslat. Jde o trvalé serverové omezení ze strany VW, nikoli o přepínatelné nastavení. Data vozidla se dál aktualizují přes portál EU Data Act."
+    },
+    "export_file_not_allowed": {
+      "message": "Home Assistant nemá povoleno číst {path}. Umístěte soubor s exportem do konfigurační složky (nebo do složky uvedené v allowlist_external_dirs) a zadejte cestu znovu."
+    },
+    "export_file_not_found": {
+      "message": "V umístění {path} nebyl nalezen žádný soubor. Zkontrolujte cestu. Relativní název se hledá v konfigurační složce."
+    },
+    "export_file_no_data": {
+      "message": "Soubor neobsahoval čitelnou datovou sadu EU Data Act. Ujistěte se, že jde o .zip stažený z datového portálu VW pro toto vozidlo."
+    },
+    "historical_portal_not_ready": {
+      "message": "Portál EU Data Act ještě není připraven. Počkejte, až integrace po nastavení jednou provede dotaz, a poté zkuste historický export znovu."
+    }
+  },
+  "selector": {
+    "execute_vehicle_action_options": {
+      "options": {
+        "lock": "Zamknout",
+        "unlock": "Odemknout",
+        "start_climatisation": "Spustit klimatizaci",
+        "stop_climatisation": "Zastavit klimatizaci",
+        "start_charging": "Spustit nabíjení",
+        "stop_charging": "Zastavit nabíjení",
+        "flash_lights": "Bliknout světly",
+        "start_window_heating": "Spustit vyhřívání oken",
+        "stop_window_heating": "Zastavit vyhřívání oken",
+        "wake_vehicle": "Probudit vozidlo",
+        "start_aux_heating": "Spustit nezávislé topení",
+        "stop_aux_heating": "Zastavit nezávislé topení",
+        "start_ventilation": "Spustit větrání",
+        "stop_ventilation": "Zastavit větrání"
+      }
+    }
+  }
+}

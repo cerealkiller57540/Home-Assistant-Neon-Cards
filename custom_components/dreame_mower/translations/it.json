@@ -1,0 +1,172 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Scegli il tipo di account",
+        "description": "Seleziona il tipo di account per l'integrazione del tosaerba da sogno.",
+        "data": {
+          "account_type": "Tipo di account"
+        }
+      },
+      "dreame": {
+        "data": {
+          "username": "Nome utente",
+          "password": "Password",
+          "country": "Paese del server"
+        },
+        "description": "Accedi alla nuvola di Dreamehome."
+      },
+      "mova": {
+        "data": {
+          "username": "Nome utente",
+          "password": "Password",
+          "country": "Paese del server"
+        },
+        "description": "Accedi al cloud Movahome."
+      },
+      "devices": {
+        "data": {
+          "devices": "Dispositivi supportati"
+        },
+        "description": "Seleziona il dispositivo Dreame Mower che si desidera configurare."
+      },
+      "options": {
+        "data": {
+          "name": "Nome del dispositivo",
+          "notify": "Tipi di notifica"
+        },
+        "description": "Configura il nome del dispositivo Dreame Mower e le preferenze di notifica."
+      }
+    },
+    "error": {
+      "cannot_connect": "Connessione non riuscita. Controlla la rete e riprova. Consulta i log di Home Assistant per i dettagli.",
+      "unsupported": "Questo modello di dispositivo non è supportato da questa integrazione.",
+      "credentials_incomplete": "Nome utente, password e paese sono obbligatori.",
+      "login_error": "Accesso non riuscito. Controlla nome utente e password. Assicurati di aver selezionato il tipo di account corretto (Dreamehome vs MOVAhome).",
+      "no_devices": "Nessun rasaerba supportato trovato in questo account. Assicurati di aver scelto il tipo di account corretto — MOVAhome per i dispositivi MOVA, Dreamehome per Dreame — e che il dispositivo sia aggiunto a quell'app. Puoi anche provare un paese server diverso.",
+      "invalid_account_type": "Tipo di account non valido selezionato."
+    },
+    "abort": {
+      "cannot_connect": "Impossibile connettersi.",
+      "already_configured": "Questo dispositivo è già configurato."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opzioni",
+        "description": "Configurare le impostazioni di notifica per l'integrazione del tosaerba da sogno.",
+        "data": {
+          "notify": "Tipi di notifica",
+          "map_rotation": "Rotazione mappa",
+          "map_show_title": "Mostra titolo mappa",
+          "map_show_legend": "Mostra legenda mappa",
+          "map_padding": "Margine mappa (pixel)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Stato",
+        "state": {
+          "no_status": "Nessuno status",
+          "mowing": "Falciatura",
+          "standby": "Stand-by",
+          "paused": "In pausa",
+          "paused_due_to_errors": "In pausa a causa di errori",
+          "returning_to_station_to_charge": "Tornando alla stazione per caricare",
+          "charging": "Carica",
+          "mapping": "Mappatura",
+          "charging_complete": "Accusa completa",
+          "updating": "Aggiornamento",
+          "charging_paused_high_temperature": "Ricarica in pausa: temperatura della batteria troppo alta",
+          "charging_paused_low_temperature": "Ricarica in pausa: temperatura della batteria troppo bassa",
+          "maintenance_paused": "In pausa al punto di manutenzione"
+        }
+      },
+      "charging_status": {
+        "name": "Stato di ricarica",
+        "state": {
+          "not_docked": "Non ancorato",
+          "charging": "Carica",
+          "not_charging": "Non ricarica",
+          "charging_completed": "Addebito completato",
+          "return_to_charge": "Torna alla carica",
+          "charging_paused_high_temperature": "Ricarica in pausa: temperatura della batteria troppo alta",
+          "charging_paused_low_temperature": "Ricarica in pausa: temperatura della batteria troppo bassa"
+        }
+      },
+      "mowing_progress": {
+        "name": "Falciatura progresso"
+      },
+      "bluetooth_connection": {
+        "name": "Bluetooth"
+      },
+      "dnd_status": {
+        "name": "Non disturbare"
+      },
+      "charging_schedule": {
+        "name": "Programma di ricarica"
+      },
+      "timezone": {
+        "name": "Fuso orario"
+      },
+      "device_code": {
+        "name": "Codice del dispositivo"
+      },
+      "current_task": {
+        "name": "Attività attuale",
+        "state": {
+          "idle": "Nessuna attività",
+          "starting": "Avvio",
+          "mowing": "Falciatura",
+          "paused": "In pausa",
+          "finished": "Completata",
+          "failed": "Fallita",
+          "exit": "Arrestata",
+          "returning_to_dock": "Ritorno alla stazione"
+        }
+      },
+      "consumable_blade_health": {
+        "name": "Stato delle lame"
+      },
+      "consumable_brush_health": {
+        "name": "Stato della spazzola"
+      },
+      "consumable_robot_health": {
+        "name": "Stato di manutenzione"
+      }
+    },
+    "binary_sensor": {
+      "firmware_update_available": {
+        "name": "Aggiornamento firmware disponibile"
+      }
+    },
+    "camera": {
+      "map_camera": {
+        "name": "Mappa"
+      }
+    },
+    "button": {
+      "reset_blade": {
+        "name": "Azzera contatore lame"
+      },
+      "reset_brush": {
+        "name": "Azzera contatore spazzola"
+      },
+      "reset_robot_maintenance": {
+        "name": "Azzera contatore manutenzione"
+      },
+      "dock_without_stopping": {
+        "name": "Torna alla base senza fermare il compito"
+      }
+    },
+    "number": {
+      "cutting_height": {
+        "name": "Altezza di taglio"
+      }
+    }
+  }
+}

@@ -1,0 +1,232 @@
+import time
+
+"""
+car_charging.py — Gestion intelligente de la charge VW Golf ID.3
+Remplace les 4 automations YAML voiture.
+
+Entités clés :
+  switch.wvwzzze18sp049976_charging          — démarre/stoppe la charge
+  homeassistant.reload_config_entry          — reload intégration VW (synchro fiable)
+  binary_sensor.wvwzzze18sp049976_charging_cable_connected
+  sensor.wvwzzze18sp049976_battery_level
+  sensor.wvwzzze18sp049976_charging_state
+  number.wvwzzze18sp049976_battery_target_charge_level
+  sensor.lixee_current_price                 — HEURE CREUSE / HEURE PLEINE
+  sensor.surplus_solaire_moyen_5_min         — surplus solaire (W)
+  input_number.car_battery_max               — seuil max batterie (%)
+  input_number.solar_surplus_min             — surplus min pour charge solaire (W)
+  input_boolean.car_smart_charging           — killswitch charge HC
+  input_boolean.car_solar_charging           — killswitch charge solaire
+"""
+
+CABLE     = "binary_sensor.wvwzzze18sp049976_charging_cable_connected"
+BAT_LVL   = "sensor.wvwzzze18sp049976_battery_level"
+BAT_TGT   = "number.wvwzzze18sp049976_battery_target_charge_level"
+CHG_SW    = "switch.wvwzzze18sp049976_charging"
+CHG_STATE = "sensor.wvwzzze18sp049976_charging_state"
+VW_ENTRY  = "01KC1HGD1676P8B4FVF2QATGRQ"
+PRIX      = "sensor.lixee_current_price"
+SURPLUS   = "sensor.surplus_solaire_moyen_5_min"
+BAT_MAX   = "number.wvwzzze18sp049976_battery_target_charge_level"
+SOL_MIN   = "input_number.solar_surplus_min"
+SMART     = "input_boolean.car_smart_charging"
+SOLAR     = "input_boolean.car_solar_charging"
+NOTIFY    = "notify.mobile_app_pixel_9a"
+
+_last_solar_notif = 0  # timestamp dernière notif solaire
+_last_unavail_notif = 0  # timestamp dernière notif API indisponible
+_UNAVAIL = {"unavailable", "unknown", None}
+
+
+def _refresh_and_wait():
+    """Reload l'intégration VW et attend 5 min pour avoir un état frais.
+    Depuis v5.4.9 le refresh token est désactivé (VW a bloqué l'endpoint) → chaque
+    reload déclenche un full relogin. On espace les attentes pour limiter la charge."""
+    homeassistant.reload_config_entry(entry_id=VW_ENTRY)
+    task.sleep(300)
+
+def _refresh():
+    """Reload l'intégration VW (post-action, sans attente bloquante)."""
+    homeassistant.reload_config_entry(entry_id=VW_ENTRY)
+
+
+def _bat() -> float:
+    return float(state.get(BAT_LVL) or 0)
+
+def _bat_max() -> float:
+    return float(state.get(BAT_MAX) or 80)
+
+def _surplus() -> float:
+    return float(state.get(SURPLUS) or 0)
+
+def _sol_min() -> float:
+    return float(state.get(SOL_MIN) or 1500)
+
+def _at_home() -> bool:
+    return state.get("device_tracker.wvwzzze18sp049976_position") == "home"
+
+def _cable_ok() -> bool:
+    return state.get(CABLE) == "on"
+
+def _charging_on() -> bool:
+    return state.get(CHG_SW) == "on"
+
+def _notify(title, msg):
+    service.call("notify", "mobile_app_pixel_9a", title=title, message=msg)
+
+def _api_ok() -> bool:
+    """Retourne False si les entités clés VW sont unavailable/unknown."""
+    return state.get(BAT_LVL) not in _UNAVAIL and state.get(CHG_SW) not in _UNAVAIL
+
+def _check_api(context: str) -> bool:
+    """Vérifie l'API VW, notifie si indisponible (throttle 1h). Retourne True si OK."""
+    global _last_unavail_notif
+    if _api_ok():
+        return True
+    log.warning(f"[car_charging] {context} — API VW indisponible, skip")
+    now = time.monotonic()
+    if now - _last_unavail_notif >= 3600:
+        _notify("⚠️ Voiture", "API VW indisponible — charge automatique suspendue")
+        _last_unavail_notif = now
+    return False
+
+
+# ── Surveillance API VW → notif si perte prolongée ───────────────────────────
+
+@state_trigger(f"{CHG_SW} == 'unavailable'", f"{BAT_LVL} == 'unavailable'")
+def car_api_lost(**kwargs):
+    global _last_unavail_notif
+    now = time.monotonic()
+    if now - _last_unavail_notif >= 3600:
+        _notify("⚠️ Voiture", "Connexion API VW perdue (Unauthorized ?)")
+        _last_unavail_notif = now
+        log.warning("[car_charging] API VW perdue")
+
+
+# ── Heures Creuses → démarrer la charge ──────────────────────────────────────
+
+@state_trigger(f"{PRIX} == 'HEURE CREUSE'")
+def car_start_hc(**kwargs):
+    if state.get(SMART) != "on":
+        return
+
+    if not _check_api("HC"):
+        return
+
+    if not _at_home():
+        log.info("[car_charging] HC — voiture hors domicile, skip")
+        return
+
+    if not _cable_ok():
+        log.info("[car_charging] HC — câble non connecté, skip")
+        return
+
+    # Refresh pour éviter assumed_state
+    _refresh_and_wait()
+
+    bat = _bat()
+    if bat >= _bat_max():
+        log.info(f"[car_charging] HC — batterie déjà à {bat}% >= max {_bat_max()}%, skip")
+        return
+
+    if _charging_on():
+        log.info(f"[car_charging] HC — charge déjà active, skip")
+        return
+
+    switch.turn_on(entity_id=CHG_SW)
+    log.info(f"[car_charging] HC — charge démarrée ({bat}%)")
+    _notify("🔌 Charge Voiture", f"Début de charge HC ({bat}%)")
+    task.sleep(5)
+    _refresh()
+
+
+# ── Heures Pleines → stopper la charge ───────────────────────────────────────
+
+@state_trigger(f"{PRIX} == 'HEURE PLEINE'")
+def car_stop_hp(**kwargs):
+    if state.get(SMART) != "on":
+        return
+
+    if not _check_api("HP"):
+        return
+
+    if not _charging_on():
+        return
+
+    # Si surplus solaire suffisant → on laisse charger
+    if _surplus() >= _sol_min():
+        log.info(f"[car_charging] HP — surplus solaire {_surplus()}W suffisant, charge maintenue")
+        return
+
+    switch.turn_off(entity_id=CHG_SW)
+    bat = _bat()
+    log.info(f"[car_charging] HP — charge arrêtée ({bat}%)")
+    _notify("⏸ Charge Voiture", f"Fin des heures creuses ({bat}%)")
+    task.sleep(5)
+    _refresh()
+
+
+# ── Batterie max atteinte → stopper ──────────────────────────────────────────
+
+@state_trigger(f"{BAT_LVL}")
+def car_stop_battery_full(**kwargs):
+    if not _check_api("BattFull"):
+        return
+
+    if not _charging_on():
+        return
+
+    if _bat() < _bat_max():
+        return
+
+    switch.turn_off(entity_id=CHG_SW)
+    bat = _bat()
+    log.info(f"[car_charging] Batterie max atteinte ({bat}%), charge arrêtée")
+    _notify("⏸ Charge Voiture", f"Batterie pleine ({bat}%)")
+    task.sleep(5)
+    _refresh()
+
+
+# ── Surplus solaire → démarrer la charge ─────────────────────────────────────
+
+@state_trigger(f"{SURPLUS}")
+def car_solar_charge(**kwargs):
+    surplus = _surplus()
+
+    if state.get(SOLAR) != "on":
+        return
+
+    if not _check_api("Solaire"):
+        return
+
+    if not _at_home():
+        return
+
+    if not _cable_ok():
+        return
+
+    bat = _bat()
+    bat_tgt = float(state.get(BAT_TGT) or 100)
+
+    global _last_solar_notif
+    now = time.monotonic()
+    throttle = 300  # 5 min entre deux notifs solaires
+
+    if surplus >= _sol_min() and bat < bat_tgt:
+        if not _charging_on():
+            switch.turn_on(entity_id=CHG_SW)
+            log.info(f"[car_charging] Solaire — charge démarrée ({surplus}W surplus, {bat}%)")
+            if now - _last_solar_notif >= throttle:
+                _notify("☀ Charge Voiture", f"Charge sur surplus solaire activée ({int(surplus)}W)")
+                _last_solar_notif = now
+
+    elif surplus < 10 and _charging_on():
+        # Ne stoppe que si HC n'est pas actif — sinon c'est HC qui gère
+        if not (state.get(PRIX) == "HEURE CREUSE" and state.get(SMART) == "on"):
+            switch.turn_off(entity_id=CHG_SW)
+            log.info(f"[car_charging] Solaire — surplus insuffisant ({surplus}W), charge arrêtée")
+            if now - _last_solar_notif >= throttle:
+                _notify("🌥 Charge Voiture", f"Surplus insuffisant, charge arrêtée ({int(surplus)}W)")
+                _last_solar_notif = now
+            task.sleep(5)
+            _refresh()

@@ -1,0 +1,244 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Samsung TV Smart - Authentication",
+        "description": "Choose how to authenticate with SmartThings.\n\nOAuth Status: {oauth_status}",
+        "data": {
+          "auth_method": "Authentication Method"
+        }
+      },
+      "pick_implementation": {
+        "title": "Sign in with Samsung",
+        "description": "Select your SmartThings account to authenticate."
+      },
+      "host": {
+        "title": "Configure TV",
+        "description": "Enter your Samsung TV's IP address and a name for the device.",
+        "data": {
+          "host": "TV IP Address",
+          "name": "Device Name",
+          "use_ha_name_for_ws": "Use Home Assistant location name for WebSocket"
+        }
+      },
+      "manual": {
+        "title": "Manual Configuration",
+        "description": "Enter your TV's IP address and SmartThings credentials.\n\nTo create a Personal Access Token, visit [SmartThings Tokens]({st_tokens_url})",
+        "data": {
+          "host": "TV IP Address",
+          "name": "Device Name",
+          "use_ha_name_for_ws": "Use Home Assistant location name for WebSocket",
+          "api_key": "SmartThings Personal Access Token (PAT)",
+          "st_entry_unique_id": "Or use SmartThings Integration Token"
+        }
+      },
+      "st_integration": {
+        "title": "Use SmartThings Integration",
+        "description": "Reuse the authentication from your existing SmartThings integration.",
+        "data": {
+          "st_entry": "SmartThings Integration",
+          "host": "TV IP Address",
+          "name": "Device Name"
+        }
+      },
+      "stdevice": {
+        "title": "Select SmartThings Device",
+        "description": "Multiple Samsung TVs found. Please select your TV:",
+        "data": {
+          "st_devices": "Samsung TV"
+        }
+      },
+      "stdeviceid": {
+        "title": "SmartThings Device ID",
+        "description": "No TV found automatically. Please enter the SmartThings Device ID manually.\n\nYou can find this in the SmartThings app or developer portal.",
+        "data": {
+          "device_id": "SmartThings Device ID"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Samsung TV",
+        "description": "Choose what to change for this TV.",
+        "menu_options": {
+          "reconfigure_connection": "Connection (IP address & port)",
+          "reconfigure_auth": "Authentication (OAuth2 / PAT / SmartThings)",
+          "reconfigure_ip_control": "IP Control (reliable power & pairing)"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authentication Required",
+        "description": "Your SmartThings authentication has expired. Click Submit to sign in again."
+      },
+      "reconfigure_connection": {
+        "title": "Connection",
+        "description": "Update the TV's IP address and WebSocket port. Use 8001 unless your TV only answers on the SSL port 8002.",
+        "data": {
+          "host": "TV IP Address",
+          "port": "Port"
+        }
+      },
+      "reconfigure_auth": {
+        "title": "Authentication",
+        "description": "Pick how Home Assistant authenticates with this TV. For OAuth2, just select it and submit — the login flow starts automatically (the fields below are ignored). For PAT, paste a SmartThings Personal Access Token. For SmartThings Integration, pick an existing entry.",
+        "data": {
+          "auth_method": "Authentication method",
+          "api_key": "SmartThings Personal Access Token (PAT)",
+          "st_entry_unique_id": "SmartThings Integration"
+        }
+      },
+      "reconfigure_ip_control": {
+        "title": "IP Control",
+        "description": "IP Control gives reliable power on/off (even from Art Mode) without SmartThings. Current status: {status}.\n\nCheck \"Pair now\" to (re)pair the TV — it must be ON in normal viewing with IP Remote enabled. The toggles below appear once paired.",
+        "data": {
+          "pair_now": "Pair now",
+          "enable_ip_control": "Enable IP Control",
+          "ip_control_art_mode": "Use IP Control for Art Mode"
+        }
+      },
+      "reconfigure_ip_pair": {
+        "title": "Pair IP Control",
+        "description": "Pairs the TV's IP Control interface.\n\nBefore continuing:\n1. The TV must be ON and in NORMAL viewing — not Art Mode.\n2. Enable IP Remote: Settings → All Settings → Connections → Network → Expert Settings → Enable IP Remote.\n\nAccept the authorization prompt on the TV when it appears. Current status: {status}."
+      }
+    },
+    "error": {
+      "invalid_host": "Unable to connect to the TV. Check the IP address and ensure the TV is on.",
+      "only_key_or_st": "Please provide either a Personal Access Token OR select a SmartThings integration, not both.",
+      "st_api_key_fail": "Could not retrieve the API key from the SmartThings integration.",
+      "wrong_api_key": "The SmartThings token is invalid. Please check and try again.",
+      "st_device_not_found": "No Samsung TV found with this SmartThings Device ID.",
+      "st_device_used": "This SmartThings device is already configured.",
+      "not_successful": "Could not connect to the TV. Ensure it's on and allow the connection when prompted.",
+      "ip_control_pair_failed": "IP Control pairing failed. Make sure the TV is ON in normal viewing (not Art Mode) and IP Remote is enabled in Settings, then try again.",
+      "ip_control_no_host": "No TV host is configured for this entry."
+    },
+    "abort": {
+      "already_configured": "This TV is already configured.",
+      "unsupported_version": "This integration requires Home Assistant {req_ver} or later. You are running {run_ver}.",
+      "host_unique_id": "Cannot reconfigure: The TV's unique ID is based on the host address.",
+      "oauth_failed": "OAuth authentication failed. Please try again.",
+      "oauth_not_configured": "OAuth2 is not configured.\n\nPlease add SmartThings credentials in:\n**Settings → Devices & Services → Application Credentials**",
+      "no_smartthings_integration": "No SmartThings integration found. Please set up SmartThings first or use another authentication method.",
+      "missing_scopes": "The granted permissions are insufficient. Please ensure you grant all requested permissions.",
+      "reauth_account_mismatch": "The account used for re-authentication doesn't match the original account.",
+      "reauth_successful": "Re-authentication successful.",
+      "reauth_failed": "Re-authentication failed.",
+      "reconfigure_successful": "Configuration updated.",
+      "ip_control_pair_successful": "IP Control paired successfully. The access token has been stored."
+    },
+    "create_entry": {
+      "default": "Successfully configured {name}"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Samsung TV Smart Options",
+        "data": {
+          "logo_option": "Logo Style",
+          "use_local_logo": "Use Local Logo Cache",
+          "app_load_method": "Application Load Method",
+          "use_st_status_info": "Use SmartThings for Status",
+          "use_st_channel_info": "Use SmartThings for Channel Info",
+          "show_channel_number": "Show Channel Number",
+          "power_on_method": "Power On Method",
+          "show_adv_opt": "Show Advanced Options"
+        }
+      },
+      "menu": {
+        "title": "Configuration Menu",
+        "menu_options": {
+          "source_list": "Configure Sources",
+          "app_list": "Configure Applications",
+          "channel_list": "Configure Channels",
+          "sync_ent": "Synchronized Entities",
+          "init": "Basic Options",
+          "adv_opt": "Advanced Options",
+          "art_identify": "Art Identification",
+          "save_exit": "Save and Exit"
+        }
+      },
+      "source_list": {
+        "title": "Configure Sources",
+        "description": "Define custom sources (name: command pairs).",
+        "data": {
+          "source_list": "Source List"
+        }
+      },
+      "app_list": {
+        "title": "Configure Applications",
+        "description": "Define custom applications (name: app_id pairs).",
+        "data": {
+          "app_list": "Application List"
+        }
+      },
+      "channel_list": {
+        "title": "Configure Channels",
+        "description": "Define favorite channels (name: channel_number pairs).",
+        "data": {
+          "channel_list": "Channel List"
+        }
+      },
+      "sync_ent": {
+        "title": "Synchronized Entities",
+        "description": "Select entities to synchronize with TV power state.",
+        "data": {
+          "sync_turn_off": "Turn off with TV",
+          "sync_turn_on": "Turn on with TV"
+        }
+      },
+      "adv_opt": {
+        "title": "Advanced Options",
+        "data": {
+          "app_launch_method": "Application Launch Method",
+          "wol_repeat": "Wake-on-LAN Repeat Count",
+          "ping_port": "Ping Port (0 = auto)",
+          "ext_power_entity": "External Power Entity",
+          "use_mute_check": "Use Mute State for Power Detection",
+          "dump_apps": "Debug: Dump Applications",
+          "toggle_art_mode": "Toggle Art Mode on Power",
+          "st_poll_on_interval": "SmartThings poll interval when on (seconds)"
+        }
+      },
+      "save_exit": {
+        "title": "Save Configuration"
+      },
+      "art_identify": {
+        "title": "Art identification",
+        "description": "Identify the artwork shown on the Frame TV via reverse image search (Google Vision) confirmed by an LLM. All fields are optional except the toggle; leave a key blank to keep the previously saved one.",
+        "data": {
+          "art_identify_enable": "Enable artwork identification",
+          "art_vision_api_key": "Google Cloud Vision API key",
+          "art_llm_provider": "LLM provider",
+          "art_llm_api_key": "LLM API key (Anthropic, OpenAI or Gemini)",
+          "art_llm_model": "LLM model (blank = provider default)",
+          "art_identify_personal": "Also identify personal photos (usually off)"
+        }
+      }
+    },
+    "error": {
+      "invalid_tv_list": "Invalid list format. Please use valid JSON format.",
+      "ip_control_pair_failed": "Pairing failed. Make sure the TV is on and in normal viewing (not Art Mode), and that IP Remote is enabled, then try again.",
+      "ip_control_no_host": "No host address is configured for this TV."
+    }
+  },
+  "application_credentials": {
+    "description": "To use OAuth2 authentication with Samsung TV Smart, you need to create SmartThings developer credentials.\n\n**Setup Instructions:**\n\n1. Go to [SmartThings Developer Portal]({smartthings_portal})\n2. Sign in with your Samsung account\n3. Click **New Project** → Select **Automation for the Home**\n4. Give your project a name (e.g., 'Home Assistant TV')\n5. Click **Register App** in the sidebar\n6. Select **OAuth2 / Credentials**\n7. Fill in the form:\n   - **App Name**: Home Assistant Samsung TV\n   - **Redirect URI**: `{callback_url}`\n   - **Scopes**: Select `r:devices:*` and `x:devices:*`\n8. Click **Save** and copy your credentials below\n\n[SmartThings OAuth Documentation]({oauth_docs})"
+  },
+  "exceptions": {
+    "oauth2_implementation_unavailable": {
+      "message": "OAuth2 credentials are not configured. Please add SmartThings credentials in Settings → Devices & Services → Application Credentials."
+    }
+  },
+  "issues": {
+    "oauth_auth_failed": {
+      "title": "SmartThings authentication failed for {device_name}",
+      "description": "Home Assistant could not refresh the SmartThings access token for **{device_name}**. The refresh token is no longer valid — this can happen when the token is revoked, expires, or is rotated by SmartThings.\n\nSmartThings-based features (power state, picture mode, source selection) will not work until you reconnect.\n\nTo fix this, go to **Settings → Devices & Services → Samsung TV Smart**, select the affected entry, choose **Reconfigure**, and sign in with Samsung again."
+    }
+  },
+  "entity": {
+    "button": {
+      "reboot": {
+        "name": "Reboot TV"
+      }
+    }
+  }
+}

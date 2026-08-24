@@ -1,0 +1,172 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Välj kontotyp",
+        "description": "Välj din kontotyp för Dreame Mower -integrationen.",
+        "data": {
+          "account_type": "Kontotyp"
+        }
+      },
+      "dreame": {
+        "data": {
+          "username": "Användarnamn",
+          "password": "Lösenord",
+          "country": "Servern"
+        },
+        "description": "Logga in på Dreamehome -molnet."
+      },
+      "mova": {
+        "data": {
+          "username": "Användarnamn",
+          "password": "Lösenord",
+          "country": "Servern"
+        },
+        "description": "Logga in på Movahome -molnet."
+      },
+      "devices": {
+        "data": {
+          "devices": "Stödda enheter"
+        },
+        "description": "Välj den Dreame Mower -enheten du vill ställa in."
+      },
+      "options": {
+        "data": {
+          "name": "Enhetsnamn",
+          "notify": "Anmälningstyper"
+        },
+        "description": "Konfigurera ditt Dreame Mower -enhetsnamn och meddelandepreferenser."
+      }
+    },
+    "error": {
+      "cannot_connect": "Anslutning misslyckades. Kontrollera ditt nätverk och försök igen. Se Home Assistant-loggar för detaljer.",
+      "unsupported": "Denna enhetsmodell stöds inte av denna integration.",
+      "credentials_incomplete": "Användarnamn, lösenord och land är obligatoriska.",
+      "login_error": "Inloggning misslyckades. Kontrollera ditt användarnamn och lösenord. Se till att du har valt rätt kontotyp (Dreamehome vs MOVAhome).",
+      "no_devices": "Ingen kompatibel gräsklippare hittades i detta konto. Se till att du valde rätt kontotyp — MOVAhome för MOVA-enheter, Dreamehome för Dreame — och att enheten är tillagd i den appen. Du kan även prova ett annat serverland.",
+      "invalid_account_type": "Ogiltigt kontotyp valt."
+    },
+    "abort": {
+      "cannot_connect": "Misslyckades med att ansluta.",
+      "already_configured": "Den här enheten är redan konfigurerad."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Alternativ",
+        "description": "Konfigurera inställningar för meddelanden för Dreame Mower -integrationen.",
+        "data": {
+          "notify": "Anmälningstyper",
+          "map_rotation": "Kartrotation",
+          "map_show_title": "Visa karttitel",
+          "map_show_legend": "Visa kartförklaring",
+          "map_padding": "Kartutfyllnad (pixlar)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "no_status": "Ingen status",
+          "mowing": "Klippa",
+          "standby": "Beredskap",
+          "paused": "Paus",
+          "paused_due_to_errors": "Pausade på grund av fel",
+          "returning_to_station_to_charge": "Återvänder till stationen för att ladda",
+          "charging": "Laddning",
+          "mapping": "Kartläggning",
+          "charging_complete": "Laddning komplett",
+          "updating": "Uppdatering",
+          "charging_paused_high_temperature": "Laddning pausad: batteritemperaturen är för hög",
+          "charging_paused_low_temperature": "Laddning pausad: batteritemperaturen är för låg",
+          "maintenance_paused": "Pausad vid underhållspunkten"
+        }
+      },
+      "charging_status": {
+        "name": "Laddningsstatus",
+        "state": {
+          "not_docked": "Inte dockad",
+          "charging": "Laddning",
+          "not_charging": "Laddar inte",
+          "charging_completed": "Laddning avslutad",
+          "return_to_charge": "Återgå till laddning",
+          "charging_paused_high_temperature": "Laddning pausad: batteritemperaturen är för hög",
+          "charging_paused_low_temperature": "Laddning pausad: batteritemperaturen är för låg"
+        }
+      },
+      "mowing_progress": {
+        "name": "Klippa framsteg"
+      },
+      "bluetooth_connection": {
+        "name": "Bluetooth"
+      },
+      "dnd_status": {
+        "name": "Stör ej"
+      },
+      "charging_schedule": {
+        "name": "Laddningsschema"
+      },
+      "timezone": {
+        "name": "Tidszon"
+      },
+      "device_code": {
+        "name": "Enhetskod"
+      },
+      "current_task": {
+        "name": "Aktuell uppgift",
+        "state": {
+          "idle": "Ingen uppgift",
+          "starting": "Startar",
+          "mowing": "Klipper",
+          "paused": "Pausad",
+          "finished": "Slutförd",
+          "failed": "Misslyckades",
+          "exit": "Stoppad",
+          "returning_to_dock": "Återvänder till stationen"
+        }
+      },
+      "consumable_blade_health": {
+        "name": "Knivskick"
+      },
+      "consumable_brush_health": {
+        "name": "Borststatus"
+      },
+      "consumable_robot_health": {
+        "name": "Underhållsstatus"
+      }
+    },
+    "binary_sensor": {
+      "firmware_update_available": {
+        "name": "Firmware-uppdatering tillgänglig"
+      }
+    },
+    "camera": {
+      "map_camera": {
+        "name": "Karta"
+      }
+    },
+    "button": {
+      "reset_blade": {
+        "name": "Återställ knivräknaren"
+      },
+      "reset_brush": {
+        "name": "Återställ borstenteller"
+      },
+      "reset_robot_maintenance": {
+        "name": "Återställ underhållsräknaren"
+      },
+      "dock_without_stopping": {
+        "name": "Docka utan att stoppa uppgiften"
+      }
+    },
+    "number": {
+      "cutting_height": {
+        "name": "Klipphöjd"
+      }
+    }
+  }
+}

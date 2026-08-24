@@ -1,0 +1,28 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Orange Livebox TV UHD",
+        "description": "Ajout manuel d'un décodeur Orange par son adresse IP.",
+        "data": {
+          "host": "Adresse IP du décodeur",
+          "port": "Port (API remoteControl)",
+          "name": "Nom (optionnel)",
+          "country": "Pays"
+        }
+      },
+      "discovery_confirm": {
+        "title": "Décodeur découvert",
+        "description": "Ajouter le décodeur « {name} » ({host}) ?"
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossible de joindre le décodeur. Vérifiez qu'il est allumé et sur le réseau."
+    },
+    "abort": {
+      "already_configured": "Ce décodeur est déjà configuré.",
+      "cannot_connect": "Impossible de joindre le décodeur."
+    },
+    "flow_title": "{name}"
+  }
+}

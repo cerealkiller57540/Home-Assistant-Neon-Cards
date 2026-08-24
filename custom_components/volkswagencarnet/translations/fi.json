@@ -1,0 +1,78 @@
+{
+  "title": "Volkswagen Connect",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Volkswagen Connect Asetukset",
+        "description": "Täydennä Volkswagen Connect tiedot\n\nS-PIN vaaditaan joihinkin toimintoihin, esim. lukituksen hallintaan ja polttomoottorin lämmityksen käynnistämiseen",
+        "data": {
+          "username": "Sähköposti",
+          "password": "Salasana",
+          "mutable": "Salli komentojen lähettäminen ajoneuvolle",
+          "region": "Maa jossa ajoneuvo myytiin (ISO 3166-1 alpha-2)",
+          "spin": "S-PIN",
+          "name": "Nimeä ajoneuvo (oletuksena näytetään VIN)",
+          "debug": "Ota täysi API:n debuglogitus käyttöön (logitustaso pitää myös olla asetettu debugille)",
+          "convert": "Käytä etäisyysmuunnoksia",
+          "scan_interval": "Anturidatan päivitysväli (minuuteissa)",
+          "fake_user_agent": "Peitä selaimen identiteetti (ota käyttöön jos kirjautuminen on estetty)"
+        }
+      },
+      "select_vehicle": {
+        "title": "Ajoneuvo",
+        "description": "Löydetyt ajoneuvot. Valitse käytettävä ajoneuvo.",
+        "data": {
+          "vehicle": "Ajoneuvon tunniste (VIN)"
+        }
+      },
+      "select_instruments": {
+        "title": "Mittarit",
+        "description": "Valitse tarkasteltavat mittarit",
+        "data": {
+          "resources": "Tarkasteltavat resurssit"
+        }
+      },
+      "reauth_confirm": {
+        "data": {
+          "description": "Kirjausu uudelleen Volkswagen Connectiin. Varmista että olet hyväksynyt mahdolliset uudet Volkswagen Connect portaalin käyttöehdot ensin.",
+          "username": "Sähköposti",
+          "password": "Salasana"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Ajoneuvo samalla tunnistenumerolla on jo konfiguroitu",
+      "reauth_successful": "Uudelleenautentikointi onnistui"
+    },
+    "error": {
+      "cannot_connect": "Kirjautuminen Volkswagen Connect-palveluun epäonnistui, tarkista käyttäjätiedot sekä varmista että palvelu on käytössä ja toimii",
+      "cannot_update": "Tietojen päivitys Volkswagen Connect-palvelusta epäonnistui",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
+    },
+    "progress": {
+      "task_login": "Kirjaudutaan Volkswagen Connect-palveluun",
+      "task_update": "Haetaan ajoneuvoja"
+    }
+  },
+  "options": {
+    "step": {
+      "user": {
+        "title": "Volkswagen Connect Asetukset",
+        "description": "Aseta päivitysväli",
+        "data": {
+          "scan_interval": "Anturidatan päivitysväli (minuuteissa)",
+          "region": "Maa jossa ajoneuvo myytiin (ISO 3166-1 alpha-2)",
+          "debug": "Ota täysi API:n debuglogitus käyttöön (debug-taso pitää olla asetettu)",
+          "convert": "Käytä etäisyysmuunnoksia"
+        }
+      },
+      "select_instruments": {
+        "title": "Mittarit",
+        "description": "Valitse tarkasteltavat mittarit",
+        "data": {
+          "resources": "Tarkasteltavat resurssit"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+"""
+netgear_watchdog.py — Surveille l'intégration netgear_plus et la recharge
+si les sensors sont unavailable depuis plus de 5 minutes.
+"""
+import time
+
+WATCH_SENSOR   = "sensor.gs108t_port_1_link_speed"
+ENTRY_ID       = "01KR60VFETAYT2R3EKT0Z2E54R"
+# reload_config_entry ne recharge PAS le module Python vendored (reste en cache
+# dans sys.modules — cf mémoire project_netgear_gs108t_auth_failures) et relance
+# un login à froid pendant que le switch peut être encore instable. Le
+# coordinator retente déjà tout seul (UpdateFailed) sans intervention. Ce
+# watchdog ne doit rester qu'un filet de sécurité pour une panne VRAIMENT
+# longue, pas une réaction au premier unavailable.
+UNAVAIL_DELAY  = 1800   # secondes avant de recharger (30 min, était 5 min)
+COOLDOWN       = 3600   # secondes min entre deux recharges (1h, était 10 min)
+
+_last_reload = 0
+
+
+@time_trigger("period(now, 2min)")   # vérifie toutes les 2 minutes
+def netgear_watchdog(**kwargs):
+    global _last_reload
+
+    s = state.get(WATCH_SENSOR)
+    if s != "unavailable":
+        return
+
+    now = time.time()
+    # Attendre que ce soit vraiment unavailable depuis UNAVAIL_DELAY
+    task.sleep(UNAVAIL_DELAY)
+
+    if state.get(WATCH_SENSOR) != "unavailable":
+        return  # revenu tout seul
+
+    if (now - _last_reload) < COOLDOWN:
+        log.info("[netgear_watchdog] Unavailable détecté mais cooldown actif, skip")
+        return
+
+    log.warning("[netgear_watchdog] GS108T unavailable depuis 5 min — rechargement intégration")
+    homeassistant.reload_config_entry(entry_id=ENTRY_ID)
+    _last_reload = time.time()

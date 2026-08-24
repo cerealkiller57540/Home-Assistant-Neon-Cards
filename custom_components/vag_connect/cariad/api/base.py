@@ -1,0 +1,1818 @@
+# Copyright 2026 Prash Balan (@its-me-prash) — GNU AGPL v3.0-or-later
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""Base async API client — injected aiohttp session, token management."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import time
+from collections.abc import Awaitable
+from contextlib import contextmanager
+from typing import Any, Iterator
+
+from aiohttp import (
+    ClientConnectorError,
+    ClientPayloadError,
+    ClientSession,
+    ClientTimeout,
+    ServerDisconnectedError,
+)
+
+from ..auth.idk import IDKAuth
+from .graphql import VehicleImageFetcher, VehicleImageData
+from ..exceptions import APIError, AuthenticationError, TokenExpiredError
+from ..models import BrandConfig, TokenSet, VehicleData
+
+_LOGGER = logging.getLogger(__name__)
+
+_REQUEST_TIMEOUT = 60
+
+# Token-refresh storm protection (v1.8.7).
+# Capped at 3 successful-or-attempted refreshes per rolling hour. If the
+# CARIAD identity backend hands out short-lived tokens or returns transient
+# 401s, this prevents us from looping login → 401 → login until the IP gets
+# rate-limited or the account temporarily locked. Patterns from
+# `skodaconnect/myskoda` #976 and `upstream/homeassistant-volkswagencarnet`
+# #683 — both repos shipped fixes after users reported account suspensions
+# triggered by integrations refreshing tokens every poll cycle.
+_REFRESH_MAX_PER_HOUR = 3
+_REFRESH_WINDOW_S = 3600
+
+# v2.19.0 (C1) — the supplementary Tibber source sweeps ALL paired cars in one
+# fetch, but the coordinator asks per-VIN; cache the sweep for a poll so a
+# multi-car account triggers one fetch, not one per VIN. A little below the
+# default ~60s poll so it still refreshes every scheduled poll.
+_TIBBER_CACHE_TTL_S = 45.0
+
+# v2.9.0 - VW account-lock detection. After the 2026-05-31 ecosystem-
+# wide VW Auth chaos, oliverrahner (volkswagencarnet#332) and others
+# reported their underlying brand account getting locked for ~24h
+# after too many failed token-refresh attempts. The lock manifests as
+# HTTP 423 (Locked) or HTTP 403 with a throttling body marker on
+# ``/auth/v1/idk/oidc/token``. Coordinator surfaces a Repair issue
+# once we see ``_LOCK_THRESHOLD`` such responses inside
+# ``_LOCK_WINDOW_S`` so the user understands why polling went silent.
+_LOCK_THRESHOLD = 3
+_LOCK_WINDOW_S = 1800
+_LOCK_BODY_MARKERS: tuple[str, ...] = (
+    "throttle",
+    "rate limit",
+    "too many",
+    "account locked",
+    "temporarily locked",
+)
+
+# v2.5.2 — Silent scout-channel expansion guardrails.
+#   _PROBE_INTERVAL_S    — minimum seconds between probe passes per VIN
+#   _PROBE_TIMEOUT_S     — per-probe HTTP timeout (kept short — probes are best-effort)
+#   _PROBE_BUDGET_S      — total time budget for one pass before we bail
+#   _PROBE_TOKEN_GUARD   — skip pass when last_rate_limit_remaining is at or below this
+#   _PROBE_CB_THRESHOLD  — disable probes after this many consecutive auth-storm hits
+_PROBE_INTERVAL_S    = 3600          # 1 hour
+_PROBE_TIMEOUT_S     = 5
+_PROBE_BUDGET_S      = 30
+_PROBE_TOKEN_GUARD   = 50
+_PROBE_CB_THRESHOLD  = 3
+
+# v2.15.0b1 (B4) — account-scoped rate-limit lockout. When a backend hard-limits
+# us (HTTP 430, or 429 still firing after the retry budget is spent), pause ALL
+# requests on this client for a cool-down window instead of hammering. A hammered
+# account can get locked for hours (myskoda #1053 precedent), so the cure must not
+# be more polling. The hold is per-client = per-account (one client per entry).
+_LOCKOUT_429_S = 1800   # 30 min once 429 retries are exhausted
+_LOCKOUT_430_S = 7200   # 2 h on a hard 430 (explicit lockout signal)
+# VW EU Two-Way (650d46ca): the ~1 h device-grant Bearer is NON-refreshable, and
+# an EXPIRED bearer can come back 403 (not 401) from the CARIAD BFF, so the
+# reactive 401-retry re-mint can miss it and the entry freezes after ~1 h
+# (leMineGaming, #1217). Re-mint PROACTIVELY once the token is within this skew
+# of expiry so a request never rides an expired bearer.
+_DEVICE_GRANT_REMINT_SKEW_S = 300   # 5 min before expiry
+
+
+class _AuthStormSignal(Exception):
+    """Internal sentinel — a probe got HTTP 401.
+
+    Distinct from ``AuthenticationError`` so the probe pass can abort
+    cleanly without poisoning the production ``_request`` retry path.
+    Never escapes the probe runner.
+    """
+
+# Transient network exceptions that should be retried with the same
+# exponential backoff as 5xx server errors. Verified against:
+#   - `mitch-dc/volkswagen_we_connect_id` #166 (`socket.gaierror` /
+#     `ClientConnectorError` was being misclassified as auth failure)
+#   - `skodaconnect/homeassistant-myskoda` #731 ("server unavailable" UX)
+# DNS, connection refused, and mid-stream disconnects from the CARIAD BFF
+# happen routinely on weekends and during VAG maintenance windows. They are
+# not auth failures and must not trigger reauth.
+_TRANSIENT_NET_ERRORS: tuple[type[BaseException], ...] = (
+    ClientConnectorError,
+    ServerDisconnectedError,
+    ClientPayloadError,
+    asyncio.TimeoutError,
+)
+
+
+class CariadBaseClient:
+    """Base class for all CARIAD brand API clients.
+
+    Subclasses implement get_vehicles() and get_status(vin).
+    Token refresh is handled transparently.
+    """
+
+    def __init__(
+        self,
+        session: ClientSession,
+        brand: BrandConfig,
+        email: str,
+        password: str,
+        spin: str = "",
+    ) -> None:
+        self._session = session
+        self._brand = brand
+        self._email = email
+        self._password = password
+        self._spin = spin
+        self._tokens: TokenSet | None = None
+        # v2.12.0 — when the VW EU strategy chain falls through to the EU
+        # Data Act portal (cookie-based, read-only), the connector is
+        # retained here so the brand client's get_status routes through
+        # it instead of the (dead) token-based BFF. None = token mode.
+        self._eu_portal: Any = None
+        # v2.14.0 — OPT-IN, BETA. When the user explicitly chooses the
+        # volkswagen.de website-authproxy mode, the coordinator flips this
+        # flag (set_website_authproxy_mode) BEFORE authenticate(). It makes
+        # authenticate() use the cookie-based WebsiteAuthProxyConnector
+        # (retained on _website_proxy) as the sole strategy and routes
+        # get_vehicles/get_status through it — exactly the way _eu_portal is
+        # wired. Default False → every existing strategy path is untouched.
+        self._use_website_proxy: bool = False
+        self._website_proxy: Any = None
+        # v2.15.0b1 (C1) — a SUPPLEMENTARY read-only connector armed ALONGSIDE
+        # the primary channel (not via the dispatch above). get_status never
+        # looks at it; only the coordinator's multi-channel merge reads it, so
+        # the primary read + command routing are completely unaffected. None =
+        # the default single-channel behaviour.
+        self._supplementary_authproxy: Any = None
+        # v2.15.0b1 (C1) — DEDICATED aiohttp session for the supplementary
+        # connector. It must NOT share the brand client's session: vw.de and a
+        # cookie-based primary (EU Data Act portal) share the IDP host
+        # (identity.vwgroup.io) AND cookie names (auth0/did/idkit), so a shared
+        # jar would clobber the primary's cookies and fail the resume probe.
+        self._supplementary_session: Any = None
+        # v2.15.0b5 (C1) — set True when the supplementary vw.de session can't
+        # silently resume (login=otp_required) so the coordinator raises a
+        # "re-login" Repair issue. Stays False for transient/other failures.
+        self._supplementary_needs_reauth: bool = False
+        # v2.15.0b8 (C1) — supplementary EU Data Act PORTAL read channel armed
+        # alongside a command-capable primary (e.g. MBB): it fills the reads MBB
+        # can't (SoC/charging/odometer/service). email/pw login → auto-relogin,
+        # no OTP, reliable unattended. Safe on the shared client session because
+        # a non-portal primary (MBB = bearer) holds no IDP cookies to clobber.
+        self._supplementary_eu_portal: Any = None
+        self._supplementary_eu_portal_creds: Any = None
+        # v2.19.0 (C1) — supplementary TIBBER read channel (OAuth2, read-only).
+        # Shares this client's session (Bearer on a different host, no IDP
+        # cookies to clobber), like the portal supplementary. fetch_vehicles()
+        # returns ALL paired cars at once, so a per-poll TTL cache + lock
+        # collapses the per-VIN fan-out into ONE sweep. None until armed.
+        self._supplementary_tibber: Any = None
+        self._tibber_cache: dict[str, VehicleData] = {}
+        self._tibber_cache_at: float = 0.0
+        self._tibber_lock: asyncio.Lock | None = None
+        # b12 — MBB COMMAND CHANNEL: a second, MBB-primary-configured client held
+        # alongside a read-only primary (portal) so commands route through MBB
+        # while reads stay on the portal. None unless armed. Shares this client's
+        # session (MBB = bearer, no IDP cookies to clobber).
+        self._mbb_command: Any = None
+        # When the website-authproxy login surfaces an email-OTP challenge,
+        # the code the user enters in the config flow is handed to the
+        # connector via this field before authenticate() runs.
+        self._website_proxy_otp: str | None = None
+        # v2.14.3 — persisted website-authproxy session cookies. The config
+        # flow exports the volkswagen.de / vwgroup.io cookies after a
+        # successful login (incl. email-OTP) and the coordinator threads them
+        # in via set_website_authproxy_mode(..., cookies=...). _arm_website_proxy
+        # hydrates them into the connector BEFORE begin_login() so an
+        # already-authenticated session resumes WITHOUT re-prompting the OTP.
+        # None / empty = no persisted session → normal (OTP-prompting) login.
+        self._website_cookies: list[dict[str, Any]] | None = None
+        # v2.15.0 — durable MBB strategy. When the entry was created via the
+        # MBB device-grant login, the registered ``X-Client-Id`` that minted
+        # the durable bearer is threaded here by the coordinator. The MBB
+        # bearer IS ``self._tokens.access_token``; this client id must ride on
+        # every MBB token refresh + VSR read + RLU command (a mismatch 403s).
+        # Empty for every non-MBB entry → no behaviour change.
+        self._mbb_client_id: str = ""
+        # 2026-08 — VW EU Two-Way (650d46ca): stored credentials for the headless
+        # RE-MINT of the 1h non-refreshable device-grant token. Populated by the
+        # coordinator from entry.data on a VW EU Two-Way entry; empty otherwise
+        # (no behaviour change for any other entry).
+        self._vweu_email: str = ""
+        self._vweu_password: str = ""
+        # v2.15.0 — user-supplied VIN(s) for the MBB strategy. The fal-scoped
+        # MBB bearer can't list the account garage (usermanagement 403s), so
+        # the config flow lets the user enter their VIN(s) directly; these are
+        # returned by get_vehicles instead of the dead enumeration call.
+        self._mbb_manual_vins: list[str] = []
+        self._image_data: dict[str, VehicleImageData] = {}
+        self._refresh_lock: asyncio.Lock | None = None
+        # Sliding window of token refresh attempt timestamps (monotonic seconds).
+        # Pruned to the last `_REFRESH_WINDOW_S` on every refresh attempt.
+        # Prevents the spiral documented in myskoda #976 / volkswagencarnet #683.
+        self._refresh_history: list[float] = []
+        # v2.15.12 (#584) — SEPARATE storm budget for refreshes triggered by a
+        # remote COMMAND (MBB lock/unlock/climate/charge). A failing command
+        # (e.g. the MBB token exchange 500 or a data-plane 401) used to spend
+        # slots of the shared ``_refresh_history`` above, so three failed button
+        # presses could exhaust the budget and make the DATA-READ poll trip the
+        # storm guard → every entity went unavailable. Commands now bill their
+        # refreshes here, so a command failure can never knock the reads (and
+        # thus the whole integration) offline. Reads keep ``_refresh_history``.
+        self._cmd_refresh_history: list[float] = []
+        # v2.9.0 - VW account-lock detection sliding window. Tuples of
+        # (monotonic_seconds, http_status). Coordinator drains via
+        # ``self.account_lock_signal`` to decide whether to raise the
+        # Repair issue. Pruned to ``_LOCK_WINDOW_S`` on every append.
+        self._lock_history: list[tuple[float, int]] = []
+        # Bool the coordinator polls each cycle: True once the lock
+        # threshold has been crossed inside the window. Cleared after
+        # the first successful auth lands.
+        self.account_lock_detected: bool = False
+        # #1078 — True once the DATA-plane refresh-storm guard has tripped.
+        # The coordinator polls it each cycle to surface an actionable Repair
+        # ("raise your update interval"), because for a short-token brand the
+        # storm is a polling-frequency problem, not a credential problem —
+        # "reauthenticate" does not fix it. Cleared on the next good refresh.
+        self.refresh_storm_detected: bool = False
+        self._auth = IDKAuth(session, brand)
+        # v1.9.0 — Vehicle Data Scout opt-in stash. Brand clients populate
+        # this in ``get_status`` so the coordinator can run
+        # ``detect_unexpected`` over the raw responses without each brand
+        # client having to import the detector. Keys are logical endpoint
+        # names matching ``EXPECTED_KEYS[brand][endpoint]`` (e.g.
+        # ``"vehicle-status"``); values are the unparsed dict from the
+        # backend. Re-populated per poll — never accumulates across polls.
+        self.last_raw_responses: dict[str, dict[str, Any]] = {}
+        # #923/#1157 — last outcome of each experimental vw.de probe
+        # (parkingposition / SoH), merged up from the supplementary connector so
+        # the test cohort's diagnostics show WHY a probe yielded nothing. Bare
+        # status labels only ("404"/"412"/"200 no-value") — no PII.
+        self.probe_outcomes: dict[str, str] = {}
+        # #912 — opt-in test-cohort capture of a command's async result body (the
+        # BFF pendingrequests poll), so a PPE reporter can hand us the exact
+        # rejection shape (e.g. Audi E:CV.PA.31) we can't otherwise sample. Held
+        # in its OWN dict, NOT last_raw_responses, because get_status wipes the
+        # latter each poll and would clobber a one-shot command capture before the
+        # user pulls diagnostics. Single overwriting key → bounded. Redacted at
+        # export. Gated on ``_test_cohort`` (default off → never captures).
+        self.command_captures: dict[str, Any] = {}
+        self._test_cohort: bool = False
+        # v1.19.1 — Pycupra-style API quota visibility. Most VAG backends
+        # send X-RateLimit-Remaining (and sometimes X-RateLimit-Limit /
+        # X-RateLimit-Reset) on successful responses. We capture the
+        # latest value so the coordinator can surface it as a
+        # ``requests_remaining_today`` sensor — users see how close they
+        # are to the daily quota cap (community research: MyCupra/MySeat
+        # ~1500/day, OLA + mysmob behave similarly). None means we have
+        # never observed the header (older backends don't send it on
+        # every endpoint).
+        self.last_rate_limit_remaining: int | None = None
+        self.last_rate_limit_limit: int | None = None
+        self.last_rate_limit_reset_at: str | None = None
+        # v2.15.0b1 (B4) — account-scoped rate-limit lockout deadline
+        # (monotonic). Set on HTTP 430 / 429-exhaustion; checked at the top of
+        # _request so we stop sending until the backend has cooled down.
+        self._rate_limit_locked_until: float | None = None
+        # v1.19.2 (#118 eismarkt) — token persistence callback hook.
+        # Coordinator wires this to ``TokenStorage.save`` so every
+        # successful authenticate() / _refresh_tokens() result is
+        # persisted across HA restarts + HACS updates. Optional —
+        # if None (e.g. tests without storage), tokens stay in-memory.
+        # Signature: ``async def on_tokens_changed(tokens: TokenSet) -> None``
+        self.on_tokens_changed: Any | None = None
+
+        # v2.5.2 — Silent scout-channel expansion (see ``_v3_probes.py``).
+        # The probe pass runs at most once per ``_PROBE_INTERVAL_S`` per VIN
+        # and feeds GET responses into ``last_raw_responses`` so the
+        # coordinator's scout walk picks them up like any other response.
+        # All state is fail-safe: probe errors NEVER affect production
+        # polling, and the circuit-breaker auto-disables probes for the
+        # session if too many consecutive failures (auth-storm risk).
+        self._probe_last_pass_at: dict[str, float] = {}  # vin -> monotonic
+        self._probe_consecutive_fails: int = 0
+        self._probe_disabled: bool = False
+
+        # v2.8.0 quick win D — per-job parser-health counters. Each brand
+        # client's get_status() wraps each job-extraction block in a
+        # self._parser_job("job_name") context manager that increments
+        # successes/failures. Coordinator exposes the snapshot in diagnostics.
+        self.parser_stats: dict[str, dict[str, int | str]] = {}
+
+    @property
+    def brand(self) -> BrandConfig:
+        """Brand configuration."""
+        return self._brand
+
+    # v2.9.0 - provenance canary, see ``_canaries.py``. Referenced as
+    # a class attribute so any port of the multi-strategy resolver in
+    # this class carries the marker along into the destination repo.
+    _PROVENANCE_AUTH_RESOLVER = "cariad_resolver_provenance_kw7zq3p1_2026"
+
+    async def authenticate(self, mfa_code: str | None = None) -> None:
+        """Perform full login and store tokens.
+
+        v2.6.0 multi-strategy resolver. The 2026-05-27 Cariad WAF migration
+        gated the BFF token endpoint behind Google Play Integrity, which
+        Python clients cannot satisfy. The OIDC hybrid_full flow
+        (response_type=code id_token token) bypasses that wall entirely by
+        having Auth0 deliver tokens directly in the callback URL fragment.
+
+        Per-brand strategy (in priority order, fallback on AuthenticationError):
+          - volkswagen  : hybrid_full → classic auth-code → data_act_portal
+          - audi        : classic auth-code → hybrid_full → data_act_portal
+                          (Audi still issues usable refresh_tokens through
+                          the qmauth assertion path; prefer that to avoid
+                          the ~2h re-login penalty of hybrid_full)
+          - skoda/seat  : classic auth-code → data_act_portal
+            /cupra
+          - others      : classic auth-code only (unchanged)
+
+        The data_act_portal strategy is a last-resort read-only fallback.
+        When it succeeds the TokenSet carries strategy="data_act_portal"
+        and the coordinator switches into read-only mode (command entities
+        disabled, polling throttled to 15 min).
+
+        Trade-off for hybrid_full success: no usable refresh_token is
+        returned, so re-login fires every ~2 h. ``_refresh_tokens()``
+        detects the empty refresh_token and calls ``authenticate()`` again
+        transparently. The 5-strategy storm-guard in _refresh_tokens
+        prevents runaway loops.
+        """
+        # Strategy descriptor: (kind, kwargs) where kind is "idk" for the
+        # standard IDKAuth.authenticate path and "data_act_portal" for the
+        # last-resort read-only fallback.
+        strategies: list[tuple[str, dict[str, bool]]] = []
+        # v2.14.0 — when authenticate() is re-driven with an OTP code (e.g. a
+        # coordinator reauth for the website-authproxy channel), feed it to the
+        # connector so the email-challenge step can complete.
+        if self._use_website_proxy and mfa_code:
+            self._website_proxy_otp = mfa_code
+        # v2.14.0 — OPT-IN website-authproxy mode short-circuits the whole
+        # resolver: it is the ONLY strategy when the user selected it, so we
+        # never touch the BFF/hybrid/Data-Act chain. Gated on the explicit
+        # opt-in flag, so this branch is dead for every other entry.
+        if self._use_website_proxy:
+            strategies = [("website_authproxy", {})]
+        elif self._brand.name == "volkswagen":
+            strategies = [
+                ("idk", {"hybrid_full": True}),
+                ("idk", {"hybrid_full": False}),
+                ("data_act_portal", {}),
+            ]
+        elif self._brand.name == "audi":
+            strategies = [
+                ("idk", {"hybrid_full": False}),
+                ("idk", {"hybrid_full": True}),
+                ("data_act_portal", {}),
+            ]
+        elif self._brand.name in ("skoda", "seat", "cupra", "bentley"):
+            strategies = [
+                ("idk", {"hybrid_full": False}),
+                ("data_act_portal", {}),
+            ]
+        else:
+            strategies = [("idk", {"hybrid_full": False})]
+
+        last_err: Exception | None = None
+        for idx, (kind, opts) in enumerate(strategies):
+            try:
+                if kind == "idk":
+                    self._tokens = await self._auth.authenticate(
+                        self._email, self._password,
+                        mfa_code=mfa_code,
+                        **opts,
+                    )
+                elif kind == "data_act_portal":
+                    # v2.12.0 — cookie-based EU Data Act portal connector
+                    # (read-only). v2.12.7 — the build+login+sentinel logic
+                    # moved to ``_arm_eu_portal`` so the SAME arming can fire
+                    # as a runtime fallback when a brand's native data backend
+                    # is blocked mid-flight (e.g. CUPRA/SEAT OLA 403) even
+                    # though the IDP login still succeeds.
+                    await self._arm_eu_portal()
+                elif kind == "website_authproxy":
+                    # v2.14.0 — OPT-IN, read-only volkswagen.de website
+                    # authproxy connector. Only reached when the user opted in
+                    # (see the strategy list above), so dormant otherwise.
+                    await self._arm_website_proxy()
+                else:
+                    raise AuthenticationError(f"Unknown strategy kind: {kind}")
+
+                if idx > 0:
+                    _LOGGER.info(
+                        "Authenticated for brand %s via fallback strategy "
+                        "#%d (kind=%s opts=%s) after primary strategy failed: %s",
+                        self._brand.name, idx, kind, opts,
+                        type(last_err).__name__ if last_err else "?",
+                    )
+                else:
+                    _LOGGER.debug(
+                        "Authenticated for brand %s (kind=%s opts=%s)",
+                        self._brand.name, kind, opts,
+                    )
+                # v2.8.0 — capture session cookies into the token set
+                # so the next session can hydrate the IDP device-bound
+                # cookie and skip the OTP prompt. Only the idk path
+                # owns vwgroup.io cookies; the data_act_portal path
+                # leaves its session jar alone.
+                if (
+                    self._tokens is not None
+                    and kind == "idk"
+                    and hasattr(self._auth, "capture_session_cookies")
+                ):
+                    captured = self._auth.capture_session_cookies()
+                    if captured:
+                        self._tokens.auth_cookies = captured
+                        _LOGGER.debug(
+                            "Captured %d IDP cookies for brand %s on "
+                            "successful auth",
+                            len(captured), self._brand.name,
+                        )
+                await self._notify_tokens_changed()
+                return
+            except AuthenticationError as err:
+                last_err = err
+                if idx == len(strategies) - 1:
+                    raise
+                _LOGGER.info(
+                    "Auth strategy #%d (kind=%s opts=%s) failed for %s: %s — "
+                    "trying next strategy",
+                    idx, kind, opts, self._brand.name, err,
+                )
+            except Exception as err:  # noqa: BLE001
+                # v2.7.2 — aiohttp.InvalidURL and similar low-level
+                # errors can carry tokens or full OAuth callback URLs
+                # in their __str__. Catch any non-AuthenticationError
+                # here, log the exception TYPE only (no PII), and
+                # convert to an AuthenticationError so downstream
+                # handlers see a clean error without the raw URL.
+                # Re-raise on the last strategy; otherwise fall through
+                # to the next one like AuthenticationError above.
+                last_err = err
+                _LOGGER.warning(
+                    "Auth strategy #%d (kind=%s opts=%s) raised %s for %s "
+                    "(message redacted to protect tokens)",
+                    idx, kind, opts, type(err).__name__, self._brand.name,
+                )
+                if idx == len(strategies) - 1:
+                    raise AuthenticationError(
+                        f"Auth failed with {type(err).__name__} "
+                        f"(no usable strategy left)"
+                    ) from err
+
+    async def _arm_eu_portal(self) -> None:
+        """Build + log in the read-only EU Data Act portal connector and
+        retain it on ``self._eu_portal`` with a sentinel TokenSet.
+
+        v2.12.7 — used both by the ``data_act_portal`` login strategy AND as
+        a runtime fallback when a brand's native data backend is blocked
+        (e.g. the CUPRA/SEAT OLA ``403`` device-attestation wall) while the
+        IDP login still succeeds. In that case the login-time fallback never
+        fires, so the brand's read methods arm the portal here on a persistent
+        native block — reads then degrade to the portal instead of going dark.
+        """
+        import time as _time  # noqa: PLC0415
+
+        from ..auth._eu_data_act import EUDataActConnector  # noqa: PLC0415
+
+        connector = EUDataActConnector(self._session, brand=self._brand.name)
+        await connector.login(self._email, self._password)
+        self._eu_portal = connector
+        # Sentinel TokenSet: no real token (cookie session), but valid()
+        # needs access_token + id_token non-empty so downstream treats us as
+        # authenticated. Long expiry so the coordinator doesn't churn
+        # re-logins; the connector re-logins on 401/403 via the read methods.
+        self._tokens = TokenSet(
+            access_token="eu-data-act-portal-cookie-session",
+            refresh_token="",
+            id_token="eu-data-act-portal-cookie-session",
+            expires_at=_time.time() + 3300,
+            strategy="data_act_portal",
+        )
+
+    def supplementary_readers(
+        self, vin: str
+    ) -> list[tuple[str, Awaitable[VehicleData | None]]]:
+        """v2.15.0b1 (C1) — read coroutines for every armed SUPPLEMENTARY
+        read-only channel, for the coordinator's multi-channel merge.
+
+        Returns ``[(channel_name, awaitable→VehicleData|None), …]``. Empty when
+        no supplementary channel is armed (the default) — so the coordinator's
+        merge is a no-op and single-channel polling is byte-for-byte unchanged.
+        Isolated from ``get_status``: never affects the primary read or commands.
+        """
+        readers: list[tuple[str, Awaitable[VehicleData | None]]] = []
+        web = getattr(self, "_supplementary_authproxy", None)
+        if web is not None:
+            readers.append(("website_authproxy", self._read_authproxy(web, vin)))
+        portal = getattr(self, "_supplementary_eu_portal", None)
+        if portal is not None:
+            readers.append(("eu_data_act", self._read_eu_portal(portal, vin)))
+        # v2.19.0 — Tibber LAST = lowest trust: it only fills a field that the
+        # primary AND every higher supplementary left at its default.
+        tib = getattr(self, "_supplementary_tibber", None)
+        if tib is not None:
+            readers.append(("tibber", self._read_tibber(vin)))
+        return readers
+
+    async def _read_authproxy(
+        self, connector: Any, vin: str
+    ) -> VehicleData | None:
+        """Read one VIN from a website-authproxy connector with a single
+        re-login retry. Fail-soft: any error returns None so a read-only
+        supplementary channel can never sink the poll (the primary stands)."""
+        # #923/#875/#966 — keep the SSO session fresh instead of only reacting
+        # once a read has already failed. ``maybe_roll`` is debounced (10 min)
+        # and was wired only to the sole-mode channel, so on the supplementary
+        # slot the session aged untouched against the portal's own 30-minute
+        # timeout and its rotated cookies were never written back. Best-effort:
+        # a failure here must not stop the read below from trying.
+        try:
+            roll = getattr(connector, "maybe_roll", None)
+            if roll is not None:
+                await roll()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            try:
+                return await connector.get_vehicle_data(vin)  # type: ignore[no-any-return]
+            except AuthenticationError:
+                try:
+                    await connector.refresh()
+                    return await connector.get_vehicle_data(vin)  # type: ignore[no-any-return]
+                except Exception:  # noqa: BLE001
+                    return None
+            except Exception:  # noqa: BLE001
+                return None
+        finally:
+            # #923/#1157 — surface the connector's probe outcomes even when the
+            # read itself fail-softed to None, so the cohort's diagnostics show
+            # WHY a probe yielded nothing (403/404/412 vs 200-no-value vs never).
+            _outc = getattr(connector, "probe_outcomes", None)
+            if _outc:
+                if not isinstance(getattr(self, "probe_outcomes", None), dict):
+                    self.probe_outcomes = {}
+                self.probe_outcomes.update(_outc)
+
+    async def _read_eu_portal(
+        self, connector: Any, vin: str
+    ) -> VehicleData | None:
+        """Read one VIN from the supplementary EU Data Act portal connector,
+        re-logging in (email/pw, no OTP) on a stale session. Fail-soft → None,
+        so a read-only fallback can never sink the poll (the primary stands)."""
+        try:
+            return await connector.get_vehicle_data(vin)  # type: ignore[no-any-return]
+        except AuthenticationError:
+            creds = getattr(self, "_supplementary_eu_portal_creds", None)
+            if not creds:
+                return None
+            try:
+                await connector.login(creds[0], creds[1])
+                return await connector.get_vehicle_data(vin)  # type: ignore[no-any-return]
+            except Exception:  # noqa: BLE001
+                return None
+        except Exception:  # noqa: BLE001
+            return None
+
+    async def arm_supplementary_authproxy(
+        self, cookies: list[dict[str, Any]] | None
+    ) -> bool:
+        """v2.15.0b1 (C1) — arm the SUPPLEMENTARY vw.de read connector from
+        persisted session cookies, ALONGSIDE the primary channel.
+
+        Unlike ``set_website_authproxy_mode`` (which makes vw.de the SOLE
+        channel via the get_status dispatch), this only fills the
+        ``_supplementary_authproxy`` slot that the coordinator merges from — so
+        get_status, the primary read and command routing are never affected.
+        Fail-soft: no/stale cookies or any error leaves the slot None and the
+        primary channel runs unchanged (a fresh OTP login is the OptionsFlow's
+        job, never a mid-setup prompt). Returns True if the channel is live.
+        """
+        if not cookies:
+            return False
+        import aiohttp  # noqa: PLC0415
+
+        from ..auth._website_authproxy import (  # noqa: PLC0415
+            WebsiteAuthProxyConnector,
+        )
+        # Dedicated, isolated session + cookie jar — never the shared brand
+        # session (see the field comment: a shared jar clobbers a cookie-based
+        # primary's IDP cookies and fails the resume probe).
+        await self.close_supplementary()
+        self._supplementary_needs_reauth = False
+        # Match the config-flow login session (TCPConnector ssl=True) so the
+        # resume probe behaves identically to the proven login path.
+        session = aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(ssl=True),
+            cookie_jar=aiohttp.CookieJar(unsafe=True),
+        )
+        try:
+            connector = WebsiteAuthProxyConnector(
+                session, self._email, self._password, brand=self._brand.name,
+            )
+            connector.import_cookies(cookies)
+            # Resume via the prompt=none SILENT re-authorize (connector.refresh):
+            # a live Auth0 SSO cookie re-mints the portal session WITHOUT ever
+            # touching the OTP path (which only lives on the interactive login).
+            # refresh() raises if the SSO is dead — then it's a genuine re-add,
+            # surfaced as a Repair. It NEVER calls begin_login, so no OTP-email
+            # storm on reload. (Mechanism mirrors the rafaelhutter portal client.)
+            try:
+                await connector.refresh()
+            except AuthenticationError as err:
+                # v2.24.2 — say WHY. This used to log the exception class only,
+                # so an expired SSO, a redirect loop and a portal outage were
+                # indistinguishable in the log, and reports arrived with nothing
+                # to go on. AuthenticationError carries a purpose-built message
+                # and never a URL, so it is safe to show in full.
+                self._supplementary_needs_reauth = True
+                _LOGGER.warning(
+                    "VW Group Connect: supplementary vw.de channel could not silently"
+                    " resume: %s — re-add it from the integration options; the"
+                    " primary channel is unaffected.", err,
+                )
+                await session.close()
+                return False
+            except Exception as err:  # noqa: BLE001
+                # Everything else keeps the class-only form on purpose. Per the
+                # v2.7.2 rule, a raw message must never reach WARNING here:
+                # aiohttp.InvalidURL and friends put the whole request URL in
+                # __str__, which on the OAuth callback path is
+                # weconnect://authenticated#access_token=<JWT>… — those decode to
+                # the user's email and a working token. Message goes to DEBUG.
+                self._supplementary_needs_reauth = True
+                _LOGGER.warning(
+                    "VW Group Connect: supplementary vw.de channel could not silently"
+                    " resume (%s, message redacted, see DEBUG) — re-add it from"
+                    " the integration options; the primary channel is"
+                    " unaffected.", type(err).__name__,
+                )
+                _LOGGER.debug(
+                    "vw.de silent resume failure details: %s", err, exc_info=True,
+                )
+                await session.close()
+                return False
+            self._supplementary_authproxy = connector
+            self._supplementary_session = session
+            _LOGGER.info(
+                "VW Group Connect: supplementary vw.de read channel armed"
+                " (read-only, merged onto the primary)."
+            )
+            return True
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning(
+                "VW Group Connect: could not arm supplementary vw.de channel (%s)"
+                " — primary channel unaffected.", type(err).__name__,
+            )
+            self._supplementary_authproxy = None
+            await session.close()
+            return False
+
+    async def arm_supplementary_eu_portal(
+        self, email: str | None, password: str | None
+    ) -> bool:
+        """v2.15.0b8 (C1) — arm the supplementary EU Data Act portal read
+        channel (email/pw login, no OTP → reliable auto-relogin). Skipped when
+        the portal is ALREADY the primary channel (would self-collide on the
+        shared session). Fail-soft: any error leaves the slot None and the
+        primary channel runs unchanged. Returns True if armed."""
+        if not email:
+            return False
+        if getattr(self, "_eu_portal", None) is not None:
+            # portal is already the primary — nothing to supplement
+            return False
+        from ..auth._eu_data_act import EUDataActConnector  # noqa: PLC0415
+        try:
+            connector = EUDataActConnector(self._session, brand=self._brand.name)
+            await connector.login(email, password or "")
+            self._supplementary_eu_portal = connector
+            self._supplementary_eu_portal_creds = (email, password or "")
+            _LOGGER.info(
+                "VW Group Connect: supplementary EU Data Act portal read channel"
+                " armed (read-only, merged onto the primary)."
+            )
+            return True
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning(
+                "VW Group Connect: could not arm supplementary EU Data Act portal"
+                " (%s) — primary channel unaffected.", type(err).__name__,
+            )
+            self._supplementary_eu_portal = None
+            return False
+
+    async def arm_supplementary_tibber(self, tokens: Any) -> bool:
+        """v2.19.0 (C1) — arm the supplementary Tibber Data-API read channel
+        (OAuth2, read-only). Fills EV SoC / target-SoC / range / plug / charging
+        that the first-party channels leave empty, as the LOWEST-trust gap-fill.
+        Shares this client's session (Bearer on a different host). Fail-soft: any
+        error leaves the slot None and the primary channel runs unchanged.
+        Returns True if armed. The token bundle is never logged."""
+        if not isinstance(tokens, dict):
+            return False
+        access = str(tokens.get("access_token") or "")
+        refresh = str(tokens.get("refresh_token") or "")
+        if not access and not refresh:
+            return False
+        from .._tibber_source import TibberDataSource  # noqa: PLC0415
+        try:
+            source = TibberDataSource(
+                self._session,
+                access_token=access,
+                refresh_token=refresh,
+                client_id=str(tokens.get("client_id") or ""),
+                client_secret=str(tokens.get("client_secret") or ""),
+            )
+            self._supplementary_tibber = source
+            self._tibber_cache = {}
+            self._tibber_cache_at = 0.0
+            _LOGGER.info(
+                "VW Group Connect: supplementary Tibber read channel armed"
+                " (read-only, lowest-trust gap-fill onto the primary)."
+            )
+            return True
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning(
+                "VW Group Connect: could not arm supplementary Tibber channel (%s)"
+                " — primary channel unaffected.", type(err).__name__,
+            )
+            self._supplementary_tibber = None
+            return False
+
+    async def _read_tibber(self, vin: str) -> VehicleData | None:
+        """v2.19.0 (C1) — serve ONE VIN's sparse Tibber data. fetch_vehicles()
+        sweeps every paired car, so cache the whole sweep for the poll and serve
+        per-VIN from it (the coordinator loops VINs serially within a poll). The
+        lock coalesces the rare poll/command-refresh overlap into a single sweep.
+        Fail-soft → None; a read-only fallback must never sink the poll."""
+        source = getattr(self, "_supplementary_tibber", None)
+        if source is None:
+            return None
+        if self._tibber_lock is None:
+            self._tibber_lock = asyncio.Lock()
+        try:
+            async with self._tibber_lock:
+                now = time.monotonic()
+                if (
+                    not self._tibber_cache
+                    or (now - self._tibber_cache_at) > _TIBBER_CACHE_TTL_S
+                ):
+                    self._tibber_cache = await source.fetch_vehicles()
+                    self._tibber_cache_at = now
+            return self._tibber_cache.get(vin.upper())
+        except Exception:  # noqa: BLE001
+            return None
+
+    async def close_supplementary(self) -> None:
+        """Close the dedicated supplementary session (on unload / re-arm).
+        Idempotent + fail-soft."""
+        sess = getattr(self, "_supplementary_session", None)
+        self._supplementary_session = None
+        self._supplementary_authproxy = None
+        # the portal supplementary shares the client session (no own session to
+        # close) — just drop the connector reference.
+        self._supplementary_eu_portal = None
+        # b12 — the MBB command channel shares this client's session too; drop it.
+        self._mbb_command = None
+        # v2.19.0 — Tibber shares this client's session too; drop it + its cache.
+        self._supplementary_tibber = None
+        self._tibber_cache = {}
+        self._tibber_cache_at = 0.0
+        if sess is not None:
+            try:
+                await sess.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+    def set_website_authproxy_mode(
+        self,
+        enabled: bool,
+        *,
+        otp: str | None = None,
+        cookies: list[dict[str, Any]] | None = None,
+    ) -> None:
+        """v2.14.0 — OPT-IN: route this client through the website authproxy.
+
+        Called by the coordinator (and the config-flow validator) when the
+        user explicitly selected the "Volkswagen.de website (beta)" mode.
+        Strictly additive: when ``enabled`` is False (the default), nothing
+        changes and every existing strategy path runs unmodified. ``otp`` is
+        the email-OTP code collected by the config flow, consumed once on the
+        next ``authenticate()``.
+
+        v2.14.3 — ``cookies`` are the persisted volkswagen.de / vwgroup.io
+        session cookies (as exported by the config flow). When supplied, they
+        are hydrated into the connector BEFORE ``begin_login()`` in
+        ``_arm_website_proxy``, so an already-authenticated session resumes
+        without re-prompting the email-OTP. Defaults to None → unchanged
+        behaviour (a fresh, OTP-prompting login) for callers that don't pass it.
+        """
+        self._use_website_proxy = bool(enabled)
+        self._website_proxy_otp = otp
+        self._website_cookies = cookies
+
+    async def _arm_website_proxy(self) -> None:
+        """Build + log in the read-only website-authproxy connector.
+
+        v2.14.0 — mirrors ``_arm_eu_portal``: it logs the connector in,
+        retains it on ``self._website_proxy`` so the brand client's
+        get_vehicles/get_status route through it, and stores a sentinel
+        TokenSet (``strategy="website_authproxy"``) so downstream treats the
+        client as authenticated and the coordinator forces read-only mode.
+
+        A pending email-OTP challenge raises ``EmailTwoFactorRequiredError``
+        unless an OTP code was supplied via ``set_website_authproxy_mode`` —
+        the config flow catches that to add the OTP step, and the coordinator
+        surfaces the matching Repair issue.
+        """
+        import time as _time  # noqa: PLC0415
+
+        from ..auth._website_authproxy import (  # noqa: PLC0415
+            WebsiteAuthProxyConnector,
+        )
+        from ..exceptions import EmailTwoFactorRequiredError  # noqa: PLC0415
+
+        connector = WebsiteAuthProxyConnector(
+            self._session, self._email, self._password, brand=self._brand.name,
+        )
+        # v2.14.3 — hydrate persisted session cookies BEFORE begin_login(). When
+        # the cookies are still valid, the authproxy redirects the already-
+        # authenticated session straight back to volkswagen.de and begin_login()
+        # returns "ok" WITHOUT an OTP challenge — fixing the re-prompt-on-every-
+        # restart bug. If the cookies are stale the IDP re-prompts and
+        # begin_login() surfaces "otp_required" → the normal reauth path below.
+        if self._website_cookies:
+            connector.import_cookies(self._website_cookies)
+            # b9 — resume via the prompt=none SILENT refresh: it re-mints the
+            # portal session from the Auth0 SSO cookie WITHOUT ever touching the
+            # OTP path. (The old data-endpoint probe was the wrong test — the
+            # portal session token expires ~30 min after login even while the SSO
+            # is still alive, so probing /relations failed and forced a needless
+            # OTP re-login on restart.) Only a genuinely DEAD SSO makes refresh()
+            # raise → then begin_login() does a real, one-time (OTP) re-auth.
+            try:
+                await connector.refresh()
+                result = "ok"
+            except Exception:  # noqa: BLE001
+                result = await connector.begin_login()
+        else:
+            result = await connector.begin_login()
+        if result == "otp_required":
+            if not self._website_proxy_otp:
+                raise EmailTwoFactorRequiredError()
+            ok = await connector.submit_otp(self._website_proxy_otp)
+            # OTP is single-use — drop it so a later re-login doesn't reuse it.
+            self._website_proxy_otp = None
+            if not ok:
+                raise AuthenticationError(
+                    "Website authproxy: OTP submission did not complete login"
+                )
+        self._website_proxy = connector
+        # Sentinel TokenSet: no usable bearer (cookie session), but valid()
+        # needs access_token + id_token non-empty so the client counts as
+        # authenticated. Long expiry so the coordinator doesn't churn relogins;
+        # the connector re-establishes the session on 401/403 via refresh().
+        self._tokens = TokenSet(
+            access_token="vw-website-authproxy-cookie-session",
+            refresh_token="",
+            id_token="vw-website-authproxy-cookie-session",
+            expires_at=_time.time() + 3300,
+            strategy="website_authproxy",
+        )
+
+    def get_website_proxy_cookies(self) -> list[dict[str, Any]]:
+        """v2.14.3 — export the live website-authproxy session cookies.
+
+        The coordinator calls this after a successful website-authproxy login/
+        refresh to persist the (rotated) cookies back into the config entry, so
+        the next setup/restart resumes the session without an OTP prompt.
+        Returns an empty list (never raises) when the connector is unarmed or
+        the export fails, so a capture hiccup never breaks the poll.
+        """
+        connector = self._website_proxy
+        if connector is None:
+            return []
+        try:
+            cookies = connector.export_cookies()
+        except Exception:  # noqa: BLE001
+            return []
+        # Typed intermediate so mypy doesn't flag a Returning-Any on the
+        # connector's loosely-typed export.
+        result: list[dict[str, Any]] = cookies if isinstance(cookies, list) else []
+        return result
+
+    def get_supplementary_proxy_cookies(self) -> list[dict[str, Any]]:
+        """v2.25.0 — export the live SUPPLEMENTARY vw.de session cookies.
+
+        The twin of ``get_website_proxy_cookies`` for the supplementary slot
+        (``_supplementary_authproxy``), which had no export path at all. Without
+        it the coordinator could never write the rotated cookies back, so every
+        restart replayed the original OTP cookies from the entry until they went
+        stale and ``refresh()`` reported "SSO session expired" (#966/#632).
+        Same fail-soft contract: empty list, never raises.
+        """
+        connector = self._supplementary_authproxy
+        if connector is None:
+            return []
+        try:
+            cookies = connector.export_cookies()
+        except Exception:  # noqa: BLE001
+            return []
+        result: list[dict[str, Any]] = cookies if isinstance(cookies, list) else []
+        return result
+
+    def set_persisted_tokens(self, tokens: TokenSet | None) -> None:
+        """v1.19.2 (#118) — inject tokens loaded from HA storage at
+        coordinator setup, before the first API call. If valid, the
+        client will skip the initial authenticate() and rely on the
+        existing 401-refresh path for any expired access_token.
+
+        No-op for None / invalid tokens — coordinator falls through to
+        a normal authenticate() flow.
+
+        v2.8.0 — also hydrates any persisted IDP cookies (e.g. the
+        ~30-day device-bound cookie issued after a successful email
+        OTP challenge) into the auth session. Without this, every
+        fresh authenticate() ran the OTP challenge from scratch on
+        VW EU even though the IDP would have remembered the device.
+        """
+        if tokens is not None and tokens.is_valid():
+            self._tokens = tokens
+            _LOGGER.debug(
+                "Loaded persisted tokens for brand %s "
+                "(expires_at=%.0f, strategy=%s)",
+                self._brand.name,
+                tokens.expires_at,
+                tokens.strategy or "(legacy)",
+            )
+            # v2.13.0 — device-code/QR portal entries carry a REAL bearer for
+            # the EU-Data-Act proxy_api (not the BFF). Build the portal
+            # connector in Bearer mode now so the first poll — at setup AND
+            # after a restart (this is the single central token-load point for
+            # both) — routes to the portal, not the dead BFF. _refresh_tokens
+            # re-injects a fresh bearer on expiry.
+            if tokens.strategy == "device_grant_portal":
+                from ..auth._eu_data_act import (  # noqa: PLC0415
+                    EUDataActConnector,
+                )
+
+                self._eu_portal = EUDataActConnector(
+                    self._session, brand=self._brand.name,
+                    access_token=tokens.access_token,
+                )
+            if tokens.auth_cookies and hasattr(
+                self._auth, "hydrate_session_cookies"
+            ):
+                self._auth.hydrate_session_cookies(tokens.auth_cookies)
+                _LOGGER.debug(
+                    "Hydrated %d persisted IDP cookies into auth "
+                    "session for brand %s",
+                    len(tokens.auth_cookies),
+                    self._brand.name,
+                )
+
+    async def _notify_tokens_changed(self) -> None:
+        """v1.19.2 — fire the persistence hook if registered.
+
+        Called from authenticate() and _refresh_tokens() success
+        paths. Defensive: callback errors are logged but never
+        propagate, so a broken storage path can't break runtime
+        polling.
+        """
+        if self.on_tokens_changed is None or self._tokens is None:
+            return
+        try:
+            await self.on_tokens_changed(self._tokens)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning(
+                "Token persistence callback failed (%s) — runtime "
+                "tokens still valid in-memory, will retry on next "
+                "refresh",
+                err,
+            )
+
+    async def get_vehicles(self) -> list[str]:
+        """Return list of VINs in the account garage."""
+        raise NotImplementedError
+
+    async def get_status(self, vin: str) -> VehicleData:
+        """Return current vehicle data for the given VIN."""
+        raise NotImplementedError
+
+    # ── v2.8.0 EU Data Act scraper bridge (Action #3) ──────────────────────────
+
+    async def fetch_images(self) -> None:
+        """Fetch render image URLs via GraphQL — Audi only.
+
+        Called once during get_vehicles(). Populates self._image_data.
+        SEAT/CUPRA use OLA renders endpoint instead (in SeatCupraClient).
+        Škoda, Porsche, VW NA do not have a GraphQL image endpoint.
+        """
+        if self._brand.name not in ("audi",):
+            return
+        try:
+            fetcher = VehicleImageFetcher(self._session)
+            data = await fetcher.fetch_image_data(self._access_token, self._brand.name)
+            self._image_data = data
+            if data:
+                _LOGGER.info(
+                    "VAG images (%s): render URLs for %d vehicle(s)",
+                    self._brand.name, len(data),
+                )
+        except Exception:  # noqa: BLE001
+            self._image_data = {}
+
+    async def command_lock(self, vin: str) -> None:
+        """Remote lock."""
+        raise NotImplementedError
+
+    async def command_unlock(self, vin: str, spin: str = "") -> None:
+        """Remote unlock — may require S-PIN."""
+        raise NotImplementedError
+
+    async def get_capabilities(self, vin: str) -> dict[str, Any]:
+        """Return the per-VIN capabilities document.
+
+        Default implementation returns ``{}`` (i.e. "no data") so callers
+        can rely on the helper existing without checking ``hasattr``.
+        Brand-specific clients that have a real capabilities endpoint
+        override this — currently SEAT/CUPRA (OLA) and the CARIAD BFF
+        family (VW EU + Audi). Škoda mysmob and Porsche PPA do not expose
+        a discrete capabilities endpoint and keep the default.
+        """
+        return {}
+
+    async def command_start_climate(self, vin: str) -> None:
+        """Start pre-conditioning."""
+        raise NotImplementedError
+
+    async def command_start_climate_control(
+        self,
+        vin: str,
+        *,
+        temp_c: float | None = None,
+        glass_heating: bool | None = None,
+        seat_fl: bool | None = None,
+        seat_fr: bool | None = None,
+        seat_rl: bool | None = None,
+        seat_rr: bool | None = None,
+        climatisation_at_unlock: bool | None = None,
+        climatisation_mode: str | None = None,
+        ppe_mode: bool = False,
+    ) -> None:
+        """v2.10.0 - rich climate-start. Override in CARIAD-BFF brand clients.
+
+        Accepts per-seat heating toggles (seat_fl/fr/rl/rr), glass_heating,
+        climatisation_at_unlock, climatisation_mode and temp_c. Each field
+        is optional, with omitted fields keeping the brand backend default.
+
+        #912 - ``ppe_mode`` carries the coordinator's ``force_ppe_climate``
+        gate through to the CARIAD-BFF clients, which drop the temperature
+        fields PPE/PPC vehicles reject. Declared here so the signature matches
+        the override and the coordinator can pass it unconditionally.
+
+        Default implementation raises NotImplementedError so the coordinator
+        can fall back to the basic ``command_start_climate`` flow for brands
+        that do not accept the rich payload (SEAT/CUPRA OLA, Skoda mysmob,
+        Porsche PPA, VW NA).
+        """
+        raise NotImplementedError
+
+    async def command_stop_climate(self, vin: str) -> None:
+        """Stop pre-conditioning."""
+        raise NotImplementedError
+
+    async def command_start_charging(self, vin: str) -> None:
+        """Start charging."""
+        raise NotImplementedError
+
+    async def command_stop_charging(self, vin: str) -> None:
+        """Stop charging."""
+        raise NotImplementedError
+
+    async def command_flash(
+        self,
+        vin: str,
+        latitude: float | None = None,
+        longitude: float | None = None,
+        duration_s: int = 10,
+        honk: bool = False,
+    ) -> None:
+        """Honk and flash. SEAT/CUPRA require the user position; others ignore it.
+
+        ``duration_s`` and ``honk`` (#1009) default to the previous behaviour —
+        a 10-second lights-only signal — so a brand client that ignores them
+        behaves exactly as it did before.
+        """
+        raise NotImplementedError
+
+    async def command_wake(self, vin: str) -> None:
+        """Wake vehicle from sleep."""
+        raise NotImplementedError
+
+    async def command_set_target_soc(self, vin: str, target: int) -> None:
+        """Set charge target SoC (20–100%)."""
+        raise NotImplementedError
+
+    async def command_set_battery_care(self, vin: str, enabled: bool) -> None:
+        """v2.10.0 - toggle battery preservation mode (SEAT/CUPRA primary).
+
+        When enabled, the brand backend caps the high end of the
+        charge at the battery-care target SOC (default 80%, configurable
+        via command_set_battery_care_target). Reduces calendar-aging
+        damage to the HV battery for users that mostly do short trips.
+        """
+        raise NotImplementedError
+
+    async def command_set_battery_care_target(self, vin: str, target_pct: int) -> None:
+        """v2.10.0 - set the battery-care top-charge target (50-100%)."""
+        raise NotImplementedError
+
+    async def command_set_climate_temperature(self, vin: str, temp_c: float) -> None:
+        """Set pre-conditioning target temperature."""
+        raise NotImplementedError
+
+    async def command_set_charge_mode(self, vin: str, mode: str) -> None:
+        """Set charging mode (MANUAL | TIMER | PREFERRED_CHARGING_TIMES)."""
+        raise NotImplementedError
+
+    async def command_set_min_soc(self, vin: str, min_soc: int) -> None:
+        """Set minimum SoC for PHEV departure timer (0–100%)."""
+        raise NotImplementedError
+
+    async def command_start_window_heating(self, vin: str) -> None:
+        """Start window (windscreen + rear) heating."""
+        raise NotImplementedError
+
+    async def command_stop_window_heating(self, vin: str) -> None:
+        """Stop window heating."""
+        raise NotImplementedError
+
+    # ── v2.5.2 silent scout-channel probe pass ─────────────────────────────────
+
+    async def run_v3_probe_pass(self, vin: str) -> int:
+        """Issue probe GETs for the given VIN, feed responses to the scout.
+
+        Probe behaviour (silent + fail-safe):
+        - Runs at most once per ``_PROBE_INTERVAL_S`` per VIN (default 1h).
+        - Skipped entirely when ``last_rate_limit_remaining`` is at or
+          below ``_PROBE_TOKEN_GUARD`` — protects the user's daily quota.
+        - Skipped entirely after ``_PROBE_CB_THRESHOLD`` consecutive
+          pass-level failures (auth-storm circuit-breaker).
+        - Per-probe HTTP timeout ``_PROBE_TIMEOUT_S`` (short, best-effort).
+        - Total per-pass time budget ``_PROBE_BUDGET_S`` (bail if exceeded).
+        - 401/403/404/5xx/network errors are swallowed silently per-probe;
+          a 401 NEVER triggers ``_refresh_tokens`` here (would be a storm
+          risk). On 401 the entire pass aborts and increments the
+          circuit-breaker.
+        - 2xx-with-JSON responses are stored into ``last_raw_responses``
+          under a ``v3_probe:<probe_name>`` key. The coordinator runs the
+          same ``detect_unexpected`` walk it always does and emits scout
+          telemetry for any new field paths.
+
+        Returns:
+            The number of probes that completed with a 2xx JSON body
+            (zero on skip / failure / circuit-breaker tripped).
+        """
+        from ._v3_probes import probes_for_brand, base_url_for_brand  # noqa: PLC0415
+
+        if self._probe_disabled:
+            return 0
+        probes = probes_for_brand(self._brand.name)
+        if not probes:
+            return 0
+        if self._tokens is None:
+            return 0
+        # v2.15.0 — the durable MBB bearer must NEVER be sent to the dead/
+        # attestation-gated CARIAD BFF host. The probe pass has no per-strategy
+        # host routing (it resolves base_url_for_brand → the BFF), so skip it
+        # entirely for MBB entries. The dedicated MBB getters in the brand
+        # client carry the bearer only to the legacy MBB hosts.
+        if self._tokens.strategy == "mbb":
+            return 0
+
+        # Rate-limit per VIN — never re-run within _PROBE_INTERVAL_S.
+        now = time.monotonic()
+        last = self._probe_last_pass_at.get(vin, 0.0)
+        if last and (now - last) < _PROBE_INTERVAL_S:
+            return 0
+
+        # Token-budget guard — don't burn the user's daily quota on probes.
+        if (
+            self.last_rate_limit_remaining is not None
+            and self.last_rate_limit_remaining <= _PROBE_TOKEN_GUARD
+        ):
+            _LOGGER.debug(
+                "v3 probe pass skipped (%s vin=%s): rate-limit remaining %d <= guard %d",
+                self._brand.name, vin[-6:],
+                self.last_rate_limit_remaining, _PROBE_TOKEN_GUARD,
+            )
+            self._probe_last_pass_at[vin] = now  # honour interval even on skip
+            return 0
+
+        base_url = base_url_for_brand(self._brand.name) or getattr(self, "_BASE", None)
+        if not base_url:
+            # No documented backend host for this brand — silently skip.
+            return 0
+
+        self._probe_last_pass_at[vin] = now
+        pass_started = time.monotonic()
+        success_count = 0
+        # Capture user_id once (set by IDKAuth during login, SEAT/CUPRA path).
+        user_id = getattr(self._auth, "user_id", "") or ""
+
+        for probe in probes:
+            # Pass-level time budget.
+            if (time.monotonic() - pass_started) > _PROBE_BUDGET_S:
+                _LOGGER.debug(
+                    "v3 probe pass aborted (%s vin=%s): time budget %ds exceeded",
+                    self._brand.name, vin[-6:], _PROBE_BUDGET_S,
+                )
+                break
+
+            host = probe.host_override or base_url
+            try:
+                path = probe.path.format(vin=vin, user_id=user_id)
+            except KeyError:
+                # Unknown placeholder — skip probe, never crash.
+                continue
+            url = f"{host}{path}"
+
+            try:
+                body = await self._probe_request(url)
+            except _AuthStormSignal:
+                # 401 from a probe — abort entire pass and trip the breaker.
+                self._probe_consecutive_fails += 1
+                if self._probe_consecutive_fails >= _PROBE_CB_THRESHOLD:
+                    self._probe_disabled = True
+                    _LOGGER.info(
+                        "v3 probe channel auto-disabled for %s (%d consecutive 401s)",
+                        self._brand.name, self._probe_consecutive_fails,
+                    )
+                return success_count
+            except Exception:  # noqa: BLE001 — probes never raise
+                continue
+
+            if not isinstance(body, dict):
+                continue
+            scout_key = f"v3_probe:{probe.name}"
+            self.last_raw_responses[scout_key] = body
+            success_count += 1
+
+        # Successful pass resets the auth-storm breaker.
+        if success_count > 0:
+            self._probe_consecutive_fails = 0
+        _LOGGER.debug(
+            "v3 probe pass complete (%s vin=%s): %d/%d probes returned JSON",
+            self._brand.name, vin[-6:], success_count, len(probes),
+        )
+        return success_count
+
+    async def _probe_request(self, url: str) -> Any:
+        """Minimal GET for v2.5.2 probe pass.
+
+        Distinct from ``_request`` in three ways:
+        1. Short timeout (``_PROBE_TIMEOUT_S``).
+        2. No retry loop — best-effort one-shot.
+        3. 401 raises ``_AuthStormSignal`` so the caller aborts the pass
+           rather than triggering ``_refresh_tokens`` (storm risk).
+
+        Returns the parsed JSON body for 2xx responses, ``None`` otherwise.
+        Caller is expected to treat all non-dict returns as no-op.
+        """
+        headers = {
+            "Authorization": f"Bearer {self._access_token}",
+            "Accept": "application/json",
+            "User-Agent": self._brand.user_agent,
+        }
+        try:
+            async with self._session.request(
+                "GET", url, headers=headers,
+                timeout=ClientTimeout(total=_PROBE_TIMEOUT_S),
+            ) as resp:
+                if resp.status == 401:
+                    raise _AuthStormSignal()
+                self._capture_rate_limit_headers(resp.headers)
+                if resp.status not in (200, 201, 207):
+                    return None
+                ct = resp.headers.get("Content-Type", "")
+                if "json" not in ct:
+                    return None
+                return await resp.json()
+        except _TRANSIENT_NET_ERRORS:
+            return None
+
+    # ── HTTP helpers ───────────────────────────────────────────────────────────
+
+    async def _get(self, url: str, **kwargs: Any) -> Any:
+        """Authenticated GET — auto-refreshes token on 401."""
+        return await self._request("GET", url, **kwargs)
+
+    async def _post(self, url: str, **kwargs: Any) -> Any:
+        """Authenticated POST."""
+        return await self._request("POST", url, **kwargs)
+
+    async def _put(self, url: str, **kwargs: Any) -> Any:
+        """Authenticated PUT — auto-refreshes token on 401 like _post."""
+        return await self._request("PUT", url, **kwargs)
+
+    def _rate_lockout_remaining(self) -> int:
+        """Seconds left on the account-scoped rate-limit lockout (0 = none).
+
+        Self-clearing: once the deadline passes, the lock is dropped so the
+        next request goes through normally."""
+        if self._rate_limit_locked_until is None:
+            return 0
+        remaining = self._rate_limit_locked_until - time.monotonic()
+        if remaining <= 0:
+            self._rate_limit_locked_until = None
+            return 0
+        return int(remaining)
+
+    def _enter_rate_lockout(self, seconds: int, status: int) -> None:
+        """Pause all requests on this client for ``seconds`` (B4)."""
+        self._rate_limit_locked_until = time.monotonic() + seconds
+        _LOGGER.warning(
+            "Account rate-limit lockout (HTTP %d) on %s — pausing all requests"
+            " for %d min to avoid a multi-hour account lock",
+            status, self._brand.name, seconds // 60,
+        )
+
+    async def _request(
+        self, method: str, url: str, retry: bool = True, _attempt: int = 0, **kwargs: Any
+    ) -> Any:
+        """Execute an authenticated request with retry for transient errors.
+
+        Retry behaviour (v1.8.7 hardening):
+
+        - HTTP 401 → token refresh + 1 retry. Refresh itself is throttled
+          to ``_REFRESH_MAX_PER_HOUR`` per rolling hour (storm protection).
+        - HTTP 429 → exponential backoff up to 3 attempts (5s/10s/20s).
+        - HTTP 500/502/503/504 → exponential backoff up to 3 attempts
+          (3s/6s/12s). 504 added in v1.8.7 — Gateway Timeouts from the
+          CARIAD BFF are routine on weekends and were previously surfaced
+          as fatal API errors.
+        - Transient network errors (DNS / connection refused / mid-stream
+          disconnects / asyncio timeouts) → same backoff as server errors.
+          Verified pattern from we_connect_id #166 and myskoda #731.
+        - HTTP 430 / repeated 429 → account-scoped lockout (B4): stop sending
+          on this client for a cool-down window so a rate-limited account does
+          not get hammered into a multi-hour lock.
+        """
+        locked = self._rate_lockout_remaining()
+        if locked > 0:
+            raise APIError(
+                429, url,
+                f"rate-limit lockout active — {locked}s remaining (account cooldown)",
+            )
+        # VW EU Two-Way (#1217) — re-mint the ~1 h device-grant Bearer BEFORE it
+        # expires so no request rides an expired token. The reactive 401-retry
+        # below cannot be relied on alone: an expired bearer can come back 403
+        # (not 401) from the CARIAD BFF, which would silently freeze the entry
+        # after ~1 h. Only on the first attempt, VW device-grant with a stored
+        # password; coalesced via stale_access_token so concurrent requests
+        # re-mint once; fail-soft so a re-mint hiccup falls through to the
+        # reactive path rather than sinking the request.
+        _tok = self._tokens
+        if (
+            _attempt == 0
+            and _tok is not None
+            and getattr(_tok, "strategy", "") == "device_grant"
+            and self._brand.name == "volkswagen"
+            and self._vweu_password
+            and (getattr(_tok, "expires_at", 0.0) or 0.0) - time.time()
+            < _DEVICE_GRANT_REMINT_SKEW_S
+        ):
+            try:
+                await self._refresh_tokens(stale_access_token=self._access_token)
+            except Exception as _e:  # noqa: BLE001 — reactive 401 path still backs us up
+                _LOGGER.debug("proactive device_grant re-mint failed: %s", _e)
+        headers = kwargs.pop("headers", {})
+        token_used = self._access_token
+        headers["Authorization"] = f"Bearer {token_used}"
+        headers["Accept"] = "application/json"
+        headers["Content-Type"] = headers.get("Content-Type", "application/json")
+        # v2.14.11 — setdefault, not unconditional assignment. The OLA brands
+        # (SEAT/CUPRA) thread a power-user ``user_agent_override`` through
+        # ``seat_cupra.py`` into ``headers`` BEFORE this call; an unconditional
+        # ``=`` here clobbered it, making the OptionsFlow override dead. Now the
+        # caller-supplied UA wins and BrandConfig.user_agent is only the default.
+        headers.setdefault("User-Agent", self._brand.user_agent)
+
+        try:
+            async with self._session.request(
+                method, url, headers=headers, timeout=ClientTimeout(total=_REQUEST_TIMEOUT), **kwargs
+            ) as resp:
+                if resp.status == 401 and retry:
+                    await self._refresh_tokens(stale_access_token=token_used)
+                    return await self._request(method, url, retry=False, **kwargs)
+                if resp.status == 429 and _attempt < 3:
+                    wait = (2 ** _attempt) * 5
+                    _LOGGER.debug("Rate limited (429) — retrying in %ds", wait)
+                    await asyncio.sleep(wait)
+                    return await self._request(method, url, retry=retry, _attempt=_attempt + 1, **kwargs)
+                if resp.status == 429:
+                    # retries exhausted — back off the whole account (B4)
+                    self._enter_rate_lockout(_LOCKOUT_429_S, 429)
+                if resp.status == 430:
+                    # explicit hard lockout signal — long account-scoped hold (B4)
+                    self._enter_rate_lockout(_LOCKOUT_430_S, 430)
+                if resp.status in (500, 502, 503, 504) and _attempt < 3:
+                    wait = (2 ** _attempt) * 3
+                    _LOGGER.debug("Server error %d — retrying in %ds", resp.status, wait)
+                    await asyncio.sleep(wait)
+                    return await self._request(method, url, retry=retry, _attempt=_attempt + 1, **kwargs)
+                if resp.status == 204:
+                    self._capture_rate_limit_headers(resp.headers)
+                    return None
+                if resp.status not in (200, 201, 202, 207):
+                    body = await resp.text()
+                    raise APIError(resp.status, url, body)
+                # v1.19.1 — capture quota headers on successful response
+                # only (4xx/5xx may omit them or send stale values).
+                self._capture_rate_limit_headers(resp.headers)
+                ct = resp.headers.get("Content-Type", "")
+                if "json" in ct:
+                    return await resp.json()
+                return await resp.text()
+        except _TRANSIENT_NET_ERRORS as err:
+            if _attempt < 3:
+                wait = (2 ** _attempt) * 3
+                _LOGGER.debug(
+                    "Transient network error (%s) — retrying in %ds",
+                    type(err).__name__,
+                    wait,
+                )
+                await asyncio.sleep(wait)
+                return await self._request(
+                    method, url, retry=retry, _attempt=_attempt + 1, **kwargs
+                )
+            raise APIError(0, url, f"transient: {type(err).__name__}: {err}") from err
+
+    async def _refresh_tokens(
+        self, *, for_command: bool = False, stale_access_token: str | None = None
+    ) -> None:
+        """Attempt token refresh; fall back to full re-login.
+
+        Uses a lock to prevent concurrent refresh attempts from racing.
+
+        Storm protection (v1.8.7): if more than ``_REFRESH_MAX_PER_HOUR``
+        refresh attempts occur within ``_REFRESH_WINDOW_S`` seconds, raise
+        ``AuthenticationError`` to surface the problem instead of silently
+        looping. The coordinator catches this in its poll loop and triggers
+        the HA reauth flow — the user gets a UI prompt instead of a slowly
+        rate-limited account. Patterns from myskoda #976 and
+        volkswagencarnet #683.
+
+        v2.15.12 (#584): ``for_command=True`` bills the attempt against the
+        SEPARATE ``_cmd_refresh_history`` budget. A failing remote command must
+        never spend the data-plane's refresh budget, otherwise a few failed
+        button presses trip the storm guard for the READ poll and take every
+        entity offline. Command storms still raise (bounded, own budget) but
+        stay contained to the service call.
+        """
+        if self._refresh_lock is None:
+            self._refresh_lock = asyncio.Lock()
+        async with self._refresh_lock:
+            # #1078 single-flight: one Škoda poll fires ~14 concurrent GETs
+            # (get_status asyncio.gather); on a just-expired bearer they all 401
+            # at once and each lands here. They serialise on this lock, but
+            # without this guard each still books a refresh, so a SINGLE expiry
+            # event spends the whole _REFRESH_MAX_PER_HOUR budget in seconds and
+            # self-trips the storm guard at a perfectly healthy interval. If a
+            # concurrent waiter already rotated the bearer while we queued, our
+            # 401 is already resolved: return so the caller retries with the fresh
+            # token, without counting an attempt. A genuine storm (refresh fails,
+            # or the new bearer is itself rejected) leaves the token unchanged, so
+            # this never suppresses a real one. Only the reactive _request 401
+            # path passes stale_access_token; the command/pre-flight callers keep
+            # stale_access_token=None and are unchanged.
+            if (
+                stale_access_token is not None
+                and self._tokens is not None
+                and self._tokens.access_token != stale_access_token
+            ):
+                return
+            now = time.monotonic()
+            cutoff = now - _REFRESH_WINDOW_S
+            history = (
+                self._cmd_refresh_history if for_command else self._refresh_history
+            )
+            history[:] = [t for t in history if t > cutoff]
+            if len(history) >= _REFRESH_MAX_PER_HOUR:
+                _LOGGER.error(
+                    "Token refresh storm: %d attempts in last %ds for %s (%s) —"
+                    " pausing to prevent IP ban; please reauthenticate from the UI",
+                    len(history),
+                    _REFRESH_WINDOW_S,
+                    self._brand.name,
+                    "command" if for_command else "data",
+                )
+                # #1078 — flag the DATA-plane storm so the coordinator can raise
+                # a "raise your update interval" Repair. Commands have their own
+                # bounded budget and a separate remedy, so don't flag those.
+                if not for_command:
+                    self.refresh_storm_detected = True
+                raise AuthenticationError(
+                    "Token refresh storm — please reauthenticate"
+                )
+            history.append(now)
+
+            # v2.15.0 — durable MBB bearer refresh. The MBB OAuth backend
+            # (mbboauth-1d) refreshes via grant_type=refresh_token with the
+            # registered ``X-Client-Id`` — NOT via self._auth.refresh() (which
+            # routes VW to the dead/attestation-gated CARIAD BFF). This is the
+            # whole point of the MBB recipe: a long-lived, password-free
+            # refresh that survives restarts. On failure the error propagates →
+            # the coordinator surfaces a reauth (the user re-runs the MBB QR).
+            if (
+                self._tokens
+                and self._tokens.strategy == "mbb"
+                and self._tokens.refresh_token
+            ):
+                from ..auth import _mbboauth  # noqa: PLC0415
+
+                mbb_tokens = await _mbboauth.refresh(
+                    self._session,
+                    self._tokens.refresh_token,
+                    client_id=self._mbb_client_id or _mbboauth.MBB_SHARED_CLIENT_ID,
+                )
+                from ..models import TokenSet  # noqa: PLC0415
+
+                self._tokens = TokenSet(
+                    access_token=mbb_tokens.access_token,
+                    refresh_token=mbb_tokens.refresh_token
+                    or self._tokens.refresh_token,
+                    id_token=self._tokens.id_token,
+                    expires_at=mbb_tokens.expires_at,
+                    strategy="mbb",
+                )
+                await self._notify_tokens_changed()
+                self.account_lock_detected = False
+                self.refresh_storm_detected = False
+                self._lock_history.clear()
+                return
+
+            # v2.13.0 — device-code/QR portal tokens refresh at the IDP token
+            # endpoint as a PUBLIC client, NOT via self._auth.refresh() (which
+            # routes VW to the dead CARIAD BFF). Re-inject the fresh bearer into
+            # the live portal connector so it never 401s mid-poll. If the IDP
+            # rejects the refresh (the one unverified runtime assumption), the
+            # error propagates → the coordinator triggers a QR reauth prompt.
+            if (
+                self._tokens
+                and self._tokens.strategy == "device_grant_portal"
+                and self._tokens.refresh_token
+            ):
+                from ..auth._device_grant import (  # noqa: PLC0415
+                    DeviceAuthorizationGrant,
+                    portal_dag_config,
+                )
+
+                pc = portal_dag_config(self._brand.name)
+                if pc is not None:
+                    client_id, scope = pc
+                    grant = DeviceAuthorizationGrant(
+                        self._session, client_id, scope=scope,
+                        strategy="device_grant_portal",
+                    )
+                    self._tokens = await grant.refresh(self._tokens.refresh_token)
+                    if getattr(self, "_eu_portal", None) is not None:
+                        self._eu_portal.set_bearer(self._tokens.access_token)
+                    await self._notify_tokens_changed()
+                    self.refresh_storm_detected = False
+                    return
+
+            # 2026-08 — VW EU Two-Way (650d46ca): the 1h Bearer is NON-refreshable
+            # (public client → refresh 401 invalid_client), so RE-MINT via a fresh
+            # headless device-grant login rather than self._auth.refresh (which
+            # would 401 and route VW to the dead CARIAD BFF). The stored password
+            # drives the login; the shared session's cookie jar carries the 24h
+            # re-auth cookie, so most re-mints take the password-free QUICK route
+            # (silent confirm). On failure the error propagates → coordinator reauth.
+            if (
+                self._tokens
+                and self._tokens.strategy == "device_grant"
+                and self._brand.name == "volkswagen"
+                and self._vweu_password
+            ):
+                from ..auth._vweu_twoway_login import VwEuTwoWayLogin  # noqa: PLC0415
+
+                self._tokens = await VwEuTwoWayLogin(self._session).login(
+                    self._vweu_email, self._vweu_password
+                )
+                await self._notify_tokens_changed()
+                self.account_lock_detected = False
+                self.refresh_storm_detected = False
+                self._lock_history.clear()
+                return
+
+            if self._tokens and self._tokens.refresh_token:
+                try:
+                    self._tokens = await self._auth.refresh(self._tokens.refresh_token)
+                    # v1.19.2 (#118) — persist refreshed tokens so the
+                    # next HACS update / HA restart picks up the
+                    # already-valid session instead of re-running the
+                    # full OAuth login (which counts against quota +
+                    # can trigger reauth-storm on transient failures).
+                    await self._notify_tokens_changed()
+                    # v2.9.0 - successful refresh clears any prior
+                    # lock signal so the coordinator's Repair issue
+                    # gets dismissed on the next cycle.
+                    self.account_lock_detected = False
+                    self.refresh_storm_detected = False
+                    self._lock_history.clear()
+                    return
+                except TokenExpiredError:
+                    pass
+                except APIError as err:
+                    # v2.9.0 - account-lock detection. Record HTTP 423
+                    # or HTTP 403 with throttle-marker bodies; if 3 such
+                    # responses arrive inside the 30-min sliding window,
+                    # flip ``account_lock_detected`` so the coordinator
+                    # surfaces a Repair issue on the next poll.
+                    self._record_lock_signal(err.status, err.body)
+                    raise
+            _LOGGER.info("Token refresh failed — re-authenticating for %s", self._brand.name)
+            await self.authenticate()
+            # v2.9.0 - a successful full re-auth also clears the lock.
+            self.account_lock_detected = False
+            self.refresh_storm_detected = False
+            self._lock_history.clear()
+
+    def _record_lock_signal(self, status: int, body: str) -> None:
+        """v2.9.0 - feed the VW account-lock sliding-window detector.
+
+        Called from ``_refresh_tokens`` whenever an ``APIError`` lands
+        with a status that matches the lock signature (423 unambiguously,
+        or 403 with one of ``_LOCK_BODY_MARKERS`` in the body). After
+        ``_LOCK_THRESHOLD`` such signals inside ``_LOCK_WINDOW_S``,
+        flips ``self.account_lock_detected`` so the coordinator can
+        raise the Repair issue on its next iteration.
+        """
+        is_lock = False
+        if status == 423:
+            is_lock = True
+        elif status == 403 and body:
+            body_l = body.lower()
+            if any(marker in body_l for marker in _LOCK_BODY_MARKERS):
+                is_lock = True
+        if not is_lock:
+            return
+        now = time.monotonic()
+        cutoff = now - _LOCK_WINDOW_S
+        self._lock_history = [(t, s) for (t, s) in self._lock_history if t > cutoff]
+        self._lock_history.append((now, status))
+        if len(self._lock_history) >= _LOCK_THRESHOLD:
+            if not self.account_lock_detected:
+                _LOGGER.warning(
+                    "Brand account appears to be temporarily locked for %s "
+                    "(%d lock-class auth responses in last %ds, last status=%d). "
+                    "Surfacing Repair issue.",
+                    self._brand.name,
+                    len(self._lock_history),
+                    _LOCK_WINDOW_S,
+                    status,
+                )
+            self.account_lock_detected = True
+
+    @property
+    def _access_token(self) -> str:
+        if not self._tokens:
+            raise AuthenticationError("Not authenticated — call authenticate() first.")
+        return self._tokens.access_token
+
+    def _capture_rate_limit_headers(self, headers: Any) -> None:
+        """v1.19.1 — Read X-RateLimit-* headers from a response.
+
+        Most VAG backends send these on successful 2xx responses:
+
+        - ``X-RateLimit-Remaining``: int, requests left in the current
+          window. Most useful field — surfaced as
+          ``requests_remaining_today`` sensor by the coordinator.
+        - ``X-RateLimit-Limit``: int, total budget in the current
+          window. Useful for percentage calculations in HA templates.
+        - ``X-RateLimit-Reset``: ISO-8601 timestamp or epoch seconds —
+          when the budget refreshes. Stored as opaque string; the
+          coordinator can parse if needed.
+
+        Older backends omit these headers — we leave the attributes
+        at their previous value rather than reset to None, so a
+        single header-less endpoint doesn't blank an otherwise valid
+        observation. ``None`` means we've never seen the header at all.
+
+        Headers are case-insensitive per RFC 9110; aiohttp's
+        ``CIMultiDict`` handles that already.
+        """
+        remaining = headers.get("X-RateLimit-Remaining")
+        if remaining is not None:
+            try:
+                self.last_rate_limit_remaining = int(remaining)
+            except (TypeError, ValueError):
+                # Some backends ship a float ("1499.5") or "unlimited"
+                # — try float fallback; otherwise leave previous value.
+                try:
+                    self.last_rate_limit_remaining = int(float(remaining))
+                except (TypeError, ValueError):
+                    pass
+        limit = headers.get("X-RateLimit-Limit")
+        if limit is not None:
+            try:
+                self.last_rate_limit_limit = int(limit)
+            except (TypeError, ValueError):
+                try:
+                    self.last_rate_limit_limit = int(float(limit))
+                except (TypeError, ValueError):
+                    pass
+        reset = headers.get("X-RateLimit-Reset")
+        if reset is not None:
+            self.last_rate_limit_reset_at = str(reset)
+
+    @contextmanager
+    def _parser_job(self, job_name: str) -> Iterator[None]:
+        """v2.8.0 quick win D — wrap a parser block; count success/failure.
+
+        Each brand client's ``get_status()`` wraps each named parser job
+        (vehicle_status, charging, climatisation, oil_level, etc.) with
+        ``with self._parser_job("name"):``. Successful exit increments
+        the ``success`` counter; any exception inside the block increments
+        ``fail``, stores the truncated error text in ``last_error``, then
+        re-raises so the existing except clauses in ``get_status()`` decide
+        whether to swallow or propagate (we do not change behavior here).
+
+        Counters are exposed via ``self.parser_stats`` and surfaced in
+        diagnostics export for users debugging silent "Unbekannt" sensors.
+
+        Defensive: when the client was instantiated via ``__new__``
+        (the existing parser-unit tests do this to skip the HA setup
+        chain), ``parser_stats`` is not initialised. Fall back to a
+        local stats dict so the counters become no-ops instead of
+        raising AttributeError mid-parse.
+        """
+        stats_store = getattr(self, "parser_stats", None)
+        if stats_store is None:
+            stats_store = {}
+            self.parser_stats = stats_store  # type: ignore[attr-defined]
+        stats = stats_store.setdefault(
+            job_name, {"success": 0, "fail": 0, "last_error": ""}
+        )
+        try:
+            yield
+            stats["success"] = int(stats.get("success", 0)) + 1
+        except Exception as err:  # noqa: BLE001
+            stats["fail"] = int(stats.get("fail", 0)) + 1
+            stats["last_error"] = str(err)[:200]
+            raise
+
+    def _note_parser_job(self, job_name: str, *, present: bool) -> None:
+        """v2.8.0 quick win D — record sub-job presence in ``parser_stats``.
+
+        Companion to ``_parser_job``. Used for the selectivestatus family
+        of jobs where one HTTP call returns many sub-blocks (charging,
+        climatisation, oilLevel, tyrePressure, auxiliaryHeating,
+        door_lock, service_care). Each brand parser calls this once
+        per logical sub-job after probing the expected top-level key:
+        ``present=True`` when the backend shipped the block,
+        ``present=False`` when the block is missing or the wrong shape.
+        Lets the diagnostics export show "which sub-job stopped flowing"
+        without forcing huge with-block indentation diffs in the existing
+        defensively-parsed ``_parse_status`` methods.
+
+        Same defensive-getattr as ``_parser_job``: tolerate clients
+        instantiated via ``__new__`` in unit tests.
+        """
+        stats_store = getattr(self, "parser_stats", None)
+        if stats_store is None:
+            stats_store = {}
+            self.parser_stats = stats_store  # type: ignore[attr-defined]
+        stats = stats_store.setdefault(
+            job_name, {"success": 0, "fail": 0, "last_error": ""}
+        )
+        if present:
+            stats["success"] = int(stats.get("success", 0)) + 1
+        else:
+            stats["fail"] = int(stats.get("fail", 0)) + 1
+            if not stats.get("last_error"):
+                stats["last_error"] = "sub-job absent in selectivestatus response"
+
+    def _val(self, data: dict[str, Any], *path: str, default: Any = None) -> Any:
+        """Safe nested dict access. _val(d, 'a', 'b', 'c') → d['a']['b']['c']."""
+        node: Any = data
+        for key in path:
+            if not isinstance(node, dict):
+                return default
+            node = node.get(key, default)
+            if node is None:
+                return default
+        return node

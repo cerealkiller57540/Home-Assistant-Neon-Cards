@@ -1,0 +1,2113 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "VW Group Connect instellen",
+        "description": "Hoe wil je je aanmelden?\n\n**Browser-login (aanbevolen)** — open een URL op je telefoon of laptop, meld je aan bij je Brand ID-account en keur het apparaat goed. Er wordt nooit een wachtwoord opgeslagen in Home Assistant. Beschikbaar voor Audi, SEAT en CUPRA.\n\n**E-mail + wachtwoord (verouderd)** — voer je Brand ID-inloggegevens rechtstreeks in. Vereist voor Volkswagen EU, Škoda en Porsche.",
+        "menu_options": {
+          "browser_login": "Browser-login (aanbevolen)",
+          "email_password": "E-mail + wachtwoord (verouderd)",
+          "website_authproxy": "Volkswagen.de-website (bèta — alleen-lezen)",
+          "mbb_login": "Volkswagen EU — Duurzame login (MBB, tweerichtings-alpha)"
+        }
+      },
+      "mbb_login": {
+        "title": "Volkswagen EU — Duurzame login (MBB, BETA)",
+        "description": "**Experimenteel, opt-in — alleen Volkswagen EU.** Een bevestiging in de browser (geen wachtwoord opgeslagen in Home Assistant) maakt via de oude MBB-backend een duurzaam, vernieuwbaar token aan. Anders dan het alleen-lezen portaal overleeft dit herstarts en ondersteunt het tweerichtings vergrendelen/ontgrendelen op afstand. **Voer je VIN in** (het MBB-token kan je garage niet zelf opsommen) en voeg je S-PIN toe om vergrendelen/ontgrendelen mogelijk te maken. In het volgende scherm zie je een korte code en een URL om op een willekeurig apparaat te openen.",
+        "data": {
+          "mbb_vins": "VIN (voertuigidentificatienummer)",
+          "spin": "S-PIN",
+          "scan_interval": "Bijwerkinterval"
+        },
+        "data_description": {
+          "mbb_vins": "Je 17-cijferige VIN (op de voorruit / het kentekenbewijs). Meerdere auto's: scheiden met een komma. Verplicht — het duurzame MBB-token werkt per VIN maar kan je garage niet opsommen.",
+          "spin": "Optionele 4-cijferige beveiligings-PIN — vereist voor vergrendelen/ontgrendelen op afstand.",
+          "scan_interval": "Minuten tussen het ophalen van voertuiggegevens."
+        }
+      },
+      "website_authproxy": {
+        "title": "Volkswagen.de-website (BÈTA, alleen-lezen)",
+        "description": "**Experimental, opt-in.** Reads your Volkswagen via the volkswagen.de website login instead of the app backend. Volkswagen only, read-only (no remote commands). Sign in with your Volkswagen ID email and password. If your account uses email verification you will be asked for the code next. **Vereiste:** je Volkswagen ID moet de hoofdgebruiker van het voertuig zijn — bevestig je identiteit één keer op volkswagen.de (myVolkswagen → je voertuig). Zonder dit geeft de website geen voertuiggegevens.",
+        "data": {
+          "username": "E-mailadres",
+          "password": "Wachtwoord",
+          "scan_interval": "Update-interval"
+        },
+        "data_description": {
+          "username": "Het e-mailadres van je Volkswagen ID / myVolkswagen-account.",
+          "password": "Je Volkswagen ID-wachtwoord.",
+          "scan_interval": "Hoe vaak gegevens worden opgehaald (minuten). Minimum: 5."
+        }
+      },
+      "website_authproxy_otp": {
+        "title": "E-mailverificatiecode",
+        "description": "Er is een verificatiecode verstuurd naar het e-mailadres van **{username}**.\n\nVoer de code in om het aanmelden bij het Volkswagen.de-website-kanaal (bèta) te voltooien.",
+        "data": {
+          "mfa_code": "Verificatiecode"
+        },
+        "data_description": {
+          "mfa_code": "Code uit je inbox — enkele minuten geldig."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Opnieuw inloggen — {brand}",
+        "description": "De sessie voor **{username}** is verlopen.\n\nVoer uw wachtwoord opnieuw in.",
+        "data": {
+          "password": "Wachtwoord",
+          "spin": "S-PIN"
+        }
+      },
+      "reconfigure": {
+        "title": "VW Group Connect opnieuw configureren",
+        "description": "Wijzig inloggegevens of instellingen zonder de integratie te verwijderen.",
+        "data": {
+          "brand": "Voertuigmerk",
+          "username": "E-mailadres",
+          "password": "Wachtwoord",
+          "spin": "S-PIN",
+          "country": "Regio (alleen Volkswagen VS/Canada)",
+          "scan_interval": "Update-interval"
+        }
+      },
+      "mfa": {
+        "title": "Tweestapsverificatie",
+        "description": "Er is een bevestigingscode verzonden naar **{username}**.\n\nVoer de code in uit uw e-mail of authenticator-app.",
+        "data": {
+          "mfa_code": "Bevestigingscode"
+        },
+        "data_description": {
+          "mfa_code": "6-cijferige code — geldig een paar minuten."
+        }
+      },
+      "email_password": {
+        "title": "Aanmelden met e-mail + wachtwoord (verouderd)",
+        "description": "Verbind je voertuig met Home Assistant.\n\nKies je merk en voer de inloggegevens van de app van je fabrikant in.",
+        "data": {
+          "brand": "Merk van het voertuig",
+          "username": "E-mailadres",
+          "password": "Wachtwoord",
+          "spin": "S-PIN",
+          "country": "Regio (alleen Volkswagen VS/Canada)",
+          "scan_interval": "Update-interval",
+          "enable_mbb_commands": "Duurzame tweerichtingscommando's (MBB) inschakelen — Car-Net Volkswagen / oudere Audi"
+        },
+        "data_description": {
+          "enable_mbb_commands": "De duurzame manier om afstandsbedieningscommando's (vergrendelen/ontgrendelen, klimaat) naar een Volkswagen te sturen — via de oudere Car-Net/MBB-backend, dus het overleeft herstarts. Voor Car-Net-auto's (de meeste PHEV/verbranding, van vóór ID); nieuwere ID/MEB-modellen komen niet in aanmerking, laat het daar dus uit. Uitlezingen komen nog steeds van het portaal hierboven; dit voegt alleen het commandokanaal en een eenmalige browserbevestiging toe (er wordt geen extra wachtwoord opgeslagen).",
+          "brand": "Kies je merk — myAudi, WeConnect ID, MyŠkoda, SEAT, CUPRA, VW US/CA of Porsche.",
+          "username": "E-mailadres uit de app van de fabrikant.",
+          "password": "Wachtwoord uit de app.",
+          "spin": "Alleen nodig voor vergrendelen. App → Beveiliging → S-PIN.",
+          "scan_interval": "Hoe vaak gegevens worden opgehaald. Standaard: 5 min. Minimum: 3 min."
+        }
+      },
+      "browser_login": {
+        "title": "Browser-login — kies je merk",
+        "description": "Kies het merk van het voertuig dat je wilt verbinden. Op het volgende scherm zie je een korte code en een URL die je op elk apparaat met een browser kunt openen.",
+        "data": {
+          "brand": "Merk van het voertuig",
+          "spin": "S-PIN",
+          "scan_interval": "Update-interval"
+        },
+        "data_description": {
+          "brand": "Alleen merken met browser-login-ondersteuning worden getoond. Gebruik 'E-mail + wachtwoord' voor Volkswagen EU en Porsche.",
+          "scan_interval": "Minuten tussen de gegevensopvragingen van het voertuig.",
+          "spin": "Optionele 4-cijferige beveiligings-PIN voor acties op afstand (vergrendelen, ontgrendelen, klimaat)."
+        }
+      },
+      "browser_login_pending": {
+        "title": "Inlogcode aanvragen…",
+        "description": "De IDP om een eenmalige apparaatcode vragen."
+      },
+      "browser_login_approve": {
+        "title": "Goedkeuren in je browser",
+        "description": "Scan de QR-code met je telefoon of open de URL op een willekeurig apparaat. Meld je aan bij je Brand ID-account als daarom wordt gevraagd, bevestig de code, vink daarna het vakje hieronder aan en klik op Verzenden.",
+        "data": {
+          "qr_code": "Scan met je telefooncamera om de inlogpagina te openen",
+          "verification_url": "Of open deze URL in een willekeurige browser",
+          "user_code": "Code om te bevestigen in de browser",
+          "approved_in_browser": "Ik heb goedgekeurd in de browser"
+        },
+        "data_description": {
+          "qr_code": "Richt je telefooncamera op de QR-code. De inlogpagina opent in de browser van je telefoon, vooraf ingevuld met de onderstaande code.",
+          "verification_url": "Als je niet kunt scannen: kopieer deze link, open hem op een willekeurig apparaat en meld je aan bij je Brand ID-account.",
+          "user_code": "Bevestig na het aanmelden deze code in de browser om Home Assistant goed te keuren.",
+          "approved_in_browser": "Laat aangevinkt. Klik pas op Verzenden nadat je bent aangemeld en de code in de browser hebt bevestigd."
+        }
+      },
+      "companion_adb": {
+        "title": "Reservetelefoon (ADB) — experimenteel",
+        "description": "Lees je auto uit en bedien hem door de officiële app op een reserve-Android-telefoon via ADB aan te sturen. Dit is EXPERIMENTEEL en optioneel (opt-in). Je hebt een tweede telefoon nodig die ingelogd blijft in de merk-app, met ADB via Wi-Fi ingeschakeld. Een oudere telefoon (Android 10 of ouder) maakt hier rechtstreeks verbinding; een moderne telefoon (Android 11+, draadloos debuggen) heeft de 'VW Group App ADB Bridge'-add-on nodig, waar je dit vervolgens op richt. Volkswagen is geverifieerd; de andere merken zijn voorlopig alleen-lezen totdat een schermindeling van een echt apparaat is bevestigd. Er wordt niets geroot en er worden geen app-tokens uitgelezen — de integratie leest alleen het scherm en tikt op knoppen.",
+        "data": {
+          "brand": "Merk van het voertuig",
+          "adb_host": "IP-adres van de telefoon",
+          "adb_port": "ADB-poort",
+          "vin": "VIN (de auto die de app toont)",
+          "spin": "S-PIN (optioneel)",
+          "companion_use_addon": "Verbinden via de ADB Bridge-add-on",
+          "companion_addon_token": "Add-on-token"
+        },
+        "data_description": {
+          "adb_host": "Het adres van de telefoon in je netwerk, bijv. 192.168.1.42.",
+          "adb_port": "Meestal 5555 voor ADB via Wi-Fi.",
+          "vin": "Het VIN van 17 tekens van de auto die in de app wordt getoond.",
+          "companion_use_addon": "Vink dit aan voor een telefoon met Android 11 of nieuwer, die alleen draadloos debuggen biedt. Voer dan hierboven het adres van de ADD-ON in in plaats van dat van de telefoon.",
+          "companion_addon_token": "Alleen nodig als je api_token in de add-on hebt ingesteld."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbinding mislukt. Controleer inloggegevens en internetverbinding.",
+      "unknown": "Onbekende fout. Controleer de logboeken.",
+      "terms_and_conditions": "Gebruiksvoorwaarden moeten worden geaccepteerd. Log eenmaal in via de app.",
+      "marketing_consent": "Nieuwe privacytoestemming vereist. App → Profiel → Toestemmingen.",
+      "two_factor_required": "Tweestapsverificatie vereist. Log handmatig in via de app.",
+      "email_two_factor_required": "E-mail 2FA vereist. Controleer je inbox (en spam) op een 6-cijferige code, log dan handmatig in via de app.",
+      "too_many_requests": "Account tijdelijk geblokkeerd. Wacht 15 minuten.",
+      "invalid_credentials": "E-mailadres of wachtwoord onjuist.",
+      "portal_interaction_required": "Het EU Data Act-portaal vereist een eenmalige actie in je browser of merk-app (bijv. voorwaarden accepteren, toestemming bevestigen, onboarding/regiokeuze voltooien) voordat headless-toegang werkt. Dit is GEEN wachtwoordprobleem — open het portaal één keer in een browser, voltooi de melding en probeer het opnieuw.",
+      "upstream_unavailable": "VW backend tijdelijk onbereikbaar. Dit is een serverprobleem bij VW, GEEN inlogfout. Wacht 5–15 minuten en probeer opnieuw. Configureer de integratie NIET opnieuw.",
+      "na_signin_attestation": "Je e-mailadres en wachtwoord kloppen — Volkswagen North America blokkeert deze login nu achter een apparaat-attestatiecontrole van Google (Play Integrity) die alleen de officiële app op een echte telefoon kan doorstaan. Je wachtwoord opnieuw invoeren helpt niet; dit is een server-side blokkade van VW, geen probleem met je inloggegevens. (Gevolgd: #1165.)",
+      "brand_not_dag_eligible": "Het geselecteerde merk ondersteunt geen browser-login. Gebruik in plaats daarvan de e-mail + wachtwoord-methode.",
+      "skoda_qr_retired": "De wachtwoordloze (QR-)login van Škoda is door Volkswagen uitgeschakeld en werkt niet meer. Ga terug en kies “E-mail + wachtwoord (verouderd)”, selecteer daar Škoda en meld je aan met je MyŠkoda-e-mailadres en -wachtwoord.",
+      "still_waiting_browser": "Nog steeds wachten op goedkeuring in de browser. Open de bovenstaande URL, meld je aan, bevestig de code en klik daarna opnieuw op Verzenden.",
+      "companion_cannot_connect": "Kon de telefoon niet bereiken via ADB. Controleer of hij verbonden is met het netwerk, of ADB via Wi-Fi aanstaat en of je de foutopsporingsmelding hebt geaccepteerd.",
+      "companion_needs_addon": "Dit lijkt een telefoon met Android 11 of nieuwer die draadloos debuggen gebruikt; de directe verbinding hier kan daar niet mee overweg (dat is TLS + koppelen). Installeer de add-on 'VW Group App ADB Bridge' (github.com/its-me-prash/vwgroup-app-adb-bridge) en laat de companion daarnaar wijzen. Oudere telefoons (Android 10 of ouder) verbinden hier rechtstreeks.",
+      "companion_app_not_found": "Verbonden met de telefoon, maar de merk-app is er niet op geïnstalleerd.",
+      "companion_unknown_brand": "Voor dat merk is nog geen voorinstelling voor de reservetelefoon beschikbaar."
+    },
+    "abort": {
+      "already_configured": "Dit account is al geconfigureerd.",
+      "reauth_successful": "Herauthenticatie geslaagd.",
+      "reconfigure_successful": "Configuratie succesvol bijgewerkt.",
+      "mbb_not_eligible": "Je voertuig komt niet in aanmerking voor de duurzame MBB-login — de backend gaf \"Unknown user\" terug. Het is een nieuwer ID-/MEB-model (ID.3/4/5, e-up enz.) dat nooit in het oude Car-Net/MBB-systeem was geregistreerd, dus de duurzame login en de commando's op afstand kunnen het niet bereiken. Gebruik voor zulke voertuigen het EU Data Act-portaalkanaal (of de e-mail-+-wachtwoordlogin). De MBB-login is voor oudere Car-Net-auto's (de meeste plug-inhybride / verbrandingsmodellen)."
+    },
+    "progress": {
+      "awaiting_browser_login": "Open {verification_uri} in een willekeurige browser, meld je aan met je Brand ID-account en bevestig de code {user_code}.",
+      "requesting_device_code": "Een eenmalige inlogcode aanvragen bij de IDP…"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "VW Group Connect — Instellingen",
+        "data": {
+          "scan_interval": "Update-interval",
+          "spin": "S-PIN",
+          "battery_nominal_kwh": "Nominale accucapaciteit (kWh, voor State of Health)",
+          "enable_reverse_geocoding": "Reverse geocoding (parkeeradres)",
+          "read_only_mode": "Alleen-lezen modus",
+          "companion_read_charge_detail": "Companion: laaddoel lezen (navigeert in de app)",
+          "companion_wake_sleep": "Companion: scherm wekken om op te halen, daarna weer in slaap",
+          "force_ppe_climate": "Audi PPE/PPC klimaat-body (Q6/A6 e-tron, RS e-tron GT Facelift, A3 2024+ PHEV)",
+          "enable_push_mqtt": "Skoda push-updates (MQTT, EXPERIMENTEEL)",
+          "enable_push_fcm": "CUPRA/SEAT push-updates (FCM, EXPERIMENTEEL)",
+          "enable_push_audi_vw": "Audi/VW push updates (Cariad FCM, EXPERIMENTAL)",
+          "client_id_override": "OAuth client_id-overschrijving (gevorderde gebruikers)",
+          "eu_data_act_auto_kickoff": "EU Data Act: Custom Data Request automatisch starten",
+          "supplementary_authproxy": "Volkswagen.de-leeskanaal toevoegen (gegevens samenvoegen)",
+          "hide_empty_entities": "Entiteiten zonder gegevens verbergen",
+          "supplementary_eu_portal": "EU Data Act-portaal-leeskanaal toevoegen",
+          "remove_supplementary_authproxy": "vw.de-leeskanaal verwijderen",
+          "remove_supplementary_eu_portal": "EU Data Act-portaal-leeskanaal verwijderen",
+          "supplementary_tibber": "Tibber-leeskanaal toevoegen (EV-laadgegevens)",
+          "remove_supplementary_tibber": "Tibber-leeskanaal verwijderen",
+          "abrp_enable": "ABRP-telemetrie verzenden inschakelen",
+          "abrp_api_key": "ABRP-api_key (ontwikkelaarssleutel)",
+          "abrp_user_token": "ABRP-token (per voertuig)",
+          "keep_raw_datasets": "Ruwe EU Data Act-datasets bewaren (diagnose)",
+          "test_cohort": "Help VW Group Connect verbeteren (opt-in testgroep)",
+          "vweu_device_grant": "VW EU Two-Way toevoegen — commando's + live uitlezingen (BÈTA)",
+          "remove_vweu_twoway": "VW EU Two-Way verwijderen (terug naar het vorige kanaal)"
+        },
+        "data_description": {
+          "scan_interval": "Hoe vaak gegevens worden opgehaald (minuten). Minimum: 3.",
+          "spin": "S-PIN voor deurvergrendeling.",
+          "enable_reverse_geocoding": "Verzendt parkeer-GPS naar OpenStreetMap Nominatim om straat/stad te vinden. Standaard uit (privacy).",
+          "read_only_mode": "Indien ingeschakeld worden alleen statussensoren aangemaakt — geen schakelaars, knoppen, sloten, klimaat of schuifregelaars die commando's verzenden. Handig als je voertuigtelemetrie wilt zonder risico op onbedoelde bediening. Herlaad de integratie na inschakelen.",
+          "companion_read_charge_detail": "Alleen voor Companion (ADB). Leest ook het laaddoel, het vermogen en de resterende tijd die achter het laaddetailscherm zitten. Hiervoor wordt er in de app GETIKT om daarheen te navigeren (ongeveer elke 15 minuten), dus schakel dit pas in als je hebt bevestigd dat dit op je telefoon werkt. Standaard uit. Herlaad de integratie na het wijzigen.",
+          "companion_wake_sleep": "Alleen voor Companion (ADB). Wekt het scherm van de telefoon vóór elke opvraging en laat het daarna weer slapen, zodat een vergrendelde of slapende telefoon de app toont tijdens het lezen zonder het scherm permanent aan te laten staan. Standaard uit. Herlaad de integratie na het wijzigen.",
+          "force_ppe_climate": "Alleen voor Audi. Forceert het nieuwe PPE/PPC body-formaat (climatisationMode verplicht, targetTemperature weggelaten) bij klimaat-start. Alleen inschakelen als je een Q6 e-tron, A6 e-tron, RS e-tron GT Facelift of A3 2024+ PHEV bezit — anders geeft de API 400 terug. Integratie herladen na inschakelen.",
+          "enable_push_mqtt": "EXPERIMENTEEL: alleen Skoda. Schakelt realtime MQTT-push van de Skoda mysmob-backend in (vereist de Python-pakketten aiomqtt + firebase-messaging — momenteel lazy-imported, niet vooraf geïnstalleerd). Basisfase in v1.18.0; live-activering wacht op validatie door community-testers. Als push niet beschikbaar is, valt de integratie stilletjes terug op polling. Herlaad de integratie na het wijzigen.",
+          "enable_push_fcm": "EXPERIMENTEEL: alleen CUPRA/SEAT. Schakelt realtime Firebase Cloud Messaging-push van de OLA-backend in (vereist het Python-pakket firebase-messaging — dezelfde lazy-import als de Skoda MQTT-schakelaar in v1.18.0). Basisfase in v1.19.0; live-activering wacht op validatie door community-testers. Als push niet beschikbaar is, valt de integratie stilletjes terug op polling. Herlaad de integratie na het wijzigen.",
+          "enable_push_audi_vw": "EXPERIMENTAL: Audi/VW only. Enables real-time push notifications from Cariad FCM channel (same one myAudi/WeConnect mobile apps use — covers lock/unlock results, charging-state, climate, alarm). Requires firebase-messaging Python package (same as Skoda MQTT + CUPRA/SEAT FCM). Foundation phase in v1.23.0; live activation pending community-tester validation. If push is unavailable, the integration silently falls back to polling. Reload the integration after toggling.",
+          "client_id_override": "Noodoplossing voor gevorderde gebruikers, voor wanneer de community een nieuwe OAuth client_id in een nieuwe VW Group-APK ontdekt voordat onze dagelijkse atlas-builder deze oppikt. Plak hier de volledige UUID@apps_vw-dilab_com-tekenreeks; de resolver probeert deze bij elke authenticatie als EERSTE, met alle bestaande client_ids nog steeds als fallback in de keten. Laat leeg voor het standaardgedrag. Formaat: 8-4-4-4-12 hexadecimale tekens gevolgd door @apps_vw-dilab_com. Onjuist opgemaakte waarden worden stilletjes genegeerd.",
+          "eu_data_act_auto_kickoff": "Alleen zinvol wanneer de integratie in de alleen-lezen EU Data Act-portalmodus draait (live BFF-strategieën zijn mislukt). Wanneer AAN, controleert de coördinator bij het opstarten per VIN op een actieve 15-minuten Custom Data Request en maakt er een aan als die niet bestaat. Het starten impliceert een data-abonnement van 1 maand op je account bij het portaal, dus dit is opt-in. Het portaal accepteert MAXIMAAL ÉÉN actieve custom request per VIN tegelijk. Standaard uit.",
+          "abrp_enable": "Live telemetrie naar A Better Routeplanner sturen. Vereist een api_key en een token per voertuig. Uit = geen uitgaande oproepen.",
+          "abrp_api_key": "Een ontwikkelaars-/partnersleutel die je bij iternio registreert (wij leveren er geen). Identificeert de integratie. Wordt nooit gelogd.",
+          "abrp_user_token": "Het 'Generic'-token uit de ABRP-app: Instellingen -> je auto -> Live Data. Wordt nooit gelogd.",
+          "keep_raw_datasets": "Alleen nuttig op het EU Data Act-portaalkanaal. Indien ingeschakeld worden de laatste paar ruwe dataset-ZIP's die het portaal levert op schijf bewaard (onder .storage, per voertuig en met een groottelimiet), zodat een verkeerde of ontbrekende waarde kan worden gereproduceerd uit precies de bytes die je auto heeft verzonden. Deze bestanden bevatten je GPS-locatie, VIN en telemetrie, dus standaard staat dit uit – schakel het alleen in tijdens het oplossen van problemen.",
+          "test_cohort": "Standaard uitgeschakeld. Zet dit aan om de integratie experimenteel gegevens van je auto te laten uitlezen — zoals de lopende poging om de GPS-locatie van Volkswagen EU-auto's terug te halen — en af en toe een melding te tonen die je kunt wegklikken, met de vraag of je een diagnosebestand wilt delen zodat een nieuwe functie voor jouw model bevestigd kan worden. Alles wat je deelt wordt automatisch geanonimiseerd voordat het je systeem verlaat: er zit nooit een VIN, GPS, token of e-mailadres in. Zo worden nieuwe functies ontgrendeld voor jouw auto en voor iedereen die hetzelfde model rijdt — en je kunt het op elk moment weer uitzetten.",
+          "vweu_device_grant": "Alleen Volkswagen, BÈTA. Voegt tweerichtingsbediening (vergrendelen/ontgrendelen, klimaat, laden) en live CARIAD-uitlezingen toe door je aan te melden met je Volkswagen ID. Volkswagen geeft hier maar een token van 1 uur af, dus je wachtwoord wordt opgeslagen om het automatisch te vernieuwen — het wordt alleen naar de eigen loginserver van Volkswagen verzonden en nooit vastgelegd in logboeken of diagnose. Wil je liever geen wachtwoord opslaan, gebruik dan de alleen-lezen kanalen. Dit aanvinken opent de aanmeldstap."
+        }
+      },
+      "add_vwde": {
+        "title": "Volkswagen.de-website (BÈTA, alleen-lezen)",
+        "description": "**Experimental, opt-in.** Reads your Volkswagen via the volkswagen.de website login instead of the app backend. Volkswagen only, read-only (no remote commands). Sign in with your Volkswagen ID email and password. If your account uses email verification you will be asked for the code next. **Vereiste:** je Volkswagen ID moet de hoofdgebruiker van het voertuig zijn — bevestig je identiteit één keer op volkswagen.de (myVolkswagen → je voertuig). Zonder dit geeft de website geen voertuiggegevens.",
+        "data": {
+          "username": "E-mailadres",
+          "password": "Wachtwoord",
+          "scan_interval": "Update-interval"
+        },
+        "data_description": {
+          "username": "Het e-mailadres van je Volkswagen ID / myVolkswagen-account.",
+          "password": "Je Volkswagen ID-wachtwoord.",
+          "scan_interval": "Hoe vaak gegevens worden opgehaald (minuten). Minimum: 5."
+        }
+      },
+      "add_vwde_otp": {
+        "title": "E-mailverificatiecode",
+        "description": "Er is een verificatiecode verstuurd naar het e-mailadres van **{username}**.\n\nVoer de code in om het aanmelden bij het Volkswagen.de-website-kanaal (bèta) te voltooien.",
+        "data": {
+          "mfa_code": "Verificatiecode"
+        },
+        "data_description": {
+          "mfa_code": "Code uit je inbox — enkele minuten geldig."
+        }
+      },
+      "add_portal": {
+        "title": "EU Data Act-portaal — leeskanaal",
+        "description": "Meld je aan bij het EU Data Act-portaal (e-mail + wachtwoord) om SoC, laden, kilometerstand en onderhoud toe te voegen, samengevoegd met je hoofdkanaal.",
+        "data": {
+          "username": "E-mail",
+          "password": "Wachtwoord"
+        }
+      },
+      "add_tibber": {
+        "title": "Tibber — EV-leeskanaal (OAuth2)",
+        "description": "Voeg de laadgegevens van je EV toe via de officiële Data API van Tibber, als alleen-lezen bron met de laagste prioriteit — die vult alleen gaten die de eigen kanalen van je auto leeg laten en overschrijft nooit versere gegevens. Eenmalige instelling:\n\n1. Open {manage_url} en maak een OAuth2-client aan.\n2. Stel de redirect-URI exact in op `{redirect_uri}`.\n3. Geef de lees-scopes vrij (user, homes, vehicles).\n4. Plak hieronder de client ID en de client secret.\n\nAlleen-lezen — Tibber kan je auto niet aansturen. Je auto moet al gekoppeld zijn in de Tibber-app.",
+        "data": {
+          "tibber_client_id": "Tibber client ID",
+          "tibber_client_secret": "Tibber client secret"
+        }
+      },
+      "tibber_authorize": {
+        "title": "Tibber — toegang autoriseren",
+        "description": "Open deze URL in een browser, log in bij Tibber en sta toegang toe:\n\n{authorize_url}\n\nNadat je toegang hebt toegestaan, wordt je browser doorgestuurd naar een my.home-assistant.io-pagina. Kopieer het VOLLEDIGE adres uit de adresbalk (het bevat ?code=…) en plak het hieronder.",
+        "data": {
+          "tibber_auth_response": "Doorgestuurde URL (of de code)"
+        }
+      },
+      "add_vweu_twoway": {
+        "title": "VW EU Two-Way (commando's + live uitlezingen, B\u00c8TA)",
+        "description": "**Experimenteel, opt-in — alleen Volkswagen.** Voegt tweerichtingsbediening (vergrendelen/ontgrendelen, klimaat, laden) en live CARIAD-uitlezingen toe door je aan te melden met je Volkswagen ID. Omdat Volkswagen via deze weg maar een token van 1 uur afgeeft, wordt je wachtwoord **opgeslagen** zodat de integratie het automatisch kan vernieuwen. Het wordt alleen naar de eigen loginserver van Volkswagen verzonden en nooit vastgelegd in logboeken of diagnose. Liever geen wachtwoord opslaan? Gebruik dan de alleen-lezen kanalen. **Vereiste:** je Volkswagen ID moet de hoofdgebruiker van het voertuig zijn.",
+        "data": {
+          "username": "Email Address",
+          "password": "Password"
+        },
+        "data_description": {
+          "username": "Het e-mailadres van je Volkswagen ID / myVolkswagen-account.",
+          "password": "Je Volkswagen ID-wachtwoord. Wordt alleen gebruikt om het toegangstoken van 1 uur te vernieuwen bij de loginserver van Volkswagen; wordt nooit gelogd en uit diagnose weggelaten."
+        }
+      }
+    },
+    "error": {
+      "abrp_credentials_required": "Om ABRP in te schakelen moet je zowel de api_key als het voertuigtoken invoeren.",
+      "invalid_auth": "Aanmelden mislukt. Controleer je Volkswagen ID-e-mailadres en -wachtwoord.",
+      "cannot_connect": "Volkswagen niet bereikbaar. Probeer het opnieuw.",
+      "vweu_mfa_unsupported": "Dit account vereist een e-mail- of authenticatorcode, die VW EU Two-Way nog niet aankan. Gebruik in plaats daarvan de alleen-lezen kanalen.",
+      "vweu_no_bff_data": "Aangemeld, maar Volkswagen leverde op de moderne backend nog geen live gegevens voor deze auto, dus VW EU Two-Way is niet ingeschakeld en je huidige kanaal blijft ongewijzigd. Probeer het later opnieuw of deel een diagnosebestand zodat we het kunnen onderzoeken."
+    },
+    "abort": {
+      "not_volkswagen": "Dit kanaal is alleen beschikbaar voor Volkswagen.",
+      "vweu_twoway_vw_disabled": "Volkswagen heeft de login die dit kanaal gebruikte op 2026-08-18 uitgeschakeld, dus het kan niet meer worden ingesteld. Live uitlezingen blijven werken via het EU Data Act-portaal en een duurzaam commandokanaal via de klassieke Car-Net-backend is in bèta — zie issue #584."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "fuel_level": {
+        "name": "Brandstofniveau"
+      },
+      "battery_soc": {
+        "name": "Accuniveau"
+      },
+      "range_km": {
+        "name": "Actieradius"
+      },
+      "electric_range_km": {
+        "name": "Elektrisch bereik"
+      },
+      "combustion_range_km": {
+        "name": "Brandstofbereik"
+      },
+      "total_range_km": {
+        "name": "Totaal bereik"
+      },
+      "odometer_km": {
+        "name": "Kilometerstand"
+      },
+      "charging_state": {
+        "name": "Laadstatus"
+      },
+      "plug_state": {
+        "name": "Laadstekker"
+      },
+      "target_soc": {
+        "name": "Laaddoel"
+      },
+      "charging_power_kw": {
+        "name": "Laadvermogen"
+      },
+      "charging_rate_kmh": {
+        "name": "Laadsnelheid"
+      },
+      "charge_complete_eta": {
+        "name": "Laden gereed"
+      },
+      "charging_type": {
+        "name": "Laadtype"
+      },
+      "climatisation_state": {
+        "name": "Airco"
+      },
+      "target_temperature": {
+        "name": "Doeltemperatuur"
+      },
+      "outside_temp": {
+        "name": "Buitentemperatuur"
+      },
+      "service_km": {
+        "name": "Volgende service"
+      },
+      "service_due_at": {
+        "name": "Servicedatum"
+      },
+      "service_due_in_days": {
+        "name": "Service over"
+      },
+      "oil_service_km": {
+        "name": "Volgende olieverversing"
+      },
+      "oil_service_at": {
+        "name": "Datum olieverversing"
+      },
+      "oil_service_due_in_days": {
+        "name": "Olieverversing over"
+      },
+      "lights_count": {
+        "name": "Lichten aan (aantal)"
+      },
+      "max_charge_current_a": {
+        "name": "Max. laadstroom"
+      },
+      "vehicle_state": {
+        "name": "Auto-status"
+      },
+      "connection_state": {
+        "name": "Verbindingsstatus"
+      },
+      "parking_address": {
+        "name": "Geparkeerd bij"
+      },
+      "parking_city": {
+        "name": "Stad"
+      },
+      "battery_temp": {
+        "name": "Accu temperatuur"
+      },
+      "voltage_12v": {
+        "name": "12V-accu"
+      },
+      "wake_count_today": {
+        "name": "Wake-ups vandaag"
+      },
+      "last_trip_distance_km": {
+        "name": "Laatste Rit — Afstand"
+      },
+      "last_trip_avg_speed_kmh": {
+        "name": "Laatste Rit — Gem. Snelheid"
+      },
+      "last_trip_avg_fuel_consumption_l_100km": {
+        "name": "Laatste Rit — Gem. Brandstofverbruik"
+      },
+      "last_trip_avg_electric_consumption_kwh_100km": {
+        "name": "Laatste Rit — Gem. Elektrisch Verbruik"
+      },
+      "software_version": {
+        "name": "Software-Versie"
+      },
+      "total_charged_energy_kwh": {
+        "name": "Totaal Geladen Energie"
+      },
+      "last_charging_session_kwh": {
+        "name": "Laatste Sessie — Energie"
+      },
+      "last_charging_session_duration_min": {
+        "name": "Laatste Sessie — Duur"
+      },
+      "last_charging_session_start": {
+        "name": "Laatste laadsessie, start"
+      },
+      "last_charging_session_current_type": {
+        "name": "Laatste laadsessie, stroomtype"
+      },
+      "last_charging_power_curve_points": {
+        "name": "Laatste laadsessie, vermogenscurvepunten"
+      },
+      "active_charging_profile_name": {
+        "name": "Actief Laadprofiel"
+      },
+      "active_charging_profile_target_soc_pct": {
+        "name": "Actief Profiel — Doel-lading"
+      },
+      "next_charging_time": {
+        "name": "Volgende Laadtijd"
+      },
+      "charging_profiles_count": {
+        "name": "Aantal Laadprofielen"
+      },
+      "battery_care_target_soc_pct": {
+        "name": "Batterij-Zorg — Doel-lading"
+      },
+      "driving_score": {
+        "name": "Rijscore"
+      },
+      "driving_score_class": {
+        "name": "Rijscore-Klasse"
+      },
+      "departure_timer_1_time": {
+        "name": "Vertrektimer 1"
+      },
+      "departure_timer_2_time": {
+        "name": "Vertrektimer 2"
+      },
+      "departure_timer_3_time": {
+        "name": "Vertrektimer 3"
+      },
+      "last_updated_at": {
+        "name": "Laatste update"
+      },
+      "last_seen_at": {
+        "name": "Voertuig laatst gemeld"
+      },
+      "adblue_range_km": {
+        "name": "AdBlue bereik"
+      },
+      "api_observer_findings": {
+        "name": "API-waarnemer"
+      },
+      "raw_api_fields": {
+        "name": "Ruwe API-velden"
+      },
+      "data_source_channel": {
+        "name": "Gegevensbronkanaal"
+      },
+      "error_reporter_count": {
+        "name": "Foutmelder"
+      },
+      "requests_remaining_today": {
+        "name": "Resterende API-verzoeken"
+      },
+      "license_plate": {
+        "name": "Kenteken"
+      },
+      "equipment_count": {
+        "name": "Aantal uitrustingen"
+      },
+      "secondary_engine_range_km": {
+        "name": "Actieradius secundaire motor"
+      },
+      "secondary_engine_type": {
+        "name": "Type secundaire motor"
+      },
+      "secondary_engine_fuel_level_pct": {
+        "name": "Brandstofniveau secundaire motor"
+      },
+      "subscription_expiry_at": {
+        "name": "Abonnement verloopt"
+      },
+      "subscription_days_remaining": {
+        "name": "Abonnement resterende dagen"
+      },
+      "battery_temp_max": {
+        "name": "Accutemperatuur (Max)"
+      },
+      "departure_timer_enabled_count": {
+        "name": "Vertrektimers ingeschakeld"
+      },
+      "fuel_tank_capacity_liters": {
+        "name": "Tankinhoud"
+      },
+      "climate_running_requests_count": {
+        "name": "Klimaatverzoeken in behandeling"
+      },
+      "active_warning_lights_count": {
+        "name": "Actieve waarschuwingslampjes"
+      },
+      "last_lock_action": {
+        "name": "Laatste vergrendelingsactie"
+      },
+      "last_lock_action_at": {
+        "name": "Tijd laatste vergrendeling"
+      },
+      "maintenance_report_captured_at": {
+        "name": "Onderhoudsrapport bijgewerkt"
+      },
+      "primary_engine_fuel_level_pct": {
+        "name": "Brandstofniveau (primair)"
+      },
+      "car_type": {
+        "name": "Voertuigtype"
+      },
+      "climate_timer_enabled_count": {
+        "name": "Klimaattimers ingeschakeld"
+      },
+      "primary_engine_type": {
+        "name": "Type primaire motor"
+      },
+      "steering_wheel_position": {
+        "name": "Stuurpositie"
+      },
+      "primary_engine_soc_pct": {
+        "name": "12V-accu lading"
+      },
+      "next_charging_timer_id": {
+        "name": "Volgende timer (ID)"
+      },
+      "next_charging_timer_target_soc_reachable": {
+        "name": "Volgende timer — Doel-lading haalbaar"
+      },
+      "capabilities_count": {
+        "name": "Aantal functies"
+      },
+      "tire_pressure_front_left_bar": {
+        "name": "Bandenspanning Voor Links"
+      },
+      "tire_pressure_front_right_bar": {
+        "name": "Bandenspanning Voor Rechts"
+      },
+      "tire_pressure_rear_left_bar": {
+        "name": "Bandenspanning Achter Links"
+      },
+      "tire_pressure_rear_right_bar": {
+        "name": "Bandenspanning Achter Rechts"
+      },
+      "lifetime_distance_km": {
+        "name": "Totale Afstand"
+      },
+      "lifetime_avg_fuel_consumption_l_100km": {
+        "name": "Gemiddeld Brandstofverbruik (Totaal)"
+      },
+      "lifetime_avg_electric_consumption_kwh_100km": {
+        "name": "Gemiddeld Stroomverbruik (Totaal)"
+      },
+      "last_alarm_at": {
+        "name": "Laatste Alarm"
+      },
+      "heater_source": {
+        "name": "Verwarmingsbron"
+      },
+      "climate_ready_at": {
+        "name": "Klimaat Klaar Om"
+      },
+      "warning_messages": {
+        "name": "Voertuig waarschuwingen"
+      },
+      "service_campaigns": {
+        "name": "Serviceacties"
+      },
+      "auxiliary_heating_remaining_min": {
+        "name": "Standkachel resterende tijd"
+      },
+      "auxiliary_heating_status": {
+        "name": "Status standkachel"
+      },
+      "brake_fluid_change_due_at": {
+        "name": "Vervanging remvloeistof vereist"
+      },
+      "brake_pads_front_inspection_due_at": {
+        "name": "Inspectie remblokken voor vereist"
+      },
+      "brake_pads_rear_inspection_due_at": {
+        "name": "Inspectie remblokken achter vereist"
+      },
+      "preferred_workshop_address": {
+        "name": "Adres voorkeursgarage"
+      },
+      "preferred_workshop_name": {
+        "name": "Voorkeursgarage"
+      },
+      "preferred_workshop_phone": {
+        "name": "Telefoon voorkeursgarage"
+      },
+      "adblue_level_pct": {
+        "name": "AdBlue-niveau"
+      },
+      "cng_level_pct": {
+        "name": "CNG-tankniveau"
+      },
+      "cng_range_km": {
+        "name": "CNG-actieradius"
+      },
+      "primary_engine_range_km": {
+        "name": "Actieradius primaire motor"
+      },
+      "charging_preferred_mode": {
+        "name": "Voorkeurslaadmodus"
+      },
+      "pending_action_id": {
+        "name": "ID openstaande actie"
+      },
+      "pending_action_type": {
+        "name": "Type openstaande actie"
+      },
+      "pending_action_status": {
+        "name": "Status openstaande actie"
+      },
+      "refuel_trip_distance_km": {
+        "name": "Afstand sinds tanken"
+      },
+      "refuel_trip_duration_min": {
+        "name": "Rijtijd sinds tanken"
+      },
+      "refuel_trip_avg_speed_kmh": {
+        "name": "Gem. snelheid sinds tanken"
+      },
+      "refuel_trip_avg_fuel_consumption_l_100km": {
+        "name": "Gem. brandstofverbruik sinds tanken"
+      },
+      "refuel_trip_avg_electric_consumption_kwh_100km": {
+        "name": "Gem. energieverbruik sinds tanken"
+      },
+      "refuel_trip_total_fuel_consumption_l": {
+        "name": "Totale brandstof sinds tanken"
+      },
+      "refuel_trip_total_electric_consumption_kwh": {
+        "name": "Totale energie sinds laden"
+      },
+      "refuel_trip_recuperation_kwh": {
+        "name": "Recuperatie sinds laden"
+      },
+      "refuel_trip_timestamp": {
+        "name": "Tankcyclus gestart"
+      },
+      "actual_charge_rate_kw": {
+        "name": "Actueel laadvermogen"
+      },
+      "hv_battery_min_temperature_c": {
+        "name": "HV-accutemperatuur (min)"
+      },
+      "hv_battery_max_temperature_c": {
+        "name": "HV-accutemperatuur (max)"
+      },
+      "charge_max_ac_setting": {
+        "name": "Max AC-stroom (instelling)"
+      },
+      "charge_max_ac_ampere": {
+        "name": "Max AC-stroom (leverbaar)"
+      },
+      "auto_release_ac_connector_state": {
+        "name": "Status automatische ontgrendeling connector"
+      },
+      "active_ventilation_state": {
+        "name": "Actieve ventilatie"
+      },
+      "active_ventilation_remaining_time_min": {
+        "name": "Actieve ventilatie resterend"
+      },
+      "battery_support_state": {
+        "name": "12V-accuondersteuning"
+      },
+      "evcc_charge_status": {
+        "name": "evcc-laadstatus"
+      },
+      "connection_state_battery_power_level": {
+        "name": "12V-accu laadniveau"
+      },
+      "last_trip_total_fuel_consumption_l": {
+        "name": "Laatste rit, totale brandstof"
+      },
+      "last_trip_total_electric_consumption_kwh": {
+        "name": "Laatste rit, totale energie"
+      },
+      "notifications_count": {
+        "name": "Aantal meldingen"
+      },
+      "last_notification_subject": {
+        "name": "Laatste melding, onderwerp"
+      },
+      "last_notification_severity": {
+        "name": "Laatste melding, ernst"
+      },
+      "engine_oil_temperature_c": {
+        "name": "Motorolietemperatuur"
+      },
+      "engine_coolant_temperature_c": {
+        "name": "Koelvloeistoftemperatuur"
+      },
+      "last_trip_reset_at": {
+        "name": "Laatste ritreset"
+      },
+      "battery_temp_c": {
+        "name": "Batterijtemperatuur"
+      },
+      "charging_settings_pending": {
+        "name": "Laadinstellingen in behandeling"
+      },
+      "charging_status_pending": {
+        "name": "Laadopdrachten in behandeling"
+      },
+      "charging_mode_pending": {
+        "name": "Laadmoduswijzigingen in behandeling"
+      },
+      "charging_care_pending": {
+        "name": "Batterij-Zorg wijzigingen in behandeling"
+      },
+      "climate_remaining_time_min": {
+        "name": "Klimaat resterende tijd"
+      },
+      "climate_without_external_power": {
+        "name": "Klimaat zonder externe voeding"
+      },
+      "climate_zone_front_left": {
+        "name": "Klimaatzone linksvoor"
+      },
+      "climate_zone_front_right": {
+        "name": "Klimaatzone rechtsvoor"
+      },
+      "climate_zone_rear_left": {
+        "name": "Klimaatzone linksachter"
+      },
+      "climate_zone_rear_right": {
+        "name": "Klimaatzone rechtsachter"
+      },
+      "climatisation_settings_pending": {
+        "name": "Klimaatinstellingen in behandeling"
+      },
+      "climatisation_status_pending": {
+        "name": "Klimaatopdrachten in behandeling"
+      },
+      "connection_active": {
+        "name": "Verbinding actief"
+      },
+      "connection_battery_power_level": {
+        "name": "Batterijniveau (verbinding)"
+      },
+      "daily_power_budget_warning": {
+        "name": "Waarschuwing dagelijks energiebudget"
+      },
+      "insufficient_battery_level_warning": {
+        "name": "Waarschuwing batterijniveau te laag"
+      },
+      "nav_target_soc_pct": {
+        "name": "Doellaadniveau (navigatie)"
+      },
+      "parking_map_url_dark": {
+        "name": "Parkeerkaart-URL (donker)"
+      },
+      "parking_map_url_light": {
+        "name": "Parkeerkaart-URL (licht)"
+      },
+      "plug_led_color": {
+        "name": "Kleur laadstekker-LED"
+      },
+      "remaining_charge_time_nav_min": {
+        "name": "Resterende laadtijd (navigatie)"
+      },
+      "vehicle_nickname": {
+        "name": "Voertuigbijnaam"
+      },
+      "lifetime_avg_speed_kmh": {
+        "name": "Gemiddelde snelheid totaal"
+      },
+      "lifetime_travel_time_min": {
+        "name": "Rijtijd totaal"
+      },
+      "monthly_mileage_km": {
+        "name": "Maandelijkse kilometers"
+      },
+      "remaining_charge_time_min": {
+        "name": "Resterende laadtijd"
+      },
+      "charging_scenario": {
+        "name": "Laadscenario"
+      },
+      "immediate_charge_action_state": {
+        "name": "Directe laadactie"
+      },
+      "profile_charge_reason": {
+        "name": "Laadreden"
+      },
+      "charge_session_energy_kwh": {
+        "name": "Geladen energie"
+      },
+      "remaining_charge_time_bulk_min": {
+        "name": "Resterende tijd tot 80% (snellaad)"
+      },
+      "odometer_state": {
+        "name": "Status kilometerstand"
+      },
+      "instrument_cluster_time": {
+        "name": "Voertuigklok"
+      },
+      "hv_battery_state": {
+        "name": "HV-accustatus"
+      },
+      "data_error_detail": {
+        "name": "Datafout"
+      },
+      "external_power_supply_state": {
+        "name": "Externe voeding"
+      },
+      "charging_reason": {
+        "name": "Laadreden"
+      },
+      "charging_error_code": {
+        "name": "Laadfoutcode"
+      },
+      "remaining_time_target_soc": {
+        "name": "Resterende-tijd laaddoel"
+      },
+      "charge_led_color": {
+        "name": "Kleur LED laadpoort"
+      },
+      "charge_led_pattern": {
+        "name": "Patroon LED laadpoort"
+      },
+      "last_report_id": {
+        "name": "Rapport-ID"
+      },
+      "climate_energy_consumption_kwh": {
+        "name": "Klimaatverbruik"
+      },
+      "residual_energy_consumption_kwh": {
+        "name": "Verbruik boordnet"
+      },
+      "battery_climatization_energy_kwh": {
+        "name": "Energie accuklimatisering"
+      },
+      "last_trip_avg_recuperation_kwh_100km": {
+        "name": "Recuperatie rit (gem.)"
+      },
+      "lifetime_avg_recuperation_kwh_100km": {
+        "name": "Recuperatie totaal (gem.)"
+      },
+      "last_trip_avg_aux_consumption_kwh_100km": {
+        "name": "Verbruik nevenverbruikers laatste rit (gem.)"
+      },
+      "lifetime_avg_aux_consumption_kwh_100km": {
+        "name": "Verbruik nevenverbruikers totaal (gem.)"
+      },
+      "lifetime_avg_gas_consumption_kg_100km": {
+        "name": "Gasverbruik totaal (gem.)"
+      },
+      "lifetime_range_gain_km": {
+        "name": "Gewonnen actieradius totaal"
+      },
+      "lifetime_zero_emission_km": {
+        "name": "Emissievrije afstand totaal"
+      },
+      "last_trip_avg_gas_consumption_kg_100km": {
+        "name": "Gasverbruik laatste rit (gem.)"
+      },
+      "last_trip_range_gain_km": {
+        "name": "Gewonnen actieradius laatste rit"
+      },
+      "last_trip_zero_emission_km": {
+        "name": "Emissievrije afstand laatste rit"
+      },
+      "charger_update_trigger": {
+        "name": "Trigger lader-update"
+      },
+      "report_trigger": {
+        "name": "Rapport-trigger"
+      },
+      "climate_mode": {
+        "name": "Klimaatmodus"
+      },
+      "active_target_soc": {
+        "name": "Actief laaddoel"
+      },
+      "charge_time_display": {
+        "name": "Laadtijd-details"
+      },
+      "charging_plug1_flap_lock_state": {
+        "name": "Laadklep 1 vergrendeling"
+      },
+      "charging_plug1_flap_state": {
+        "name": "Laadklep 1"
+      },
+      "charging_plug1_infrastructure_state": {
+        "name": "Laadpunt 1 status"
+      },
+      "charging_plug1_lock_state": {
+        "name": "Laadstekker 1 vergrendeling"
+      },
+      "charging_plug2_connectionstate": {
+        "name": "Laadaansluiting 2 verbinding"
+      },
+      "charging_plug2_flap_lock_state": {
+        "name": "Laadklep 2 vergrendeling"
+      },
+      "charging_plug2_flap_state": {
+        "name": "Laadklep 2"
+      },
+      "charging_plug2_infrastructure_state": {
+        "name": "Laadpunt 2 status"
+      },
+      "charging_plug2_lock_state": {
+        "name": "Laadstekker 2 vergrendeling"
+      },
+      "battery_available_kwh": {
+        "name": "Beschikbare accu-energie"
+      },
+      "battery_cap_kwh": {
+        "name": "Accucapaciteit (energie)"
+      },
+      "battery_soh_pct": {
+        "name": "Accugezondheid (State of Health)"
+      },
+      "trip_total_cost": {
+        "name": "Totale ritkosten"
+      },
+      "trip_fuel_cost": {
+        "name": "Brandstofkosten rit"
+      },
+      "trip_electricity_cost": {
+        "name": "Stroomkosten rit"
+      },
+      "trip_cng_cost": {
+        "name": "CNG-kosten rit"
+      },
+      "oil_level_pct": {
+        "name": "Oliepeil (procent)"
+      },
+      "dataset_key": {
+        "name": "Datasetsleutel"
+      },
+      "charge_mode_selection": {
+        "name": "Geselecteerde laadmodus"
+      },
+      "max_charge_current_ac": {
+        "name": "Max. AC-laadstroom"
+      },
+      "auto_unlock_charge_port": {
+        "name": "Laadklep automatisch ontgrendelen"
+      },
+      "charge_bulk_threshold_pct": {
+        "name": "Snellaaddrempel"
+      },
+      "charge_rate_unit": {
+        "name": "Eenheid laadsnelheid"
+      },
+      "lifetime_trip_distance_km": {
+        "name": "Langetermijn-ritafstand"
+      },
+      "lifetime_trip_start_odometer_km": {
+        "name": "Kilometerstand bij start (langetermijn)"
+      },
+      "last_trip_start_odometer_km": {
+        "name": "Kilometerstand bij start laatste rit"
+      },
+      "oil_level_liters": {
+        "name": "Oliepeil (liter)"
+      },
+      "oil_level_additional_pct": {
+        "name": "Aanvullend oliepeil"
+      },
+      "tyre_pressure_diff_fl": {
+        "name": "Bandenspanningsafwijking linksvoor"
+      },
+      "tyre_pressure_diff_fr": {
+        "name": "Bandenspanningsafwijking rechtsvoor"
+      },
+      "tyre_pressure_diff_rl": {
+        "name": "Bandenspanningsafwijking linksachter"
+      },
+      "tyre_pressure_diff_rr": {
+        "name": "Bandenspanningsafwijking rechtsachter"
+      },
+      "tyre_pressure_diff_spare": {
+        "name": "Bandenspanningsafwijking reservewiel"
+      },
+      "tyre_pressure_actual_fl": {
+        "name": "Bandenspanning linksvoor"
+      },
+      "tyre_pressure_actual_fr": {
+        "name": "Bandenspanning rechtsvoor"
+      },
+      "tyre_pressure_actual_rl": {
+        "name": "Bandenspanning linksachter (werkelijk)"
+      },
+      "tyre_pressure_actual_rr": {
+        "name": "Bandenspanning rechtsachter (werkelijk)"
+      },
+      "tyre_pressure_actual_spare": {
+        "name": "Bandenspanning reservewiel (werkelijk)"
+      },
+      "tyre_pressure_required_fl": {
+        "name": "Bandenspanning linksvoor (streefwaarde)"
+      },
+      "tyre_pressure_required_fr": {
+        "name": "Bandenspanning rechtsvoor (streefwaarde)"
+      },
+      "tyre_pressure_required_rl": {
+        "name": "Bandenspanning linksachter (streefwaarde)"
+      },
+      "tyre_pressure_required_rr": {
+        "name": "Bandenspanning rechtsachter (streefwaarde)"
+      },
+      "tyre_pressure_required_spare": {
+        "name": "Bandenspanning reservewiel (streefwaarde)"
+      },
+      "parking_lights_state": {
+        "name": "Parkeerlichten"
+      },
+      "aux_battery_energy_pct": {
+        "name": "Niveau hulpaccu"
+      },
+      "aux_battery_bem_alert_at": {
+        "name": "Waarschuwingstijd hulpaccu"
+      },
+      "current_speed_kmh": {
+        "name": "Snelheid"
+      },
+      "ignition_state": {
+        "name": "Contact"
+      },
+      "brake_pressure_indication": {
+        "name": "Remdrukindicatie"
+      },
+      "dashboard_warnings_raw": {
+        "name": "Waarschuwingslampjes (ruw)"
+      },
+      "climate_error_code": {
+        "name": "Foutcode klimaatregeling"
+      },
+      "window_heating_error_code": {
+        "name": "Foutcode ruitverwarming"
+      },
+      "lpg_range_km": {
+        "name": "LPG-bereik"
+      },
+      "engine_status": {
+        "name": "Motorstatus"
+      },
+      "trip_avg_aux_consumption_kwh": {
+        "name": "Gem. nevenverbruik"
+      },
+      "departure_charge_kwh": {
+        "name": "Lading tot vertrek"
+      },
+      "tire_pressure_fl_state": {
+        "name": "Bandenstatus linksvoor"
+      },
+      "tire_pressure_fl_errorcode": {
+        "name": "Bandenfoutcode linksvoor"
+      },
+      "tire_pressure_fr_state": {
+        "name": "Bandenstatus rechtsvoor"
+      },
+      "tire_pressure_fr_errorcode": {
+        "name": "Bandenfoutcode rechtsvoor"
+      },
+      "tire_pressure_rl_state": {
+        "name": "Bandenstatus linksachter"
+      },
+      "tire_pressure_rl_errorcode": {
+        "name": "Bandenfoutcode linksachter"
+      },
+      "tire_pressure_rr_state": {
+        "name": "Bandenstatus rechtsachter"
+      },
+      "tire_pressure_rr_errorcode": {
+        "name": "Bandenfoutcode rechtsachter"
+      },
+      "next_charge_timer_start_at": {
+        "name": "Volgende laadstart"
+      },
+      "next_charge_timer_finish_at": {
+        "name": "Volgend laadeinde"
+      },
+      "next_charge_target_reachability": {
+        "name": "Laaddoel haalbaar"
+      },
+      "next_charge_timer_number": {
+        "name": "Volgende laadtimer (nummer)"
+      },
+      "ascent_slope_consumption": {
+        "name": "Hellingverbruik (omhoog)"
+      },
+      "descent_slope_consumption": {
+        "name": "Hellingverbruik (omlaag)"
+      },
+      "report_type": {
+        "name": "Rapporttype"
+      },
+      "result_app": {
+        "name": "Resultaat app-gegevens"
+      },
+      "result_master": {
+        "name": "Resultaat stamgegevens"
+      },
+      "update_reason": {
+        "name": "Reden laatste update"
+      },
+      "start_stop_action": {
+        "name": "Laad start/stop-actie"
+      },
+      "start_stop_modification": {
+        "name": "Start/stop-wijziging"
+      },
+      "bidi_max_charge_level_pct": {
+        "name": "Bidirectioneel laden max. laadniveau"
+      },
+      "bidi_min_charge_level_pct": {
+        "name": "Bidirectioneel laden min. laadniveau"
+      },
+      "bidi_energy_used": {
+        "name": "Bidirectioneel energieverbruik"
+      },
+      "bidi_energy_used_threshold": {
+        "name": "Limiet bidirectioneel energieverbruik"
+      },
+      "bidi_cycles": {
+        "name": "Bidirectionele laadcycli"
+      },
+      "bidi_cycles_threshold": {
+        "name": "Limiet bidirectionele laadcycli"
+      },
+      "bidi_operating_hours": {
+        "name": "Bidirectionele bedrijfsuren"
+      },
+      "bidi_operating_hours_threshold": {
+        "name": "Limiet bidirectionele bedrijfsuren"
+      },
+      "bidi_quota": {
+        "name": "Bidirectioneel laadquotum"
+      },
+      "bidi_quota_threshold": {
+        "name": "Limiet bidirectioneel laadquotum"
+      },
+      "sunroof_position_pct": {
+        "name": "Schuifdakpositie"
+      },
+      "spoiler_position_pct": {
+        "name": "Spoilerpositie"
+      },
+      "battery_care_score": {
+        "name": "Batterijzorg-score"
+      },
+      "battery_care_score_threshold": {
+        "name": "Drempel batterijzorg-score"
+      },
+      "cabin_temp": {
+        "name": "Interieurtemperatuur"
+      },
+      "charge_target_time": {
+        "name": "Streeftijd laden"
+      },
+      "max_number_users": {
+        "name": "Max. aantal gebruikers"
+      },
+      "charging_profiles_pending": {
+        "name": "Laadprofiel wijzigingen in behandeling"
+      },
+      "climatisation_timers_pending": {
+        "name": "Klimaattimer wijzigingen in behandeling"
+      },
+      "calibration_need_detected": {
+        "name": "Accukalibratie nodig"
+      },
+      "calibration_request_initial": {
+        "name": "Kalibratieverzoek"
+      },
+      "calibration_request_escalation_1": {
+        "name": "Kalibratieherinnering"
+      },
+      "calibration_request_escalation_2": {
+        "name": "Laatste kalibratieherinnering"
+      },
+      "calibration_request_method": {
+        "name": "Kalibratiemethode"
+      },
+      "calibration_failure": {
+        "name": "Kalibratiefout"
+      },
+      "calibration_failure_reason": {
+        "name": "Reden kalibratiefout"
+      },
+      "preferred_charge_mode": {
+        "name": "Voorkeurslaadmodus"
+      },
+      "last_refuel_quantity": {
+        "name": "Laatste tankbeurt hoeveelheid"
+      },
+      "last_refuel_cost": {
+        "name": "Laatste tankbeurt kosten"
+      },
+      "last_refuel_currency": {
+        "name": "Valuta laatste tankbeurt"
+      },
+      "last_refuel_fuel_type": {
+        "name": "Laatste brandstof"
+      },
+      "last_refuel_station": {
+        "name": "Laatste tankstation"
+      },
+      "last_refuel_at": {
+        "name": "Tijd laatste tankbeurt"
+      },
+      "parking_location": {
+        "name": "Parkeerlocatie"
+      },
+      "parking_cost": {
+        "name": "Parkeerkosten"
+      },
+      "parking_currency": {
+        "name": "Parkeervaluta"
+      },
+      "parking_started_at": {
+        "name": "Parkeren gestart"
+      },
+      "parking_ended_at": {
+        "name": "Parkeren beëindigd"
+      },
+      "reminder_technical_inspection": {
+        "name": "Inspectieherinnering"
+      },
+      "reminder_seasonal_tyre_change": {
+        "name": "Bandenwissel-herinnering"
+      },
+      "reminder_first_aid_kit": {
+        "name": "EHBO-kit herinnering"
+      },
+      "reminder_tyre_repair_kit": {
+        "name": "Bandenreparatieset-herinnering"
+      }
+    },
+    "binary_sensor": {
+      "mbb_two_way_available": {
+        "name": "MBB tweerichting beschikbaar"
+      },
+      "doors_locked": {
+        "name": "Deuren vergrendeld"
+      },
+      "doors_open": {
+        "name": "Deuren open"
+      },
+      "driver_braking_active": {
+        "name": "Bestuurder remt"
+      },
+      "windows_open": {
+        "name": "Ramen open"
+      },
+      "plug_connected": {
+        "name": "Laadkabel aangesloten"
+      },
+      "is_charging": {
+        "name": "Aan het laden"
+      },
+      "climatisation_active": {
+        "name": "Klimaatregeling actief"
+      },
+      "is_driving": {
+        "name": "Onderweg"
+      },
+      "is_online": {
+        "name": "Voertuig bereikbaar"
+      },
+      "connector_locked": {
+        "name": "Laadstekker vergrendeld"
+      },
+      "trunk_locked": {
+        "name": "Kofferruimte vergrendeld"
+      },
+      "sunroof_open": {
+        "name": "Schuifdak"
+      },
+      "window_heating_front": {
+        "name": "Voorruit verwarming"
+      },
+      "window_heating_back": {
+        "name": "Achterruit verwarming"
+      },
+      "lights_on": {
+        "name": "Lichten aan"
+      },
+      "warning_active": {
+        "name": "Voertuigwaarschuwing actief"
+      },
+      "warning_engine": {
+        "name": "Motorwaarschuwing"
+      },
+      "warning_oil": {
+        "name": "Oliepeilwaarschuwing"
+      },
+      "warning_tyre": {
+        "name": "Bandenspanning waarschuwing"
+      },
+      "warning_brakes": {
+        "name": "Remwaarschuwing"
+      },
+      "warning_12v_low": {
+        "name": "12V-accu zwak"
+      },
+      "ota_update_available": {
+        "name": "Software-update beschikbaar"
+      },
+      "battery_care_enabled": {
+        "name": "Batterij-Zorg Actief"
+      },
+      "auto_unlock_when_charged": {
+        "name": "Automatisch ontgrendelen bij volle lading"
+      },
+      "climate_at_unlock": {
+        "name": "Klimaat bij ontgrendelen"
+      },
+      "window_heating_enabled": {
+        "name": "Ruitverwarming ingeschakeld"
+      },
+      "air_conditioning_without_external_power": {
+        "name": "Airco zonder externe voeding"
+      },
+      "subscription_active": {
+        "name": "Abonnement actief"
+      },
+      "ignition_on": {
+        "name": "Contact"
+      },
+      "daily_power_budget_available": {
+        "name": "Dagelijks energiebudget beschikbaar"
+      },
+      "vehicle_at_saved_location": {
+        "name": "Op opgeslagen locatie"
+      },
+      "battery_protection_limit_on": {
+        "name": "12V-accubeveiliging"
+      },
+      "tire_pressure_warning": {
+        "name": "Bandenspanning-Waarschuwing"
+      },
+      "departure_timer_1_enabled": {
+        "name": "Vertrektimer 1 Actief"
+      },
+      "departure_timer_2_enabled": {
+        "name": "Vertrektimer 2 Actief"
+      },
+      "departure_timer_3_enabled": {
+        "name": "Vertrektimer 3 Actief"
+      },
+      "alarm_active": {
+        "name": "Alarm Actief"
+      },
+      "siren_active": {
+        "name": "Sirene Actief"
+      },
+      "camping_mode": {
+        "name": "Kampeermodus"
+      },
+      "oil_level_warning": {
+        "name": "Oliepeil"
+      },
+      "seat_heating": {
+        "name": "Stoelverwarming"
+      },
+      "parking_light": {
+        "name": "Parkeerlicht"
+      },
+      "external_power": {
+        "name": "Externe voeding beschikbaar"
+      },
+      "battery_care": {
+        "name": "Batterijbeschermingsmodus"
+      },
+      "energy_flow": {
+        "name": "Energiestroom actief"
+      },
+      "area_alarm": {
+        "name": "Geofence-alarm"
+      },
+      "auto_release_ac_connector": {
+        "name": "Automatische ontgrendeling AC-connector"
+      },
+      "optimised_battery_use": {
+        "name": "Geoptimaliseerd batterijgebruik"
+      },
+      "sunroof_rear_closed": {
+        "name": "Schuifdak achter"
+      },
+      "roof_cover_closed": {
+        "name": "Cabriokap"
+      },
+      "permission_is_owner": {
+        "name": "Account is hoofdeigenaar"
+      },
+      "permission_can_command": {
+        "name": "Account kan opdrachten verzenden"
+      },
+      "external_power_available": {
+        "name": "Externe voeding beschikbaar"
+      },
+      "hood_open": {
+        "name": "Motorkap open"
+      },
+      "trunk_open": {
+        "name": "Kofferbak open"
+      },
+      "warning_inspection": {
+        "name": "Inspectie nodig"
+      },
+      "parking_brake_engaged": {
+        "name": "Parkeerrem"
+      },
+      "parking_light_left": {
+        "name": "Parkeerlicht (links)"
+      },
+      "parking_light_right": {
+        "name": "Parkeerlicht (rechts)"
+      },
+      "energy_flow_active": {
+        "name": "Energiestroom"
+      },
+      "battery_care_mode_active": {
+        "name": "Accuspaarmodus"
+      },
+      "bonnet_locked": {
+        "name": "Motorkap vergrendeld"
+      },
+      "closures_secured": {
+        "name": "Alle openingen beveiligd"
+      },
+      "service_hatch_open": {
+        "name": "Serviceluik open"
+      },
+      "spoiler_open": {
+        "name": "Spoiler uitgeklapt"
+      },
+      "oil_dipstick_active": {
+        "name": "Oliepeilstok actief"
+      },
+      "fuel_level_estimated": {
+        "name": "Brandstofniveau geschat"
+      },
+      "climatisation_at_unlock": {
+        "name": "Klimaatregeling bij ontgrendelen"
+      },
+      "mirror_heating_enabled": {
+        "name": "Spiegelverwarming"
+      },
+      "climate_zone_front_left_enabled": {
+        "name": "Klimaatzone linksvoor"
+      },
+      "climate_zone_front_right_enabled": {
+        "name": "Klimaatzone rechtsvoor"
+      },
+      "mirror_heating_active": {
+        "name": "Spiegelverwarming actief"
+      },
+      "climate_zone_active_front_left": {
+        "name": "Klimaatzone linksvoor actief"
+      },
+      "climate_zone_active_front_right": {
+        "name": "Klimaatzone rechtsvoor actief"
+      },
+      "climate_zone_active_rear_left": {
+        "name": "Klimaatzone linksachter actief"
+      },
+      "climate_zone_active_rear_right": {
+        "name": "Klimaatzone rechtsachter actief"
+      },
+      "abrp_data_changed": {
+        "name": "ABRP-gegevens gewijzigd"
+      },
+      "climatisation_without_hv_power": {
+        "name": "Klimaatregeling zonder externe stroom"
+      },
+      "door_front_left": {
+        "name": "Portier linksvoor"
+      },
+      "door_front_right": {
+        "name": "Portier rechtsvoor"
+      },
+      "door_rear_left": {
+        "name": "Portier linksachter"
+      },
+      "door_rear_right": {
+        "name": "Portier rechtsachter"
+      },
+      "door_trunk": {
+        "name": "Kofferbak"
+      },
+      "door_bonnet": {
+        "name": "Motorkap"
+      },
+      "light_left": {
+        "name": "Licht links"
+      },
+      "light_right": {
+        "name": "Licht rechts"
+      },
+      "window_front_left": {
+        "name": "Raam linksvoor"
+      },
+      "window_front_right": {
+        "name": "Raam rechtsvoor"
+      },
+      "window_rear_left": {
+        "name": "Raam linksachter"
+      },
+      "window_rear_right": {
+        "name": "Raam rechtsachter"
+      },
+      "climate_zone_front_left": {
+        "name": "Klimaatzone linksvoor"
+      },
+      "climate_zone_front_right": {
+        "name": "Klimaatzone rechtsvoor"
+      },
+      "climate_zone_rear_left": {
+        "name": "Klimaatzone linksachter"
+      },
+      "climate_zone_rear_right": {
+        "name": "Klimaatzone rechtsachter"
+      },
+      "climate_without_external_power": {
+        "name": "Klimaat zonder externe voeding"
+      },
+      "connection_active": {
+        "name": "Verbinding actief"
+      },
+      "daily_power_budget_warning": {
+        "name": "Waarschuwing dagelijks energiebudget"
+      },
+      "insufficient_battery_level_warning": {
+        "name": "Waarschuwing batterijniveau te laag"
+      },
+      "mandatory_consent_given": {
+        "name": "Verplichte toestemming gegeven"
+      },
+      "marketing_consent_given": {
+        "name": "Marketingtoestemming gegeven"
+      }
+    },
+    "switch": {
+      "lock_switch": {
+        "name": "Deurvergrendeling"
+      },
+      "climatisation_switch": {
+        "name": "Klimaatregeling"
+      },
+      "charging_switch": {
+        "name": "Laden"
+      },
+      "window_heating_switch": {
+        "name": "Ruitenverwarming"
+      },
+      "ventilation_switch": {
+        "name": "Cabine-Ventilatie"
+      },
+      "aux_heating_switch": {
+        "name": "Standkachel (Webasto)"
+      },
+      "departure_timer_1_switch": {
+        "name": "Vertrektimer 1"
+      },
+      "departure_timer_2_switch": {
+        "name": "Vertrektimer 2"
+      },
+      "departure_timer_3_switch": {
+        "name": "Vertrektimer 3"
+      },
+      "battery_care_switch": {
+        "name": "Batterijbehoud"
+      },
+      "camping_switch": {
+        "name": "Kampeermodus"
+      },
+      "auto_unlock_plug_switch": {
+        "name": "Laadstekker automatisch ontgrendelen"
+      },
+      "active_ventilation_switch": {
+        "name": "Actieve ventilatie"
+      }
+    },
+    "number": {
+      "target_soc_number": {
+        "name": "Laaddoel"
+      },
+      "climate_temp_number": {
+        "name": "Klimaat temperatuur"
+      },
+      "target_soc": {
+        "name": "Laaddoel"
+      },
+      "target_temperature": {
+        "name": "Klimaattemperatuur"
+      },
+      "min_soc": {
+        "name": "Minimum lading (PHEV)"
+      },
+      "max_charge_current": {
+        "name": "Max. laadstroom"
+      },
+      "auxheat_duration": {
+        "name": "Duur standkachel"
+      },
+      "auxheat_target_temp": {
+        "name": "Doeltemperatuur standkachel"
+      },
+      "battery_care_target": {
+        "name": "Doel batterijbehoud"
+      },
+      "scan_interval": {
+        "name": "Pollinterval"
+      }
+    },
+    "button": {
+      "flash_button": {
+        "name": "Lichtsignaal"
+      },
+      "refresh_button": {
+        "name": "Gegevens vernieuwen"
+      },
+      "wake_button": {
+        "name": "Voertuig wekken"
+      },
+      "data_act_request_button": {
+        "name": "EU Data Act-gegevensverzoek aanmaken"
+      },
+      "companion_reset_button": {
+        "name": "Companion-verbinding resetten"
+      }
+    },
+    "climate": {
+      "climate": {
+        "name": "Standklimatisering"
+      }
+    },
+    "device_tracker": {
+      "position": {
+        "name": "Locatie"
+      }
+    },
+    "select": {
+      "charge_mode_select": {
+        "name": "Laadmodus",
+        "state": {
+          "manual": "Handmatig",
+          "timer": "Timer",
+          "preferred_charging_times": "Voorkeurslaadtijden",
+          "only_own_current": "Alleen eigen stroom",
+          "immediate_discharging": "Nu ontladen",
+          "timer_charging_climatization": "Getimed laden met klimaatregeling"
+        }
+      },
+      "skoda_charge_current_select": {
+        "name": "Max. laadstroom",
+        "state": {
+          "maximum": "Maximaal",
+          "reduced": "Gereduceerd"
+        }
+      }
+    },
+    "time": {
+      "departure_timer_1_time_set": {
+        "name": "Vertrek-Timer 1 — Tijd"
+      },
+      "departure_timer_2_time_set": {
+        "name": "Vertrek-Timer 2 — Tijd"
+      },
+      "departure_timer_3_time_set": {
+        "name": "Vertrek-Timer 3 — Tijd"
+      }
+    },
+    "image": {
+      "render_icon": {
+        "name": "3/4 weergave icoon"
+      },
+      "render_small": {
+        "name": "3/4 weergave klein"
+      },
+      "render_medium": {
+        "name": "3/4 weergave middel"
+      },
+      "render_side_sm": {
+        "name": "Zijaanzicht klein"
+      },
+      "render_side_lg": {
+        "name": "Zijaanzicht groot"
+      },
+      "render_angle_hd": {
+        "name": "3/4 weergave HD"
+      },
+      "render_angle_lg": {
+        "name": "3/4 weergave groot"
+      },
+      "vehicle_render": {
+        "name": "Voertuigweergave"
+      }
+    },
+    "lock": {
+      "door_lock": {
+        "name": "Deurslot"
+      }
+    },
+    "event": {
+      "push_event": {
+        "name": "Push-gebeurtenis",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "operation-request": "Bedieningsverzoek",
+              "service-event": "Service-gebeurtenis",
+              "account-event": "Account-gebeurtenis",
+              "vehicle-event": "Voertuiggebeurtenis",
+              "alarm": "Alarm",
+              "other": "Overig",
+              "lock_state": "Vergrendelingsstatus",
+              "charging_state": "Laadstatus",
+              "climate_state": "Klimaatstatus"
+            }
+          }
+        }
+      }
+    },
+    "update": {
+      "software_update": {
+        "name": "Software-update"
+      }
+    },
+    "calendar": {
+      "charging_schedule": {
+        "name": "Laadschema"
+      },
+      "service": {
+        "name": "Serviceschema"
+      }
+    }
+  },
+  "issues": {
+    "vweu_twoway_disabled": {
+      "title": "VW EU Two-Way: uitgeschakeld door Volkswagen",
+      "description": "Op 2026-08-18 heeft Volkswagen de login uitgeschakeld die het VW EU Two-Way-kanaal (moderne CARIAD-backend) gebruikte, waardoor het token van 1 uur niet meer kan worden vernieuwd en tweerichtingscommando's via dat kanaal zijn gestopt. Dit is een wijziging aan de kant van Volkswagen \u2014 er is bij jou niets verkeerd geconfigureerd en je account loopt geen risico (de fout treedt op v\u00f3\u00f3rdat er een wachtwoord wordt verzonden).\n\n**Je live uitlezingen blijven werken** via het EU Data Act-portaal, dus je sensoren worden niet be\u00efnvloed.\n\n**Voor tweerichtingscommando's (vergrendelen/ontgrendelen, klimaat, laden):** een duurzame vervanging via de klassieke Car-Net (MBB)-backend \u2014 die Volkswagen NIET heeft uitgeschakeld \u2014 is nu in b\u00e8ta. Zie issue #584 voor hoe je het inschakelt en test.\n\nJe kunt het nu inactieve kanaal op elk moment verwijderen via de opties van de integratie (VW EU Two-Way \u2192 verwijderen). Dit bericht is alleen ter informatie; de integratie blijft draaien op je leeskanalen.\n\n**Tip:** schakel per auto slechts \u00c9\u00c9N tweerichtingsintegratie tegelijk in. VW beperkt het aantal verzoeken en kan een account tijdelijk blokkeren wanneer meerdere apps het tegelijk bestoken \u2014 als dat gebeurt, kan zelfs de offici\u00eble VW-app de auto niet meer bedienen, en d\u00e1t is het teken dat het om een accountblokkering gaat en niet om deze integratie."
+    },
+    "two_factor_required": {
+      "title": "Tweestapsverificatie vereist — {brand}",
+      "description": "Je {brand}-account ({username}) vereist een e-mailverificatiecode.\n\n**Eenmalige oplossing:**\n1. Open de **{brand}-app** op je telefoon\n2. Log handmatig in\n3. Bevestig de code die per e-mail is verstuurd\n4. Herstart Home Assistant\n\nNa deze eenmalige stap bewaart de integratie het login-token — je hoeft dit niet te herhalen."
+    },
+    "email_two_factor_required": {
+      "title": "E-mail 2FA — controleer je inbox",
+      "description": "Je {brand}-account ({username}) vereist een **e-mailverificatiecode**.\n\n**Eenmalige oplossing:**\n1. **Controleer je e-mail** (en spam) — 6-cijferige code van VAG IDP\n2. Open de **{brand}-app**\n3. Log handmatig in en voer de code in\n4. Herstart Home Assistant"
+    },
+    "terms_and_conditions": {
+      "title": "Gebruiksvoorwaarden accepteren — {brand}",
+      "description": "Er zijn nieuwe gebruiksvoorwaarden voor {brand} ({username}).\n\n1. Open de {brand}-app\n2. Log in en accepteer de voorwaarden\n3. Herstart Home Assistant"
+    },
+    "marketing_consent": {
+      "title": "Toestemming vereist — {brand}",
+      "description": "Er is een nieuwe privacytoestemming vereist voor {brand} ({username}).\n\nOpen de app → Profiel → Toestemmingen → bevestigen → HA herstarten."
+    },
+    "too_many_requests": {
+      "title": "Account tijdelijk geblokkeerd — {brand}",
+      "description": "Het {brand}-account ({username}) is tijdelijk geblokkeerd wegens te veel verzoeken.\n\n**Wacht 15 minuten** en herstart Home Assistant.\nTip: verhoog het bijwerkinterval naar minimaal 15 minuten."
+    },
+    "auth_failed": {
+      "title": "Aanmelden mislukt — {brand}",
+      "description": "De verbinding met {brand} ({username}) is mislukt.\n\nInstellingen → Apparaten en diensten → VW Group Connect → ⋮ → Opnieuw configureren."
+    },
+    "vehicle_data_scout_findings": {
+      "title": "API-waarnemer — {count} nieuw(e) veld(en) bij {brand}",
+      "description": "De Vehicle Data Scout heeft **{count}** nieuw(e) veld(en) gevonden in het API-antwoord van {brand} die VW Group Connect nog niet uitleest.\n\nDat betekent meestal dat je auto een functie of firmware heeft die we nog niet in kaart hebben gebracht — en **juist door dit rapport door te sturen kunnen we er ondersteuning voor bouwen**, voor jouw auto en voor iedereen met hetzelfde model.\n\n**1-klik rapport:** klik hieronder op **Meer info** om een vooraf ingevulde GitHub-issue te openen.\n\n**Nog nuttiger:** voeg je diagnosegegevens toe — Instellingen → Apparaten en diensten → VW Group Connect → ⋮ → **Diagnosegegevens downloaden**. Deze bevatten nu het volledige API-antwoord met de nieuwe velden in hun context, en dat is precies wat we nodig hebben om er entiteiten van te maken.\n\n_Alles wordt automatisch geanonimiseerd: VINs gemaskeerd, GPS verwijderd, tokens, gebruikers-ID's, e-mails en kentekens weggehaald. Er wordt nooit iets gedeeld, tenzij je het zelf bijvoegt._"
+    },
+    "error_reporter_findings": {
+      "title": "Foutmelder — {count} recente fout(en) bij {brand}",
+      "description": "De Foutmelder heeft **{count}** recente integratiefout(en) voor {brand} vastgelegd.\n\nMelden helpt ons bugs te vinden die alleen op specifieke voertuigen of firmwareversies optreden.\n\n**1-klik rapport:**\n📤 Klik hieronder op **Meer info** om een vooraf ingevulde GitHub-issue te openen.\n\n**Voor Facebook / forum:** Instellingen → Apparaten → VW Group Connect → Diagnose → Downloaden — het rapport is bijgevoegd, VINs en tokens gemaskeerd.\n\n_Privacy: VINs gemaskeerd, Bearer/JWT/UUID/e-mail-tokens uit berichten en tracebacks verwijderd. Geen referenties opgenomen._"
+    },
+    "quota_low": {
+      "title": "API-quotum laag — {remaining} verzoeken over vandaag",
+      "description": "Je VAG-account nadert de dagelijkse limiet voor API-verzoeken ({remaining} van {limit} over, {pct}%).\n\nOm een quotum-lockout te voorkomen (de backend van de fabrikant kan het account tijdelijk opschorten wanneer de daglimiet wordt bereikt), overweeg je het volgende:\n\n1. **Verhoog het update-interval** — Instellingen → Apparaten en services → VW Group Connect → Configureren → Update-interval (momenteel meestal 5–10 min)\n2. **Verminder andere VAG-integraties** die op hetzelfde account draaien (elke telt mee voor hetzelfde quotum)\n3. **Wacht op de dagelijkse reset** — meestal rond middernacht in de tijdzone van de fabrikant\n\nDeze waarschuwing verdwijnt automatisch wanneer het resterende aantal weer toeneemt."
+    },
+    "quota_critical": {
+      "title": "API-quotum KRITIEK — {remaining} verzoeken over vandaag",
+      "description": "Je VAG-account heeft vandaag minder dan 25 API-verzoeken over ({remaining} van {limit}, {pct}%). De backend van de fabrikant kan het account tijdelijk opschorten als je het budget uitput.\n\n**Onmiddellijke actie:**\n1. **Pauzeer het pollen** — Instellingen → Apparaten en services → VW Group Connect → Configureren → Update-interval → stel in op 30 min of hoger\n2. Vermijd handmatige verversingen / het wekken van het voertuig totdat het budget wordt gereset\n\nDeze waarschuwing verdwijnt automatisch wanneer het resterende aantal weer toeneemt."
+    },
+    "account_locked": {
+      "title": "{brand}-account lijkt tijdelijk vergrendeld",
+      "description": "De backend van het merk heeft in de afgelopen 30 minuten **3 auth-reacties van de lock-klasse** teruggegeven (meest recent HTTP {last_status}). Dit betekent doorgaans dat VW het onderliggende merkaccount tijdelijk heeft geblokkeerd na te veel mislukte pogingen om het token te vernieuwen.\n\nDe vergrendeling wordt meestal binnen **enkele uren tot 24 uur** opgeheven. De integratie is gestopt met opnieuw proberen, zodat het vergrendelingsvenster niet wordt verlengd.\n\n**Terwijl je wacht**:\n\n1. Meld je **niet** herhaaldelijk aan/af bij de app van de fabrikant — dat verlengt de vergrendeling.\n2. Wacht minstens 1-2 uur en open daarna de officiële app van de fabrikant op je telefoon. Als de app je probleemloos aanmeldt, heeft de backend je account ontgrendeld.\n3. Verhoog na het ontgrendelen de `scan_interval` in Instellingen → Apparaten en services → VW Group Connect → Configureren naar 15-30 minuten om toekomstige druk te verminderen.\n4. Optioneel: schakel de alleen-lezen EU Data Act-portalmodus in via de OptionsFlow om tijdens toekomstige incidenten toch wat gegevens te blijven ontvangen.\n\nDeze waarschuwing verdwijnt automatisch zodra de volgende tokenvernieuwing voor het eerst slaagt."
+    },
+    "data_act_no_data": {
+      "title": "EU Data Act-portaal: nog geen voertuiggegevens ({brand})",
+      "description": "Het EU Data Act-portaal is ingelogd voor {brand}, maar levert nog geen voertuiggegevens.\n\nDe integratie maakt het doorlopende gegevensverzoek automatisch voor je aan, dus de gebruikelijke oorzaken van een lege feed zijn:\n\n1. **Toestemming voor gegevensdeling niet gegeven voor deze auto.** In het portaal geef je de EU Data Act-toestemming voor gegevensdeling per voertuig, eenmalig. Zolang je dat niet doet, wordt het verzoek wel aangemaakt maar blijft het leeg — dit is de meest voorkomende oorzaak.\n2. **De auto heeft nog niets nieuws gestuurd.** Een nieuwe dataset verschijnt pas nadat de auto is gereden, geladen of vergrendeld/ontgrendeld, dus een gloednieuw verzoek kan er 15-60 minuten (of een korte rit) over doen voordat het zich begint te vullen.\n3. **Een storing aan VW-kant.** VW meldt sinds eind mei 2026 een merkbrede storing van het EU Data Act-portaal; zolang die duurt levert het portaal voor elk hulpmiddel lege gegevens, en herstelt het zich merk voor merk.\n\n**Snelste controle:** open `eu-data-act.drivesomethinggreater.com`, log in en controleer (a) of de toestemming voor gegevensdeling voor deze auto is gegeven en (b) of er een actief doorlopend (15-minuten) gegevensverzoek is met alle dataclusters aangevinkt. Zie je daar ook geen gegevens, dan ligt het aan VW-kant — de integratie kan niets doen tot VW het herstelt.\n\nDit is de alleen-lezen portaal-beta – de waarschuwing verdwijnt vanzelf zodra er gegevens binnenkomen."
+    },
+    "data_act_browser_missing": {
+      "description": "Je hebt de headless-browser-fallback voor het EU Data Act-portaal ingeschakeld, maar het Python-pakket `playwright` is niet geïnstalleerd in je Home Assistant-container.\n\n**Installeren:** open de shell van de HA-container (Add-ons → Terminal & SSH, of `docker exec` voor een handmatige installatie) en voer uit:\n\n```\npip install playwright\nplaywright install chromium\n```\n\nDe chromium-download is groot (ongeveer 100 MB), daarom is deze afhankelijkheid optioneel in plaats van meegeleverd met de integratie. Herstart Home Assistant na de installatie.\n\nJe kunt de schakelaar ook uitzetten via Instellingen → Apparaten & diensten → VW Group Connect → Configureren → 'EU Data Act-portaal: headless-browser-fallback'.",
+      "title": "EU Data Act-portaal: optioneel pakket 'playwright' ontbreekt"
+    },
+    "data_act_session_expired": {
+      "description": "Het {brand}-portaal op `eu-data-act.drivesomethinggreater.com` gaf HTTP 401 terug op een API-aanroep voor een Custom Data Request, wat betekent dat de sessiecookies zijn verlopen. Het portaal ondersteunt geen tokenvernieuwing op de achtergrond, dus Home Assistant kan dit niet automatisch herstellen.\n\n**Wat te doen:** Instellingen → Apparaten & diensten → VW Group Connect → menu met 3 puntjes → Herconfigureren → voer je inloggegevens opnieuw in. De volgende setupronde opent de portaalsessie opnieuw en de integratie hervat het opvragen van de actieve Custom Data Request.\n\nDeze waarschuwing verdwijnt vanzelf zodra de volgende API-aanroep van het portaal slaagt.",
+      "title": "EU Data Act-portaalsessie verlopen – opnieuw aanmelden"
+    },
+    "ola_headers_outdated": {
+      "description": "De online-services-backend van VW Group (OLA) weigerde **{count}** verzoeken op rij voor {brand} met HTTP 403 Forbidden.\n\nDit is een **server-side blokkade door VW** — geen update, headerwijziging of opnieuw inloggen lost het op. VW vereist nu een door Google ondertekend apparaat-attestatietoken (Firebase App Check / Play Integrity) plus een web-application-firewall-token op de SEAT/CUPRA-backend — de officiële app maakt die vanuit een geharde, door Google ondertekende build, wat een open-source-client niet kan nabootsen. **Opdrachten** op afstand voor {brand} (en SEAT) komen daarom waarschijnlijk niet terug.\n\nVoertuig**gegevens** komen waar beschikbaar nog steeds binnen via het alleen-lezen EU Data Act-portaal — dat is de weg vooruit voor deze merken. Dit ligt volledig bij VW; aan jouw kant niets te doen. (Gevolgd: #464.)",
+      "title": "{brand}-opdrachten geblokkeerd door VW (apparaat-attestatie) — {count} opeenvolgende 403-fouten"
+    },
+    "vw_na_data_forbidden": {
+      "title": "Volkswagen US/CA: voertuiggegevens geblokkeerd (HTTP 403)",
+      "description": "Je Volkswagen-account is ingelogd en je garage is gelezen, maar de gegevensverzoeken per voertuig (status, laden, klimaat) worden geweigerd met HTTP 403 Forbidden.\n\nEen veelvoorkomende oorzaak is een inactief Car-Net-/VW Connect-abonnement. Maar het gebeurt ook wanneer het abonnement actief is en de MyVW-app actuele gegevens toont. In dat geval geeft VW deze externe client simpelweg geen toestemming om het voertuig uit te lezen, en is er aan jouw kant niets te wijzigen.\n\n**Wat te doen:**\n\n1. Open de officiële MyVW-app en controleer of je Remote Access-/Car-Net-abonnement actief is voor deze auto.\n2. Is het verlopen, verleng het dan via VW en wacht op de volgende uitlezing.\n\nDe integratie blijft de laatst opgeslagen gegevens tonen. Deze waarschuwing verdwijnt vanzelf zodra een gegevensverzoek weer slaagt."
+    },
+    "vw_na_data_forbidden_attestation": {
+      "title": "Volkswagen US/CA: voertuiggegevens geblokkeerd door VW (apparaatattestatie)",
+      "description": "Je Volkswagen-account is ingelogd en je garage is gelezen, maar de gegevensverzoeken per voertuig (status, laden, klimaat) worden geweigerd met HTTP 403 Forbidden, en het antwoord bevat een **apparaatattestatie**-markering.\n\nDit is een **serverzijdige vergrendeling door VW**, geen abonnementsprobleem en niets wat opnieuw inloggen kan oplossen — Car-Net verlengen helpt dus niet. VW vereist nu een door Google ondertekend apparaatattestatie-token (Firebase App Check / Play Integrity) dat de officiële app vanuit een geharde build aanmaakt en dat een opensource-client niet kan nabootsen.\n\nDe integratie blijft de laatst opgeslagen gegevens tonen. Deze waarschuwing verdwijnt vanzelf als VW het gegevensvlak weer openstelt."
+    },
+    "supplementary_reauth": {
+      "title": "Volkswagen.de-leeskanaal moet opnieuw inloggen",
+      "description": "Het aanvullende volkswagen.de-leeskanaal kon zijn sessie niet hervatten (Volkswagen vraagt opnieuw om de eenmalige code per e-mail). De hoofdgegevens van je voertuig zijn niet getroffen. Open de opties van deze integratie en voer \"Volkswagen.de-leeskanaal toevoegen\" opnieuw uit om de extra vw.de-gegevens te herstellen."
+    },
+    "meb_commands_unavailable": {
+      "title": "Opdrachten op afstand zijn niet beschikbaar voor deze auto ({brand})",
+      "description": "Je hebt MBB-opdrachten op afstand ingeschakeld bij het instellen van {brand}, maar dit is een MEB-/ID-auto (ID.3/4/5/7, Enyaq, Born, Q4). De MEB-backend van VW ondersteunt het duurzame Car-Net-opdrachtpad niet — de duurzame login antwoordde \"Unknown user\" — dus vergrendel-, klimaat- en laadopdrachten kunnen niet worden verzonden.\n\nDe vermelding blijft **alleen-lezen**: voertuiggegevens komen nog steeds binnen via het EU Data Act-portaal, je ziet alleen geen opdracht-entiteiten. Dit is een bekende beperking van VW's MEB-platform, geen instelfout — je kunt deze melding sluiten."
+    },
+    "refresh_interval_too_frequent": {
+      "title": "{brand}: update-interval te frequent",
+      "description": "{brand} geeft kortlevende access-tokens uit, dus bij je huidige update-interval van **{current} minuten** moet vrijwel elke poll het token vernieuwen. Dat activeert de refresh-storm-beveiliging — een limiet op hoe vaak de integratie mag vernieuwen, bedoeld om te voorkomen dat het merkaccount wordt vergrendeld — en de gegevens stoppen met bijwerken totdat de beveiliging wordt gereset.\n\nDit is een probleem met de pollingfrequentie, niet een inlogprobleem: opnieuw authenticeren lost het niet op.\n\n**De oplossing:** verhoog het update-interval naar **{recommended} minuten** of meer in Instellingen → Apparaten en services → VW Group Connect → Configureren. Zo blijven de tokenvernieuwingen onder de limiet en blijven de gegevens binnenkomen.\n\nDeze waarschuwing verdwijnt automatisch zodra een tokenvernieuwing weer voor het eerst slaagt."
+    },
+    "mandatory_consent_missing": {
+      "title": "Škoda: verplichte toestemming niet geaccepteerd",
+      "description": "Je {brand}-account heeft een verplichte servicetoestemming niet geaccepteerd, waardoor sommige gegevens of functies mogelijk niet beschikbaar zijn. Open de MyŠkoda-app en accepteer de vereiste toestemming — deze melding verdwijnt daarna vanzelf."
+    },
+    "test_cohort_share_request": {
+      "title": "Help een nieuwe functie bevestigen — deel je testresultaat?",
+      "description": "Bedankt dat je meedoet aan de opt-in testgroep. Je auto zit in een of meer experimenten — bijvoorbeeld het achterhalen van de GPS-locatie of de batterijconditie (State-of-Health) van VW EU-auto's via het volkswagen.de-kanaal, of het vastleggen van hoe de backend van je auto precies op een commando reageert. Om het resultaat op verschillende modellen en platforms te bevestigen, zou het echt helpen als je een diagnosebestand deelt: ga naar Settings → Devices & Services → VW Group Connect → het menu met drie puntjes → Download diagnostics en voeg het bestand vervolgens toe aan de betreffende testers-issue op GitHub.\n\nDe export wordt automatisch geanonimiseerd voordat je hem downloadt — er zitten geen VIN, GPS, tokens of e-mailadres in — dus je kunt hem gerust openbaar delen. Je ziet dit alleen omdat je je hebt aangemeld; je kunt de melding wegklikken, en door de testgroep in de opties van de integratie weer uit te zetten stop je deze meldingen helemaal. Bedankt dat je helpt om functies te ontgrendelen voor iedereen die jouw model rijdt."
+    },
+    "stale_data": {
+      "title": "{vin}: voertuiggegevens al {age} uur niet ververst",
+      "description": "De laatste gegevens die je auto doorgaf, zijn ongeveer **{age} uur geleden** vastgelegd, ook al blijft de integratie succesvol opvragen. Dat kan twee oorzaken hebben: misschien staat de auto gewoon geparkeerd en in slaapstand (normaal — je hoeft niets te doen), of de gegevensstroom via de EU Data Act is verlopen en levert geen verse metingen meer.\n\nDe waarden die je nu ziet, zijn de laatst bekende — niet live. Is er sindsdien gereden of opgeladen en blijft deze waarschuwing staan, dan is de gegevensstroom hoogstwaarschijnlijk verlopen: ga naar volkswagen.de → de gegevensinstellingen van je auto en vernieuw of vraag het delen van gegevens opnieuw aan, of voeg het kanaal opnieuw toe.\n\nDeze waarschuwing verdwijnt vanzelf zodra er een verse meting binnenkomt."
+    }
+  },
+  "services": {
+    "start_climate_control": {
+      "name": "Klimaatregeling starten (uitgebreid)",
+      "description": "Start het voorklimatiseren met individuele stoelverwarming, ruitverwarming, klimaatmodus en gedrag bij ontgrendeling. Alleen van toepassing op Audi en VW EU (CARIAD BFF). Andere merken vallen terug op de basisservice `start_climatisation`. Alle payload-velden behalve `device_id` zijn optioneel — weggelaten velden behouden de standaardwaarde van het merk.",
+      "fields": {
+        "device_id": {
+          "name": "Voertuig",
+          "description": "Voertuig dat de voorklimatiseer-opdracht ontvangt."
+        },
+        "temp_c": {
+          "name": "Doeltemperatuur (C)",
+          "description": "Doeltemperatuur van de cabine in graden Celsius (15 tot 30, stap 0,5)."
+        },
+        "glass_heating": {
+          "name": "Ruitverwarming",
+          "description": "Schakel voorruit- en achterruitverwarming in naast het voorklimatiseren van de cabine."
+        },
+        "seat_fl": {
+          "name": "Stoelverwarming linksvoor",
+          "description": "Schakel stoelverwarming in op de linkervoorstoel."
+        },
+        "seat_fr": {
+          "name": "Stoelverwarming rechtsvoor",
+          "description": "Schakel stoelverwarming in op de rechtervoorstoel."
+        },
+        "seat_rl": {
+          "name": "Stoelverwarming linksachter",
+          "description": "Schakel stoelverwarming in op de linkerachterstoel."
+        },
+        "seat_rr": {
+          "name": "Stoelverwarming rechtsachter",
+          "description": "Schakel stoelverwarming in op de rechterachterstoel."
+        },
+        "climatisation_at_unlock": {
+          "name": "Klimaatregeling voortzetten na ontgrendelen",
+          "description": "Houd het voorklimatiseren actief nadat het voertuig is ontgrendeld."
+        },
+        "climatisation_mode": {
+          "name": "Klimatiseermodus",
+          "description": "Comfort (vol vermogen) of economy (verminderd vermogen, langere looptijd)."
+        }
+      }
+    },
+    "update_charging_settings": {
+      "name": "Laadinstellingen bijwerken (SEAT/CUPRA)",
+      "description": "Werk het SEAT/CUPRA-laadschema in één aanroep bij. Stelt een willekeurige combinatie in van doellaadtoestand, maximale AC-laadstroom en de vlag voor automatisch ontgrendelen wanneer opgeladen. Andere merken worden op het dispatch-niveau van de coördinator geweigerd.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "VIN van het bij te werken voertuig."
+        },
+        "target_soc": {
+          "name": "Doellaadtoestand (%)",
+          "description": "Doellaadtoestand tussen 20 en 100 procent."
+        },
+        "max_charge_current": {
+          "name": "Maximale AC-laadstroom",
+          "description": "Backend-enum, maximum of gereduceerd."
+        },
+        "auto_unlock_charge": {
+          "name": "Stekker automatisch ontgrendelen wanneer volledig opgeladen",
+          "description": "Indien waar ontgrendelt de connector zichzelf zodra het opladen is voltooid."
+        }
+      }
+    },
+    "execute_vehicle_action": {
+      "name": "Voertuigactie uitvoeren",
+      "description": "Geïntegreerde service die een uit een vervolgkeuzelijst geselecteerde voertuigactie verstuurt. Gelijkwaardig aan het aanroepen van de gelijknamige service per actie, maar gemakkelijker te vinden in de Home Assistant Lovelace-servicekiezer. Alle bestaande services per actie (vag_connect.lock, vag_connect.start_climatisation, enz.) blijven ongewijzigd werken.",
+      "fields": {
+        "device_id": {
+          "name": "Voertuig",
+          "description": "Het voertuigapparaat waarop de actie wordt uitgevoerd."
+        },
+        "action": {
+          "name": "Actie",
+          "description": "Welke actie moet worden verstuurd."
+        }
+      }
+    },
+    "open_app": {
+      "description": "Activeert het event `vag_connect_open_app` op de HA-eventbus met de payloadvelden `vin`, `brand`, `deeplink_url` en `action`, zodat een Lovelace-kaart de native mobiele app van het merk (myAudi, WeConnect, MyŠkoda, MySEAT, MyCUPRA, My Porsche of VW US) op het aanroepende apparaat kan openen. De integratie kan zelf geen URL's op een telefoon openen; de dashboardkaart is verantwoordelijk voor het navigeren naar `window.location.href = deeplink_url` op iOS / Android.",
+      "fields": {
+        "action": {
+          "description": "Optioneel padsegment dat aan de deeplink wordt toegevoegd zodat de merk-app direct naar een sectie navigeert. Standaard `open` opent de app op het startscherm.",
+          "name": "App-actie"
+        },
+        "vin": {
+          "description": "VIN van het voertuig waarvan de merk-app moet worden geopend.",
+          "name": "VIN"
+        }
+      },
+      "name": "Native merk-app openen (deeplink)"
+    },
+    "abrp_send": {
+      "name": "Telemetrie naar ABRP sturen",
+      "description": "Bouwt en stuurt de huidige telemetrie van het voertuig naar A Better Routeplanner.",
+      "fields": {
+        "device_id": {
+          "name": "Voertuig",
+          "description": "Het te uploaden voertuig (of gebruik VIN)."
+        },
+        "vin": {
+          "name": "VIN",
+          "description": "VIN van het voertuig (alternatief voor apparaat)."
+        },
+        "api_key": {
+          "name": "api_key overschrijven",
+          "description": "Optioneel. Vervangt de opgeslagen ontwikkelaarssleutel. Wordt nooit gelogd."
+        },
+        "token": {
+          "name": "token overschrijven",
+          "description": "Optioneel. Vervangt het opgeslagen voertuigtoken. Wordt nooit gelogd."
+        }
+      }
+    },
+    "set_location_target_soc": {
+      "name": "Laaddoel per locatie instellen",
+      "description": "Stelt het laaddoel van een specifiek laadprofiel in (Škoda, locatiegebonden).",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "VIN van het voertuig."
+        },
+        "profile_id": {
+          "name": "Profiel-ID",
+          "description": "ID van het laadprofiel (uit de laadprofielen-sensor)."
+        },
+        "target": {
+          "name": "Laaddoel (%)",
+          "description": "Laaddoel tussen 20 en 100 procent."
+        }
+      }
+    },
+    "set_seat_heating": {
+      "name": "Stoelverwarming instellen",
+      "description": "Schakelt de stoelverwarming per stoel (Škoda). Alleen de opgegeven stoelen veranderen.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "VIN van het voertuig."
+        },
+        "front_left": {
+          "name": "Linksvoor"
+        },
+        "front_right": {
+          "name": "Rechtsvoor"
+        },
+        "rear_left": {
+          "name": "Linksachter"
+        },
+        "rear_right": {
+          "name": "Rechtsachter"
+        }
+      }
+    },
+    "ask_assistant": {
+      "name": "De Škoda AI-assistent vragen (Laura)",
+      "description": "Stuur een vrije-tekstprompt naar de MyŠkoda AI-assistent \"Laura\" (alleen Škoda) en krijg het antwoord via response_variable (summary = antwoordtekst, session_id voor vervolgvragen). Alleen adviserend — routeplanning + productvragen, geen voertuigbesturing.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "VIN van het account."
+        },
+        "prompt": {
+          "name": "Vraag / prompt",
+          "description": "Vrije tekst voor de assistent."
+        },
+        "timezone": {
+          "name": "Tijdzone",
+          "description": "Optioneel (IANA, bijv. Europe/Zurich). Standaard de HA-systeemtijdzone."
+        },
+        "session_id": {
+          "name": "Sessie-ID",
+          "description": "Optioneel. Uit een vorig antwoord, om dezelfde context voort te zetten."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "vehicle_not_found": {
+      "message": "Voertuig met VIN {vin} niet gevonden."
+    },
+    "spin_required": {
+      "message": "S-PIN is vereist voor deze actie. Configureer het onder Instellingen → Apparaten en diensten → VW Group Connect → Configureren."
+    },
+    "feature_not_supported": {
+      "message": "De functie {feature} wordt niet ondersteund door uw voertuig of de huidige API-client. De actie is niet verzonden."
+    },
+    "wake_budget_exhausted": {
+      "message": "Dagelijkse wake-up budget op ({count}/{budget}). Om de 12V-accu te beschermen worden er geen verdere wake-ups verzonden tot middernacht UTC. Zie sensor.wake_count_today."
+    },
+    "wake_cooldown_active": {
+      "message": "Wake-up cooldown actief ({remaining_s}s resterend). Om de 12V-accu te beschermen zijn wake-ups beperkt tot één elke {cooldown_min} minuten per voertuig."
+    },
+    "read_only_mode_active": {
+      "message": "Alleen-lezen modus is ingeschakeld in de integratie-opties. Schakel het uit onder Instellingen → Apparaten en diensten → VW Group Connect → Configureren om voertuigcommando's te verzenden."
+    },
+    "read_only_portal_active": {
+      "message": "Dit voertuig maakt verbinding via VW's alleen-lezen EU Data Act-portaal, dus commando's op afstand (vergrendelen, klimaat, laden) zijn er niet voor beschikbaar. Dit is geen instelling die je kunt aan- of uitzetten — het portaalkanaal heeft geen commandopad."
+    },
+    "read_only_attestation_blocked": {
+      "message": "VW blokkeert opdrachten op afstand voor SEAT/CUPRA achter een Google-apparaatcontrole (Play Integrity / App Check) die alleen de officiële app op een echte telefoon kan doorstaan. Vergrendeling, klimaat en laden kunnen daarom niet vanaf hier worden verstuurd. Dit is een permanente blokkering aan de serverkant van VW, geen instelling die je kunt uitschakelen. Voertuiggegevens worden nog steeds bijgewerkt via het EU Data Act-portaal."
+    },
+    "export_file_not_allowed": {
+      "message": "Home Assistant mag {path} niet lezen. Zet het exportbestand in de configuratiemap (of in een map die onder allowlist_external_dirs staat) en geef het pad opnieuw op."
+    },
+    "export_file_not_found": {
+      "message": "Er is geen bestand gevonden op {path}. Controleer het pad. Een relatieve naam wordt in de configuratiemap gezocht."
+    },
+    "export_file_no_data": {
+      "message": "Dat bestand bevatte geen leesbare EU Data Act-dataset. Controleer of het de .zip is die je voor deze auto uit het VW-dataportaal hebt gedownload."
+    },
+    "historical_portal_not_ready": {
+      "message": "Het EU Data Act-portaal is nog niet gereed. Wacht tot de integratie na de installatie één keer heeft opgehaald en probeer de historische export dan opnieuw."
+    }
+  },
+  "selector": {
+    "execute_vehicle_action_options": {
+      "options": {
+        "lock": "Vergrendelen",
+        "unlock": "Ontgrendelen",
+        "start_climatisation": "Klimatisering starten",
+        "stop_climatisation": "Klimatisering stoppen",
+        "start_charging": "Opladen starten",
+        "stop_charging": "Opladen stoppen",
+        "flash_lights": "Lichten laten knipperen",
+        "start_window_heating": "Ruitverwarming starten",
+        "stop_window_heating": "Ruitverwarming stoppen",
+        "wake_vehicle": "Voertuig wekken",
+        "start_aux_heating": "Standkachel starten",
+        "stop_aux_heating": "Standkachel stoppen",
+        "start_ventilation": "Ventilatie starten",
+        "stop_ventilation": "Ventilatie stoppen"
+      }
+    }
+  }
+}

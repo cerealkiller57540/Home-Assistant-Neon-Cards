@@ -1,0 +1,99 @@
+input_boolean:
+  mode_bain_sdb:
+    name: "Mode Bain/Douche SdB"
+    icon: mdi:bathtub
+
+automation:
+  - alias: "Ambiance SdB - Démarrage mode bain"
+    id: ambiance_sdb_bain_start
+    trigger:
+      - platform: state
+        entity_id: input_boolean.mode_bain_sdb
+        to: "on"
+    action:
+      - service: light.turn_on
+        target:
+          entity_id: light.leds_sdb
+        data:
+          effect: "Meditation"
+
+  - alias: "Ambiance SdB - Arrêt mode bain"
+    id: ambiance_sdb_bain_stop
+    trigger:
+      - platform: state
+        entity_id: input_boolean.mode_bain_sdb
+        to: "off"
+    action:
+      - service: light.turn_on
+        target:
+          entity_id: light.leds_sdb
+        data:
+          effect: ""
+
+  - alias: "Ambiance SdB - Matin"
+    id: ambiance_sdb_matin
+    trigger:
+      - platform: time
+        at: "07:00:00"
+    condition:
+      - condition: state
+        entity_id: input_boolean.mode_bain_sdb
+        state: "off"
+    action:
+      - service: light.turn_on
+        target:
+          entity_id: light.leds_sdb
+        data:
+          color_temp_kelvin: 2700
+          brightness_pct: 30
+
+  - alias: "Ambiance SdB - Journée"
+    id: ambiance_sdb_journee
+    trigger:
+      - platform: time
+        at: "09:00:00"
+    condition:
+      - condition: state
+        entity_id: input_boolean.mode_bain_sdb
+        state: "off"
+    action:
+      - service: light.turn_on
+        target:
+          entity_id: light.leds_sdb
+        data:
+          color_temp_kelvin: 3200
+          brightness_pct: 50
+
+  - alias: "Ambiance SdB - Soir"
+    id: ambiance_sdb_soir
+    trigger:
+      - platform: time
+        at: "19:00:00"
+    condition:
+      - condition: state
+        entity_id: input_boolean.mode_bain_sdb
+        state: "off"
+    action:
+      - service: light.turn_on
+        target:
+          entity_id: light.leds_sdb
+        data:
+          rgb_color: [255, 140, 20]
+          brightness_pct: 40
+
+  - alias: "Ambiance SdB - Nuit"
+    id: ambiance_sdb_nuit
+    trigger:
+      - platform: time
+        at: "23:00:00"
+    condition:
+      - condition: state
+        entity_id: input_boolean.mode_bain_sdb
+        state: "off"
+    action:
+      - service: light.turn_on
+        target:
+          entity_id: light.leds_sdb
+        data:
+          rgb_color: [215, 150, 255]
+          brightness_pct: 15

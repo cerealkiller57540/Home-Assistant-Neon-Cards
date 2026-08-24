@@ -1,0 +1,1357 @@
+# Copyright 2026 Prash Balan (@its-me-prash) — GNU AGPL v3.0-or-later
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""Vehicle Data Scout — detects JSON fields the parser doesn't read.
+
+Mirrors the `upstream/cc-*` "Unexpected Keys found"
+pattern that has been our richest source of API findings (CC-seatcupra
+issue #109 with Rainer's CUPRA Born live dump, CC-skoda issue #50 with
+the Kodiaq iV 2026 complete response).
+
+Architecture:
+- Pure data layer: ``EXPECTED_KEYS`` declares paths we already read; the
+  ``detect_unexpected`` function walks an actual response and yields
+  ``UnexpectedField`` entries for paths NOT in the expected set.
+- Privacy: every yielded sample value is anonymised via ``mask_value``
+  (VIN/userID/GPS/email/token redaction) before leaving this module.
+- Brand-agnostic: the EXPECTED_KEYS table is keyed by ``(brand, endpoint)``
+  so each brand client can register its known shape.
+
+Usage from a brand client::
+
+    from cariad._unexpected_keys import detect_unexpected
+    findings = list(detect_unexpected("skoda", "vehicle-status", raw_status))
+    if findings:
+        coordinator.record_unexpected_keys(vin, findings)
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from typing import Any, Iterable
+
+from ._util import mask_vin
+
+# Patterns we always mask in sample values, regardless of field name.
+# VINs are 17 chars alphanumeric; rough match is fine for redaction.
+_VIN_RE = re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b")
+# Email addresses
+_EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
+# JWT-shaped tokens (3 base64 segments)
+_JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")
+# UUIDs (used for userIDs)
+_UUID_RE = re.compile(
+    r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
+)
+
+
+@dataclass(frozen=True)
+class UnexpectedField:
+    """A JSON path observed in a live response that our parser doesn't read.
+
+    Attributes:
+        path: Dotted JSON path, e.g. ``"charging.batteryStatus.value.temp_C"``.
+        sample_masked: Anonymised string snippet of the value seen
+            (truncated to 80 chars). NEVER contains raw VIN, userID,
+            GPS coordinate or token.
+        endpoint: Logical endpoint name (e.g. ``"vehicle-status"``).
+        first_seen_at: Timestamp of first observation (UTC ISO string).
+    """
+
+    path: str
+    sample_masked: str
+    endpoint: str
+    first_seen_at: str
+
+
+# `EXPECTED_KEYS[brand][endpoint]` is a set of dotted paths we know about.
+# Paths use lowercase brand names (matching ``BrandConfig.name``).
+# Add to these as new fields are integrated, so they stop appearing as
+# "unexpected" findings.
+#
+# Convention:
+#   - Top-level keys: just the key, e.g. ``"overall"``
+#   - Nested: dot-separated, e.g. ``"charging.batteryStatus.value"``
+#   - Wildcards: ``"*"`` matches any single segment
+#     (e.g. ``"doors.*.locked"`` covers ``doors.frontLeft.locked`` etc.)
+#   - Don't list scalar leaf values (we report parent paths)
+#
+# ─── Scout Policy (v2.4.1+) ────────────────────────────────────────────
+# See ``docs/SCOUT_POLICY.md`` for the full rules. Summary: every leaf-
+# value silenced here MUST also be parsed (parser → dataclass field →
+# entity). Silencer-only is no longer acceptable.
+#
+# Exemption tiers documented inline below:
+#   T2  — unit-variant duplicates (parse the canonical form, let
+#         SensorDeviceClass handle display-time unit conversion)
+#   T3  — *.carCapturedTimestamp leaves (consolidated into the
+#         coordinator's ``last_updated_at`` field)
+#   T4  — container declarations (endpoint roots, .status / .value /
+#         .settings wrappers — no leaf value)
+#   T5  — brand-specific paths from legacy fixtures (unclear if still
+#         in production; defer to next scout-confirmation)
+#
+# When you ADD a new silencer entry, add the parser+entity at the same
+# time OR add an inline ``# T2/T3/T4/T5 exempt`` comment.
+#
+# v2.4.1 audit (2026-05-25): classified 67 pre-existing silenced-only
+# paths. 12 promoted to T1 (parsed + entity, see vw_eu.py + sensor.py).
+# 55 documented as T2-T5 exempt with inline comments below.
+EXPECTED_KEYS: dict[str, dict[str, set[str]]] = {
+    "skoda": {
+        "vehicle-status": {
+            "overall", "overall.doors", "overall.doorsLocked",
+            "overall.windows", "overall.lights", "overall.locked",
+            "overall.reliableLockStatus",
+            "detail", "detail.sunroof", "detail.trunk", "detail.bonnet",
+            "carCapturedTimestamp",
+            # v1.12.2 (#107 — tritanium73's Skoda live test 2026-05-01,
+            # FIRST community Scout report from a non-maintainer!).
+            # The wildcards ``renders.lightMode.*`` only match 3-segment
+            # paths; the Scout reported ``renders.lightMode`` (2 segments)
+            # so the parent itself needs explicit registration too.
+            "renders", "renders.lightMode", "renders.lightMode.*",
+            "renders.darkMode", "renders.darkMode.*",
+            "compositeRenders", "compositeRenders.*",
+            "engine",
+        },
+        "charging": {
+            "status", "status.battery", "status.battery.stateOfChargeInPercent",
+            "status.battery.remainingCruisingRangeInMeters",
+            "status.battery.carCapturedTimestamp",
+            "status.state", "status.chargingState",
+            "status.chargePowerInKw", "status.chargingRateInKilometersPerHour",
+            "status.chargeType", "status.fullyChargedAt",
+            "status.remainingTimeToFullyChargedInMinutes",
+            "status.carCapturedTimestamp",
+            "settings", "settings.targetStateOfChargeInPercent",
+            "settings.autoUnlockPlugWhenChargedAC",
+            "settings.maxChargeCurrentAC",
+            "settings.carCapturedTimestamp",
+            # v1.19.3 (#143 whaak58 Skoda Scout-Report 2026-05-04) —
+            # Skoda mysmob now ships full charging settings under
+            # ``settings`` directly (lowercase Ac variants alongside
+            # legacy AC) plus location-aware flag + transient-error
+            # container + carCapturedTimestamp at top level. Wildcards
+            # cover all current + future setting children.
+            "isVehicleInSavedLocation",
+            "carCapturedTimestamp",
+            "errors",
+            "errors.*",
+            "settings.autoUnlockPlugWhenCharged",
+            "settings.availableChargeModes",
+            "settings.batteryCareModeTargetValueInPercent",
+            "settings.chargingCareMode",
+            "settings.maxChargeCurrentAc",
+            # v2.18.1 — Scout #781/#795 (@DvorakMartin1 Škoda). The integer-amps
+            # spelling ``maxChargeCurrentAcAmpere`` is READ by the parser
+            # (skoda.py ``_mca = v(settings, "maxChargeCurrentAcAmpere")``) but
+            # EXPECTED_KEYS was never updated — classic silencer-lag-behind-parser.
+            "settings.maxChargeCurrentAcAmpere",
+            "settings.preferredChargeMode",
+        },
+        "air-conditioning": {
+            "state", "targetTemperature", "targetTemperature.temperatureValue",
+            "windowHeatingState", "windowHeatingState.front", "windowHeatingState.rear",
+            "chargerConnectionState", "chargerLockState",
+            "carCapturedTimestamp",
+            # v1.12.2 (#107 — tritanium73's Skoda 2026-05-01 Live-Test).
+            # Newer mysmob air-conditioning response includes additional
+            # status meta: list of in-flight requests, steering-wheel
+            # position (LEFT/RIGHT), windowHeatingState.unspecified
+            # (when state is INVALID), departure timer list, outside
+            # temperature block, and an errors[] array.
+            "runningRequests",
+            "steeringWheelPosition",
+            "windowHeatingState.unspecified",
+            "timers",
+            "outsideTemperature",
+            "errors",
+            # v1.17.5 (#129 rocksandclouds + #130 Chr1sDub + #133
+            # christianmhz — three independent Skoda Scout-Reports
+            # 2026-05-03/04 converging on the same outsideTemperature
+            # leaf set). Backend now ships full block on air-conditioning
+            # endpoint with value/unit/timestamp. Wildcard covers
+            # potential future sub-fields without re-registering.
+            "outsideTemperature.*",
+            # v1.17.5 (#133 christianmhz) — targetTemperature now
+            # includes the in-car display unit (CELSIUS|FAHRENHEIT)
+            # alongside the value. Sibling of temperatureValue.
+            "targetTemperature.unitInCar",
+            # v1.19.3 (#143 whaak58 Skoda Scout-Report 2026-05-04) —
+            # newer Skoda firmware exposes per-feature toggles on the
+            # air-conditioning endpoint: airConditioningAtUnlock (auto-
+            # AC when unlocking via app), seatHeatingActivated (dict
+            # for front-left/front-right state), windowHeatingEnabled.
+            # Wildcards on seatHeatingActivated because per-seat dict
+            # may grow rear-seat keys on premium models.
+            "airConditioningAtUnlock",
+            "seatHeatingActivated",
+            "seatHeatingActivated.*",
+            "windowHeatingEnabled",
+            # v2.2.0 (#220, Daniel Walter Scout-Report 2026-05-16) —
+            # Skoda mysmob now exposes ``airConditioningWithoutExternalPower``
+            # boolean on the air-conditioning endpoint. Indicates whether
+            # climatisation can run from the HV battery alone (without
+            # being plugged into a charger). Wired as binary_sensor.
+            "airConditioningWithoutExternalPower",
+            # v2.17.0 (#682, ra666ack Scout 2026-07-09) — heaterSource enum
+            # ("AUTOMATIC") on air-conditioning. Cross-brand alias, parsed in
+            # skoda.py → the existing heater_source sensor.
+            "heaterSource",
+            # v2.4.2 (#302, Scout-Report 2026-05-27) — RETRO-SILENCER ADD.
+            # Field is ALREADY PARSED at skoda.py:586 since v2.1.0
+            # (``estimatedDateTimeToReachTargetTemperature`` → ``d.climate_ready_at``
+            # → ``sensor.climate_ready_at``). EXPECTED_KEYS was never
+            # updated when the parser shipped — classic silencer-lag-
+            # behind-parser gap, same class as v2.4.1 #284
+            # (chargingSettings.requests). The sensor is shipping fine
+            # for users; only the scout was noisy. T1 (parsed + entity
+            # exists, just registering the silencer side now).
+            "estimatedDateTimeToReachTargetTemperature",
+            # v2.5.8 (#315 #316 #321 #327 #328 #329 #330 #333 — EIGHT
+            # independent Skoda Scout-Reports converging on the same
+            # field 2026-05-28/29). Skoda mysmob now exposes a
+            # ``campingMode`` toggle/object on air-conditioning. Likely
+            # the new Enyaq/iV "Camping Mode" feature: climatisation
+            # runs continuously when parked + windows lock + roof-rack
+            # power-out. Sample shows ``{1 keys}`` so it's an object,
+            # not a primitive — wildcard registers all current + future
+            # sub-keys without per-leaf whack-a-mole.
+            # v2.5.8 also wires this as binary_sensor.camping_mode for
+            # Skoda (sensor named based on the boolean enabled key).
+            "campingMode",
+            "campingMode.*",
+        },
+        "parking": {
+            "parkingPosition", "parkingPosition.gpsCoordinates",
+            "parkingPosition.gpsCoordinates.latitude",
+            "parkingPosition.gpsCoordinates.longitude",
+            "parkingPosition.formattedAddress",
+            "carCapturedTimestamp",
+            # v1.17.5 (#133 christianmhz) — Skoda mysmob now wraps
+            # transient lookup failures (e.g. "no recent GPS fix") in
+            # an ``errors`` array on the parking endpoint, mirroring
+            # the same convention seen on air-conditioning + driving-
+            # range. Defensive registration with wildcard.
+            "errors",
+            "errors.*",
+        },
+        "driving-range": {
+            "totalRangeInKm", "electricRange", "electricRange.distanceInKm",
+            "combustionRange", "adBlueRange", "adBlueRange.distanceInKm",
+            "carCapturedTimestamp",
+            # v1.12.2 (#107) — Skoda mysmob now also publishes the
+            # high-level ``carType`` ("diesel"/"gasoline"/"electric"/
+            # "hybrid") at the top level + a ``primaryEngineRange``
+            # block (4 keys, similar to fuelStatus.primaryEngine on
+            # CARIAD-BFF). Registering silences the Scout — actually
+            # wiring these as fallback range sources is a v1.13.0+
+            # feature once we have a verified live response.
+            "carType",
+            "primaryEngineRange",
+            # v1.14.0 (#116, MavericklCS Scout-Report 2026-05-01) — four
+            # ``primaryEngineRange.*`` children on a Skoda gasoline-engine
+            # vehicle. Confirms the structure inferred in v1.12.2 from
+            # tritanium73's #107 report. ``currentSoCInPercent`` on a
+            # gasoline car is unusual — likely the 12V SoC; will be
+            # cross-checked with future Scout-Reports before wiring as a
+            # sensor.
+            "primaryEngineRange.engineType",
+            "primaryEngineRange.currentSoCInPercent",
+            "primaryEngineRange.currentFuelLevelInPercent",
+            "primaryEngineRange.remainingRangeInKm",
+            # v2.2.0 (#220, Daniel Walter Scout-Report 2026-05-16) —
+            # Skoda mysmob ``secondaryEngineRange`` expanded mid-May 2026
+            # from 1-key (``distanceInKm`` only) to 4-key shape mirroring
+            # the ``primaryEngineRange`` layout. New companion fields:
+            # ``engineType`` (PETROL/DIESEL on PHEV), ``currentFuelLevelInPercent``
+            # (secondary tank %), and an implicit container key.
+            # Wildcard registration covers all current + future children
+            # without per-field whack-a-mole — same pattern as primaryEngineRange.
+            "secondaryEngineRange",
+            "secondaryEngineRange.*",
+        },
+        "maintenance": {
+            "maintenanceReport", "maintenanceReport.mileageInKm",
+            "maintenanceReport.inspectionDueInKm",
+            "maintenanceReport.inspectionDueInDays",
+            "maintenanceReport.oilServiceDueInKm",
+            "maintenanceReport.oilServiceDueInDays",
+            "carCapturedTimestamp",
+            # v1.12.2 (#107) — Skoda mysmob v3 maintenance endpoint
+            # includes meta blocks alongside the report itself.
+            "maintenanceReport.capturedAt",
+            "preferredServicePartner",
+            "predictiveMaintenance",
+            "customerService",
+            # v1.14.0 (#116, MavericklCS) — ``predictiveMaintenance``
+            # has a ``setting`` sub-block (4 keys observed). Wildcard
+            # registration covers all current + future setting children
+            # without per-field whack-a-mole.
+            "predictiveMaintenance.setting",
+            "predictiveMaintenance.setting.*",
+            # v1.17.5 (#130 Chr1sDub Octavia iV 2024 + #133 christianmhz —
+            # both reported the same maintenance shape on 2026-05-04).
+            # Skoda mysmob exposes preferred-workshop info (name, brand,
+            # partner-id, contact, address, location, opening hours) and
+            # service-booking history (active + past). Wildcards because
+            # contact/address/location/openingHours are deeply nested
+            # composite blocks; we don't read them yet but registering
+            # silences the Scout. Future feature work can wire a
+            # ``preferred_workshop_name`` sensor + booking attrs.
+            #
+            # Both 2-segment + 3-segment wildcards needed because the
+            # Scout walker (``_walk`` in this module) DESCENDS through
+            # known parents. ``preferredServicePartner.*`` matches the
+            # 2-segment children (``contact``, ``address``, ``location``,
+            # ``openingHours``) — those ARE dicts so the walker recurses
+            # into them and 3-segment leaves (``contact.phone``,
+            # ``address.street``, ``location.lat/lon``) need their own
+            # wildcard. ``customerService`` is shallower (2 keys both
+            # arrays) so 2-segment alone suffices but 3-segment is safe
+            # future-proofing.
+            "preferredServicePartner.*",
+            "preferredServicePartner.*.*",
+            "customerService.*",
+            "customerService.*.*",
+            # v2.8.0 quick win C — brake-service due-date fields on the
+            # Skoda mysmob maintenanceReport. Different MOD generations
+            # ship different field names; we accept both spellings in
+            # the parser and silence both here so the Scout does not
+            # flag the unread variant as an unexpected key.
+            "maintenanceReport.brakeFluidServiceDueInDays",
+            "maintenanceReport.brakeFluidChangeDueInDays",
+            "maintenanceReport.brakeFluidChange_days",
+            "maintenanceReport.brakePadsFrontInspectionDueInDays",
+            "maintenanceReport.brakePadFrontInspectionDueInDays",
+            "maintenanceReport.brakePadsRearInspectionDueInDays",
+            "maintenanceReport.brakePadRearInspectionDueInDays",
+        },
+        "readiness": {
+            "unreachable", "inMotion", "carCapturedTimestamp",
+            # v1.19.3 (#143 whaak58 Skoda Scout-Report 2026-05-04) —
+            # newer Skoda firmware exposes additional readiness flags:
+            # ignitionOn (boolean) + batteryProtectionLimitOn (12V
+            # protection threshold reached). Useful future signals
+            # for "car is being driven" / "12V critical" automations.
+            "ignitionOn",
+            "batteryProtectionLimitOn",
+        },
+        # v1.20.0 (Bundle 2 Phase A) — myskoda PR #557 widget endpoint
+        # for lightweight per-tick polling. Schema verified against
+        # myskoda WidgetResponse model + 2 fixtures (parked + inmotion).
+        # Wildcards on per-section subtree because parking + maps blocks
+        # carry varying optional children depending on vehicle state
+        # (in-motion vs parked, with/without GPS).
+        "widget": {
+            "vehicle", "vehicle.name", "vehicle.licensePlate",
+            "vehicle.renderUrl",
+            "vehicleStatus", "vehicleStatus.doorsLocked",
+            "vehicleStatus.drivingRangeInKm",
+            "chargingStatus",
+            "chargingStatus.stateOfChargeInPercent",
+            "chargingStatus.remainingTimeToFullyChargedInMinutes",
+            "parkingPosition", "parkingPosition.state",
+            "parkingPosition.formattedAddress",
+            "parkingPosition.gpsCoordinates",
+            "parkingPosition.gpsCoordinates.latitude",
+            "parkingPosition.gpsCoordinates.longitude",
+            "parkingPosition.maps",
+            "parkingPosition.maps.lightMapUrl",
+            "parkingPosition.maps.darkMapUrl",
+            # Wildcards for forward-compat children we haven't seen yet
+            "vehicle.*",
+            "vehicleStatus.*",
+            "chargingStatus.*",
+            "parkingPosition.*",
+            "parkingPosition.maps.*",
+            "parkingPosition.gpsCoordinates.*",
+        },
+    },
+    "cupra": {
+        "status": {
+            "doors", "doors.*", "doors.*.locked", "doors.*.open",
+            "windows", "windows.*", "windows.sunroof",
+            "trunk", "trunk.open", "trunk.locked",
+            "hood", "hood.open",
+            # v1.10.2 (#53 Gerhard's Born Live-Dump 2026-04-30) — newer
+            # OLA firmware ships flat top-level overall fields alongside
+            # the structured tree.
+            "hood.locked",
+            "locked",        # overall door-locked bool
+            "lights",        # vehicle lights state ("off"/"on")
+            "updatedAt",     # alternate to carCapturedTimestamp
+            "sunroof", "sunRoof",
+            "engine",
+            "access", "access.doorClosedLeftFront", "access.doorClosedRightFront",
+            "access.doorClosedLeftBack", "access.doorClosedRightBack",
+            "access.doorsOpenedCount", "access.windowsOpenedCount",
+            "access.trunk", "access.trunkLocked", "access.trunkStatus",
+            "access.hood", "access.hoodOpen", "access.sunroof",
+            "access.sunroofOpen",
+            "carCapturedTimestamp",
+        },
+        "mycar": {
+            "measurements", "measurements.mileage", "measurements.mileage.value",
+            "measurements.fuelLevelStatus",
+            "measurements.fuelLevelStatus.value",
+            "measurements.fuelLevelStatus.value.currentFuelLevel_pct",
+            "measurements.batteryStatus",
+            "measurements.batteryStatus.value",
+            "measurements.batteryStatus.value.currentSOC_pct",
+            "access", "access.accessStatus", "access.accessStatus.value",
+            "access.accessStatus.value.doorLockStatus",
+            # v1.10.2 (#53 Gerhard's Born Live-Dump) — top-level meta blocks.
+            # We don't drill into them yet but registering silences the Scout.
+            "engines",       # vehicle engine info block
+            "services",      # subscribed services info block
+            "carCapturedTimestamp",
+            # v1.16.1 (#122 r1150gs SEAT Scout-Report 2026-05-02) —
+            # ``engines`` block has a ``primary`` sub-block (3 keys
+            # observed). Wildcard registration covers all current +
+            # future primary children without per-field whack-a-mole.
+            "engines.primary",
+            "engines.primary.*",
+            # v2.2.0 PR #18/20 (#232 matthias0304 CUPRA Scout-Report
+            # 2026-05-16) — ``engines.secondary`` 3-key block shipped on
+            # CUPRA PHEV variants (Formentor PHEV, Leon e-Hybrid). Mirrors
+            # the Skoda Scout #220 ``driving-range.secondaryEngineRange``
+            # pattern. Wired in seat_cupra.py parser to populate the
+            # existing cross-brand ``secondary_engine_{range_km,type,
+            # fuel_level_pct}`` fields. Wildcard registration covers
+            # all current + future secondary children without per-field
+            # whack-a-mole — same pattern as engines.primary.
+            "engines.secondary",
+            "engines.secondary.*",
+            # v1.17.5 (#53 Gerhard Born v1.17.4 test 2026-05-04) —
+            # ``services`` block on mycar has been registered as parent
+            # since v1.10.2; Born now exposes the per-service entitlement
+            # children (charging/climatisation/windowHeating). Each is a
+            # multi-key dict (subscription state + caps + limits) that we
+            # don't drill into yet — wildcard silences Scout for any
+            # future per-service shape changes. 3-segment wildcard for
+            # the per-service leaves (sub state, expiry, etc.).
+            "services.*",
+            "services.*.*",
+        },
+        "charging": {
+            "battery", "battery.stateOfChargeInPercent", "battery.currentSOC_pct",
+            # v1.10.2 (#53 Gerhard's Born Live-Dump) — Born 2026 firmware
+            # uses camelCase field names.
+            "battery.currentSocPercentage",
+            "battery.estimatedRangeInKm",
+            "currentPct",
+            "charging", "state", "status", "chargingState",
+            "chargePowerInKw", "chargePower_kW", "chargedPowerInKw",
+            "chargeRateInKmPerHour", "chargeRate_kmph",
+            # v2.4.2 (#299, Scout-Report 2026-05-27) — RETRO-SILENCER ADD.
+            # Field is ALREADY PARSED at seat_cupra.py:747 since v2.0.1
+            # (Scout #192 — Cupra Born MY26 ships ``rateInKmph`` on the
+            # OLA charging endpoint as a 3rd-position fallback in the
+            # ``charging_rate_kmh`` chain after ``chargeRateInKmPerHour``
+            # and ``chargeRate_kmph``). Wired into ``sensor.charging_speed``.
+            # EXPECTED_KEYS just never got the silencer-side entry —
+            # silencer-lag-behind-parser gap. T1 (parsed + entity exists).
+            "rateInKmph",
+            # v2.4.3 (pre-emptive, 2026-05-27 upstream sweep) — pycupra
+            # v0.2.31 (upstream, 2026-05-26) added Compressed Natural Gas
+            # (CNG) instruments for CUPRA Leon TGI / Ibiza TGI variants.
+            # We don't have a CUPRA TGI tester live yet but ship the
+            # silencer pre-emptively to avoid scout spam when one shows up.
+            # T5 (community-discovered field, not yet parser-wired — when
+            # a tester reports we'll promote to T1 with sensor.cng_range_km
+            # + sensor.cng_level_pct entities, mirroring the existing
+            # diesel_range pattern from v1.9.1 #91).
+            "cngLevel", "cngLevelInPct", "cng_level_pct",
+            "cngRange", "cngRangeInKm", "cng_range_km",
+            "remainingTimeInMinutes", "remainingTime",
+            "remainingTimeToFullyChargedInMinutes", "remainingChargingTime",
+            "chargeType", "chargingType", "type",
+            "chargeMode", "preferredChargeMode", "mode",
+            "settings", "active", "batteryCardStatus", "progressBarPct",
+            "plug", "plug.connectionState", "plug.plugConnectionState",
+            "plug.lockState", "plug.externalPower",
+            # v1.10.2 (#53 Gerhard) — short field name variants on Born 2026.
+            "plug.connection",
+            "plug.lock",
+            # v1.10.2 (#53 Gerhard) — nested ``charging.*`` paths (the
+            # backend wraps the flat fields above into a nested object on
+            # newer firmware as well).
+            "charging.state",
+            "charging.remainingTimeInMinutes",
+            "charging.chargedPowerInKw",
+            "charging.type",
+            "charging.mode",
+            "charging.settings",
+            # v2.5.8 (#331 matthias0304 + #332 ColinSainsbury — TWO
+            # independent CUPRA Scout-Reports converging 2026-05-29).
+            # OLA backend now exposes lifetime charge-energy total at
+            # the top of the charging block + a rateInKmph rename of
+            # the existing chargingRateInKilometersPerHour field.
+            # T1 plan: chargeRate_kmph fallback chain already covers
+            # rateInKmph variant in seat_cupra.py:747 (silencer-lag-
+            # behind-parser, exactly the v2.4.2 #299 pattern). Adding
+            # silencer here completes T1.
+            # battery.chargeEnergyInKwh is NEW — currently parser-side
+            # null, but worth registering ahead of a future
+            # sensor.charging_session_energy_kwh entity (currently
+            # only Skoda has total_charged_energy_kwh per #35).
+            "battery.chargeEnergyInKwh",
+            "charging.rateInKmph",
+        },
+        "charging-info": {
+            "targetSOC_pct", "targetSoc_pct", "targetStateOfChargeInPercent",
+            "maxChargeCurrentAC", "maxChargeCurrent",
+            "autoUnlockPlugWhenCharged", "autoUnlockPlugWhenChargedAC",
+            # v1.10.2 (#53 Gerhard's Born Live-Dump) — wrapper blocks
+            # for the new charge-care subsystem.
+            "settings",
+            "chargingCareSettings",
+            "chargingCareStatus",
+            "carCapturedTimestamp",
+            # v1.17.5 (#53 Gerhard Born v1.17.4 test 2026-05-04) — Born
+            # now publishes the per-setting children directly under
+            # ``settings`` (lowercase ``Ac`` suffix variant alongside the
+            # uppercase ``AC`` we already had above) and the charge-care
+            # status leaves. Wildcards because the dict shape is settled
+            # for now but Born firmware migrations have shown to add
+            # fields each release. 3-segment for any nested settings dicts.
+            "settings.*",
+            "settings.*.*",
+            "chargingCareSettings.*",
+            "chargingCareSettings.*.*",
+            "chargingCareStatus.*",
+            "chargingCareStatus.*.*",
+        },
+        "climatisation": {
+            "status", "status.climatisationState", "status.state",
+            "settings", "settings.targetTemperature_K",
+            "settings.targetTemperatureInCelsius", "targetTemperatureCelsius",
+            "outsideTemperature",
+            "windowHeatingStateFront", "windowHeatingStateRear",
+            "carCapturedTimestamp",
+            # v2.12.0 (#411 heidle78 / #414 matthias0304 / #416 goncal) —
+            # newer firmware on /v1/.../climatisation/status moves the
+            # state + window-heating blocks under dedicated top-level
+            # sub-objects. Parsed since v2.11.4; registering here so the
+            # Scout stops flagging them as unexpected.
+            "climatisationStatus",
+            "climatisationStatus.climatisationState",
+            "climatisationStatus.remainingClimatisationTime_min",
+            "climatisationStatus.carCapturedTimestamp",
+            "windowHeatingStatus",
+            "windowHeatingStatus.windowHeatingStateFront",
+            "windowHeatingStatus.windowHeatingStateRear",
+            "windowHeatingStatus.windowHeatingStatus",
+        },
+        # v2.5.3 (#306) — OLA /v1/vehicles/{vin}/mileage. Endpoint shipped
+        # by the OLA backend with server-side cached odometer values that
+        # remain available even when /v5/mycar reports the vehicle as
+        # offline. Field-name variants observed across firmware: snake +
+        # camel + ``*InKm`` (myskoda-style) + plain ``value``.
+        "mileage": {
+            "mileageInKm", "mileage", "odometer", "currentMileage", "value",
+            "carCapturedTimestamp", "updatedAt",
+            # Wildcard for any forward-compat OLA additions we haven't
+            # explicitly observed yet. Belt-and-braces against this
+            # endpoint being a future scout-issue magnet.
+            "*",
+        },
+    },
+    # SEAT shares OLA endpoints with CUPRA — same expected-keys table.
+    "seat": {},  # populated at module load below
+    "volkswagen": {
+        "selectivestatus": {
+            "access", "access.accessStatus", "access.accessStatus.value",
+            "access.accessStatus.value.overallStatus",
+            "access.accessStatus.value.carCapturedTimestamp",
+            "access.accessStatus.value.doors", "access.accessStatus.value.windows",
+            "access.accessStatus.value.doorLockStatus",
+            "charging", "charging.batteryStatus", "charging.batteryStatus.value",
+            "charging.batteryStatus.value.currentSOC_pct",
+            "charging.batteryStatus.value.cruisingRangeElectric_km",
+            "charging.batteryStatus.value.carCapturedTimestamp",
+            "charging.chargingStatus", "charging.chargingStatus.value",
+            "charging.chargingStatus.value.chargingState",
+            "charging.chargingStatus.value.chargePower_kW",
+            # v2.2.2 (Scout #260, j4x5mgq94b-commits, Audi 2026-05-17) —
+            # ``chargeRate_kmph`` was parsed since v1.10.0
+            # (``vw_eu.py`` → ``d.charging_rate_kmh`` → ``sensor.charging_speed``)
+            # but never registered in EXPECTED_KEYS, so the Scout fired
+            # on it as "unexpected". Classic silencer-lagging-behind-parser
+            # gap. Audi inherits via ``EXPECTED_KEYS["audi"] = ...``.
+            "charging.chargingStatus.value.chargeRate_kmph",
+            "charging.chargingStatus.value.chargeMode",
+            "charging.chargingStatus.value.chargeType",
+            "charging.chargingStatus.value.remainingChargingTimeToComplete_min",
+            # v2.3.0 — scout #264 (Audi moltke69 2026-05-19): route-aware
+            # smart-charging fields. Backend computes a navigation-target
+            # SoC + ETA based on the user's planned nav route.
+            # Both wired in vw_eu.py → d.nav_target_soc_pct +
+            # d.remaining_charge_time_nav_min → new sensors.
+            "charging.batteryStatus.value.navigationTargetSOC_pct",
+            "charging.chargingStatus.value.remainingChargingTimeNavigation_min",
+            "charging.chargingStatus.value.chargingSettings",
+            "charging.chargingStatus.value.chargingScenario",
+            "charging.chargingStatus.value.carCapturedTimestamp",
+            # v2.2.3 — scout #268 (VW EU arvcer 2026-05-21): pending
+            # ``start_charging``/``stop_charging`` commands queue. Mirror
+            # of the existing ``chargingSettings.requests`` parser, now
+            # parsed into ``d.charging_status_pending`` (count diagnostic).
+            "charging.chargingStatus.requests",
+            # v2.4.1 — scout #284 (Audi KimmoT727 2026-05-24): retroactive
+            # silencer-add for the long-parsed ``chargingSettings.requests``
+            # field (parser shipped v1.27.2 #181 but EXPECTED_KEYS was
+            # never updated — classic Scout Policy gap, see
+            # docs/SCOUT_POLICY.md). Reporter on latest v2.4.0, scout
+            # legitimately re-fired because of this gap. Audi inherits.
+            "charging.chargingSettings.requests",
+            "charging.chargingSettings", "charging.chargingSettings.value",
+            "charging.chargingSettings.value.targetSOC_pct",
+            "charging.chargingSettings.value.maxChargeCurrentAC",
+            # v1.9.1 (#90, Golf 7 GTE Live-Dump) — VW EU added the
+            # explicit ampere variant alongside the legacy enum string.
+            "charging.chargingSettings.value.maxChargeCurrentAC_A",
+            "charging.chargingSettings.value.autoUnlockPlugWhenChargedAC",
+            "charging.chargingSettings.value.carCapturedTimestamp",
+            # v1.9.1 (#90) — top-level chargeMode block on selectivestatus.
+            # Same content as chargingStatus.value.chargeMode, just exposed
+            # at the brand level too. Don't recurse — already covered above.
+            "charging.chargeMode",
+            # v2.15.8 (#583 audi) — chargeMode sub-job gained its own pending
+            # ``requests`` queue (sibling of chargingSettings.requests /
+            # chargingStatus.requests). Now CONSUMED by the parser into
+            # ``charging_mode_pending`` (count). Register the 3-segment leaf
+            # explicitly — the 2-segment ``charging.chargeMode`` block above
+            # does NOT cover the equal-depth-matched ``.requests`` child.
+            "charging.chargeMode.requests",
+            "charging.plugStatus", "charging.plugStatus.value",
+            "charging.plugStatus.value.plugConnectionState",
+            "charging.plugStatus.value.plugLockState",
+            "charging.plugStatus.value.externalPower",
+            "charging.plugStatus.value.ledColor",
+            "charging.plugStatus.value.carCapturedTimestamp",
+            # v2.12.0 (#415 gudden VW / #417 moltke69 + #419 audi) — three
+            # selectivestatus jobs the backend started shipping on newer
+            # MEB/PPE firmware: batterySupport (12V-battery support state),
+            # chargingProfiles (saved charge-location profiles) and
+            # chargingTimers (departure/charge schedules). INTERIM
+            # wildcard silencer — same pattern as activeVentilation above:
+            # absorb the unknown sub-shape so Scouts stop spamming while a
+            # follow-up PR builds the full parser + entities once we have a
+            # real payload to confirm field names. Audi inherits via the
+            # module-load copy below.
+            # v2.12.1 (#423 nekas123 audi) — the backend nests these one
+            # level deeper than v2.12.0 assumed: e.g.
+            # ``chargingTimers.chargingTimersStatus.value`` (3 segments).
+            # The matcher requires an equal-depth wildcard, so 2-segment
+            # ``chargingTimers.*`` does NOT cover the 3-segment path. Add
+            # 2- and 3-deep wildcards for each container.
+            "charging.batterySupport", "charging.batterySupport.*",
+            "charging.batterySupport.*.*", "charging.batterySupport.*.*.*",
+            "batterySupport", "batterySupport.*", "batterySupport.*.*",
+            # v2.21.0 — the real payload nests 4 deep
+            # (``batterySupport.batterySupportStatus.value.batterySupport``);
+            # the value is now MAPPED to battery_support_state, so absorb the
+            # rest of the container instead of leaking it to the Scout (the
+            # 3-deep wildcard above missed this depth — same gap chargingProfiles
+            # /chargingTimers already had fixed).
+            "batterySupport.*.*.*",
+            "chargingProfiles", "chargingProfiles.*", "chargingProfiles.*.*",
+            "charging.chargingProfiles", "charging.chargingProfiles.*",
+            "charging.chargingProfiles.*.*",
+            "chargingTimers", "chargingTimers.*", "chargingTimers.*.*",
+            "charging.chargingTimers", "charging.chargingTimers.*",
+            "charging.chargingTimers.*.*",
+            # v2.13.0 (#446 + #448 audi) — the backend nests these ONE LEVEL
+            # DEEPER again: e.g. ``chargingTimers.chargingTimersStatus.value.
+            # timers`` and ``chargingProfiles.chargingProfilesStatus.value.
+            # profiles`` (4 segments). Equal-depth matcher → add 4-deep (and
+            # the charging.-prefixed 5-deep) wildcards for each container.
+            "chargingProfiles.*.*.*", "charging.chargingProfiles.*.*.*",
+            "chargingTimers.*.*.*", "charging.chargingTimers.*.*.*",
+            # v2.15.4 (#530 audi) — these two 5-segment leaves under the
+            # chargingProfilesStatus container are now CONSUMED by the parser
+            # (next_charging_timer_id + next_charging_timer_target_soc_reachable;
+            # see vw_eu.py _parse_status). Register them explicitly so the Scout
+            # stops re-reporting once the fallback maps them. Equal-depth matcher
+            # → the 4-deep ``chargingProfiles.*.*.*`` above does NOT cover these.
+            "chargingProfiles.chargingProfilesStatus.value.nextChargingTimer.id",
+            "chargingProfiles.chargingProfilesStatus.value.nextChargingTimer.targetSOCreachable",
+            # v2.12.1 (#423) — DC counterpart of the long-parsed
+            # autoUnlockPlugWhenChargedAC setting.
+            "charging.chargingSettings.value.autoUnlockPlugWhenChargedDC",
+            "climatisation", "climatisation.climatisationStatus",
+            "climatisation.climatisationStatus.value",
+            "climatisation.climatisationStatus.value.climatisationState",
+            "climatisation.climatisationStatus.value.remainingClimatisationTime_min",
+            "climatisation.climatisationStatus.value.carCapturedTimestamp",
+            # v2.2.3 — scout #272 (VW EU arvcer 2026-05-23): pending
+            # start/stop climatisation commands queue. Mirror of the
+            # ``charging.chargingStatus.requests`` pattern added at
+            # the same time. Parsed into ``d.climatisation_status_pending``.
+            "climatisation.climatisationStatus.requests",
+            # v2.4.1 — scout #283 (VW EU Brinki99 2026-05-24): fourth
+            # and final ``*.requests`` queue-counter family member,
+            # on the climatisationSettings side. Parsed into
+            # ``d.climatisation_settings_pending``. Audi inherits.
+            "climatisation.climatisationSettings.requests",
+            # v2.4.2 — scout #301 (VW EU 2026-05-27): new ID-family
+            # ACTIVE VENTILATION subsystem (front-seat active ventilation
+            # while charging — replaces older "ventilation" climatisation
+            # mode on MEB ID.7 + facelift ID.3/.4). Backend ships:
+            #   - climatisation.activeVentilationStatus.value.* (state + ETA)
+            #   - climatisation.climatisationSettings.value.activeVentilationSettings.* (config)
+            #   - climatisationTimers.activeVentilationTimersStatus.value.* (schedule)
+            #
+            # INTERIM SILENCER (this PR): wildcards .* absorb the unknown
+            # sub-shape so Scouts don't spam users while a follow-up PR
+            # builds the full parser + entities. The shape inferred from
+            # key-counts in the scout report aligns with the sibling
+            # ``climatisationStatus.value.{climatisationState,
+            # remainingClimatisationTime_min, carCapturedTimestamp}`` pattern
+            # but needs real-payload confirmation before shipping entities
+            # with possibly-wrong field names.
+            #
+            # v2.10.0 — IOU CLEARED. Parser shipped at vw_eu.py:1858-1873 in
+            # Group A; ``d.active_ventilation_state`` + ``d.active_ventilation_remaining_time_min``
+            # are populated from three observed field-name variants
+            # (ventilationState / activeVentilationState, ventilationRemainingTimeInMinutes /
+            # ventilationRemainingTime_min / remainingTime_min). Entities live at
+            # sensor.py:1528-1545 (active_ventilation_state +
+            # active_ventilation_remaining_time_min). The previously planned
+            # ``duration_min`` and ``timer_count`` fields turned out to be
+            # absent from the live CARIAD-BFF payload across all 4 collected
+            # community dumps; if they appear later the parser walker will
+            # surface them via Scout. Audi inherits via line 851.
+            "climatisation.activeVentilationStatus",
+            "climatisation.activeVentilationStatus.*",
+            # v2.21.0 — the backend also nests state + remaining time one level
+            # deeper under ``.value`` using the generic ``climatisationState`` /
+            # ``remainingClimatisationTime_min`` names (#845/#856/#859). Those are
+            # now parsed into active_ventilation_state / _remaining_time_min, so
+            # absorb the value.* container (the 1-deep wildcard above missed it).
+            "climatisation.activeVentilationStatus.*.*",
+            # v2.21.0 — aux-heating settings container on VW EU (#843/#868).
+            # v2.24.0 — the child wildcard is deliberately GONE. Absorbing both
+            # the container AND its children made us blind to the very thing we
+            # were waiting for: a reporter sent a diagnostic to map these, and
+            # the field had already been filtered out before it reached the
+            # export, so the file could not contain what we asked for. Silencing
+            # a container is about stopping the parent from re-reporting as one
+            # anonymous blob; its named children are exactly the discovery
+            # signal, and they are few, so they do not flood anything. Same
+            # reasoning for the ventilation settings next to it. When these are
+            # mapped, delete the container line too rather than re-adding ".*".
+            "climatisation.climatisationSettings.value.auxiliaryHeatingSettings",
+            "climatisation.climatisationSettings.value.activeVentilationSettings",
+            "climatisationTimers.activeVentilationTimersStatus",
+            "climatisationTimers.activeVentilationTimersStatus.value",
+            "climatisationTimers.activeVentilationTimersStatus.value.*",
+            "climatisation.climatisationSettings",
+            "climatisation.climatisationSettings.value",
+            "climatisation.climatisationSettings.value.targetTemperature_C",
+            # v1.9.1 (#90) — Fahrenheit pair to celsius (US-region exposure).
+            "climatisation.climatisationSettings.value.targetTemperature_F",
+            # v1.9.1 (#90) — flag indicating climate without external power.
+            "climatisation.climatisationSettings.value.climatisationWithoutExternalPower",
+            "climatisation.climatisationSettings.value.carCapturedTimestamp",
+            "climatisation.windowHeatingStatus",
+            # Unreleased — Scout #934 (Audi Q4 e-tron 2023): the pending-command
+            # queue counter on the windowHeating side. Same ``*.requests``
+            # envelope family as chargingStatus / climatisationStatus /
+            # climatisationSettings above (a list of in-flight command requests,
+            # not a vehicle reading), so it is known-structural, not new data.
+            "climatisation.windowHeatingStatus.requests",
+            "climatisation.windowHeatingStatus.value",
+            "climatisation.windowHeatingStatus.value.windowHeatingStatus",
+            "climatisation.windowHeatingStatus.value.carCapturedTimestamp",
+            "measurements", "measurements.rangeStatus",
+            "measurements.rangeStatus.value",
+            "measurements.rangeStatus.value.electricRange",
+            # v1.9.1 (#91, Audi S6 TDI) — diesel range alongside electric
+            # for ICE / plug-in vehicles. Same pattern as Skoda's
+            # adblue_range exposure.
+            "measurements.rangeStatus.value.dieselRange",
+            "measurements.rangeStatus.value.gasolineRange",
+            # v2.4.2 — scout #301 (VW EU 2026-05-27): retro-silencer-add
+            # for AdBlue tank remaining-range on TDI vehicles. Parser
+            # already lifts ``adBlueRange`` to brand level since v1.9.1
+            # (vw_eu.py → d.adblue_range_km → sensor.adblue_range),
+            # but EXPECTED_KEYS was never updated for the
+            # ``measurements.rangeStatus.value.adBlueRange`` source path.
+            # Classic silencer-lagging-behind-parser gap, same class as
+            # #284 (chargingSettings.requests). Audi inherits via line 851.
+            "measurements.rangeStatus.value.adBlueRange",
+            "measurements.rangeStatus.value.totalRange_km",
+            "measurements.rangeStatus.value.carCapturedTimestamp",
+            "measurements.odometerStatus",
+            "measurements.odometerStatus.value",
+            "measurements.odometerStatus.value.odometer",
+            "measurements.odometerStatus.value.carCapturedTimestamp",
+            "measurements.fuelLevelStatus",
+            "measurements.fuelLevelStatus.value",
+            "measurements.fuelLevelStatus.value.currentSOC_pct",
+            # v1.9.1 (#91) — combustion fuel level percentage. Same key
+            # pattern as currentSOC_pct but for the petrol/diesel tank.
+            "measurements.fuelLevelStatus.value.currentFuelLevel_pct",
+            "measurements.fuelLevelStatus.value.primaryEngineType",
+            "measurements.fuelLevelStatus.value.carType",
+            # v2.10.0 — measurements.tirePressureStatus parser fallback wired
+            # in vw_eu.py:_parse_status. EU firmware tends to publish on
+            # ``tyrePressure.*``, newer US/PPC firmware publishes here.
+            "measurements.tirePressureStatus",
+            "measurements.tirePressureStatus.value",
+            "measurements.tirePressureStatus.value.*",
+            "measurements.tirePressureStatus.error",
+            "measurements.tirePressureStatus.error.*",
+            "measurements.fuelLevelStatus.value.carCapturedTimestamp",
+            "measurements.temperatureBatteryStatus",
+            "measurements.temperatureBatteryStatus.value",
+            "measurements.temperatureBatteryStatus.value.carCapturedTimestamp",
+            "measurements.temperatureOutsideStatus",
+            "measurements.temperatureOutsideStatus.value",
+            "measurements.temperatureOutsideStatus.value.temperatureOutside_K",
+            "measurements.temperatureOutsideStatus.value.carCapturedTimestamp",
+            "readiness", "readiness.readinessStatus",
+            "readiness.readinessStatus.value",
+            "readiness.readinessStatus.value.connectionState",
+            "readiness.readinessStatus.value.connectionWarning",
+            "vehicleLights", "vehicleLights.lightsStatus",
+            "vehicleLights.lightsStatus.value",
+            # v1.9.1 (#90 + #91) — explicit nested fields on lightsStatus.
+            "vehicleLights.lightsStatus.value.carCapturedTimestamp",
+            "vehicleLights.lightsStatus.value.lights",
+            # v1.9.1 (#90 + #91) — top-level diagnostic blocks added
+            # in newer firmware. We don't read them yet, but registering
+            # them silences the Vehicle Data Scout for these well-known
+            # branches. Future feature work can drill into the children.
+            "userCapabilities",
+            "fuelStatus",
+            "vehicleHealthInspection",
+            "vehicleHealthWarnings",
+            # v1.9.1 (#90, Golf 7 GTE) — automation block (timers, smart
+            # charging schedules) and departureProfiles (replacement for
+            # the older departureTimers — see ROADMAP "PPE Climate Body").
+            "automation",
+            "departureProfiles",
+            # v1.12.0 (#103 Audi + #104 VW EU, 2026-04-30) — intermediate
+            # ``.{xxxStatus}`` / ``.warningLights`` / ``.chargeMode.error``
+            # wrappers below the top-level meta blocks. The detector
+            # correctly descended past the registered parents and saw
+            # these wrappers as unknown — registering silences the Scout
+            # for them. We don't need to drill deeper because v1.9.1
+            # already registered the leaf paths under each (e.g.
+            # ``vehicleHealthInspection.maintenanceStatus.value...``).
+            "userCapabilities.capabilitiesStatus",
+            "fuelStatus.rangeStatus",
+            "vehicleHealthInspection.maintenanceStatus",
+            "vehicleHealthWarnings.warningLights",
+            "automation.climatisationTimer",
+            "automation.chargingProfiles",
+            "departureProfiles.departureProfilesStatus",
+            # ``charging.chargeMode.error`` — same Bad-Gateway-style
+            # error wrapper as ``fuelStatus.rangeStatus.error`` from #96.
+            # Older firmwares wrap fields in error objects when the
+            # backend can't compute them. Defensive registration.
+            "charging.chargeMode.error",
+            # v2.18.0 (#785 + #789) — the same Bad-Gateway envelope, now on
+            # the battery-care settings. Two Audi owners filed it as "new
+            # fields"; the samples say what it is outright: message "Bad
+            # Gateway", code 4001, errorTimeStamp. It's the backend telling
+            # us it couldn't compute the value, not a new API surface.
+            "batteryChargingCare.chargingCareSettings.error",
+            "batteryChargingCare.chargingCareSettings.error.*",
+            "charging.chargingCareSettings.error",
+            "charging.chargingCareSettings.error.*",
+            # (#1214 lexathon 2026-08-16, Audi) — the charge-care REQUEST
+            # queue: a list of pending charge-care setting changes ("[N items]").
+            # The charge-care feature itself is already surfaced (charging_care_*);
+            # this sibling of .error is internal request-queue metadata, not a new
+            # value to sensor-ise, so expect it (both the container + its items).
+            "batteryChargingCare.chargingCareSettings.requests",
+            "batteryChargingCare.chargingCareSettings.requests.*",
+            "charging.chargingCareSettings.requests",
+            "charging.chargingCareSettings.requests.*",
+            # v2.8.2 (#384 moltke69 2026-06-02) — same .error envelope
+            # one level deeper for vehicleHealthWarnings.warningLights.
+            # Cariad BFF wraps the warningLights value in an error
+            # object when the warning-lights subsystem times out
+            # upstream (6-key envelope, mirror of the v2.7.4
+            # oilLevel.error pattern in #371/#373).
+            "vehicleHealthWarnings.warningLights.error",
+            # v2.10.0 (#389 scout 2026-06-02) — Scout descends INTO the
+            # .error envelope and sees the 3 inner keys as new. Add the
+            # wildcard form so Scout stops at the wrapper. Same fix
+            # pattern as access.accessStatus.error.* further down.
+            "vehicleHealthWarnings.warningLights.error.*",
+            # v2.10.0 (#389) — pending-action request list. Audi BFF
+            # ships this on the access endpoint when a lock/unlock
+            # command was recently dispatched and the action is still
+            # acknowledged-pending. List of dicts; we silence the
+            # whole subtree for now and revisit as a parser when the
+            # shape stabilises (see roadmap "Anti-theft event suite").
+            "access.accessStatus.requests",
+            "access.accessStatus.requests.*",
+            # v1.12.1 (#105 + #106, 2026-04-30) — Scout descended one
+            # more level past the v1.12.0 wrapper registrations and
+            # found the ``.value`` containers below them. Same
+            # whack-a-mole as #103/#104 → register explicitly.
+            "userCapabilities.capabilitiesStatus.value",
+            "fuelStatus.rangeStatus.value",
+            "vehicleHealthInspection.maintenanceStatus.value",
+            "vehicleHealthWarnings.warningLights.value",
+            "departureProfiles.departureProfilesStatus.value",
+            # v1.12.1 (#105) — newer firmwares wrap automation timers
+            # in the same Bad-Gateway error envelope as charging.chargeMode.
+            "automation.climatisationTimer.error",
+            "automation.chargingProfiles.error",
+            # v1.12.1 (#105) — standardized HTTP-error-wrapper sub-fields.
+            # Six children always co-exist (CARIAD BFF error contract):
+            # message / errorTimeStamp / info / code / group / retry.
+            # Wildcard match keeps the registry compact + future-proofs
+            # against new error sub-fields the backend might add.
+            "charging.chargeMode.error.*",
+            "automation.climatisationTimer.error.*",
+            "automation.chargingProfiles.error.*",
+            "fuelStatus.rangeStatus.error.*",  # proactive — already saw fuelStatus.rangeStatus.error in #96
+            # v1.12.3 (#111 — DnnsJp74's Audi Live-Test 2026-05-01,
+            # ZWEITER community Scout report from a non-maintainer).
+            # 23 fields reported. Pattern: .value containers next to
+            # the .error wrappers we already registered in v1.12.0.
+            # Plus .value.* wildcards because timer/profile blocks
+            # contain user-configurable nested objects (per-timer
+            # schedules, charge profiles per location) — children are
+            # inherently variable + we don't read them in the parser.
+            "automation.climatisationTimer.value",
+            "automation.climatisationTimer.value.*",
+            "automation.chargingProfiles.value",
+            "automation.chargingProfiles.value.*",
+            # v2.18.0 — Scout #799: now CONSUMED into charging_profiles_pending
+            # (vw_eu.py). 3-seg path, not covered by automation.chargingProfiles.*
+            "automation.chargingProfiles.requests",
+            # v2.18.0 — Scout #801: now CONSUMED into climatisation_timers_pending.
+            # 3-seg path, not covered by the 2-seg climatisationTimers.* wildcard.
+            "climatisationTimers.climatisationTimersStatus.requests",
+            # v2.18.1 — Scouts #752 (@heyensh-sys) + #785 (@GiuseppeAlbano) +
+            # #789 (@Lagaff86), all audi selectivestatus. Two new shapes the
+            # backend rolled out:
+            #  · Aux-heating (Standheizung) now ALSO ships nested under the
+            #    climatisation / climatisationTimers jobs. The parser already
+            #    reads the TOP-LEVEL ``auxiliaryHeating`` job into
+            #    ``sensor.auxiliary_heating_status`` (v2.8.0), so this nested
+            #    copy is a secondary source — register the containers so the
+            #    Scout stops firing; drill the nested value into the sensor
+            #    once a real payload confirms the child field names (same
+            #    interim-silencer approach as activeVentilation/batterySupport).
+            #  · ``climatisationTimersStatus`` gained the standard 6-key
+            #    CARIAD-BFF ``.error`` envelope — the ONE sibling the v2.2.0
+            #    Phase-7 error rollout missed (same class as #598). Pure
+            #    transient-error wrapper, no user value → silence.
+            "climatisation.auxiliaryHeatingStatus",
+            "climatisation.auxiliaryHeatingStatus.value",
+            "climatisation.auxiliaryHeatingStatus.value.*",
+            "climatisation.auxiliaryHeatingStatus.error",
+            "climatisation.auxiliaryHeatingStatus.error.*",
+            # #1154 (neuweddemer, Audi) — an internal request-queue counter that
+            # arrives as an empty list; not telemetry, no user value. The nested
+            # ``.requests`` was NOT covered by the 2-seg leaf or the 4-seg
+            # ``.value.*``/``.error.*`` globs (``_path_matches`` is exact / equal-
+            # length, not prefix), so the Scout kept re-flagging it. Silence it.
+            "climatisation.auxiliaryHeatingStatus.requests",
+            "climatisation.auxiliaryHeatingStatus.requests.*",
+            "climatisationTimers.auxiliaryHeatingTimersStatus",
+            "climatisationTimers.auxiliaryHeatingTimersStatus.value",
+            "climatisationTimers.auxiliaryHeatingTimersStatus.value.*",
+            "climatisationTimers.auxiliaryHeatingTimersStatus.error",
+            "climatisationTimers.auxiliaryHeatingTimersStatus.error.*",
+            "climatisationTimers.climatisationTimersStatus.error",
+            "climatisationTimers.climatisationTimersStatus.error.*",
+            # v2.2.0 Phase 7 PR #5 (#245 Scout 2026-05-11/12/13) —
+            # Systemic Cariad-BFF rollout: jeder ``<block>.{xxxStatus}``
+            # bekommt jetzt einen ``.error`` container (6 keys —
+            # message/errorTimeStamp/info/code/group/retry) wenn das
+            # sub-status fails. Dieselbe Bad-Gateway-error-wrapper-
+            # convention wie ``charging.chargeMode.error`` (#96 +
+            # v1.12.0) plus ``automation.*.error`` (v1.12.1 #105) —
+            # nur jetzt auf 17 statt 3 sub-blocks ausgerollt. Defensive
+            # blanket-silencing inkl. ``.error.*`` wildcards für die
+            # 6-key standard children — keep silencer compact +
+            # future-proof.
+            "access.accessStatus.error",
+            "access.accessStatus.error.*",
+            "fuelStatus.rangeStatus.error",  # parent already silenced above
+            # fuelStatus.rangeStatus.error.* schon silenced (line ~585)
+            "measurements.rangeStatus.error",
+            "measurements.rangeStatus.error.*",
+            "measurements.odometerStatus.error",
+            "measurements.odometerStatus.error.*",
+            "measurements.temperatureBatteryStatus.error",
+            "measurements.temperatureBatteryStatus.error.*",
+            "measurements.fuelLevelStatus.error",
+            "measurements.fuelLevelStatus.error.*",
+            "measurements.temperatureOutsideStatus.error",
+            "measurements.temperatureOutsideStatus.error.*",
+            "vehicleLights.lightsStatus.error",
+            "vehicleLights.lightsStatus.error.*",
+            "charging.batteryStatus.error",
+            "charging.batteryStatus.error.*",
+            "charging.chargingStatus.error",
+            "charging.chargingStatus.error.*",
+            "charging.chargingSettings.error",
+            "charging.chargingSettings.error.*",
+            "charging.plugStatus.error",
+            "charging.plugStatus.error.*",
+            "climatisation.climatisationSettings.error",
+            "climatisation.climatisationSettings.error.*",
+            "climatisation.climatisationStatus.error",
+            "climatisation.climatisationStatus.error.*",
+            "climatisation.windowHeatingStatus.error",
+            "climatisation.windowHeatingStatus.error.*",
+            "vehicleHealthInspection.maintenanceStatus.error",
+            "vehicleHealthInspection.maintenanceStatus.error.*",
+            "departureProfiles.departureProfilesStatus.error",
+            "departureProfiles.departureProfilesStatus.error.*",
+            # v2.15.9 — scout #598 (@zapadee, audi selectivestatus) —
+            # the ONE sub-block the v2.2.0 Phase-7 error rollout missed:
+            # ``userCapabilities.capabilitiesStatus`` also gets the
+            # Bad-Gateway ``.error`` envelope (6-key CARIAD BFF error
+            # contract: message/errorTimeStamp/info/code/group/retry)
+            # when the capabilities subsystem times out upstream. Same
+            # shape as every other ``*.error`` sibling above. Pure
+            # transient-error wrapper, no standalone user value → the
+            # parser (which reads ``capabilitiesStatus.value``) ignores
+            # it cleanly; we register the wrapper + ``.error.*`` wildcard
+            # to silence the Scout. No sensor, no code change.
+            "userCapabilities.capabilitiesStatus.error",
+            "userCapabilities.capabilitiesStatus.error.*",
+            # Unreleased — Scout #998 (Audi, neuhausf): the capabilities
+            # subsystem's pending-request queue counter, the same ``*.requests``
+            # command-queue envelope as chargingStatus / climatisationStatus /
+            # windowHeatingStatus above (a list of in-flight capability requests,
+            # not a vehicle reading; the sample was ``[0 items]``). Known-
+            # structural, not new data, so we register it to stop the Scout
+            # re-reporting the wrapper. No sensor, no parser change.
+            "userCapabilities.capabilitiesStatus.requests",
+            "userCapabilities.capabilitiesStatus.requests.*",
+            # v2.2.3 — scout #273 (VW EU gudden 2026-05-23): readiness
+            # endpoint's defensive ``.error`` envelope (Cariad-BFF
+            # "endpoint hat einen Fehler"-wrapper pattern, same shape
+            # as the other ``*.error`` siblings above). Backend hiccup,
+            # parser ignores it cleanly. No code change beyond the
+            # silencer-add.
+            "readiness.readinessStatus.error",
+            "readiness.readinessStatus.error.*",
+            # v2.2.0 Phase 7 PR #5 (#245 Scout) — `measurements.
+            # tirePressureStatus` 1-key container shipped alongside
+            # the error rollout. Wildcard covers current + future
+            # children (likely `.value.tires[*]` per Cariad convention).
+            "measurements.tirePressureStatus",
+            "measurements.tirePressureStatus.*",
+            "measurements.tirePressureStatus.value",
+            "measurements.tirePressureStatus.value.*",
+            # Top-level batteryChargingCare + climatisationTimers job
+            # names — present in our selectivestatus query since v1.9.x
+            # but never registered in EXPECTED_KEYS catalog.
+            "batteryChargingCare",
+            "batteryChargingCare.*",  # children unknown, future-proof
+            "climatisationTimers",
+            "climatisationTimers.*",
+            # Charging chargeMode .value (mode dict) + chargingCareSettings
+            "charging.chargeMode.value",
+            "charging.chargeMode.value.*",  # mode children variable
+            "charging.chargingCareSettings",
+            "charging.chargingCareSettings.*",
+            # vehicleHealthWarnings.warningLights.value children — the
+            # actual warning lights dict (per-light status). Variable
+            # set per vehicle, parser already iterates them in v1.0+.
+            "vehicleHealthWarnings.warningLights.value.*",
+            # v1.12.3 (#113 Golf GTE + #114 Audi S6 C8 — Prash testing
+            # 2026-05-01 evening): the parent .value containers
+            # (registered in v1.12.1) descend into business+meta
+            # children which were unregistered. Use wildcards instead
+            # of enumerating because every brand/firmware mix yields
+            # different sub-fields. Parser already reads the relevant
+            # ones (inspectionDue_*, oilServiceDue_*, mileage_km,
+            # totalRange_km, carType) — registry is just for Scout silence.
+            "fuelStatus.rangeStatus.value.*",
+            "fuelStatus.rangeStatus.value.primaryEngine.*",
+            "fuelStatus.rangeStatus.value.secondaryEngine.*",
+            "vehicleHealthInspection.maintenanceStatus.value.*",
+            "departureProfiles.departureProfilesStatus.value.*",
+            "userCapabilities.capabilitiesStatus.value.*",
+            # v2.7.0 — oilLevel + tyrePressure + auxiliaryHeating jobs
+            # promoted to production in v2.7.0b10. Scout was firing on
+            # these freshly-arrived top-level branches (issues #366,
+            # #367) the moment the new job ran for the first time even
+            # though our parser already reads them. Silence the entire
+            # branch family.
+            "oilLevel",
+            "oilLevel.*",
+            "oilLevel.oilLevelStatus",
+            "oilLevel.oilLevelStatus.*",
+            "oilLevel.oilLevelStatus.value",
+            "oilLevel.oilLevelStatus.value.*",
+            "tyrePressure",
+            "tyrePressure.*",
+            "tyrePressure.tyrePressureStatus",
+            "tyrePressure.tyrePressureStatus.*",
+            "tyrePressure.tyrePressureStatus.value",
+            "tyrePressure.tyrePressureStatus.value.*",
+            "auxiliaryHeating",
+            "auxiliaryHeating.*",
+            "auxiliaryHeating.*.value",
+            "auxiliaryHeating.*.value.*",
+            # v2.7.4 — when these jobs return 5xx the Cariad BFF wraps
+            # the response in a ``.error`` envelope with 6 sub-keys
+            # (message, errorTimeStamp, info, code, group, retry).
+            # The single-level ``.*`` wildcard above does not match
+            # the 4-component child paths, so Scout auto-opened issues
+            # #371 + #373 with the same six error sub-keys on a Bad
+            # Gateway response. Add 4-component wildcards explicitly.
+            "oilLevel.oilLevelStatus.error",
+            "oilLevel.oilLevelStatus.error.*",
+            "tyrePressure.tyrePressureStatus.error",
+            "tyrePressure.tyrePressureStatus.error.*",
+            "auxiliaryHeating.auxiliaryHeatingStatus",
+            "auxiliaryHeating.auxiliaryHeatingStatus.*",
+            "auxiliaryHeating.auxiliaryHeatingStatus.error",
+            "auxiliaryHeating.auxiliaryHeatingStatus.error.*",
+            "auxiliaryHeating.auxiliaryHeatingStatus.value",
+            "auxiliaryHeating.auxiliaryHeatingStatus.value.*",
+            # batteryChargingCare + climatisationTimers .value children
+            # (proactive — these top-level wrappers may have own .value
+            # blocks on newer firmwares per #103/#104 pattern).
+            "batteryChargingCare.value.*",
+            "climatisationTimers.value.*",
+            # Older auto-unlock-plug variant without AC suffix (#111 saw "off")
+            "charging.chargingSettings.value.autoUnlockPlugWhenCharged",
+            # 5x climatisationSettings.value.* zone + unit fields
+            "climatisation.climatisationSettings.value.unitInCar",
+            "climatisation.climatisationSettings.value.climatizationAtUnlock",
+            "climatisation.climatisationSettings.value.windowHeatingEnabled",
+            "climatisation.climatisationSettings.value.zoneFrontLeftEnabled",
+            "climatisation.climatisationSettings.value.zoneFrontRightEnabled",
+            # v2.18.0 — the rear pair and the mode were never added next to
+            # their front twins, so five separate Audi owners filed the same
+            # three fields in one day. The command side has read all three
+            # since v2.10.0 (vw_eu.py builds climatisationMode +
+            # zoneFrontLeftEnabled into the PPE climate body) — this is our
+            # catalogue lagging the parser, not a new API surface.
+            "climatisation.climatisationSettings.value.zoneRearLeftEnabled",
+            "climatisation.climatisationSettings.value.zoneRearRightEnabled",
+            "climatisation.climatisationSettings.value.climatisationMode",
+            # temperatureBatteryStatus Min + Max fields (parser already
+            # reads temperatureHvBatteryMin_K for battery_temp sensor;
+            # Max variant is new from #111)
+            "measurements.temperatureBatteryStatus.value.temperatureHvBatteryMin_K",
+            "measurements.temperatureBatteryStatus.value.temperatureHvBatteryMax_K",
+            # 4x connectionState meta + 2x connectionWarning meta on
+            # readiness.readinessStatus.value (we only had the parents
+            # connectionState/connectionWarning registered — Scout
+            # descended and found the leaves as unknown)
+            "readiness.readinessStatus.value.connectionState.isOnline",
+            "readiness.readinessStatus.value.connectionState.isActive",
+            "readiness.readinessStatus.value.connectionState.batteryPowerLevel",
+            "readiness.readinessStatus.value.connectionState.dailyPowerBudgetAvailable",
+            "readiness.readinessStatus.value.connectionWarning.insufficientBatteryLevelWarning",
+            "readiness.readinessStatus.value.connectionWarning.dailyPowerBudgetWarning",
+            # v1.17.5 (#132 rborkenhagen Scout-Report 2026-05-04 on a
+            # VW PHEV/EV) — three new leaves on selectivestatus:
+            #   - climatisation.climatisationSettings.value.heaterSource
+            #     ("electric" — used by Born/ID family to choose between
+            #     PTC and HV-loop pre-conditioning)
+            #   - measurements.fuelLevelStatus.value.secondaryEngineType
+            #     ("electric" — companion to primaryEngineType, hardens
+            #     the PHEV detection from v1.11.1 #96)
+            #   - departureTimers (top-level job from selectivestatus
+            #     query already in v1.13.0+ but never explicitly in
+            #     EXPECTED_KEYS catalog — wildcard for future shape)
+            "climatisation.climatisationSettings.value.heaterSource",
+            "measurements.fuelLevelStatus.value.secondaryEngineType",
+            "departureTimers",
+            "departureTimers.*",
+            # 3-segment wildcard for per-timer leaves (enabled, time,
+            # repetition pattern, etc.). Walker descends into known
+            # `departureTimers.{id}` containers.
+            "departureTimers.*.*",
+            # v2.3.0 — scout #264 (Audi moltke69 2026-05-19): newer
+            # Cariad-BFF firmware restructured departureTimers into a
+            # unified parent with charging + climatisation sub-status
+            # blocks (each with its own value/timers/carCapturedTimestamp
+            # shape — see the 5 reported paths). 4-segment wildcards
+            # cover the leaves; the parser fallback in vw_eu.py reads
+            # ``departureTimers.climatisationTimersStatus.value.timers``
+            # if the legacy ``climatisationTimers.*`` path is empty.
+            "departureTimers.chargingTimersStatus",
+            "departureTimers.chargingTimersStatus.value",
+            "departureTimers.chargingTimersStatus.value.*",
+            "departureTimers.climatisationTimersStatus",
+            "departureTimers.climatisationTimersStatus.value",
+            "departureTimers.climatisationTimersStatus.value.*",
+            "departureTimers.*.*.*",
+            # v1.19.3 (#145 manentw + #146 ammelch + #147 gudden —
+            # three convergent VW Scout-Reports 2026-05-05/06).
+            # Newer CARIAD-BFF firmware ships:
+            # - 5-segment leaves under automation.chargingProfiles.value
+            #   (nextChargingTimer.id + .targetSOCreachable). Existing
+            #   `automation.chargingProfiles.value.*` only matches
+            #   4-segment paths; 5-segment needs explicit wildcard.
+            # - Top-level batteryChargingCare.chargingCareSettings.value
+            #   container (3 segments). Sibling of existing
+            #   batteryChargingCare wildcard but the latter only matched
+            #   2-segment children.
+            # - charging.chargingCareSettings.value.batteryCareMode (4
+            #   segments). Existing charging.chargingCareSettings.* only
+            #   matched 2-segment children.
+            # - climatisationTimers.climatisationTimersStatus.value (3
+            #   segments). Status wrapper analogous to other CARIAD
+            #   .{xxxStatus}.value pattern from v1.12.0.
+            "automation.chargingProfiles.value.*.*",
+            "batteryChargingCare.chargingCareSettings",
+            "batteryChargingCare.chargingCareSettings.value",
+            # Proactive 4-segment for batteryChargingCare leaves
+            # (#145 reported `{1 keys}` shape but didn't surface the
+            # leaf name — register wildcard so future Scout doesn't
+            # re-fire on the inner key).
+            "batteryChargingCare.chargingCareSettings.value.*",
+            "charging.chargingCareSettings.value",
+            "charging.chargingCareSettings.value.*",
+            "climatisationTimers.climatisationTimersStatus",
+            "climatisationTimers.climatisationTimersStatus.value",
+            "climatisationTimers.climatisationTimersStatus.value.*",
+        },
+        "parkingposition": {
+            "data", "data.lon", "data.lat", "data.carCapturedTimestamp",
+        },
+    },
+    # Audi inherits VW EU's selectivestatus shape (same backend, same endpoint).
+    "audi": {},  # populated at module load below
+}
+
+# SEAT and CUPRA share the OLA backend — same expected-keys table
+EXPECTED_KEYS["seat"] = EXPECTED_KEYS["cupra"]
+# Audi inherits VW EU's CARIAD-BFF expected keys (same selectivestatus endpoint)
+EXPECTED_KEYS["audi"] = EXPECTED_KEYS["volkswagen"]
+
+
+def _path_matches(path: str, expected_paths: set[str]) -> bool:
+    """Check whether ``path`` is covered by ``expected_paths`` (with wildcards).
+
+    Wildcards: a path component ``"*"`` in expected matches any single
+    actual component. So ``"doors.*.locked"`` matches
+    ``"doors.frontLeft.locked"``.
+    """
+    if path in expected_paths:
+        return True
+    actual_parts = path.split(".")
+    for expected in expected_paths:
+        if "*" not in expected:
+            continue
+        expected_parts = expected.split(".")
+        if len(expected_parts) != len(actual_parts):
+            continue
+        if all(e == "*" or e == a for e, a in zip(expected_parts, actual_parts)):
+            return True
+    return False
+
+
+def mask_value(value: Any, *, max_len: int = 80) -> str:
+    """Anonymise a sample value for logging / external sharing.
+
+    - VINs (17-char alphanumeric blocks) → ``***{last 6 chars}``
+    - Email addresses → ``***@***``
+    - JWT-shaped tokens → ``[token]``
+    - UUIDs → ``[uuid]``
+    - Latitude/longitude pairs in numeric values → kept (rounded to 1
+      decimal place ≈ 11 km precision) — useful for "is this a EU vehicle"
+      kind of context without exposing precise location
+    - Strings: redacted then truncated to ``max_len``
+    - Numbers / bools / None: stringified (no leak risk)
+    - Dicts / lists: shape only (e.g. ``{4 keys}`` or ``[3 items]``)
+    """
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return str(value).lower()
+    if isinstance(value, (int,)):
+        return str(value)
+    if isinstance(value, float):
+        # Round to 1 decimal — kills GPS precision (1.0° ≈ 111km)
+        return f"{value:.1f}"
+    if isinstance(value, str):
+        s = value
+        s = _VIN_RE.sub(lambda m: mask_vin(m.group(0)), s)
+        s = _EMAIL_RE.sub("***@***", s)
+        s = _JWT_RE.sub("[token]", s)
+        s = _UUID_RE.sub("[uuid]", s)
+        if len(s) > max_len:
+            s = s[: max_len - 3] + "..."
+        return f'"{s}"'
+    if isinstance(value, dict):
+        return f"{{{len(value)} keys}}"
+    if isinstance(value, list):
+        return f"[{len(value)} items]"
+    # Fallback: type only
+    return f"<{type(value).__name__}>"
+
+
+# v2.9.0 - provenance canary, see ``_canaries.py``. Module-level
+# constant so any port of the Vehicle Data Scout (the unique-key
+# auto-discovery system) carries the marker into the destination repo.
+_PROVENANCE_SCOUT = "scout_unexpected_provenance_f4hzl5r8_2026"
+
+
+def detect_unexpected(
+    brand: str,
+    endpoint: str,
+    response: Any,
+    *,
+    parent_path: str = "",
+    max_depth: int = 6,
+) -> Iterable[UnexpectedField]:
+    """Walk ``response`` and yield ``UnexpectedField`` for paths NOT in
+    ``EXPECTED_KEYS[brand][endpoint]``.
+
+    Behaviour:
+    - Returns nothing if the brand or endpoint is not registered (keeps
+      old brand clients quiet until they opt in).
+    - Walks dicts only — list contents are not recursed (the list
+      itself is reported if its parent path is unexpected).
+    - Stops at ``max_depth`` to avoid pathological responses tying up
+      the event loop.
+    - Always yields ``parent_path`` is reported once even if it has many
+      unknown children (we don't spam — finer detail comes via individual
+      child paths up to ``max_depth``).
+    """
+    from datetime import datetime, timezone  # local to avoid module-load cost
+
+    expected = EXPECTED_KEYS.get(brand, {}).get(endpoint)
+    if expected is None:
+        return  # brand/endpoint not registered for detection
+    if not isinstance(response, dict):
+        return
+    now = datetime.now(tz=timezone.utc).isoformat()
+
+    def _walk(node: Any, path: str, depth: int) -> Iterable[UnexpectedField]:
+        if depth > max_depth:
+            return
+        if not isinstance(node, dict):
+            return
+        for key, val in node.items():
+            child_path = f"{path}.{key}" if path else key
+            if not _path_matches(child_path, expected):
+                yield UnexpectedField(
+                    path=child_path,
+                    sample_masked=mask_value(val),
+                    endpoint=endpoint,
+                    first_seen_at=now,
+                )
+                # Don't recurse into unknown subtree — single report per branch
+                continue
+            if isinstance(val, dict):
+                yield from _walk(val, child_path, depth + 1)
+
+    yield from _walk(response, parent_path, depth=0)

@@ -1,0 +1,105 @@
+# =============================================================================
+#  Météo Cyber Animateur  —  idée Hermes, corrigée (bloc attributes: réécrit)
+#  Source: sensor.cyber_station_*  (collecteur Pi .51 via MQTT)
+#  ⚠️ Si "0 attaquant" en boucle => collecteur figé:
+#     ssh Pi .51 -p 2200 → systemctl restart cyber-monitor pi-monitor
+# =============================================================================
+template:
+  - sensor:
+      - name: "Météo Cyber Animateur"
+        unique_id: meteo_cyber_animateur
+        icon: >
+          {% set a  = states('sensor.cyber_station_honeypot_attaquants_24h') | int(0) %}
+          {% set t  = states('sensor.cyber_station_honeypot_tentatives')     | int(0) %}
+          {% set c  = states('sensor.cyber_station_honeypot_commandes')       | int(0) %}
+          {% set tp = states('sensor.cyber_station_tarpit_connexions_24h')    | int(0) %}
+          {% if   a > 50 or t > 200 or c > 50 %} mdi:weather-tornado
+          {% elif a > 20 or t > 80  or c > 20 %} mdi:weather-lightning-rainy
+          {% elif a > 10 or t > 30  or c > 5  %} mdi:weather-partly-lightning
+          {% elif tp > 20 %} mdi:spider-web
+          {% else %} mdi:weather-sunny {% endif %}
+        state: >
+          {% set a  = states('sensor.cyber_station_honeypot_attaquants_24h') | int(0) %}
+          {% set t  = states('sensor.cyber_station_honeypot_tentatives')     | int(0) %}
+          {% set c  = states('sensor.cyber_station_honeypot_commandes')       | int(0) %}
+          {% set tp = states('sensor.cyber_station_tarpit_connexions_24h')    | int(0) %}
+          {% set tp_time = states('sensor.cyber_station_tarpit_temps_pieg')   | float(0) %}
+          {% set last_atk = states('sensor.cyber_station_honeypot_derniere_attaque') %}
+          {% set top = state_attr('sensor.cyber_station_honeypot_top_attaquants', 'attackers') %}
+          {% set has_top = top and top | length > 0 %}
+          {% set top_ip   = top[0].ip   if has_top else 'inconnu' %}
+          {% set top_cc   = top[0].cc   if has_top else 'XX' %}
+          {% set top_flag = top[0].flag if has_top else '🏳️' %}
+          {% set top_hits = top[0].hits if has_top else 0 %}
+          {% set top_isp  = top[0].isp  if has_top else '?' %}
+          {% set top_city = top[0].city if has_top else '?' %}
+
+          {# --- NIVEAU D'ALERTE --- #}
+          {% if   a > 50 or t > 200 or c > 50 %}{% set niveau = 'apocalyptique' %}
+          {% elif a > 20 or t > 80  or c > 20 %}{% set niveau = 'orageux' %}
+          {% elif a > 10 or t > 30  or c > 5  %}{% set niveau = 'instable' %}
+          {% elif a > 5  or t > 10            %}{% set niveau = 'bruine' %}
+          {% elif tp > 20                     %}{% set niveau = 'piège' %}
+          {% else %}{% set niveau = 'calme' %}{% endif %}
+
+          {# --- TON & PHRASES SELON NIVEAU --- #}
+          {% set phrases = {
+            'calme': [
+              "☀️ Ciel cyber dégagé. " ~ a ~ " curieux·ses seulement. Le tarpit ronronne (" ~ tp ~ " piégé·es, " ~ ('%.0f'|format(tp_time)) ~ " min de perdues).",
+              "🌤️ Temps calme sur le port 22. " ~ a ~ " IP en veille. Même les bots font la sieste.",
+              "😎 Zéro stress. " ~ t ~ " tentatives, " ~ c ~ " commandes — des touristes. Top visiteur : " ~ top_flag ~ " " ~ top_ip ~ " (" ~ top_hits ~ " coups)."
+            ],
+            'bruine': [
+              "🌦️ Bruine de scans. " ~ a ~ " sources, " ~ t ~ " gouttes. Le tarpit a piégé " ~ tp ~ " connexions (" ~ ('%.0f'|format(tp_time)) ~ " min gaspillées).",
+              "☔ Pluie fine : " ~ a ~ " IP, " ~ t ~ " tentatives. " ~ top_flag ~ " " ~ top_ip ~ " (" ~ top_isp ~ ") insiste avec " ~ top_hits ~ " coups.",
+              "🌧️ Activité modérée. " ~ a ~ " attaquants, " ~ t ~ " essais. Notre honeypot les occupe gentiment."
+            ],
+            'instable': [
+              "⛈️ Orage électrique ! " ~ a ~ " orages, " ~ t ~ " éclairs, " ~ c ~ " commandes exécutées (piégées).",
+              "🌩️ Instable : " ~ a ~ " fronts, " ~ t ~ " décharges. Tarpit saturé à " ~ tp ~ " connexions (" ~ ('%.0f'|format(tp_time)) ~ " min volées).",
+              "⚡ Ça gronde : " ~ a ~ " sources, " ~ t ~ " tentatives. Leader : " ~ top_flag ~ " " ~ top_ip ~ " (" ~ top_city ~ ", " ~ top_hits ~ " hits)."
+            ],
+            'orageux': [
+              "🌪️ TEMPÊTE CYBER ! " ~ a ~ " cyclones, " ~ t ~ " éclairs, " ~ c ~ " commandes absorbées. Le tarpit régale : " ~ tp ~ " piégé·es !",
+              "⛈️⛈️ Orage violent : " ~ a ~ " fronts simultanés. " ~ top_flag ~ " " ~ top_ip ~ " (" ~ top_isp ~ ") mène la danse avec " ~ top_hits ~ " coups.",
+              "🌩️⚡ Dépression barométrique critique. " ~ t ~ " tentatives en 24h. Notre honeypot fait le mort… et ils mordent."
+            ],
+            'apocalyptique': [
+              "☄️🌋 APOCALYPSE CYBER ! " ~ a ~ " assaillants, " ~ t ~ " projectiles, " ~ c ~ " commandes interceptées. Tarpit : " ~ tp ~ " prisonniers (" ~ ('%.0f'|format(tp_time)) ~ " min de vie gaspillée).",
+              "💥🔥 DÉLUGE : " ~ t ~ " tentatives ! " ~ a ~ " IP distinctes. Top : " ~ top_flag ~ " " ~ top_ip ~ " (" ~ top_isp ~ ", " ~ top_city ~ ") — " ~ top_hits ~ " assauts. On tient le choc.",
+              "☠️🌪️ NIVEAU CRITIQUE. " ~ a ~ " vagues, " ~ t ~ " impacts. Le honeypot régale : " ~ tp ~ " connexions piégées. Dernière vague : " ~ (last_atk | replace('T', ' ') | replace('+00:00', ' UTC')) ~ "."
+            ],
+            'piège': [
+              "🕷️ TAPIS D'ARAIGNÉE actif. " ~ tp ~ " mouches collées, " ~ ('%.0f'|format(tp_time)) ~ " min de CPU brûlées pour rien. " ~ a ~ " curieux dehors.",
+              "🕸️ Le tarpit fait le plein : " ~ tp ~ " connexions engluées (" ~ ('%.0f'|format(tp_time)) ~ " min). Attaquants : " ~ a ~ ", tentatives : " ~ t ~ "."
+            ]
+          } %}
+
+          {% set pool = phrases[niveau] %}
+          {% set idx = (a + t + c + tp) | int % (pool | length) %}
+          {{ pool[idx] }}
+
+        # --- ATTRIBUTS : chaque template est INDÉPENDANT, on recalcule tout ici ---
+        attributes:
+          niveau: >
+            {% set a  = states('sensor.cyber_station_honeypot_attaquants_24h') | int(0) %}
+            {% set t  = states('sensor.cyber_station_honeypot_tentatives')     | int(0) %}
+            {% set c  = states('sensor.cyber_station_honeypot_commandes')       | int(0) %}
+            {% set tp = states('sensor.cyber_station_tarpit_connexions_24h')    | int(0) %}
+            {% if   a > 50 or t > 200 or c > 50 %}apocalyptique
+            {% elif a > 20 or t > 80  or c > 20 %}orageux
+            {% elif a > 10 or t > 30  or c > 5  %}instable
+            {% elif a > 5  or t > 10            %}bruine
+            {% elif tp > 20                     %}piège
+            {% else %}calme{% endif %}
+          attaquants_24h: "{{ states('sensor.cyber_station_honeypot_attaquants_24h') | int(0) }}"
+          tentatives:     "{{ states('sensor.cyber_station_honeypot_tentatives')     | int(0) }}"
+          commandes:      "{{ states('sensor.cyber_station_honeypot_commandes')       | int(0) }}"
+          tarpit_connexions: "{{ states('sensor.cyber_station_tarpit_connexions_24h') | int(0) }}"
+          tarpit_minutes: "{{ '%.1f' | format(states('sensor.cyber_station_tarpit_temps_pieg') | float(0)) }}"
+          top_attaquant: >
+            {% set top = state_attr('sensor.cyber_station_honeypot_top_attaquants', 'attackers') %}
+            {% if top and top | length > 0 %}
+            {{ top[0].flag }} {{ top[0].ip }} ({{ top[0].cc }}, {{ top[0].isp }}, {{ top[0].city }}, {{ top[0].hits }} hits)
+            {%- else -%}inconnu{%- endif %}
+          derniere_attaque: "{{ states('sensor.cyber_station_honeypot_derniere_attaque') }}"

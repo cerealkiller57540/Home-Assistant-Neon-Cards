@@ -1,0 +1,446 @@
+# Loads default set of integrations. Do not remove.
+default_config:
+homeassistant:
+  packages: !include_dir_named packages
+
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
+  extra_module_url:
+  - /hacsfiles/lovelace-card-mod/card-mod.js?hacstag=190927524421
+  - /local/glitch-header.js?v=1
+
+pyscript:
+  allow_all_imports: true
+  hass_is_global: true
+
+# === TELEGRAM (fallback notifs portail/garage, 2026-06-13) ===
+# ⚠️ En HA 2026.6, telegram_bot est config_flow (UI) — PLUS de config YAML.
+# Configuré via Paramètres → Appareils & services → Ajouter → Telegram bot.
+# Token bot + chat_id restent dans secrets.yaml pour référence. L'entité notify
+# créée par le config flow est ciblée dans les automations via son entity_id.
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+template: !include templates.yaml
+sensor: !include sensor.yaml
+
+# Logging
+logger:
+  default: warn
+  logs:
+    custom_components.sunology: critical
+    custom_components.sunology-socket: critical
+    pyscript.car_charging: warn
+    pyscript.pihole_update: warn
+    pysmartthings: critical
+    custom_components.pyscript: warning
+    custom_components.samsungtv_smart.sensor: error
+    custom_components.atmofrance.sensor: error
+    # 2026-06-05 : token SmartThings expiré → spam x127 "Authentication failed". Museler l'API
+    # (à régénérer le token plus tard : account.smartthings.com → PAT → reconfigure l'intégration).
+    custom_components.samsungtv_smart.api.smartthings: critical
+    custom_components.samsungtv_smart: error
+    homeassistant.components.dlna_dmr: error
+    homeassistant.helpers.entity: error
+    homeassistant.components.media_player: error
+
+# === CAMERAS ===
+# 2026-06-05 : bloc camera mjpeg YAML retiré (déprécié → erreur log). La webcam est désormais
+# gérée via l'UI (intégration MJPEG). Ancien bloc archivé dans _removed_config_archive.md.
+
+# === INPUT DATETIME ===
+input_datetime:
+  lights_off_time:
+    name: "Lumières - Heure d'extinction"
+    has_date: false
+    has_time: true
+  tondeuse_derniere_tonte:
+    name: "Tondeuse - Dernière tonte"
+    has_date: true
+    has_time: false
+
+# === INPUT NUMBER ===
+input_number:
+  # ==== HEAT PUMP SMART BIAS CONTROLS ====
+  heat_pump_bias_off_peak:
+    name: "Off-Peak Boost (°C)"
+    min: 0
+    max: 2.5
+    step: 0.5
+    icon: mdi:thermometer-plus
+
+  heat_pump_bias_peak:
+    name: "Peak Reduction (°C)"
+    min: -2.5
+    max: 0
+    step: 0.5
+    icon: mdi:thermometer-minus
+
+  heat_pump_bias_journee:
+    name: "Journée Bias (°C)"
+    min: -2
+    max: 0.5
+    step: 0.5
+    icon: mdi:weather-sunny
+
+  heat_pump_bias_soiree_tardive:
+    name: "Soirée Tardive Bias (°C)"
+    min: -2
+    max: 1.0
+    step: 0.1
+    icon: mdi:weather-night
+
+  heat_pump_bias_pre_offpeak:
+    name: "Pre-Off-Peak Ramp (°C)"
+    min: 0
+    max: 1
+    step: 0.25
+    icon: mdi:arrow-up-circle
+
+  heat_pump_bias_afternoon_hc:
+    name: "Afternoon HC Boost (°C)"
+    min: 0
+    max: 2.5
+    step: 0.5
+    icon: mdi:white-balance-sunny
+
+  heat_pump_bias_post_afternoon_hc:
+    name: "Post-Afternoon HC (°C)"
+    min: 0
+    max: 1
+    step: 0.25
+    icon: mdi:connection
+
+  heat_pump_room_temp_cutoff:
+    name: "HC Nuit - Seuil coupure boost (°C)"
+    min: 19
+    max: 23
+    step: 0.5
+    icon: mdi:thermometer-check
+
+  car_battery_min:
+    name: "Voiture - Niveau batterie minimum"
+    min: 0
+    max: 100
+    step: 5
+    unit_of_measurement: "%"
+    icon: mdi:battery-low
+
+  car_battery_max:
+    name: "Voiture - Niveau batterie maximum"
+    min: 0
+    max: 100
+    step: 5
+    unit_of_measurement: "%"
+    icon: mdi:battery-high
+
+  solar_surplus_min:
+    name: "Surplus solaire minimum"
+    min: 0
+    max: 5000
+    step: 100
+    unit_of_measurement: "W"
+    icon: mdi:solar-power
+
+  sonos_night_volume:
+    name: "Sonos - Volume nocturne"
+    min: 0
+    max: 0.20
+    step: 0.01
+    icon: mdi:volume-low
+
+  compteur_abonnement_edf:
+    name: "Compteur abonnement EDF"
+    min: 0
+    max: 100000
+    step: 1
+    icon: mdi:counter
+
+# === INPUT TEXT ===
+input_text:
+  heat_agent_last_note:
+    name: "Heat Agent - Dernière note"
+    max: 255
+    icon: mdi:robot
+
+# === INPUT BOOLEAN ===
+input_boolean:
+  # ==== HEAT PUMP SMART BIAS SWITCHES ====
+  heat_pump_smart_bias_enabled:
+    name: "Heat Pump Smart Bias Control"
+    icon: mdi:brain
+
+  heat_pump_smart_bias_peak_mode:
+    name: "Peak/Off-Peak Mode Enabled"
+    icon: mdi:clock-time-eight
+
+  # ==== EXISTING SWITCHES ====
+  car_smart_charging:
+    name: "Charge intelligente voiture"
+    icon: mdi:ev-station
+
+  car_solar_charging:
+    name: "Charge sur surplus solaire"
+    icon: mdi:solar-power-variant
+
+  lights_auto_sunset:
+    name: "Lumières auto au coucher du soleil"
+    icon: mdi:weather-sunset
+
+  led_effect_active:
+    name: Effet LED
+    initial: off
+
+  tondeuse_rattrapage_needed:
+    name: "Tondeuse - Rattrapage nécessaire"
+    icon: mdi:grass
+
+  tondeuse_pause:
+    name: "Tondeuse - Pause (herbe sèche/vacances)"
+    icon: mdi:pause-circle
+
+  # Armement du retour : passe à ON quand le Pixel entre dans le rayon lointain (~400 m)
+  # et redescend à OFF une fois l'ouverture déclenchée près de la maison (~80 m) ou au
+  # départ. Sert de "2 rayons auto-temporisés" pour ouvrir portail/garage dans la rue.
+  retour_imminent:
+    name: "Retour maison imminent"
+    icon: mdi:car-arrow-left
+    initial: off
+
+  # 2026-06-06 : VERROU partagé portail/garage. Mis à ON au début de toute action
+  # (départ / ouverture portail / ouverture garage), remis à OFF après un cooldown de 90 s.
+  # Empêche le yo-yo WiFi (Livebox <-> My VW <-> not connected) de rejouer les automations
+  # en rafale (constat du 06-06 : ~8 impulsions portail en 4 min, et le RETOUR qui
+  # déclenchait le DÉPART à 18:50:39). Verrou PARTAGÉ => départ et retour ne se croisent plus.
+  porte_action_en_cours:
+    name: "Portail/garage — action en cours (verrou)"
+    icon: mdi:lock-clock
+    initial: off
+
+  # 2026-06-08 : REFONTE SIMPLE. Flag "vraiment parti en voiture". Posé ON au départ,
+  # consommé (remis OFF) au retour. CLÉ anti-faux-retour : le garage/portail ne s'ouvrent
+  # au retour QUE si ce flag est ON → un rebond GPS/WiFi (app HA qui se reconnecte,
+  # unavailable→home) alors qu'on n'est jamais parti ne peut PLUS ouvrir le garage tout seul
+  # (cas vécu 08-06 11:38 : garage ouvert au bureau). Remplace retour_imminent + le verrou.
+  parti_en_voiture:
+    name: "Parti en voiture"
+    icon: mdi:car-arrow-right
+    initial: off
+
+# === UTILITY METER ===
+# NOTE: Do NOT add 'name:' — HA uses the YAML key as entity_id.
+# French labels go in the dashboard only.
+utility_meter:
+
+  heat_pump_consumed_daily:
+    source: sensor.nodon_capteur_energy
+    cycle: daily
+
+  solar_production_daily:
+    source: sensor.envoy_122233025824_production_d_energie_totale
+    cycle: daily
+
+  solar_export_daily:
+    source: sensor.envoy_122233025824_lifetime_net_energy_production
+    cycle: daily
+
+  sunology_production_daily:
+    source: sensor.pc_sunology_energy
+    cycle: daily
+
+light:
+- platform: group
+  name: "LEDs Cuisine"
+  unique_id: group_leds_cuisine
+  entities:
+  - light.smart_led_bulb_1
+  - light.smart_led_bulb_2_2
+  - light.smart_led_bulb_3
+  - light.smart_led_bulb_4
+
+- platform: group
+  name: "LEDs Sdb"
+  unique_id: group_leds_sdb
+  entities:
+  - light.smart_led_bulb_sdb_1
+  - light.smart_led_bulb_sdb_2
+  - light.smart_led_bulb_sdb_3
+  - light.smart_led_bulb_sdb_4
+  - light.smart_led_bulb_sdb_5
+  - light.smart_led_bulb_sdb_6
+
+- platform: group
+  name: "LEDs Salon"
+  unique_id: group_leds_salon
+  entities:
+  - light.smart_led_bulb_2
+  - light.smart_led_bulb
+ 
+- platform: group
+  name: "LEDs Couloir"
+  unique_id: group_leds_couloir
+  entities:
+  - light.couloir_smart_led_couloir_1
+  - light.couloir_smart_led_couloir_2
+
+# === MEDIA PLAYER ===
+# 2026-06-05 : ancienne intégration liveboxtvuhd (YAML) RETIRÉE — remplacée par le fork moderne
+# liveboxtv_ng (config_flow + UPnP + EPG dynamique, gère .30 ET .63). Bloc archivé dans
+# _removed_config_archive.md.
+
+# === RECORDER ===
+# Mode exclude — HA enregistre tout par défaut
+# On exclut uniquement les entités volumineuses et inutiles
+recorder:
+  # Historique détaillé court terme (UI/debug). Les statistiques long terme
+  # (énergie, agrégats) ne sont JAMAIS purgées, indépendamment de ce réglage.
+  # L'analyse empirique du heat_agent ne dépend PAS du recorder : elle vit dans
+  # /config/logs/heat_agent_log.jsonl (append pur, conservé à vie).
+  # 180 j faisait gonfler la DB à ~8,6 Go -> crash recorder nocturne (2026-06-02).
+  # 2026-06-02 : passé à 30 j en urgence (disque plein).
+  # 2026-06-02 : partition agrandie à 64 Go -> on relâche la *durée* à 90 j, mais on
+  # GARDE toutes les exclusions ci-dessous (c'est le débit ~600k pts/j qui tuait la DB,
+  # pas la durée). Surveiller la taille de home-assistant_v2.db après quelques semaines.
+  purge_keep_days: 90
+  exclude:
+    entity_globs:
+    - sensor.burthecourt_aux_chenes_forecast_*
+    - sensor.sun.*
+    - sensor.envoy_122233025824_metering_status_*
+    - sensor.envoy_122233025824_meter_status_flags_*
+    # ── 2026-06-02 : capteurs très bavards (~600k pts/j) qui gonflaient la DB. ──
+    # Exclusions agressives. N'affecte NI la base empirique heat_agent (JSONL),
+    # NI les statistiques d'énergie long terme (table `statistics`, jamais purgée),
+    # NI la lecture live (state.get reste dispo). L'agent lit conso_linky, pas ces
+    # entités. cf [[project-recorder-crash]].
+    # Batterie / onduleur (puissance, tension, target power — instantané/seconde)
+    - sensor.batp_*
+    - sensor.acvoltage_*
+    - sensor.targetpow_*
+    # Réseau Linky / surplus solaire (puissances instantanées ; les compteurs
+    # d'énergie cumulés _energy_* restent historisés via statistics)
+    - sensor.edpower_*
+    # Onduleur / PV même device : courant DC instantané (bavard, exclu).
+    # 2026-06-20 : energycons_* RETIRÉ de l'exclusion — ce sont des compteurs
+    # d'ÉNERGIE cumulés (mWh, total) requis par la page Énergie (batterie Storey).
+    # L'exclure provoquait l'avertissement "entité non suivie". Faible débit,
+    # pas un pollueur DB. cf [[project-recorder-crash]].
+    - sensor.dccurrent_*
+    # Switch Netgear GS108T (compteurs trafic par port — pur diagnostic réseau)
+    - sensor.gs108t_*
+    entities:
+    # Prises / divers puissance instantanée (l'énergie kWh cumulée reste via statistics)
+    - sensor.prise_chambre_power
+    - sensor.pc_hydroponie_power
+    # 2026-07-18 : ré-historisé à la demande de Chris (sparkline watermark POWER FEED
+    # de la card BATTLESTATION voulait une vraie courbe). Surveiller le volume si la DB
+    # regonfle, même logique que prod_totale_2 ci-dessous. cf [[project-recorder-crash]],
+    # [[project_battlestation_card]].
+    # - sensor.prise_pc_puissance
+    # 2026-06-05 : ré-historisé à la demande de Chris (courbe production solaire instantanée
+    # voulue). Surveiller le volume si la DB regonfle. cf [[project-recorder-crash]].
+    # - sensor.prod_totale_2
+    # 2026-06-02 : Shelly EM (puissance instantanée, ~241k lignes) — l'énergie kWh
+    # cumulée reste via statistics. Identifié comme gros pollueur post-recover DB.
+    - sensor.shellyemminig4_d885acef3f88_puissance
+    # Diagnostics internes ESP Ecodan (debug, aucun intérêt historique)
+    - sensor.ecodan_heatpump_heap_free
+    - sensor.ecodan_heatpump_loop_time
+    # Ecodan diagnostics
+    - sensor.ecodan_heatpump_wifi_signal_db
+    - sensor.ecodan_heatpump_wifi_signal
+    - sensor.ecodan_heatpump_cpu_0
+    - sensor.ecodan_heatpump_cpu_1
+    - sensor.ecodan_heatpump_esp_uptime
+    - sensor.ecodan_heatpump_esp_internal_temperature
+    # Lixee diagnostics/static
+    - sensor.lixee_linkquality
+    - sensor.lixee_site_id
+    - sensor.lixee_ntarf
+    - sensor.lixee_pref
+    - sensor.lixee_relais
+    - sensor.lixee_status_register
+    - sensor.lixee_current_tarif
+    - sensor.lixee_smaxsn
+    - sensor.lixee_smaxsn_1
+    # Envoy CT/redundant sensors
+    - sensor.envoy_122233025824_production_ct_power
+    - sensor.envoy_122233025824_production_ct_energy_delivered
+    - sensor.envoy_122233025824_production_ct_energy_received
+    - sensor.envoy_122233025824_net_consumption_ct_current
+    - sensor.envoy_122233025824_balanced_net_power_consumption
+    - sensor.envoy_122233025824_lifetime_balanced_net_energy_consumption
+    - sensor.envoy_122233025824_lifetime_net_energy_consumption
+    - sensor.envoy_122233025824_lifetime_net_energy_production
+    # Zigbee signal
+    - sensor.0x98a316fffe752710_linkquality
+    # 2026-06-28 : heatmap cyber = HTML pré-rendu ~24 Ko en attributs (grille 24x7),
+    # > 16384 o -> le recorder refusait de stocker les attrs et spammait le log toutes
+    # les minutes. C'est un capteur d'affichage LIVE (alimenté par MQTT retained,
+    # cf cyber_monitor.py sur le Pi .51) : aucun intérêt historique. cf [[project-cyber-zipbomb-tarpit-mqtt]].
+    - sensor.cyber_station_heatmap_activite
+    # 2026-08-18 : même symptôme, même remède. Liste des IP actives en purgatoire
+    # (attribut, alimenté MQTT retained côté Pi .51) dépasse 16384 o -> spam log.
+    # Capteur d'affichage LIVE, aucun intérêt historique.
+    - sensor.cyber_station_purgatory_ip_actives
+
+mqtt:
+  climate:
+  - name: "Clim Chambre Control"
+    unique_id: "clim_chambre_custom"
+
+    # --- Modes ---
+    mode_command_topic: "zigbee2mqtt/Clim Chambre/set"
+    mode_command_template: '{"system_mode": "{{ value }}"}'
+    mode_state_topic: "zigbee2mqtt/Clim Chambre"
+    mode_state_template: "{{ value_json.system_mode }}"
+    modes:
+    - "off"
+    - "heat"
+    - "cool"
+    - "dry"
+    - "fan_only"
+
+    # --- Température ---
+    temperature_command_topic: "zigbee2mqtt/Clim Chambre/set"
+    temperature_command_template: >-
+      {"occupied_{% if state_attr('climate.clim_chambre_control', 'hvac_mode') == 'heat' %}heating{% else %}cooling{% endif %}_setpoint": {{ value }}}
+
+    temperature_state_topic: "zigbee2mqtt/Clim Chambre"
+    temperature_state_template: "{% if value_json.system_mode == 'heat' %}{{ value_json.occupied_heating_setpoint | float }}{% else %}{{ value_json.occupied_cooling_setpoint | float }}{% endif %}"
+
+    # --- Température ambiante ---
+    current_temperature_topic: "zigbee2mqtt/Clim Chambre"
+    current_temperature_template: "{{ value_json.local_temperature | float | round(1) }}"
+
+    # --- Ventilation ---
+    fan_mode_command_topic: "zigbee2mqtt/Clim Chambre/set"
+    fan_mode_command_template: '{"fan_mode": "{{ value }}"}'
+    fan_mode_state_topic: "zigbee2mqtt/Clim Chambre"
+    fan_mode_state_template: "{{ value_json.fan_mode }}"
+    fan_modes:
+    - "off"
+    - "low"
+    - "medium"
+    - "high"
+    - "auto"
+
+    # --- Volets (louver) ---
+    swing_mode_command_topic: "zigbee2mqtt/Clim Chambre/set"
+    swing_mode_command_template: '{"ac_louver_position": "{{ value }}"}'
+    swing_mode_state_topic: "zigbee2mqtt/Clim Chambre"
+    swing_mode_state_template: "{{ value_json.ac_louver_position }}"
+    swing_modes:
+    - "fully_open"
+    - "fully_closed"
+    - "quarter_open"
+    - "half_open"
+    - "three_quarters_open"
+
+    # --- Paramètres ---
+    min_temp: 16
+    max_temp: 30
+    temp_step: 1
+    precision: 0.1

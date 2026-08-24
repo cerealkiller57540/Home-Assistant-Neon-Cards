@@ -1,0 +1,26 @@
+{
+  "domain": "vag_connect",
+  "name": "VW Group Connect",
+  "after_dependencies": [
+    "llm"
+  ],
+  "codeowners": [
+    "@its-me-prash"
+  ],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/its-me-prash/vwgroup-connect-ha",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/its-me-prash/vwgroup-connect-ha/issues",
+  "loggers": [
+    "custom_components.vag_connect"
+  ],
+  "quality_scale": "platinum",
+  "requirements": [
+    "firebase-messaging>=0.4.0",
+    "aiomqtt>=2.0.0",
+    "adb-shell==0.4.4"
+  ],
+  "version": "4.2.0"
+}

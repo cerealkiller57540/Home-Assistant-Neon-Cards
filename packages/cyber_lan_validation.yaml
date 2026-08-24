@@ -1,0 +1,58 @@
+# ============================================================================
+#  Validation d'appareil LAN depuis HA — sans ouvrir l'UI NetAlertX (lente)
+#  Le collecteur Pi .51 (cyber_monitor.py) :
+#   - publie le détail du nouvel appareil en attributs (newdev_*) sur
+#     sensor.cyber_station_honeypot_top_attaquants (topic top_attrs)
+#   - écoute home/cyber_station/cmd/validate : une MAC publiée ici -> devIsNew=0
+#  cf mémoire [[project_cyber_zipbomb_tarpit_mqtt]]
+# ============================================================================
+
+# --- Template sensors : extraient le détail du nouvel appareil pour l'affichage/notif
+template:
+  - sensor:
+      - name: "LAN nouvel appareil MAC"
+        unique_id: cyber_lan_newdev_mac
+        icon: mdi:lan-pending
+        state: >-
+          {{ state_attr('sensor.cyber_station_honeypot_top_attaquants', 'newdev_mac') | default('', true) }}
+      - name: "LAN nouvel appareil IP"
+        unique_id: cyber_lan_newdev_ip
+        icon: mdi:ip-network
+        state: >-
+          {{ state_attr('sensor.cyber_station_honeypot_top_attaquants', 'newdev_ip') | default('', true) }}
+      - name: "LAN nouvel appareil détail"
+        unique_id: cyber_lan_newdev_detail
+        icon: mdi:lan-pending
+        state: >-
+          {% set mac = state_attr('sensor.cyber_station_honeypot_top_attaquants', 'newdev_mac') | default('', true) %}
+          {% set ip  = state_attr('sensor.cyber_station_honeypot_top_attaquants', 'newdev_ip') | default('', true) %}
+          {% set ven = state_attr('sensor.cyber_station_honeypot_top_attaquants', 'newdev_vendor') | default('', true) %}
+          {% set priv = state_attr('sensor.cyber_station_honeypot_top_attaquants', 'newdev_private') | default(false, true) %}
+          {% if mac %}{{ ip }} — {{ ven }}{% if priv %} — MAC privée (tél/tablette probable){% endif %} ({{ mac }}){% else %}aucun{% endif %}
+
+# --- Bouton MQTT : publie la MAC du nouvel appareil sur le canal de commande du Pi
+mqtt:
+  button:
+    - name: "Valider nouvel appareil LAN"
+      unique_id: cyber_lan_validate_button
+      icon: mdi:lan-check
+      command_topic: "home/cyber_station/cmd/validate"
+      # le payload = la MAC du nouvel appareil, lue dans les attributs publiés par le Pi
+      command_template: >-
+        {{ state_attr('sensor.cyber_station_honeypot_top_attaquants', 'newdev_mac') | default('', true) }}
+      availability:
+        - topic: "home/cyber_station/availability"
+          payload_available: "online"
+          payload_not_available: "offline"
+
+# --- Script pour valider une MAC arbitraire (utilisé par le bouton d'action de la notif)
+script:
+  cyber_valider_appareil_lan:
+    alias: "Cyber — valider appareil LAN"
+    mode: single
+    sequence:
+      - service: mqtt.publish
+        data:
+          topic: "home/cyber_station/cmd/validate"
+          payload: >-
+            {{ mac | default(state_attr('sensor.cyber_station_honeypot_top_attaquants', 'newdev_mac'), true) }}

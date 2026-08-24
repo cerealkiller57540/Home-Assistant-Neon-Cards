@@ -1,0 +1,27 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  MAJ .53 — Bouton « mettre à jour le serveur Linux .53 » depuis Home Assistant
+#
+#  Mécanisme : HA publie "RUN" sur le topic MQTT home/nodes/maj/set.
+#  Un listener systemd sur le .53 (maj-listener.service) lance
+#  `apt-get -y --no-remove upgrade` puis republie l'état sur home/nodes/maj/state.
+#
+#  - button.maj_53          : appuie → publie RUN (lance la MAJ)
+#  - sensor.maj_53_etat     : idle | running | "ok: …" | "erreur: …"
+#  Les MAJ de SÉCURITÉ restent automatiques via unattended-upgrades (natif Ubuntu) ;
+#  ce bouton sert pour les MAJ NON-sécurité (dépôt -updates), à la demande.
+# ═══════════════════════════════════════════════════════════════════════════
+
+mqtt:
+  button:
+    - name: "MAJ serveur .53"
+      unique_id: maj_53_button
+      command_topic: "home/nodes/maj/set"
+      payload_press: "RUN"
+      icon: mdi:package-up
+      qos: 1
+
+  sensor:
+    - name: "MAJ .53 état"
+      unique_id: maj_53_etat
+      state_topic: "home/nodes/maj/state"
+      icon: mdi:update

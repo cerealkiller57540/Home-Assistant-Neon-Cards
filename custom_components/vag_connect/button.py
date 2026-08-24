@@ -1,0 +1,148 @@
+# Copyright 2026 Prash Balan (@its-me-prash) — GNU AGPL v3.0-or-later
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""Button entities for VW Group Connect (flash lights, force refresh, wake)."""
+
+from homeassistant.components.button import ButtonEntity
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+from .coordinator import VagConnectCoordinator
+from .entity_base import VagConnectEntity, register_dynamic_spawner
+
+# v1.13.0 (#56 Phase 3) — capability filtering moved to coordinator's
+# ``command_capability_supported(vin, command_id)`` helper, which uses
+# the per-brand mapping in ``cariad/_capabilities.py``. This replaces
+# the brand-allowlist + cap-id-string approach below.
+#
+# Phase 2 (v1.9.1) brand-allowlist (now superseded but kept for reference):
+#   Pre-1.13.0 only SEAT/CUPRA were gated because we had verified their
+#   OLA capability vocabulary. v1.13.0 ships verified vocabularies for
+#   VW EU + Audi + Skoda (via the new Skoda capabilities endpoint) so
+#   the allowlist becomes the implicit "any brand with a registered
+#   command-id mapping in CAPABILITY_MAP".
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up button entities. v1.25.0 PR-C: dynamic listener spawn."""
+    coordinator: VagConnectCoordinator = entry.runtime_data
+    # v1.12.0 (#63) — Read-only Mode: skip vehicle-command buttons
+    # (Flash, Wake) but ALWAYS keep VagRefreshButton — refresh is a
+    # coordinator-level cloud poll, doesn't send any vehicle command.
+    read_only = coordinator.is_read_only()
+
+    def _build_for_vin(vin: str, vehicle: dict) -> list:  # noqa: ARG001
+        entities: list = []
+        # Refresh button never gates — coordinator-level operation.
+        entities.append(VagRefreshButton(coordinator, vin))
+        # v2.26.0 — companion (ADB) entries have no portal, so they must NOT
+        # get the EU-Data-Act request button (it would call a portal that
+        # isn't there). Instead they get a reset button to clear a stuck
+        # failure/rate-limit backoff. Handle before the read_only branch,
+        # because an unverified-brand companion is read_only too.
+        if coordinator.is_companion():
+            entities.append(VagCompanionResetButton(coordinator, vin))
+            return entities
+        if read_only:
+            # v2.17.1 — portal (read-only) entries expose a button to create or
+            # refresh the EU-Data-Act continuous data request on demand, so a
+            # user whose portal has no active request can fix "no data" from
+            # inside Home Assistant instead of the portal UI.
+            entities.append(VagDataActRequestButton(coordinator, vin))
+            return entities
+        # v3.0.0a1 — also require the client to implement the command, else the
+        # button raises AttributeError on press (companion/ADB has neither).
+        if (
+            coordinator.command_capability_supported(vin, "command_flash") is not False
+            and coordinator.command_method_available("command_flash")
+        ):
+            entities.append(VagFlashButton(coordinator, vin))
+        if (
+            coordinator.command_capability_supported(vin, "command_wake") is not False
+            and coordinator.command_method_available("command_wake")
+        ):
+            entities.append(VagWakeButton(coordinator, vin))
+        return entities
+
+    register_dynamic_spawner(entry, coordinator, async_add_entities, _build_for_vin)
+
+
+class VagFlashButton(VagConnectEntity, ButtonEntity):
+    """Trigger a honk-and-flash sequence."""
+
+    _attr_translation_key = "flash_button"
+    _attr_icon = "mdi:car-light-high"
+    # v1.9.1 — Phase 2 gating: hide once a 403/missing-capability is seen.
+    _command_id = "command_flash"
+
+    def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
+        super().__init__(coordinator, vin, "flash_button")
+
+    async def async_press(self) -> None:
+        await self.coordinator.async_flash_lights(self._vin)
+
+
+class VagRefreshButton(VagConnectEntity, ButtonEntity):
+    """Force an immediate data refresh from the cloud."""
+
+    _attr_translation_key = "refresh_button"
+    _attr_icon = "mdi:refresh"
+
+    def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
+        super().__init__(coordinator, vin, "refresh_button")
+
+    async def async_press(self) -> None:
+        await self.coordinator.async_request_refresh()
+
+
+class VagWakeButton(VagConnectEntity, ButtonEntity):
+    """Wake the vehicle from sleep."""
+
+    _attr_translation_key = "wake_button"
+    _attr_icon = "mdi:car-connected"
+    # v1.9.1 — Phase 2 gating.
+    _command_id = "command_wake"
+
+    def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
+        super().__init__(coordinator, vin, "wake_button")
+
+    async def async_press(self) -> None:
+        await self.coordinator.async_wake_vehicle(self._vin)
+
+
+class VagDataActRequestButton(VagConnectEntity, ButtonEntity):
+    """Create/refresh the EU Data Act continuous data request on the portal."""
+
+    _attr_translation_key = "data_act_request_button"
+    _attr_icon = "mdi:cloud-sync"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
+        super().__init__(coordinator, vin, "data_act_request_button")
+
+    async def async_press(self) -> None:
+        await self.coordinator.async_create_data_act_request()
+
+
+class VagCompanionResetButton(VagConnectEntity, ButtonEntity):
+    """v2.26.0 — clear a stuck companion (ADB) failure/rate-limit backoff.
+
+    The companion channel backs off adaptively after failures and for hours
+    after the app shows a rate-limit banner. If the cause is gone (phone
+    rebooted, app reopened) this button clears the backoff and re-reads now.
+    """
+
+    _attr_translation_key = "companion_reset_button"
+    _attr_icon = "mdi:restart-alert"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
+        super().__init__(coordinator, vin, "companion_reset_button")
+
+    async def async_press(self) -> None:
+        await self.coordinator.async_reset_companion_cooldown()

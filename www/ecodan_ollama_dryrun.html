@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HA·AI Supervisor</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#06080b; --surface:#0c1018; --panel:#101520; --border:#182030; --border2:#1e2d40;
+  --cyan:#00d4e8; --cyan-dim:#003a42; --green:#00e676; --green-dim:#003d1f;
+  --orange:#ff6b2b; --yellow:#ffd740; --red:#ff4444; --blue:#448aff; --purple:#b388ff;
+  --text:#b0c4d8; --muted:#2e4258;
+  --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif; --display:'Orbitron',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);display:flex;flex-direction:column;height:100vh;}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.02) 3px,rgba(0,0,0,0.02) 4px);pointer-events:none;z-index:9999;}
+
+/* ── SETUP ── */
+#setup{position:fixed;inset:0;background:rgba(6,8,11,0.97);display:flex;align-items:center;justify-content:center;z-index:1000;}
+.setup-box{background:var(--panel);border:1px solid var(--border2);border-top:2px solid var(--cyan);border-radius:6px;padding:32px 36px;width:460px;max-width:95vw;}
+.s-title{font-family:var(--display);font-size:0.9rem;color:var(--cyan);letter-spacing:.15em;margin-bottom:4px;}
+.s-sub{font-size:.7rem;color:var(--muted);margin-bottom:24px;letter-spacing:.05em;}
+.s-field{margin-bottom:14px;}
+.s-field label{display:block;font-family:var(--mono);font-size:.6rem;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;margin-bottom:5px;}
+.s-field input{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:3px;color:var(--text);font-family:var(--mono);font-size:.78rem;padding:8px 11px;outline:none;transition:border-color .2s;}
+.s-field input:focus{border-color:var(--cyan);}
+.s-field input::placeholder{color:var(--muted);}
+.s-btn{width:100%;background:var(--cyan);border:none;border-radius:4px;color:var(--bg);font-family:var(--display);font-weight:700;font-size:.7rem;letter-spacing:.15em;padding:11px;cursor:pointer;margin-top:6px;transition:opacity .2s;}
+.s-btn:hover{opacity:.85;}
+.s-err{color:var(--red);font-size:.68rem;font-family:var(--mono);margin-top:8px;display:none;line-height:1.6;}
+.s-diag{display:none;margin-top:10px;background:#070c10;border:1px solid var(--border2);border-radius:3px;padding:8px 11px;font-family:var(--mono);font-size:.62rem;line-height:1.8;color:var(--muted);}
+.s-autodetect{display:none;background:#081208;border:1px solid #1a3a1a;border-radius:3px;padding:6px 11px;font-family:var(--mono);font-size:.65rem;color:var(--green);margin-bottom:12px;}
+
+/* ── HEADER ── */
+header{display:flex;align-items:center;justify-content:space-between;padding:9px 18px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;}
+.logo{display:flex;align-items:center;gap:9px;font-family:var(--display);font-size:.8rem;color:var(--cyan);letter-spacing:.12em;}
+.logo-ring{width:24px;height:24px;border:1.5px solid var(--cyan);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.55rem;box-shadow:0 0 8px var(--cyan-dim);}
+.dry-badge{font-family:var(--mono);font-size:.6rem;letter-spacing:.18em;background:repeating-linear-gradient(-45deg,#140600,#140600 5px,#200900 5px,#200900 10px);border:1px solid var(--orange);color:var(--orange);padding:3px 9px;border-radius:2px;animation:strobe 3s ease-in-out infinite;}
+@keyframes strobe{0%,100%{opacity:1;}50%{opacity:.65;}}
+.hdr-right{display:flex;align-items:center;gap:12px;}
+.ha-pill{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:.6rem;color:var(--muted);background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:3px 9px;}
+.ha-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);}
+.ha-dot.ok{background:var(--green);box-shadow:0 0 5px var(--green);animation:pulse 2s infinite;}
+.ha-dot.err{background:var(--red);}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+.hdr-btn{background:none;border:1px solid var(--border);border-radius:3px;color:var(--muted);font-family:var(--mono);font-size:.6rem;letter-spacing:.08em;padding:4px 9px;cursor:pointer;transition:all .15s;}
+.hdr-btn:hover{border-color:var(--cyan);color:var(--cyan);}
+.entity-count{font-family:var(--mono);font-size:.6rem;color:var(--muted);}
+.entity-count span{color:var(--cyan);}
+
+/* ── LAYOUT ── */
+.body{display:grid;grid-template-columns:320px 1fr;flex:1;overflow:hidden;}
+
+/* ── LEFT PANEL ── */
+.left{display:flex;flex-direction:column;border-right:1px solid var(--border);overflow:hidden;}
+.tab-bar{display:flex;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;padding:0 6px;}
+.tab-btn{background:none;border:none;font-family:var(--mono);font-size:.58rem;letter-spacing:.12em;color:var(--muted);padding:8px 10px;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;text-transform:uppercase;white-space:nowrap;}
+.tab-btn:hover{color:var(--text);}
+.tab-btn.active{color:var(--cyan);border-bottom-color:var(--cyan);}
+.tab-pane{display:none;flex:1;overflow-y:auto;padding:10px 10px;flex-direction:column;gap:8px;scrollbar-width:thin;scrollbar-color:var(--border) transparent;}
+.tab-pane.active{display:flex;}
+
+/* Domain sections */
+.domain-section{background:var(--panel);border:1px solid var(--border);border-radius:4px;overflow:hidden;}
+.domain-header{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;cursor:pointer;user-select:none;background:var(--panel);transition:background .15s;}
+.domain-header:hover{background:#141c28;}
+.domain-header-left{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:.63rem;letter-spacing:.1em;color:var(--text);}
+.domain-count{font-size:.55rem;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1px 6px;font-family:var(--mono);}
+.domain-chevron{color:var(--muted);font-size:.55rem;transition:transform .2s;}
+.domain-header.open .domain-chevron{transform:rotate(90deg);}
+.domain-body{display:none;border-top:1px solid var(--border);}
+.domain-body.open{display:block;}
+.ent-row{display:flex;align-items:center;justify-content:space-between;padding:5px 10px;border-bottom:1px solid rgba(24,32,48,.6);gap:6px;}
+.ent-row:last-child{border-bottom:none;}
+.ent-name{font-size:.65rem;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ent-val{font-family:var(--mono);font-size:.68rem;color:var(--cyan);white-space:nowrap;}
+.ent-val.on{color:var(--green);}
+.ent-val.off{color:var(--muted);}
+.ent-val.warn{color:var(--yellow);}
+.ent-val.err{color:var(--red);}
+.badge{font-size:.55rem;padding:1px 5px;border-radius:2px;border:1px solid;}
+.badge.on{background:var(--green-dim);color:var(--green);border-color:var(--green);}
+.badge.off{background:transparent;color:var(--muted);border-color:var(--border2);}
+.badge.warn{background:#2a1800;color:var(--yellow);border-color:var(--yellow);}
+.badge.err{background:#2a0000;color:var(--red);border-color:var(--red);}
+
+/* Search */
+.search-wrap{padding:8px 10px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.search-input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:var(--mono);font-size:.68rem;padding:6px 10px;outline:none;transition:border-color .2s;}
+.search-input:focus{border-color:var(--cyan);}
+.search-input::placeholder{color:var(--muted);}
+
+/* Config tab */
+.cfg-block{background:var(--panel);border:1px solid var(--border);border-radius:4px;overflow:hidden;}
+.cfg-hdr{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;cursor:pointer;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;color:var(--text);user-select:none;transition:background .15s;}
+.cfg-hdr:hover{background:#141c28;}
+.cfg-hdr .chv{color:var(--muted);font-size:.55rem;transition:transform .2s;}
+.cfg-hdr.open .chv{transform:rotate(90deg);}
+.cfg-body{display:none;max-height:260px;overflow-y:auto;padding:8px 10px;font-family:var(--mono);font-size:.62rem;line-height:1.75;color:var(--muted);border-top:1px solid var(--border);white-space:pre-wrap;word-break:break-word;}
+.cfg-body.open{display:block;}
+.ck{color:var(--cyan);} .cv{color:var(--text);} .cg{color:var(--green);} .cw{color:var(--yellow);} .cr{color:var(--red);}
+
+/* ── CHAT ── */
+.chat{display:flex;flex-direction:column;overflow:hidden;}
+.chat-msgs{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:12px;scrollbar-width:thin;scrollbar-color:var(--border) transparent;}
+.msg{display:flex;gap:9px;animation:fadeUp .2s ease;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px);}to{opacity:1;transform:translateY(0);}}
+.av{width:26px;height:26px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.58rem;font-weight:500;flex-shrink:0;margin-top:1px;}
+.msg.user .av{background:#0c1828;color:var(--blue);border:1px solid #1a3050;}
+.msg.ai   .av{background:#081408;color:var(--green);border:1px solid #153015;}
+.msg-inner{flex:1;}
+.msg-meta{font-family:var(--mono);font-size:.56rem;color:var(--muted);letter-spacing:.1em;margin-bottom:3px;}
+.msg-text{font-size:.8rem;line-height:1.65;color:var(--text);}
+.msg-text p{margin-bottom:4px;}
+.msg-text strong{color:var(--cyan);}
+.msg-text code{font-family:var(--mono);font-size:.72rem;background:#0a1018;border:1px solid var(--border);border-radius:2px;padding:1px 4px;color:var(--green);}
+
+/* Action card */
+.action-card{margin-top:9px;background:#060e06;border:1px solid var(--border);border-left:3px solid var(--green);border-radius:3px;overflow:hidden;}
+.action-hdr{background:#08140a;padding:5px 10px;font-family:var(--mono);font-size:.58rem;letter-spacing:.18em;color:var(--green);text-transform:uppercase;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:5px;}
+.action-table{width:100%;border-collapse:collapse;}
+.action-table tr{border-bottom:1px solid var(--border);}
+.action-table tr:last-child{border-bottom:none;}
+.action-table td{padding:5px 10px;font-family:var(--mono);font-size:.68rem;}
+.action-table td:first-child{color:var(--muted);width:45%;}
+.td-unchanged{color:var(--muted);opacity:.4;text-decoration:line-through;}
+.td-changed{color:var(--green);}
+.td-warn{color:var(--yellow);}
+.td-crit{color:var(--red);}
+
+/* Thinking */
+.thinking{display:flex;gap:3px;align-items:center;padding:2px 0;}
+.thinking span{width:5px;height:5px;border-radius:50%;background:var(--green);animation:bounce 1s ease-in-out infinite;}
+.thinking span:nth-child(2){animation-delay:.15s;}
+.thinking span:nth-child(3){animation-delay:.3s;}
+@keyframes bounce{0%,80%,100%{transform:scale(.6);opacity:.4;}40%{transform:scale(1);opacity:1;}}
+
+/* Bottom */
+.chat-bottom{border-top:1px solid var(--border);background:var(--surface);padding:10px 16px;flex-shrink:0;}
+.quick-row{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;}
+.q-btn{background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--muted);font-family:var(--sans);font-size:.65rem;padding:3px 8px;cursor:pointer;transition:all .15s;}
+.q-btn:hover{border-color:var(--cyan);color:var(--cyan);}
+.input-row{display:flex;gap:7px;}
+.chat-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--sans);font-size:.8rem;padding:8px 12px;outline:none;transition:border-color .2s;}
+.chat-input:focus{border-color:var(--cyan);}
+.chat-input::placeholder{color:var(--muted);}
+.send-btn{background:var(--cyan);border:none;border-radius:4px;color:var(--bg);font-family:var(--display);font-weight:700;font-size:.65rem;letter-spacing:.12em;padding:8px 16px;cursor:pointer;transition:opacity .15s;white-space:nowrap;}
+.send-btn:hover{opacity:.85;}
+.send-btn:disabled{background:var(--muted);cursor:not-allowed;}
+
+/* Log */
+.logbar{border-top:1px solid var(--border);height:60px;overflow-y:auto;padding:4px 16px;font-family:var(--mono);font-size:.6rem;color:var(--muted);scrollbar-width:thin;flex-shrink:0;}
+.ll{line-height:1.7;}
+.ll.ok{color:var(--green);}
+.ll.warn{color:var(--yellow);}
+.ll.err{color:var(--red);}
+.ll.info{color:var(--cyan);}
+
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+</style>
+</head>
+<body>
+
+<!-- ══ SETUP ══ -->
+<div id="setup">
+  <div class="setup-box">
+    <div class="s-title">HA · AI SUPERVISOR</div>
+    <div class="s-sub">Supervision complète Home Assistant via Ollama · DRY RUN</div>
+    <div class="s-autodetect" id="sAutoDetect">✓ URL HA auto-détectée : <span id="sAutoUrl"></span></div>
+    <div class="s-field" id="sHaUrlField">
+      <label>URL Home Assistant</label>
+      <input id="sHaUrl" type="text" placeholder="http://192.168.1.60:8123">
+    </div>
+    <div class="s-field">
+      <label>Long-Lived Access Token</label>
+      <input id="sToken" type="password" placeholder="eyJ…">
+      <div style="font-size:.6rem;color:var(--muted);margin-top:3px;">Profil HA → Sécurité → Créer un token</div>
+    </div>
+    <div class="s-field">
+      <label>URL Ollama</label>
+      <input id="sOllamaUrl" type="text" placeholder="http://192.168.1.44:11434">
+    </div>
+    <div class="s-field">
+      <label>Modèle Ollama</label>
+      <input id="sModel" type="text" placeholder="qwen3:14b" value="qwen3:14b">
+    </div>
+    <button class="s-btn" onclick="doConnect()">▶ CONNECTER</button>
+    <div class="s-err" id="sErr"></div>
+    <div class="s-diag" id="sDiag"></div>
+  </div>
+</div>
+
+<!-- ══ HEADER ══ -->
+<header>
+  <div class="logo"><div class="logo-ring">⬡</div>HA·AI SUPERVISOR</div>
+  <div class="dry-badge">⚠ DRY RUN — LECTURE SEULE</div>
+  <div class="hdr-right">
+    <div class="entity-count">Entités : <span id="entityCountDisplay">—</span></div>
+    <div class="ha-pill"><div class="ha-dot" id="haDot"></div><span id="haStatus">déconnecté</span></div>
+    <button class="hdr-btn" onclick="refreshAll()">↻ SYNC</button>
+    <button class="hdr-btn" onclick="document.getElementById('setup').style.display='flex'">⚙</button>
+  </div>
+</header>
+
+<div class="body">
+
+  <!-- ══ LEFT ══ -->
+  <div class="left">
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('states')">📡 États</button>
+      <button class="tab-btn" onclick="switchTab('config')">⚙ Config</button>
+      <button class="tab-btn" onclick="switchTab('auto')">🤖 Automations</button>
+    </div>
+
+    <!-- ÉTATS -->
+    <div class="tab-pane active" id="tab-states">
+      <div class="search-wrap">
+        <input class="search-input" id="searchInput" placeholder="Filtrer entités…" oninput="filterEntities(this.value)">
+      </div>
+      <div id="domainPanels"></div>
+    </div>
+
+    <!-- CONFIG -->
+    <div class="tab-pane" id="tab-config">
+      <div class="cfg-block"><div class="cfg-hdr" onclick="tc(this)"><span>📐 Modes horaires PAC</span><span class="chv">▶</span></div><div class="cfg-body">
+<span class="ck">00:20–06:20</span> <span class="cv">HC Nuit</span>      → boost off_peak, cutoff pièce, strat. demain
+<span class="ck">06:20–08:00</span> <span class="cv">Morning shoulder</span> → bias 0.3–0.5°C
+<span class="ck">08:00–14:00</span> <span class="cv">Journée</span>      → coasting, bias journée
+<span class="ck">14:00–14:20</span> <span class="cv">Pre-HC PM</span>    → ramp 0.5–0.8°C selon solaire
+<span class="ck">14:20–16:20</span> <span class="cv">HC Après-midi</span> → bias météo×temp_mult (1.2–2.5°C)
+<span class="ck">16:20–17:00</span> <span class="cv">Post-HC PM</span>   → transition
+<span class="ck">17:00–21:00</span> <span class="cv">Peak Coast</span>   → bias négatif (-1°C)
+<span class="ck">21:00–23:50</span> <span class="cv">Soirée tardive</span> → descente progressive
+<span class="ck">23:50–00:20</span> <span class="cv">Pre-HC Nuit</span>  → rampe pré-boost</div></div>
+
+      <div class="cfg-block"><div class="cfg-hdr" onclick="tc(this)"><span>🧠 Self-learning HC nuit</span><span class="chv">▶</span></div><div class="cfg-body">
+Snapshot <span class="ck">00:20</span> → hc_temp_at_start
+Snapshot <span class="ck">06:20</span> → hc_temp_at_end
+<span class="ck">erreur</span>     = delta_réalisé - delta_cible
+<span class="ck">temp_factor</span> = 1 - (5 - temp_ext) × 0.03  [0.5–1.5]
+<span class="ck">correction</span>  = erreur × -0.15 × temp_factor [±0.2°C/nuit]
+<span class="ck">nouveau</span>     = current + correction  [0.5–3.0°C]
+Seuil d'activation: |erreur| > 0.15°C</div></div>
+
+      <div class="cfg-block"><div class="cfg-hdr" onclick="tc(this)"><span>☀ Potentiel solaire HC PM</span><span class="chv">▶</span></div><div class="cfg-body">
+Couche 1 — UV + météo:
+  UV≥5 → 100% | UV≥3+nua>60% → 75% | UV≥3 → 90%
+  UV≥1+nua>80% → 35% | UV≥1 → 55%
+  UV&lt;1+nua>80% → 30% | &lt;60% → 65% | &lt;40% → 80%
+
+Couche 2 — self-learning forecast:
+  &lt;5 échantillons → correction×0.25
+  &lt;10             → correction×0.60
+  ≥10             → facteur plein
+
+Bias recommandé HC PM: 0.8–2.0°C</div></div>
+
+      <div class="cfg-block"><div class="cfg-hdr" onclick="tc(this)"><span>⚠ Seuils alertes & contexte</span><span class="chv">▶</span></div><div class="cfg-body">
+<span class="cr">Dégivrage imminent</span>: ext&lt;4°C + départ-ext>30°C + comp ON
+<span class="cr">Risque gel</span>:         freeze_chance>50% OU temp&lt;2°C
+<span class="cw">ΔT Warning</span>:        comp ON + (ΔT&lt;4°C OU ΔT>12°C)
+<span class="cg">ΔT Optimal</span>:        comp ON + 5°C≤ΔT≤9°C
+
+<span class="cw">⚠ CONTEXTE OBLIGATOIRE :</span>
+  Booster actif + salon>20°C + ext>5°C → NORMAL
+  ΔT=0 + compresseur OFF → NORMAL (pas de chauffe)
+  Freq=0 + salon>consigne → NORMAL (coasting)
+  Ne jamais mettre CRITIQUE si salon confortable</div></div>
+
+      <div class="cfg-block"><div class="cfg-hdr" onclick="tc(this)"><span>🚗 Voiture & Surplus</span><span class="chv">▶</span></div><div class="cfg-body">
+VW ID (wvwzzze18sp049976)
+<span class="ck">Charge HC</span>:    price=HC + câble + batt&lt;max → start
+<span class="ck">Stop HP</span>:     price=HP + solar_charging=off → stop
+<span class="ck">Surplus</span>:     surplus>min pendant 5min → start
+<span class="ck">Stop surplus</span>: surplus&lt;min pendant 10min → stop
+<span class="ck">Alerte export</span>: >1600W pendant 10min → notif</div></div>
+
+      <div class="cfg-block"><div class="cfg-hdr" onclick="tc(this)"><span>💡 Lumières & Présence</span><span class="chv">▶</span></div><div class="cfg-body">
+Allumage: luminosité &lt;100 lux (5min) OU coucher soleil
+Extinction: luminosité >100 lux (5min) OU lever soleil
+Extinction 23h: via input_datetime.lights_off_time
+Réveil 06:30: lun-ven, avant lever soleil, si alarme Sonos
+Garage: détecteur présence → motion light
+Porte garage: alerte si ouverte >5min + voiture absente</div></div>
+
+      <div class="cfg-block"><div class="cfg-hdr" onclick="tc(this)"><span>🔊 Sonos & Confort</span><span class="chv">▶</span></div><div class="cfg-body">
+Volume nocturne: heure via input_datetime.sonos_volume_time
+Playlist auto: heure via input_datetime.sonos_playlist_time
+Alarmes mutuellement exclusives: alarm_1 XOR alarm_3
+Abonnement EDF: +1Wh à 00:05 chaque jour</div></div>
+    </div>
+
+    <!-- AUTOMATIONS -->
+    <div class="tab-pane" id="tab-auto">
+      <div class="cfg-block"><div class="cfg-hdr" onclick="tc(this)"><span>🧠 Smart Heat Pump Bias</span><span class="chv">▶</span></div><div class="cfg-body">
+Trigger: /5min + lixee price change
+Condition: smart_bias_enabled=ON
+Action: number.set_value → ecodan_heatpump_auto_adaptive_setpoint_bias
+9 branches temporelles avec limit max_bias_change/cycle</div></div>
+
+      <div class="cfg-block"><div class="cfg-hdr" onclick="tc(this)"><span>📚 Self-Learning (06:22)</span><span class="chv">▶</span></div><div class="cfg-body">
+Trigger: 06:22 quotidien
+Conditions: smart_bias_enabled + snapshots_valides
+Calcul erreur → correction bornée ±0.2°C
+Update: input_number.heat_pump_bias_off_peak
+Notif 06:32 si |erreur|>0.15°C</div></div>
+
+      <div class="cfg-block"><div class="cfg-hdr" onclick="tc(this)"><span>🔔 Alertes PAC (queued)</span><span class="chv">▶</span></div><div class="cfg-body">
+Triggers: booster_heater, short_cycle_lockout, freeze_risk
+Mode: queued max:10
+ON  → persistent_notification + mobile
+OFF → dismiss automatique</div></div>
+
+      <div class="cfg-block"><div class="cfg-hdr" onclick="tc(this)"><span>🔧 Capteurs critiques (/15min)</span><span class="chv">▶</span></div><div class="cfg-body">
+Vérifie: thermometre_salon + bias_sensor + temp_exterieure
+Si unavailable → persistent_notification
+Si tout OK     → dismiss auto</div></div>
+
+      <div class="cfg-block"><div class="cfg-hdr" onclick="tc(this)"><span>🚗 Voiture (4 automations)</span><span class="chv">▶</span></div><div class="cfg-body">
+1. Charge HC: lixee→HC + câble + batt&lt;max
+2. Stop HP:   lixee→HP + solar=off
+3. Surplus:   surplus>min (5min)
+4. Stop:      surplus&lt;min (10min)</div></div>
+
+      <div class="cfg-block"><div class="cfg-hdr" onclick="tc(this)"><span>💡 Lumières (6 automations)</span><span class="chv">▶</span></div><div class="cfg-body">
+Coucher soleil / luminosité &lt;100lux → allumage
+Lever soleil / luminosité >100lux → extinction
+Extinction 23h (configurable)
+Réveil 06:30 lun-ven (Sonos)
+Garage: motion blueprint
+Porte: alerte si absente >5min</div></div>
+
+      <div class="cfg-block"><div class="cfg-hdr" onclick="tc(this)"><span>⚡ Alertes énergie</span><span class="chv">▶</span></div><div class="cfg-body">
+Export >1600W (10min) → notif "brancher voiture ?"
+Pic conso >5000W (2min) → notif
+Abonnement EDF: +1Wh/jour à 00:05</div></div>
+    </div>
+  </div>
+
+  <!-- ══ CHAT ══ -->
+  <div class="chat">
+    <div class="chat-msgs" id="chatMsgs">
+      <div class="msg ai">
+        <div class="av">AI</div>
+        <div class="msg-inner">
+          <div class="msg-meta">SYSTÈME · en attente</div>
+          <div class="msg-text"><p>Connectez-vous à Home Assistant. Je chargerai <strong>toutes vos entités</strong> dynamiquement — PAC, solaire, voiture, lumières, présence, énergie, Sonos — et superviserai l'ensemble de votre installation.</p></div>
+        </div>
+      </div>
+    </div>
+    <div class="logbar" id="logBar"><div class="ll info">[ INIT ] HA·AI Supervisor — DRY RUN</div></div>
+    <div class="chat-bottom">
+      <div class="quick-row">
+        <button class="q-btn" onclick="qs('Fais un audit complet de toute l\'installation : PAC, solaire, voiture, lumières, énergie. Dis-moi ce qui est normal, ce qui mérite attention, et ce que tu changerais.')">🔍 Audit global</button>
+        <button class="q-btn" onclick="qs('Analyse la cohérence complète entre le mode actif PAC, le tarif HC/HP actuel, le bias appliqué, et le surplus solaire. Y a-t-il des incohérences ?')">⚡ Cohérence système</button>
+        <button class="q-btn" onclick="qs('Regarde toutes mes automations et dis-moi lesquelles se déclencheraient ou ne se déclencheraient PAS avec l\'état actuel des entités. Y a-t-il des blocages ?')">🤖 Audit automations</button>
+        <button class="q-btn" onclick="qs('Optimise ma stratégie énergétique pour aujourd\'hui : surplus solaire, fenêtres HC, charge voiture, PAC. Quel est le meilleur enchaînement ?')">☀ Stratégie énergie</button>
+        <button class="q-btn" onclick="qs('Analyse le self-learning HC nuit : delta réalisé vs cible, convergence du boost, temp extérieure. Le système apprend-il correctement ?')">🌙 Self-learning</button>
+        <button class="q-btn" onclick="qs('Regarde toutes les alertes actives (booster, lockout, gel, ΔT, humidité). Lesquelles sont vraiment importantes dans le contexte actuel ?')">⚠ Alertes contexte</button>
+        <button class="q-btn" onclick="qs('Quel est l\'état de la voiture ? La charge est-elle optimale ? Faut-il ajuster les seuils batterie ou les paramètres surplus ?')">🚗 Voiture</button>
+        <button class="q-btn" onclick="qs('Nous partons en vacances 2 semaines. Dis-moi exactement quoi configurer : PAC, voiture, lumières, Sonos, alarmes.')">✈ Vacances</button>
+      </div>
+      <div class="input-row">
+        <input class="chat-input" id="chatInput" placeholder="Supervisez n'importe quelle entité ou automation…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg();}">
+        <button class="send-btn" id="sendBtn" onclick="sendMsg()" disabled>ENVOYER</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════
+let CFG = {haUrl:'', token:'', ollamaUrl:'', model:'qwen3:14b'};
+let allStates = [];   // raw HA states array
+let chatHistory = [];
+let haReady = false;
+
+// Domain display config
+const DOMAIN_META = {
+  climate:      {icon:'🌡', label:'Climat / PAC',     priority:1},
+  sensor:       {icon:'📊', label:'Capteurs',          priority:2},
+  binary_sensor:{icon:'🔵', label:'Capteurs binaires', priority:3},
+  number:       {icon:'🔢', label:'Nombres',           priority:4},
+  input_number: {icon:'🎚', label:'Input Numbers',     priority:5},
+  input_boolean:{icon:'🔘', label:'Input Booleans',    priority:6},
+  switch:       {icon:'🔌', label:'Switches',          priority:7},
+  light:        {icon:'💡', label:'Lumières',          priority:8},
+  media_player: {icon:'🔊', label:'Médias',            priority:9},
+  automation:   {icon:'🤖', label:'Automations',       priority:10},
+  device_tracker:{icon:'📍',label:'Présence',          priority:11},
+  input_datetime:{icon:'🕐',label:'Dates/Heures',      priority:12},
+  select:       {icon:'📋', label:'Sélecteurs',        priority:13},
+  button:       {icon:'🔲', label:'Boutons',           priority:14},
+  weather:      {icon:'🌤', label:'Météo',             priority:15},
+  sun:          {icon:'☀',  label:'Soleil',            priority:16},
+  person:       {icon:'👤', label:'Personnes',         priority:17},
+  zone:         {icon:'📌', label:'Zones',             priority:18},
+};
+
+// ════════════════════════════════════════
+//  SETUP
+// ════════════════════════════════════════
+(function autoDetect(){
+  const loc = window.location;
+  if(loc.pathname.startsWith('/local/')){
+    const url = loc.origin;
+    document.getElementById('sAutoDetect').style.display='block';
+    document.getElementById('sAutoUrl').textContent = url;
+    document.getElementById('sHaUrlField').style.display='none';
+    document.getElementById('sHaUrl').value = url;
+  }
+})();
+
+async function doConnect(){
+  const isAuto = window.location.pathname.startsWith('/local/');
+  const haUrl  = (isAuto ? window.location.origin : document.getElementById('sHaUrl').value.trim()).replace(/\/$/,'');
+  const token  = document.getElementById('sToken').value.trim();
+  const oUrl   = document.getElementById('sOllamaUrl').value.trim().replace(/\/$/,'');
+  const model  = document.getElementById('sModel').value.trim() || 'qwen3:14b';
+  const errEl  = document.getElementById('sErr');
+  const diagEl = document.getElementById('sDiag');
+
+  errEl.style.display='none'; diagEl.style.display='none';
+  if(!token){errEl.textContent='Token requis.';errEl.style.display='block';return;}
+  if(!haUrl){errEl.textContent='URL HA requise.';errEl.style.display='block';return;}
+
+  CFG = {haUrl, token, ollamaUrl:oUrl, model};
+
+  diagEl.style.display='block';
+  diagEl.innerHTML=`<span style="color:var(--cyan)">Connexion…</span><br>HA : <b>${haUrl}</b><br>Ollama : <b>${oUrl||'non renseigné'}</b>`;
+
+  try{
+    const r = await fetch(`${haUrl}/api/`,{headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'}});
+    if(r.status===401) throw new Error('Token invalide (401)');
+    if(r.status===403) throw new Error('Accès refusé (403)');
+    if(!r.ok) throw new Error(`HA HTTP ${r.status}`);
+    diagEl.innerHTML += `<br><span style="color:var(--green)">✓ HA OK</span>`;
+
+    if(oUrl){
+      try{
+        await fetch(`${oUrl}/api/tags`,{signal:AbortSignal.timeout(3000)});
+        diagEl.innerHTML += `<br><span style="color:var(--green)">✓ Ollama OK</span>`;
+      }catch(e){
+        diagEl.innerHTML += `<br><span style="color:var(--yellow)">⚠ Ollama : ${e.message} — vérifiez OLLAMA_ORIGINS=* et OLLAMA_HOST=0.0.0.0</span>`;
+      }
+    }
+
+    setTimeout(()=>document.getElementById('setup').style.display='none', 700);
+    setHaStatus(true);
+    addLog('HA connecté — chargement de toutes les entités…','info');
+    await refreshAll();
+    document.getElementById('sendBtn').disabled=false;
+  }catch(e){
+    let hint='';
+    if(e.message.includes('Failed to fetch')||e.message.includes('Network')){
+      hint=`<br><br>① Fichier servi depuis <code>file://</code> → utilisez <code>/local/</code><br>② Utilisez l'IP LAN, pas <code>homeassistant.local</code><br>③ Même protocole http/https`;
+    }
+    errEl.innerHTML=`Erreur : ${e.message}${hint}`;
+    errEl.style.display='block';
+  }
+}
+
+// ════════════════════════════════════════
+//  HA FETCH — ALL STATES
+// ════════════════════════════════════════
+async function refreshAll(){
+  addLog('Chargement de /api/states…','info');
+  try{
+    const r = await fetch(`${CFG.haUrl}/api/states`,{
+      headers:{Authorization:`Bearer ${CFG.token}`,'Content-Type':'application/json'}
+    });
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    allStates = await r.json();
+    renderDomains();
+    document.getElementById('entityCountDisplay').textContent = allStates.length;
+    addLog(`${allStates.length} entités chargées depuis HA`,'ok');
+    const firstLoad = !haReady;
+    setHaStatus(true);
+    if(firstLoad) addWelcomeMessage();
+  }catch(e){
+    addLog(`Erreur sync HA : ${e.message}`,'err');
+    setHaStatus(false);
+  }
+}
+
+// ════════════════════════════════════════
+//  RENDER DOMAINS
+// ════════════════════════════════════════
+function renderDomains(filter=''){
+  const container = document.getElementById('domainPanels');
+
+  // Group by domain
+  const domains = {};
+  for(const s of allStates){
+    const domain = s.entity_id.split('.')[0];
+    if(!domains[domain]) domains[domain]={states:[]};
+    domains[domain].states.push(s);
+  }
+
+  // Filter
+  let filtered = {};
+  if(filter){
+    const f = filter.toLowerCase();
+    for(const [d,v] of Object.entries(domains)){
+      const matched = v.states.filter(s=>
+        s.entity_id.toLowerCase().includes(f) ||
+        (s.attributes?.friendly_name||'').toLowerCase().includes(f) ||
+        s.state.toLowerCase().includes(f)
+      );
+      if(matched.length) filtered[d]={states:matched};
+    }
+  } else {
+    filtered = domains;
+  }
+
+  // Sort domains by priority
+  const sorted = Object.entries(filtered).sort(([a],[b])=>{
+    const pa = DOMAIN_META[a]?.priority ?? 99;
+    const pb = DOMAIN_META[b]?.priority ?? 99;
+    return pa - pb;
+  });
+
+  container.innerHTML = sorted.map(([domain, {states}])=>{
+    const meta = DOMAIN_META[domain] || {icon:'📦', label:domain};
+    const rows = states
+      .sort((a,b)=>(a.attributes?.friendly_name||a.entity_id).localeCompare(b.attributes?.friendly_name||b.entity_id))
+      .map(s=>renderStateRow(s))
+      .join('');
+    return `<div class="domain-section">
+      <div class="domain-header" onclick="toggleDomain(this)">
+        <div class="domain-header-left">${meta.icon} ${meta.label}<span class="domain-count">${states.length}</span></div>
+        <span class="domain-chevron">▶</span>
+      </div>
+      <div class="domain-body">${rows}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderStateRow(s){
+  const name = s.attributes?.friendly_name || s.entity_id.split('.')[1];
+  const state = s.state;
+  const domain = s.entity_id.split('.')[0];
+  const unavail = state==='unavailable'||state==='unknown';
+
+  let valHtml='';
+  if(unavail){
+    valHtml=`<span class="ent-val off">${state}</span>`;
+  } else if(domain==='binary_sensor'||domain==='switch'||domain==='input_boolean'){
+    const cls = state==='on'?'on':'off';
+    valHtml=`<span class="badge ${cls}">${state.toUpperCase()}</span>`;
+  } else if(domain==='automation'){
+    const cls = state==='on'?'on':state==='off'?'off':'warn';
+    valHtml=`<span class="badge ${cls}">${state}</span>`;
+  } else if(domain==='light'){
+    const cls = state==='on'?'on':'off';
+    valHtml=`<span class="badge ${cls}">${state}</span>`;
+  } else {
+    const unit = s.attributes?.unit_of_measurement||'';
+    const num = parseFloat(state);
+    let cls='';
+    if(!isNaN(num)){
+      // color hints
+      if(s.entity_id.includes('temperature')){ cls = num<0?'err':num>25?'warn':''; }
+      if(s.entity_id.includes('humidity')){ cls = num<30?'err':num<40?'warn':''; }
+      if(s.entity_id.includes('power')&&num>3000){ cls='warn'; }
+    }
+    valHtml=`<span class="ent-val ${cls}">${state}${unit?' <span style="font-size:.58rem;color:var(--muted)">'+unit+'</span>':''}</span>`;
+  }
+
+  return `<div class="ent-row"><span class="ent-name" title="${s.entity_id}">${name}</span>${valHtml}</div>`;
+}
+
+function toggleDomain(header){
+  header.classList.toggle('open');
+  header.nextElementSibling.classList.toggle('open');
+}
+
+function filterEntities(val){
+  renderDomains(val.trim());
+}
+
+// ════════════════════════════════════════
+//  BUILD CONTEXT — TOUTES LES ENTITÉS
+// ════════════════════════════════════════
+function buildContext(){
+  const now = new Date();
+  const ts = now.toLocaleDateString('fr-FR')+' '+now.toLocaleTimeString('fr-FR');
+
+  // Group by domain
+  const domains = {};
+  for(const s of allStates){
+    const domain = s.entity_id.split('.')[0];
+    if(!domains[domain]) domains[domain]=[];
+    domains[domain].push(s);
+  }
+
+  // Skip useless domains
+  const SKIP = new Set(['persistent_notification','logbook','recorder','scene','script','tag','timer','counter','input_text','tts','stt','image','conversation','assist_pipeline','weather']);
+
+  let ctx = `=== HOME ASSISTANT — ÉTAT COMPLET — ${ts} ===\nNombre total d'entités: ${allStates.length}\n`;
+
+  for(const [domain, states] of Object.entries(domains)){
+    if(SKIP.has(domain)) continue;
+    const meta = DOMAIN_META[domain];
+    const label = meta ? `${meta.icon} ${meta.label}` : domain;
+
+    ctx += `\n[${label.toUpperCase()}]\n`;
+    for(const s of states){
+      const name = s.attributes?.friendly_name || s.entity_id;
+      const unit = s.attributes?.unit_of_measurement||'';
+      const state = s.state;
+      if(state==='unavailable'||state==='unknown'){
+        ctx += `  ${s.entity_id}: ⚠ ${state}\n`;
+      } else {
+        ctx += `  ${s.entity_id} (${name}): ${state}${unit?' '+unit:''}\n`;
+      }
+    }
+  }
+
+  return ctx;
+}
+
+// ════════════════════════════════════════
+//  SYSTEM PROMPT
+// ════════════════════════════════════════
+const SYSTEM = `Tu es l'IA de supervision de toute une installation Home Assistant. Tu reçois l'état COMPLET de toutes les entités (PAC Ecodan, solaire, voiture VW ID, lumières, présence, Sonos, énergie, météo…) et tu connais la logique de toutes les automations et templates.
+
+════ INSTALLATION ════
+- PAC : Mitsubishi Ecodan 200-W (melcloud), plancher chauffant basse température
+- Solaire PV : surplus via sensor.surplus_solaire_disponible
+- Tarif : EDF HC/HP via sensor.lixee_current_price (HEURE CREUSE / HEURE PLEINE)
+- Voiture : VW ID (wvwzzze18sp049976), charge HC et surplus solaire
+- Éclairage : automatisé via luminosité (capteur lux) et coucher/lever soleil
+- Sonos : volume nocturne + playlist automatique
+- Présence : device_tracker voiture + détecteur garage
+
+════ LOGIQUE SMART BIAS PAC ════
+Automation toutes les 5min + changement prix Lixee, conditionné sur heat_pump_smart_bias_enabled=ON
+9 branches horaires → applique un bias sur number.ecodan_heatpump_auto_adaptive_setpoint_bias :
+  00:20–06:20 HC Nuit     → off_peak_boost avec cutoff pièce + stratégie demain
+  06:20–08:00 Morning     → 0.3–0.5°C
+  08:00–14:00 Journée     → coasting journee_bias
+  14:00–14:20 Pre-HC PM   → 0.5–0.8°C selon potentiel solaire
+  14:20–16:20 HC PM       → bias météo × temp_multiplier (1.2–2.5°C) + defrost_boost
+  16:20–17:00 Post-HC     → post_afternoon_hc
+  17:00–21:00 Peak Coast  → bias négatif (peak_bias = -1°C)
+  21:00–23:50 Soirée      → soiree_tardive_bias
+  23:50–00:20 Pre-HC Nuit → pre_offpeak_ramp
+  Anti-choc: limite max_bias_change par cycle
+
+════ SELF-LEARNING HC NUIT ════
+Déclenchement 06:22. erreur=delta_réalisé-delta_cible. correction=erreur×-0.15×temp_factor (±0.2°C/nuit). Bornes: 0.5–3.0°C.
+
+════ ALERTES — INTERPRÉTATION CONTEXTUELLE ════
+JAMAIS mécanique. Toujours croiser avec le contexte :
+- Booster actif + salon>20°C + ext>5°C → NORMAL (démarrage passager)
+- ΔT=0 + compresseur OFF → NORMAL
+- Fréq=0 + coasting → NORMAL
+- CRITIQUE uniquement : gel imminent, lockout prolongé, booster par grand froid (<−5°C), capteur critique indisponible bloquant les automations
+
+════ SUPERVISION GLOBALE ════
+Tu supervises TOUT. Pour chaque question :
+1. Identifie les entités pertinentes dans le contexte reçu
+2. Croise leur état avec la logique des automations
+3. Explique si les automations se déclencheraient ou non dans l'état actuel
+4. Signale les incohérences (ex: HC actif mais bias négatif, voiture branchée mais charge désactivée)
+5. Propose des ajustements concrets
+
+CECI EST UN DRY RUN. Tu proposes uniquement, tu n'exécutes rien.
+
+RÈGLE ABSOLUE : termine TOUJOURS par ce bloc exact :
+---ACTIONS PROPOSÉES---
+PRIORITÉ: <CRITIQUE|HAUTE|NORMALE|FAIBLE>
+PAC_BIAS: <valeur ou INCHANGÉ>
+PAC_MODE: <confort|eco|hors-gel|vacances|INCHANGÉ>
+VOITURE_CHARGE: <activer|désactiver|INCHANGÉ>
+LUMIÈRES: <texte court ou INCHANGÉ>
+AUTRE: <texte court ou AUCUN>
+NOTE_SÉCU: <alerte si critique, sinon AUCUNE>
+---FIN ACTIONS---
+
+Réponds en français. Sois précis, cite les entity_id et valeurs numériques.`;
+
+// ════════════════════════════════════════
+//  CHAT
+// ════════════════════════════════════════
+function addWelcomeMessage(){
+  const domains = [...new Set(allStates.map(s=>s.entity_id.split('.')[0]))];
+  addMsg('ai', `✅ **${allStates.length} entités chargées** — ${domains.length} domaines : ${domains.slice(0,8).join(', ')}…\n\nJe supervise toute votre installation. Je connais l'état de chaque entité ET la logique de toutes vos automations.\n\nEssayez **"Audit global"** pour un diagnostic complet.`);
+}
+
+function addMsg(role, text, actHtml=null){
+  const div=document.createElement('div');
+  div.className='msg '+role;
+  const now=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const parse=t=>t.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code>$1</code>');
+  const body=text.split('\n').filter(l=>l.trim()).map(p=>`<p>${parse(p)}</p>`).join('');
+  let ac='';
+  if(actHtml){
+    ac=`<div class="action-card"><div class="action-hdr">⬡ ACTIONS PROPOSÉES · DRY RUN</div><table class="action-table">${actHtml}</table></div>`;
+  }
+  div.innerHTML=`<div class="av">${role==='user'?'MOI':'AI'}</div><div class="msg-inner"><div class="msg-meta">${role==='user'?'VOUS':'OLLAMA / '+CFG.model.toUpperCase()} · ${now}</div><div class="msg-text">${body}</div>${ac}</div>`;
+  document.getElementById('chatMsgs').appendChild(div);
+  div.scrollIntoView({behavior:'smooth'});
+}
+
+function parseActions(text){
+  const re=/---ACTIONS PROPOSÉES---([\s\S]*?)---FIN ACTIONS---/;
+  const m=text.match(re);
+  if(!m) return {clean:text,actHtml:null};
+  const clean=text.replace(re,'').trim();
+  const lines=m[1].trim().split('\n').filter(l=>l.trim());
+  let html='';
+  for(const line of lines){
+    const [k,...rest]=line.split(':');
+    const v=rest.join(':').trim();
+    const unchanged=v==='INCHANGÉ'||v==='AUCUNE'||v==='AUCUN';
+    const isCrit=k.trim()==='NOTE_SÉCU'&&!unchanged;
+    const isPrio=k.trim()==='PRIORITÉ';
+    const warnPrio=isPrio&&(v==='HAUTE'||v==='CRITIQUE');
+    const cls=unchanged?'td-unchanged':isCrit?'td-crit':warnPrio?'td-warn':'td-changed';
+    html+=`<tr><td>${k.trim()}</td><td class="${cls}">${v}</td></tr>`;
+  }
+  return {clean,actHtml:html};
+}
+
+async function sendMsg(){
+  if(!haReady){addLog('HA non connecté','err');return;}
+  const inp=document.getElementById('chatInput');
+  const txt=inp.value.trim();
+  if(!txt) return;
+  inp.value='';
+  document.getElementById('sendBtn').disabled=true;
+  addMsg('user',txt);
+
+  const context=buildContext();
+  const fullMsg=`${context}\n\n=== QUESTION/DEMANDE ===\n${txt}`;
+  chatHistory.push({role:'user',content:fullMsg});
+
+  const think=document.createElement('div');
+  think.className='msg ai';
+  think.innerHTML=`<div class="av">AI</div><div class="msg-inner"><div class="msg-meta">OLLAMA · analyse en cours…</div><div class="msg-text"><div class="thinking"><span></span><span></span><span></span></div></div></div>`;
+  document.getElementById('chatMsgs').appendChild(think);
+  think.scrollIntoView({behavior:'smooth'});
+  addLog(`→ Ollama [${CFG.model}] — ${allStates.length} entités dans le contexte`,'info');
+
+  try{
+    const res=await fetch(`${CFG.ollamaUrl}/api/chat`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:CFG.model,
+        stream:false,
+        options:{num_ctx:16384},
+        messages:[
+          {role:'system',content:SYSTEM},
+          ...chatHistory.slice(-6) // keep last 3 turns to stay within context
+        ]
+      })
+    });
+    if(!res.ok) throw new Error(`HTTP ${res.status}${res.status===404?' — modèle introuvable (ollama pull '+CFG.model+')':''}`);
+    const data=await res.json();
+    const reply=data.message?.content||'Pas de réponse.';
+    chatHistory.push({role:'assistant',content:reply});
+    think.remove();
+    const {clean,actHtml}=parseActions(reply);
+    addMsg('ai',clean,actHtml);
+    addLog(`← Réponse (${reply.length} chars)`,'ok');
+  }catch(e){
+    think.remove();
+    const ed=document.createElement('div');
+    ed.className='msg ai';
+    ed.innerHTML=`<div class="av">AI</div><div class="msg-inner"><div class="msg-text" style="color:var(--red);font-family:var(--mono);font-size:.72rem;">⚠ ${e.message}</div></div>`;
+    document.getElementById('chatMsgs').appendChild(ed);
+    addLog(`Erreur Ollama : ${e.message}`,'err');
+  }
+  document.getElementById('sendBtn').disabled=false;
+  document.getElementById('chatInput').focus();
+}
+
+function qs(t){document.getElementById('chatInput').value=t;sendMsg();}
+
+// ════════════════════════════════════════
+//  UTILS
+// ════════════════════════════════════════
+function setHaStatus(ok){
+  document.getElementById('haDot').className='ha-dot '+(ok?'ok':'err');
+  document.getElementById('haStatus').textContent=ok?'connecté':'hors ligne';
+  haReady=ok;
+}
+function addLog(msg,type=''){
+  const d=document.createElement('div');
+  d.className='ll '+type;
+  d.textContent=`[${new Date().toLocaleTimeString('fr-FR')}] ${msg}`;
+  const b=document.getElementById('logBar');
+  b.appendChild(d);b.scrollTop=b.scrollHeight;
+}
+function switchTab(name){
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',['states','config','auto'][i]===name));
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.toggle('active',p.id==='tab-'+name));
+}
+function tc(h){h.classList.toggle('open');h.nextElementSibling.classList.toggle('open');}
+
+// Auto-refresh every 90s
+setInterval(()=>{if(haReady)refreshAll();},90000);
+</script>
+</body>
+</html>

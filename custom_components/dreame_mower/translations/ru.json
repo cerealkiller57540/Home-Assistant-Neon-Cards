@@ -1,0 +1,172 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Выберите тип учетной записи",
+        "description": "Выберите тип учетной записи для интеграции Dreame Bower.",
+        "data": {
+          "account_type": "Тип учетной записи"
+        }
+      },
+      "dreame": {
+        "data": {
+          "username": "Имя пользователя",
+          "password": "Пароль",
+          "country": "Сервер страна"
+        },
+        "description": "Войдите в облако DreameHome."
+      },
+      "mova": {
+        "data": {
+          "username": "Имя пользователя",
+          "password": "Пароль",
+          "country": "Сервер страна"
+        },
+        "description": "Войдите в облако Movahome."
+      },
+      "devices": {
+        "data": {
+          "devices": "Поддерживаемые устройства"
+        },
+        "description": "Пожалуйста, выберите устройство Dreame Mower, которое вы хотите настроить."
+      },
+      "options": {
+        "data": {
+          "name": "Название устройства",
+          "notify": "Типы уведомлений"
+        },
+        "description": "Настройте название устройства Dreame Mower и предпочтения уведомления."
+      }
+    },
+    "error": {
+      "cannot_connect": "Не удалось подключиться. Проверьте сеть и повторите попытку. Подробности смотрите в журналах Home Assistant.",
+      "unsupported": "Данная модель устройства не поддерживается этой интеграцией.",
+      "credentials_incomplete": "Необходимо указать имя пользователя, пароль и страну.",
+      "login_error": "Ошибка входа. Проверьте имя пользователя и пароль. Убедитесь, что выбран правильный тип учётной записи (Dreamehome или MOVAhome).",
+      "no_devices": "В этой учётной записи не найдена поддерживаемая газонокосилка. Убедитесь, что вы выбрали правильный тип учётной записи — MOVAhome для устройств MOVA, Dreamehome для Dreame — и что устройство добавлено в соответствующее приложение. Также можно попробовать другую страну сервера.",
+      "invalid_account_type": "Выбран недопустимый тип учётной записи."
+    },
+    "abort": {
+      "cannot_connect": "Не удалось подключиться.",
+      "already_configured": "Это устройство уже настроено."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Параметры",
+        "description": "Настройте настройки уведомления для интеграции Dreame Mower.",
+        "data": {
+          "notify": "Типы уведомлений",
+          "map_rotation": "Поворот карты",
+          "map_show_title": "Показывать заголовок карты",
+          "map_show_legend": "Показывать легенду карты",
+          "map_padding": "Отступ карты (пиксели)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Статус",
+        "state": {
+          "no_status": "Нет статуса",
+          "mowing": "Косит",
+          "standby": "Поддержка",
+          "paused": "Приостановлен",
+          "paused_due_to_errors": "Приостановлен из-за ошибок",
+          "returning_to_station_to_charge": "Возвращение на станцию для зарядки",
+          "charging": "Зарядка",
+          "mapping": "Картирование",
+          "charging_complete": "Зарядка завершена",
+          "updating": "Обновление",
+          "charging_paused_high_temperature": "Зарядка приостановлена: температура аккумулятора слишком высокая",
+          "charging_paused_low_temperature": "Зарядка приостановлена: температура аккумулятора слишком низкая",
+          "maintenance_paused": "Приостановлено в точке обслуживания"
+        }
+      },
+      "charging_status": {
+        "name": "Статус зарядки",
+        "state": {
+          "not_docked": "Не пристыковано",
+          "charging": "Зарядка",
+          "not_charging": "Не заряжает",
+          "charging_completed": "Зарядка завершена",
+          "return_to_charge": "Возвращение к зарядке",
+          "charging_paused_high_temperature": "Зарядка приостановлена: температура аккумулятора слишком высокая",
+          "charging_paused_low_temperature": "Зарядка приостановлена: температура аккумулятора слишком низкая"
+        }
+      },
+      "mowing_progress": {
+        "name": "Загрязнение прогресса"
+      },
+      "bluetooth_connection": {
+        "name": "Bluetooth"
+      },
+      "dnd_status": {
+        "name": "Просьба не беспокоить"
+      },
+      "charging_schedule": {
+        "name": "График зарядки"
+      },
+      "timezone": {
+        "name": "Часовой пояс"
+      },
+      "device_code": {
+        "name": "Код устройства"
+      },
+      "current_task": {
+        "name": "Текущая задача",
+        "state": {
+          "idle": "Нет задачи",
+          "starting": "Запуск",
+          "mowing": "Кошение",
+          "paused": "Приостановлено",
+          "finished": "Завершено",
+          "failed": "Ошибка",
+          "exit": "Остановлено",
+          "returning_to_dock": "Возвращение на станцию"
+        }
+      },
+      "consumable_blade_health": {
+        "name": "Состояние ножей"
+      },
+      "consumable_brush_health": {
+        "name": "Состояние щётки"
+      },
+      "consumable_robot_health": {
+        "name": "Состояние обслуживания"
+      }
+    },
+    "binary_sensor": {
+      "firmware_update_available": {
+        "name": "Доступно обновление прошивки"
+      }
+    },
+    "camera": {
+      "map_camera": {
+        "name": "Карта"
+      }
+    },
+    "button": {
+      "reset_blade": {
+        "name": "Сбросить счётчик ножей"
+      },
+      "reset_brush": {
+        "name": "Сбросить счётчик щётки"
+      },
+      "reset_robot_maintenance": {
+        "name": "Сбросить счётчик обслуживания"
+      },
+      "dock_without_stopping": {
+        "name": "Вернуться на базу без остановки задачи"
+      }
+    },
+    "number": {
+      "cutting_height": {
+        "name": "Высота скашивания"
+      }
+    }
+  }
+}

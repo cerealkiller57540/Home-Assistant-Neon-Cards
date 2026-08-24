@@ -1,0 +1,874 @@
+﻿# Neo Tokyo Theme for Home Assistant — v2
+# Cyberpunk / Blade Runner — atmosphère bleu-indigo nocturne,
+# néon rose/magenta en ponctuation, bleu électrique comme glow structurel
+# Installation : /config/themes/neo-tokyo-v2.yaml
+# Activate     : Settings → Appearance → Themes → Neo Tokyo v2
+
+neo-tokyo-v2:
+  modes:
+    dark:
+      # ══════════════════════════════════════════════════════════════════════
+      # COULEURS DE BASE — Palette principale du thème
+      # ══════════════════════════════════════════════════════════════════════
+      primary-color: "#B400FF"                           # Violet néon — accent principal
+      accent-color: "#00fff9"                            # Cyan électrique — accent secondaire
+      secondary-color: "#6400B4"                         # Violet profond — badges, liens discrets
+      blacklight-color: "#5D0CED"                        # Violet UV — glow ultraviolet
+      lovelace-background: "center / cover no-repeat fixed url('/local/neo-tokyo-v4.png')"
+      shadow-color: "rgba(var(--rgb-accent-color), 0.30)"
+      bar-box-shadow: ""
+
+      # ══════════════════════════════════════════════════════════════════════
+      # ÉTAT DES ÉLÉMENTS (ON/OFF/HOME/etc)
+      # ══════════════════════════════════════════════════════════════════════
+      state-active-color: "#9600C8"                      # Violet doux — état allumé/actif
+      state-inactive-color: "rgba(100, 130, 200, 0.18)"  # Bleu translucide — état inactif
+      state-on-color: "var(--state-active-color)"        # Alias état ON
+      state-off-color: "var(--state-inactive-color)"     # Alias état OFF
+      state-home-color: "#00b870"                        # Vert présence — occupant à la maison
+      state-not-home-color: "#3a4862"                    # Bleu-gris — absent/dehors
+      state-unavailable-color: "#1a2238"                 # Bleu-gris nuit — entité indisponible
+
+      # ══════════════════════════════════════════════════════════════════════
+      # STATUTS — Succès, avertissements, erreurs
+      # ══════════════════════════════════════════════════════════════════════
+      success-color: "#00FFAA"                           # Vert néon — OK/succès ✓
+      warning-color: "#FFB800"                           # Orange ambré — avertissement ⚠
+      error-color: "#FF2D6B"                             # Rose-rouge — erreur critique ✗
+      error-state-color: "var(--error-color)"            # Alias erreur
+      warning-state-color: "var(--warning-color)"        # Alias avertissement
+      success-state-color: "var(--success-color)"        # Alias succès
+      info-color: "var(--accent-color)"                  # Cyan — information
+      info-state-color: "var(--accent-color)"            # Alias info
+
+      # ══════════════════════════════════════════════════════════════════════
+      # VARIABLES RGB CORRESPONDANTES — Pour usage en rgba()
+      # ══════════════════════════════════════════════════════════════════════
+      rgb-primary-color: "180, 0, 255"                   # Violet néon RGB
+      rgb-secondary-color: "100, 0, 180"                 # Violet profond RGB
+      rgb-accent-color: "0, 255, 249"                    # Cyan électrique RGB
+      rgb-blacklight-color: "93, 12, 237"                # Violet UV RGB
+      rgb-state-active-color: "150, 0, 200"              # Violet doux RGB
+      rgb-text-primary-color: "210, 218, 240"            # Blanc-lavande RGB
+      rgb-disabled-color: "36, 48, 78"                   # Bleu ardoise RGB
+      rgb-card-background-color: "4, 8, 22"              # Noir bleuté RGB
+      rgb-success-color: "0, 255, 170"                   # Vert néon RGB
+      rgb-warning-color: "255, 184, 0"                   # Orange ambré RGB
+      rgb-error-color: "255, 45, 107"                    # Rose-rouge RGB
+
+      # ══════════════════════════════════════════════════════════════════════
+      # TEXTE — Couleurs de typographie
+      # ══════════════════════════════════════════════════════════════════════
+      primary-text-color: "#ffffff"                      # Blanc pur — texte principal
+      secondary-text-color: "#b8b8ff"                    # Lavande douce — texte secondaire
+      disabled-text-color: "#28304e"                     # Bleu ardoise sombre — texte désactivé
+      text-primary-color: "var(--primary-text-color)"    # Alias texte principal
+      text-disabled-color: "var(--disabled-text-color)"  # Alias texte désactivé
+      disabled-color: "rgba(var(--rgb-gas-krypton), 0.40)" # Vert-turquoise discret
+
+      # ══════════════════════════════════════════════════════════════════════
+      # TYPOGRAPHIE — Polices et tailles
+      # ══════════════════════════════════════════════════════════════════════
+      primary-font-family: "'Orbitron','rajdhani', system-ui, sans-serif"
+
+      # Legacy Paper (ancien système Home Assistant)
+      paper-font-common-base_-_font-family: "var(--primary-font-family)"
+      paper-font-body1_-_font-family: "var(--primary-font-family)"
+      paper-font-headline_-_font-family: "var(--primary-font-family)"
+      paper-font-title_-_font-family: "var(--primary-font-family)"
+
+      # Home Assistant Cards
+      ha-card-header-font-family: "var(--primary-font-family)"
+      ha-font-family-body: "'rajdhani', system-ui, sans-serif"
+      ha-font-family-heading: "system-ui, sans-serif"
+      ha-font-family-longform: "system-ui, sans-serif"
+      ha-font-family-code: "system-ui, sans-serif"
+
+      # Tailles de police (responsive)
+      ha-font-size-xs: "calc(12px * var(--ha-font-size-scale))"
+      ha-font-size-s: "calc(13px * var(--ha-font-size-scale))"
+      ha-font-size-m: "calc(15px * var(--ha-font-size-scale))"
+      ha-font-size-l: "calc(17px * var(--ha-font-size-scale))"
+
+      # Material Design List (Sidebar)
+      md-list-item-label-text-font: "var(--primary-font-family)"
+      md-list-item-trailing-supporting-text-font: "system-ui, sans-serif"
+      md-list-item-supporting-text-font: "system-ui, sans-serif"
+
+      # Material Design Components (MDC)
+      mdc-typography-font-family: "var(--primary-font-family)"
+      mdc-typography-body1-font-family: "'rajdhani', system-ui, sans-serif"
+      mdc-typography-body2-font-family: "'rajdhani', system-ui, sans-serif"
+      mdc-typography-body2-font-size: "0.95rem"
+      mdc-typography-subtitle1-font-family: "'rajdhani', system-ui, sans-serif"
+      mdc-typography-subtitle1-font-size: "1.25rem"
+      mdc-typography-subtitle2-font-family: "'rajdhani', system-ui, sans-serif"
+      mdc-typography-subtitle2-font-size: "1.25rem"
+      mdc-typography-headline6-font-family: "var(--primary-font-family)"
+      mdc-typography-overline-font-family: "var(--primary-font-family)"
+      mdc-typography-button-font-family: "var(--primary-font-family)"
+      mdc-data-table-content-font-size: "0.95rem"
+
+      # ══════════════════════════════════════════════════════════════════════
+      # ARRIÈRE-PLANS — Gradients et fonds
+      # ══════════════════════════════════════════════════════════════════════
+      primary-background-color: "#020510"                # Quasi-noir bleuté — fond principal
+      secondary-background-color: "#060c1e"              # Bleu nuit dense — fond secondaire
+      card-background-color: "rgba(4, 8, 22, 0.82)"      # Semi-transparent — cartes
+      paper-card-background-color: "var(--card-background-color)"   # Legacy Paper
+      paper-listbox-background-color: "var(--card-background-color)" # Legacy Paper
+      paper-dialog-background-color: "rgba(3, 6, 18, 0.94)"         # Dialogue (plus opaque)
+      code-editor-background-color: "#010408"            # Noir absolu — éditeur code
+      divider-color: "rgba(180, 0, 255, 0.25)"           # Violet translucide — séparateurs
+
+      # ══════════════════════════════════════════════════════════════════════
+      # STYLE DES CARTES — Bordures, shadows, glassmorphism
+      # ══════════════════════════════════════════════════════════════════════
+      ha-card-border-radius: "14px"                       # Coins arrondis
+      ha-card-border-width: "1px"                         # Épaisseur bordure
+      ha-card-border-color: "rgba(var(--rgb-accent-color), 0.20)" # Cyan translucide
+      ha-card-box-shadow: "0 4px 28px rgba(0,0,0,0.70), 0 0 18px rgba(var(--rgb-primary-color), 0.12), inset 0 1px 0 rgba(255,255,255,0.06)"
+      ha-card-background: "linear-gradient(145deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 35%, rgba(255,255,255,0.00) 60%), rgba(4, 6, 20, 0.85)"
+      ha-card-backdrop-filter: "blur(10px) saturate(140%)" # Effet verre givré
+
+      # ══════════════════════════════════════════════════════════════════════
+      # GAZ RARES & RADIATIONS — Palette nucléaire/néon pour glows
+      # ══════════════════════════════════════════════════════════════════════
+
+      # ─── Gaz communs (spectres d'émission)
+      gas-hydrogen: "#FF00FF"                            # Fuchsia saturé
+      gas-mercury: "#00FFFF"                             # Cyan froid labo
+      gas-nitrogen: "#BB86FC"                            # Violet pastel doux
+      gas-oxygen: "#A9D1FF"                              # Bleu ciel hiver
+      gas-sodium: "#FFCC00"                              # Jaune-orange chaud
+
+      # ─── Gaz nobles (utilisés pour les accents principaux)
+      gas-xenon: "#00D4FF"                               # Bleu électrique — headers ★
+      gas-argon: "#9D4EDD"                               # Violet ionisé — sidebars ★
+      gas-radon: "#E0115F"                               # Rose radioactif — accents
+      gas-neon: "#FF3D00"                                # Rouge plasma — alertes
+      gas-krypton: "#2EE5B6"                             # Vert spectral — états OK ★
+      gas-helium: "#FFEE58"                              # Or solaire — météo/curseurs
+      rgb-gas-xenon: "0, 212, 255"                       # Xénon RGB
+      rgb-gas-argon: "157, 78, 221"                      # Argon RGB
+      rgb-gas-radon: "224, 17, 95"                       # Radon RGB
+      rgb-gas-krypton: "46, 229, 182"                    # Krypton RGB
+      rgb-gas-helium: "255, 238, 88"                     # Hélium RGB
+      rgb-gas-neon: "255, 61, 0"                         # Néon RGB
+
+      # ─── Effets de rayonnement (fluorescence active)
+      radio-cherenkov: "#00E5FF"                         # Bleu réacteur hyper-vibrant
+      radio-uranium: "#CCFF00"                           # Vert vaseline fluo vintage
+      radio-plutonium: "#39FF14"                         # Vert toxique saturation max
+      radio-actinium: "#E0FFFF"                          # Lueur spectrale blanc-bleuté
+      radium-paint: "#C3FDB8"                            # Vert radium (peinture radioactive)
+      neutron-blue: "#A5F2F3"                            # Bleu neutronique réacteur
+      rgb-radio-cherenkov: "0, 229, 255"                 # Cherenkov RGB
+      rgb-radio-uranium: "204, 255, 0"                   # Uranium RGB
+      rgb-radio-plutonium: "57, 255, 20"                 # Plutonium RGB
+      rgb-radio-actinium: "224, 255, 255"                # Actinium RGB
+
+      # ─── Métaux réactifs (instabilité thermique)
+      metal-cesium: "#FFD700"                            # Or liquide instable
+      cesium-137-glow: "#1E90FF"                         # Bleu intense désintégration
+      metal-americium: "#FF4500"                         # Orange "Safety" chaleur alpha
+      metal-thallium: "#A0D6B4"                          # Vert gris poison spectral
+      rgb-metal-cesium: "255, 215, 0"                    # Cesium RGB
+      rgb-metal-americium: "255, 69, 0"                  # Americium RGB
+      rgb-metal-thallium: "160, 214, 180"                # Thallium RGB
+
+      # ─── États stellaires & fusion nucléaire (haute énergie)
+      plasma-corona: "#FFD600"                           # Plasma solaire ultra-dense
+      plasma-hydrogen: "#FF007F"                         # Rose fusion H ionisé
+      plasma-magnetic: "#00E5FF"                         # Confinement Tokamak
+      plasma-void: "#9D00FF"                             # Violet vide basse-pression
+      plasma-electric: "#B9F2FF"                         # Bleu foudre arc électrique
+      plasma-h-alpha: "#FF3366"                          # Rose-rouge stellaire (H)
+      plasma-o-iii: "#4AF2A1"                            # Vert fantomatique (O III)
+      plasma-sulfur: "#FFAD33"                           # Orange soufre ionisation
+      plasma-mercury: "#E573FF"                          # Violet électrique mercure
+      rgb-plasma-hydrogen: "255, 0, 127"                 # Hydrogen plasma RGB
+      rgb-plasma-magnetic: "0, 229, 255"                 # Magnetic plasma RGB
+      rgb-plasma-h-alpha: "255, 51, 102"                 # H-alpha RGB
+      rgb-plasma-o-iii: "74, 242, 161"                   # O-III RGB
+      rgb-plasma-sulfur: "255, 173, 51"                  # Sulfur RGB
+      rgb-plasma-mercury: "229, 115, 255"                # Mercury RGB
+      rgb-cesium-glow: "30, 144, 255"                    # Cesium glow RGB
+      rgb-critical-blue: "165, 242, 243"                 # Critical blue RGB
+
+      # ─── Fission & contrôle nucléaire
+      gas-iodine-131: "#9D81FF"                          # Violet spectral iode
+      safety-boron: "#7CFF00"                            # Vert flamme absorption neutrons
+      rgb-gas-iodine: "157, 129, 255"                    # Iodine RGB
+      rgb-safety-boron: "124, 255, 0"                    # Boron RGB
+
+      # ─── Couleurs profondes (fonds sombres)
+      radio-cobalt-60: "#001B44"                         # Bleu nuit irradié stockage gamma
+      plasma-ultraviolet: "#310062"                      # Indigo ionisé limite UV
+      plasma-uv-glow: "#6200EA"                          # Violet UV fluorescence active
+      dark-actinoid: "#120021"                           # Noir radioactif ombre-violet
+      metal-osmium: "#192231"                            # Bleu-gris métal lourd
+      gas-xenon-deep: "#004E64"                          # Bleu pétrole Xe haute-pression
+      rgb-radio-cobalt: "0, 27, 68"                      # Cobalt RGB
+      rgb-plasma-uv: "49, 0, 98"                         # UV plasma RGB
+      rgb-plasma-uv-glow: "98, 0, 234"                   # UV glow RGB
+
+      # ══════════════════════════════════════════════════════════════════════
+      # TUNING & ANIMATIONS — Opacités, blur, transitons
+      # ══════════════════════════════════════════════════════════════════════
+      glow-opacity-idle: "0.10"                          # Glow léger (repos)
+      glow-opacity-hover: "0.25"                         # Glow moyen (survol)
+      glow-opacity-active: "0.45"                        # Glow intense (actif)
+      border-opacity-idle: "0.18"                        # Bordure discrète
+      border-opacity-hover: "0.38"                       # Bordure visible survol
+      blur-strength: "14px"                              # Flou normal glassmorphism
+      blur-strength-heavy: "20px"                        # Flou intensifié
+
+      # ══════════════════════════════════════════════════════════════════════
+      # SIDEBAR — Navigation latérale
+      # ══════════════════════════════════════════════════════════════════════
+      sidebar-background-color: "rgba(4, 8, 22, 0.40)"   # Semi-transparent noir-bleu
+      sidebar-icon-color: "#b8b8ff"                      # Lavande — icônes
+      sidebar-text-color: "#b8b8ff"                      # Lavande — texte items
+      sidebar-selected-background-color: "#1a0f2e"       # Violet sombre — élément actif
+      sidebar-selected-icon-color: "var(--primary-color)" # Violet néon — icône sélectionnée
+      sidebar-selected-text-color: "#ffffff"             # Blanc pur — texte sélectionné
+
+      # ══════════════════════════════════════════════════════════════════════
+      # HEADER / TOOLBAR — Barre supérieure
+      # ══════════════════════════════════════════════════════════════════════
+      app-header-background-color: "rgba(2, 5, 16, 0.90)" # Quasi-noir bleuté
+      app-header-text-color: "var(--primary-text-color)"  # Blanc pur
+      app-header-edit-background-color: "#050c22"         # Bleu très sombre (édition)
+      app-header-edit-text-color: "var(--primary-color)"  # Violet néon (édition)
+      app-header-selection-bar-color: "var(--accent-color)" # Cyan underline
+
+      # ══════════════════════════════════════════════════════════════════════
+      # ICÔNES — États et couleurs
+      # ══════════════════════════════════════════════════════════════════════
+      state-icon-color: "var(--accent-color)"            # Cyan — icône par défaut
+      state-icon-active-color: "var(--state-active-color)" # Violet — icône active
+      state-icon-unavailable-color: "var(--disabled-text-color)" # Bleu ardoise
+      icon-color: "var(--accent-color)"                  # Cyan — icônes générales
+      active-icon-color: "var(--state-active-color)"     # Violet — icône active
+      disabled-icon-color: "var(--disabled-text-color)"  # Bleu ardoise — icône désactivée
+      state-switch-off-color: "var(--state-inactive-color)" # Bleu translucide — icône switch OFF
+      state-switch-on-color: "var(--gas-sodium)" # icône switch ON
+      state-switch-inactive-color: "var(--state-inactive-color)" # Bleu translucide — icône switch inactif
+      state-cover-shutter-open-color: "var(--metal-cesium)" # icône volet ouvert
+      state-cover-open-color: "var(--state-active-color)" # Violet — icône couverture ouverte
+      state-cover-active-color: "var(--state-active-color)" # Violet — icône couverture active
+      state-cover-shutter-closed-color: "var(--radio-cobalt-60)" # icône volet fermé
+      state-cover-closed-color: "var(--state-inactive-color)" # Bleu translucide — icône couverture fermée
+      state-cover-inactive-color: "var(--state-inactive-color)" # Bleu translucide — icône couverture inactive
+      state-binary_sensor-door-off-color: "var(--radio-plutonium)" # icône capteur binaire porte fermée
+      state-binary_sensor-off-color: "var(--state-inactive-color)" # Bleu translucide — icône capteur binaire désactivé
+      state-binary_sensor-inactive-color: "var(--state-inactive-color)" # Bleu translucide — icône capteur binaire inactif  
+      state-input_boolean-off-color: "var(--state-inactive-color)" # Bleu translucide — icône input boolean désactivé
+      state-input_boolean-inactive-color: "var(--state-inactive-color)" # Bleu translucide — icône input boolean inactif
+      state-input_boolean-on-color: "var(--gas-sodium)" # icône input boolean activé
+      state-input_boolean-active-color: "var(--state-active-color)" # Violet — icône input boolean active
+
+      # ══════════════════════════════════════════════════════════════════════
+      # CLIMATISATION — États thermostat (auto/cool/heat/etc)
+      # ══════════════════════════════════════════════════════════════════════
+      state-climate-auto-color: "var(--success-color)"       # Vert — mode auto
+      state-climate-cool-color: "var(--cesium-137-glow)"     # Cyan — refroidissement
+      state-climate-heat-color: "var(--plasma-h-alpha)"      # chauffage
+      state-climate-dry-color: "var(--warning-color)"        # Orange — déshumidification
+      state-climate-fan_only-color: "var(--secondary-color)" # Violet — ventilateur seul
+      state-climate-eco-color: "var(--success-color)"        # Vert — mode éco
+      state-climate-idle-color: "var(--disabled-text-color)" # Bleu ardoise — arrêt
+      state-climate-manual-color: "var(--primary-color)"     # Violet néon — manuel
+      state-climate-off-color: "var(--state-inactive-color)" # Bleu translucide — éteint
+      state-climate-active-color: "var(--accent-color)"      # Cyan — refroidissement
+
+      # ══════════════════════════════════════════════════════════════════════
+      # INTERRUPTEURS — Toggle switches (ON/OFF)
+      # ══════════════════════════════════════════════════════════════════════
+      switch-checked-button-color: "var(--switch-checked-track-color)" # Bouton ON
+      switch-checked-track-color: "rgba(var(--rgb-gas-argon), 0.50)"   # Rail violet ON
+      switch-checked-color: "var(--state-active-color)"                # Violet doux ON
+      switch-unchecked-button-color: "#203060"                         # Bleu marine bouton OFF
+      switch-unchecked-track-color: "rgba(32, 48, 96, 0.50)"           # Rail bleu OFF
+      switch-unchecked-color: "rgba(32, 48, 96, 0.50)"                 # Bleu OFF
+
+      # ══════════════════════════════════════════════════════════════════════
+      # CURSEURS — Slider/range inputs
+      # ══════════════════════════════════════════════════════════════════════
+      paper-slider-knob-color: "var(--accent-color)"                 # Cyan — curseur
+      paper-slider-knob-start-color: "var(--accent-color)"           # Cyan — position initiale
+      paper-slider-pin-color: "var(--accent-color)"                  # Cyan — pin label
+      paper-slider-active-color: "var(--accent-color)"               # Cyan — rail actif
+      paper-slider-container-color: "rgba(var(--rgb-accent-color), 0.30)" # Cyan translucide — rail
+      paper-slider-secondary-color: "var(--primary-color)"           # Violet néon — curseur secondaire
+      ha-slider-indicator-color: "rgba(var(--rgb-gas-xenon), 0.85)"  # Bleu électrique — label
+      ha-slider-thumb-color: "rgba(var(--rgb-gas-xenon), 1)"         # Bleu électrique — curseur
+
+      # ══════════════════════════════════════════════════════════════════════
+      # DIALOGUES — Pop-ups et modales
+      # ══════════════════════════════════════════════════════════════════════
+      dialog-background-color: "rgba(3, 6, 18, 0.94)"       # Noir bleu très sombre
+      mdc-dialog-scrim-color: "rgba(1, 2, 8, 0.90)"         # Voile noir opaque — fond
+      mdc-dialog-content-ink-color: "var(--secondary-text-color)" # Lavande — contenu
+      mdc-dialog-heading-ink-color: "var(--primary-text-color)"   # Blanc — titre
+      ha-dialog-border-radius: "12px"                       # Coins arrondis
+
+      # ══════════════════════════════════════════════════════════════════════
+      # BADGES — Petits éléments de statut
+      # ══════════════════════════════════════════════════════════════════════
+      label-badge-border-color: "var(--state-active-color)" # Violet — bordure
+      label-badge-text-color: "var(--primary-text-color)"   # Blanc — texte
+      label-badge-red: "var(--error-color)"                 # Rose-rouge — erreur
+      label-badge-blue: "var(--accent-color)"               # Cyan — info
+      label-badge-green: "var(--success-color)"             # Vert néon — succès
+      label-badge-yellow: "var(--warning-color)"            # Orange — avertissement
+      label-badge-grey: "var(--disabled-text-color)"        # Bleu ardoise — neutre
+      md-sys-color-on-surface: "var(--secondary-text-color)"                # couleur police badges généraux
+      # ══════════════════════════════════════════════════════════════════════
+      # MARKDOWN — Contenu texte formaté
+      # ══════════════════════════════════════════════════════════════════════
+      markdown-text-color: "#a8b8d8"                         # Bleu acier clair — texte
+      markdown-link-color: "var(--accent-color)"             # Cyan — liens
+      markdown-code-background-color: "rgba(var(--rgb-accent-color), 0.12)" # Cyan très translucide
+
+      # ══════════════════════════════════════════════════════════════════════
+      # BOUTONS — Interactions primaires
+      # ══════════════════════════════════════════════════════════════════════
+      ha-button-neutral-color: "var(--primary-color)"        # Violet néon — bouton neutre
+      mdc-button-outline-color: "var(--primary-color)"       # Violet néon — bordure
+      mdc-button-disabled-ink-color: "var(--disabled-text-color)" # Bleu ardoise — texte désactivé
+      mdc-button-disabled-outline-color: "var(--disabled-text-color)" # Bleu ardoise — bordure désactivée
+      mdc-text-button-ripple-color: "rgba(var(--rgb-accent-color), 0.25)" # Cyan ripple texte
+      mdc-outlined-button-ripple-color: "rgba(var(--rgb-accent-color), 0.25)" # Cyan ripple bordure
+      mdc-contained-button-ripple-color: "rgba(var(--rgb-state-active-color), 0.40)" # Violet ripple contenu
+
+      # ══════════════════════════════════════════════════════════════════════
+      # CHIPS & TABLES — Listes et données
+      # ══════════════════════════════════════════════════════════════════════
+      chip-background-color: "rgba(var(--rgb-accent-color), 0.48)"        # Cyan très translucide
+      table-row-background-color: "rgba(4, 8, 22, 0.80)"                  # Noir-bleu — lignes pair
+      table-row-alternative-background-color: "rgba(6, 12, 28, 0.70)"     # Bleu-noir — lignes impair
+
+      # ══════════════════════════════════════════════════════════════════════
+      # PAPER COMPONENTS — Legacy HA (avant Material Design)
+      # ══════════════════════════════════════════════════════════════════════
+      paper-item-icon-color: "var(--accent-color)"              # Cyan
+      paper-item-icon-active-color: "var(--state-active-color)" # Violet
+      paper-item-selected: "var(--state-active-color)"          # Violet
+      paper-tabs-selection-bar-color: "var(--primary-color)"    # Violet
+      paper-tab-ink: "var(--state-active-color)"                # Violet
+      paper-input-container-color: "var(--accent-color)"        # Cyan
+      paper-input-container-focus-color: "var(--primary-color)" # Violet
+      paper-input-container-input-color: "var(--primary-text-color)" # Blanc
+
+      # ══════════════════════════════════════════════════════════════════════
+      # CHAMPS DE FORMULAIRE — Inputs, textfields
+      # ══════════════════════════════════════════════════════════════════════
+      input-idle-line-color: "rgba(var(--rgb-accent-color), 0.35)"     # Cyan translucide
+      input-hover-line-color: "var(--accent-color)"                    # Cyan
+      input-fill-color: "rgba(var(--rgb-card-background-color), 0.80)" # Noir-bleu
+      input-ink-color: "var(--primary-text-color)"                     # Blanc
+      input-label-ink-color: "var(--secondary-text-color)"             # Lavande
+      input-disabled-fill-color: "rgba(var(--rgb-disabled-color), 0.20)" # Bleu ardoise
+      input-disabled-ink-color: "var(--disabled-text-color)"           # Bleu ardoise
+      input-disabled-line-color: "rgba(var(--rgb-disabled-color), 0.25)" # Bleu ardoise
+      ha-input-border-color: "rgba(var(--rgb-accent-color), 0.35)"     # Cyan translucide
+      ha-input-hover-border-color: "var(--accent-color)"               # Cyan
+      ha-input-focus-border-color: "var(--primary-color)"              # Violet
+
+      # ══════════════════════════════════════════════════════════════════════
+      # MATERIAL DESIGN (MD3) — Palette générale
+      # ══════════════════════════════════════════════════════════════════════
+      material-background-color: "var(--primary-background-color)"     # Noir-bleu
+      material-primary-color: "var(--primary-color)"                   # Violet néon
+      material-secondary-color: "var(--accent-color)"                  # Cyan
+
+      # ══════════════════════════════════════════════════════════════════════
+      # COMPOSANTS MDC (Material Design Web Components)
+      # ══════════════════════════════════════════════════════════════════════
+      mdc-tab-text-label-color-default: "var(--secondary-text-color)"  # Lavande
+      mdc-tab-color-default: "var(--accent-color)"                     # Cyan
+      mdc-icon-color: "var(--accent-color)"                            # Cyan
+      mdc-icon-button-color: "var(--accent-color)"                     # Cyan
+      mdc-checkbox-unchecked-color: "var(--accent-color)"              # Cyan
+      mdc-radio-unchecked-color: "var(--accent-color)"                 # Cyan
+      mdc-ripple-color: "var(--primary-color)"                         # Violet
+      mdc-select-dropdown-icon-color: "var(--accent-color)"            # Cyan
+      mdc-select-fill-color: "var(--card-background-color)"            # Noir-bleu
+      mdc-select-ink-color: "var(--primary-text-color)"                # Blanc
+      mdc-select-label-ink-color: "var(--accent-color)"                # Cyan
+      mdc-select-disabled-dropdown-icon-color: "var(--disabled-text-color)" # Bleu ardoise
+      mdc-select-disabled-fill-color: "rgba(var(--rgb-disabled-color), 0.20)" # Bleu ardoise
+      mdc-select-disabled-ink-color: "var(--disabled-text-color)"      # Bleu ardoise
+      mdc-text-field-fill-color: "var(--card-background-color)"        # Noir-bleu
+      mdc-text-field-ink-color: "var(--primary-text-color)"            # Blanc
+      mdc-text-field-label-ink-color: "var(--accent-color)"            # Cyan
+      mdc-text-field-disabled-fill-color: "rgba(var(--rgb-disabled-color), 0.20)"
+      mdc-text-field-disabled-ink-color: "var(--disabled-text-color)"  # Bleu ardoise
+      mdc-theme-on-primary: "#020510"                                  # Noir-bleu
+      mdc-theme-on-secondary: "#020510"                                # Noir-bleu
+      mdc-theme-on-surface: "var(--primary-text-color)"                # Blanc
+      mdc-theme-text-primary-on-background: "var(--primary-text-color)" # Blanc
+      mdc-theme-primary: "var(--gas-xenon)"                            # Bleu électrique
+      mdc-theme-secondary: "var(--gas-xenon)"                          # Bleu électrique
+      mdc-theme-surface: "var(--card-background-color)"                # Noir-bleu
+      mdc-theme-background: "var(--primary-background-color)"          # Noir-bleu
+      mdc-theme-error: "var(--error-color)"                            # Rose-rouge
+
+      # ══════════════════════════════════════════════════════════════════════
+      # SYSTÈME DE COULEURS HA — Variables couleur v2024+
+      # ══════════════════════════════════════════════════════════════════════
+      ha-color-fill-neutral-quiet-resting: "rgba(4, 8, 22, 0.92)"      # Noir-bleu
+      ha-color-surface-default: "rgba(4, 8, 22, 0.92)"                 # Noir-bleu
+      ha-color-fill-neutral-quiet: "rgba(6, 12, 28, 0.85)"             # Bleu-noir
+      ha-color-on-neutral-quiet: "var(--primary-text-color)"           # Blanc
+      ha-color-on-neutral-normal: "var(--primary-text-color)"          # Blanc
+      ha-color-on-primary-normal: "var(--primary-text-color)"          # Blanc
+      ha-color-fill-primary-normal-resting: "rgba(1, 2, 8, 0.90)" 
+      ha-color-form-background: "rgba(1, 2, 8, 0.90)" 
+  
+      # ══════════════════════════════════════════════════════════════════════
+      # ENERGY DASHBOARD — Tableau de bord énergie
+      # ══════════════════════════════════════════════════════════════════════
+      energy-grid-consumption-color: "#1F7FFF"                          # Bleu électrique — consommation
+      energy-grid-return-color: "#00E8FF"                               # Cyan — injection réseau
+      energy-solar-color: "#FFD050"                                     # Or chaud — solaire
+      energy-battery-in-color: "#FF9500"                                # Orange — charge
+      energy-battery-out-color: "#AAFF00"                               # Vert lime — décharge
+
+      # ══════════════════════════════════════════════════════════════════════
+      # HACS INTEGRATION — Home Assistant Community Store
+      # ══════════════════════════════════════════════════════════════════════
+      hacs-error-color: "var(--error-color)"                            # Rose-rouge
+      hacs-warning-color: "var(--warning-color)"                        # Orange
+      hacs-update-color: "var(--gas-helium)"                             # Or solaire — mise à jour disponible
+      hacs-new-color: "var(--gas-krypton)"                              # Vert spectral — nouveau composant
+      hacs-default-icon-color: "var(--gas-argon)"                       # Violet ionisé — icône neutre HACS
+
+      # ══════════════════════════════════════════════════════════════════════
+      # KIOSK MODE — Support écran mural iPad
+      # ══════════════════════════════════════════════════════════════════════
+      kiosk-glow-intensity: "1.2"                                       # Intensité glow
+      kiosk-touch-scale: "0.97"                                         # Échelle toucher
+      kiosk-card-spacing: "16px"                                        # Espacement
+      kiosk-min-touch-target: "44px"                                    # Taille min bouton
+
+      # ══════════════════════════════════════════════════════════════════════
+      # TIMING DES ANIMATIONS — Vitesses de transition
+      # ══════════════════════════════════════════════════════════════════════
+      animation-speed-card: "4s"                                        # Cartes
+      animation-speed-sidebar: "3s"                                     # Sidebar
+      animation-speed-header: "5s"                                      # Header
+      animation-speed-badge: "2.5s"                                     # Badges
+      animation-speed-rain: "2s"                                        # Pluie
+
+  card-mod-theme: neo-tokyo-v2
+
+  # ============================================================
+  # CARD-MOD CARD — shadow DOM de chaque ha-card
+  # Sélecteurs : :host = la card elle-même
+  # ============================================================
+  card-mod-card: |
+    :host {
+      position: relative;
+      border-radius: 14px;
+      --current-gas: var(--gas-xenon);
+    }
+
+    :host::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 14px;
+      pointer-events: none;
+      z-index: 2;
+
+      /* Look de base */
+      box-shadow:
+        inset 0 2px 0 0 var(--current-gas),
+        0 0 12px var(--current-gas),
+        0 0 20px rgba(var(--rgb-gas-xenon), 0.3);
+
+      mask-image: linear-gradient(90deg, transparent, black 15%, black 85%, transparent);
+      -webkit-mask-image: linear-gradient(90deg, transparent, black 15%, black 85%, transparent);
+
+      opacity: 1;
+    }
+
+    :host(:hover) {
+    /* L'opacité sur le host directement pour éviter les conflits de couches */
+    opacity: 0.92;
+    #transform: translateY(-3px) scale(1.012);
+    }
+
+    :host(:hover)::before {
+      /* On enchaîne 3 phases :
+         1. L'hésitation (flicker initial)
+         2. Le flash de réussite
+         3. La stabilité finale (forwards) */
+      animation:
+        neon-struggle 0.4s steps(1) 2,       /* Galère : 2 cycles de 0.4s */
+        neon-ignite 0.6s steps(1) 0.8s forwards; /* Allumage final après 0.8s */
+        filter: brightness(1.2);
+        transition: opacity 0.5s ease-in-out, --current-gas 1s ease;
+    }
+
+    /* Phase 1 : Le tube qui siffle et refuse de partir */
+    @keyframes neon-struggle {
+      0%   { opacity: 1; --current-gas: var(--gas-hydrogen); }
+      20%  { opacity: 0; }
+      40%  { opacity: 0.6; --current-gas: var(--gas-neon); }
+      60%  { opacity: 0; }
+      80%  { opacity: 0.8; --current-gas: var(--gas-mercury); }
+      100% { opacity: 0; }
+    }
+
+    /* Phase 2 : L'allumage chromatique et stabilisation */
+    @keyframes neon-ignite {
+      0%   { opacity: 1; --current-gas: var(--gas-krypton); }
+      20%  { --current-gas: var(--gas-helium); }
+      40%  { --current-gas: var(--gas-radon); }
+      /* Stabilisation sur le Xénon ou l'Argon */
+      100% { opacity: 1; --current-gas: var(--gas-xenon); }
+    }
+
+    @media (max-width: 767px) {
+      :host::before { animation: none !important; opacity: 0.5; }
+      :host(:hover)::before { animation: none !important; }
+    }
+
+    :host::after {
+        content: "";
+        position: absolute;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        border-radius: 14px;
+        pointer-events: none;
+        z-index: 3;
+
+        /* Le "glow" interne et externe du coin uniquement */
+        box-shadow:
+          inset 2px 2px 0 0 var(--current-gas),
+          0 0 8px var(--current-gas);
+
+        mask-image: linear-gradient(180deg, transparent, black 15%, black 85%, transparent);
+        -webkit-mask-image: linear-gradient(180deg, transparent, black 15%, black 85%, transparent);
+
+        opacity: 1;
+        transition: --current-gas 0.5s ease;
+      }
+
+      /* La bordure krypton sans background override */
+      :host(:has(ha-card.active)) ha-card {
+        border-color: rgba(var(--rgb-gas-krypton), 0.5);
+        box-shadow: 0 0 15px rgba(var(--rgb-gas-krypton), 0.2);
+      }
+
+  # ============================================================
+  # CARD-MOD ROOT — document principal (light DOM)
+  # ha-card y est directement accessible
+  # ============================================================
+  card-mod-root: |
+
+    * {
+      font-family: 'Orbitron', var(--primary-font-family), system-ui, sans-serif;
+    }
+
+    ha-card {
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    ha-icon, ha-svg-icon, ha-icon-button {
+      color: var(--accent-color);
+      filter: drop-shadow(0 0 6px currentColor);
+    }
+
+    .name {
+      text-shadow: 0 0 3px rgba(255,255,255,0.3), 0 0 8px rgba(var(--rgb-accent-color), 0.2);
+    }
+    .state, .value {
+      text-shadow: 0 0 3px rgba(255,255,255,0.5), 0 0 8px rgba(var(--rgb-accent-color), 0.4);
+    }
+
+    @keyframes edges-pulse {
+      0%,  100% { box-shadow: 0 0 4px #fff, 0 0 10px var(--gas-xenon), 0 0 22px var(--gas-xenon), 0 0 40px rgba(var(--rgb-gas-xenon), 0.7), 0 0 70px rgba(var(--rgb-gas-argon), 0.35); }
+      8%         { box-shadow: 0 0 2px #fff, 0 0 4px var(--gas-xenon), 0 0 8px var(--gas-xenon), 0 0 14px rgba(var(--rgb-gas-xenon), 0.3); }
+      9%         { box-shadow: 0 0 8px #fff, 0 0 16px var(--gas-krypton), 0 0 35px var(--gas-krypton), 0 0 60px rgba(var(--rgb-gas-krypton), 0.9), 0 0 100px rgba(var(--rgb-gas-krypton), 0.4); }
+      10%        { box-shadow: 0 0 4px #fff, 0 0 10px var(--gas-xenon), 0 0 22px var(--gas-xenon), 0 0 40px rgba(var(--rgb-gas-xenon), 0.7), 0 0 70px rgba(var(--rgb-gas-argon), 0.35); }
+      42%        { box-shadow: 0 0 3px #fff, 0 0 7px var(--gas-xenon), 0 0 16px var(--gas-xenon), 0 0 28px rgba(var(--rgb-gas-xenon), 0.5); }
+      43%        { box-shadow: 0 0 6px #fff, 0 0 14px var(--gas-helium), 0 0 30px var(--gas-helium), 0 0 55px rgba(var(--rgb-gas-helium), 0.8), 0 0 85px rgba(var(--rgb-gas-radon), 0.4); }
+      44%        { box-shadow: 0 0 4px #fff, 0 0 10px var(--gas-xenon), 0 0 22px var(--gas-xenon), 0 0 40px rgba(var(--rgb-gas-xenon), 0.7), 0 0 70px rgba(var(--rgb-gas-argon), 0.35); }
+    }
+
+    app-header,
+      ha-app-layout app-header,
+      app-toolbar,
+      .header,
+      mwc-tab-bar {
+          border-bottom: 3px solid #fff ;
+          box-shadow:
+            0 0 4px #fff,
+            0 0 10px var(--gas-xenon),
+            0 0 22px var(--gas-xenon),
+            0 0 40px rgba(var(--rgb-gas-xenon), 0.7),
+            0 0 70px rgba(var(--rgb-gas-argon), 0.35) ;
+          animation: edges-pulse 4s ease-in-out infinite;
+      }
+
+    ha-icon:hover {
+    transform: scale(1.25) translateX(5px) rotate(-5deg);
+    opacity: 1.0;
+    transition: all 0.3s ease;
+    }
+
+    /* ── Vignette sombre en haut de page ── */
+    hui-root::before {
+      content: "";
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 140px;
+      background: linear-gradient(180deg, rgba(2,1,12,0.72) 0%, rgba(4,2,18,0.38) 55%, transparent 100%);
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* ── iPad — animations OFF (performance) ── */
+    @media (hover: none) and (pointer: coarse) and (min-width: 768px) {
+      ha-card, ha-card:hover {
+        transform: none !important;
+        animation: none !important;
+        transition: none !important;
+      }
+      ha-card:hover { opacity: 0.92; }
+      ha-icon, ha-svg-icon, ha-icon-button {
+        filter: drop-shadow(0 0 4px currentColor);
+        animation: none !important;
+        transition: none !important;
+      }
+      app-header, ha-app-layout app-header, app-toolbar, .header, mwc-tab-bar {
+        animation: none !important;
+        transition: none !important;
+        box-shadow: 0 0 8px var(--gas-xenon) !important;
+      }
+    }
+
+    /* ── Smartphone — toutes animations OFF ── */
+    @media (max-width: 767px) {
+      ha-card, ha-card:hover {
+        transform: none !important;
+        animation: none !important;
+        transition: none !important;
+      }
+      ha-card:hover { opacity: 0.92; }
+      app-header, ha-app-layout app-header, app-toolbar, .header, mwc-tab-bar {
+        animation: none !important;
+        box-shadow: 0 0 8px var(--gas-xenon) !important;
+      }
+    }
+
+  # ============================================================
+  # CARD-MOD SIDEBAR — shadow DOM de la sidebar
+  # ============================================================
+  card-mod-sidebar: |
+    @keyframes edge-pulse {
+      0%   { opacity: 0.7; }
+      50%  { opacity: 1.0; }
+      100% { opacity: 0.7; }
+    }
+    @keyframes title-glitch-rgb {
+      0%,  9%   { text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color), 1px 0 rgba(var(--rgb-accent-color),0.5); letter-spacing: 2px; }
+      10%        { text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color), -5px 0 rgba(var(--rgb-primary-color),1.0), 5px 0 rgba(var(--rgb-accent-color),1.0); letter-spacing: 3px; transform: skewX(-2deg); }
+      11%        { text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color), 1px 0 rgba(var(--rgb-accent-color),0.5); letter-spacing: 2px; transform: skewX(0); }
+      12%,  39%  { text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color), 1px 0 rgba(var(--rgb-accent-color),0.5); letter-spacing: 2px; }
+      40%        { text-shadow: 0 0 8px #fff, 0 0 18px var(--primary-color), 0 0 48px var(--primary-color), 8px 0 rgba(var(--rgb-primary-color),1.0), -8px 0 rgba(var(--rgb-accent-color),1.0); letter-spacing: 5px; transform: skewX(3deg); }
+      41%        { text-shadow: 0 0 2px #fff, 0 0 6px var(--primary-color), 0 0 14px var(--primary-color), -2px 0 rgba(var(--rgb-accent-color),0.7); letter-spacing: 1px; transform: skewX(-1deg); }
+      42%,  71%  { text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color), 1px 0 rgba(var(--rgb-accent-color),0.5); letter-spacing: 2px; transform: skewX(0); }
+      72%        { text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color), -4px 0 rgba(var(--rgb-primary-color),0.9), 4px 0 rgba(var(--rgb-accent-color),0.9); letter-spacing: 2px; }
+      73%,  100% { text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color), 1px 0 rgba(var(--rgb-accent-color),0.5); letter-spacing: 2px; }
+    }
+    @keyframes title-flicker {
+      0%,  14%  { opacity: 1;    filter: brightness(1.1) saturate(1.4); }
+      15%        { opacity: 0.4;  filter: brightness(0.5) saturate(0.8); }
+      16%        { opacity: 1;    filter: brightness(1.5) saturate(1.6); }
+      17%,  44%  { opacity: 1;    filter: brightness(1.1) saturate(1.4); }
+      45%        { opacity: 0.7;  filter: brightness(0.7) saturate(0.9); }
+      46%        { opacity: 1;    filter: brightness(1.4) saturate(1.5); }
+      47%        { opacity: 0.85; filter: brightness(0.9) saturate(1.2); }
+      48%,  79%  { opacity: 1;    filter: brightness(1.1) saturate(1.4); }
+      80%        { opacity: 0.15; filter: brightness(0.2) saturate(0.5); }
+      81%        { opacity: 1;    filter: brightness(1.7) saturate(1.8); }
+      82%,  100% { opacity: 1;    filter: brightness(1.1) saturate(1.4); }
+    }
+    @keyframes neon-flicker {
+      0%,  17%  { box-shadow: 0 0 6px rgba(var(--rgb-gas-argon),0.6), 0 0 12px rgba(var(--rgb-primary-color),0.3), inset 0 0 10px rgba(var(--rgb-gas-argon),0.12); }
+      18%        { box-shadow: 0 0 2px rgba(var(--rgb-gas-argon),0.1), inset 0 0 2px rgba(var(--rgb-gas-argon),0.03); }
+      19%        { box-shadow: 0 0 6px rgba(var(--rgb-gas-argon),0.6), 0 0 12px rgba(var(--rgb-primary-color),0.3), inset 0 0 10px rgba(var(--rgb-gas-argon),0.12); }
+      20%        { box-shadow: 0 0 2px rgba(var(--rgb-gas-argon),0.1), inset 0 0 2px rgba(var(--rgb-gas-argon),0.03); }
+      21%,  74%  { box-shadow: 0 0 6px rgba(var(--rgb-gas-argon),0.6), 0 0 12px rgba(var(--rgb-primary-color),0.3), inset 0 0 10px rgba(var(--rgb-gas-argon),0.12); }
+      75%         { box-shadow: 0 0 18px rgba(var(--rgb-gas-radon),0.8), 0 0 30px rgba(var(--rgb-primary-color),0.5), inset 0 0 16px rgba(var(--rgb-gas-argon),0.2); }
+      76%         { box-shadow: 0 0 2px rgba(var(--rgb-gas-argon),0.1), inset 0 0 2px rgba(var(--rgb-gas-argon),0.03); }
+      77%,  100% { box-shadow: 0 0 6px rgba(var(--rgb-gas-argon),0.6), 0 0 12px rgba(var(--rgb-primary-color),0.3), inset 0 0 10px rgba(var(--rgb-gas-argon),0.12); }
+    }
+
+    :host {
+      position: relative;
+      overflow: hidden;
+      primary-font-family: "'Orbitron', system-ui, sans-serif"
+      background:
+        linear-gradient(145deg,
+          rgba(255,255,255,0.055) 0%,
+          rgba(255,255,255,0.018) 35%,
+          rgba(255,255,255,0.000) 60%
+        ),
+        linear-gradient(0deg,
+          rgba(var(--rgb-primary-color), 0.07)  0%,
+          rgba(var(--rgb-primary-color), 0.04) 20%,
+          transparent 50%
+        ),
+        rgba(4, 6, 20, 0.82);
+      backdrop-filter: blur(14px) saturate(150%);
+      -webkit-backdrop-filter: blur(14px) saturate(150%);
+    }
+
+    @keyframes edge-flicker {
+      0%,  100% { opacity: 1.0;  box-shadow: 0 0 6px var(--gas-argon), 0 0 14px rgba(var(--rgb-gas-argon), 0.7), 0 0 30px rgba(var(--rgb-gas-radon), 0.25); width: 3px; }
+      12%        { opacity: 0.2;  box-shadow: none; }
+      13%        { opacity: 1.0;  box-shadow: 0 0 10px var(--gas-argon), 0 0 22px rgba(var(--rgb-gas-argon), 1.0), 0 0 40px rgba(var(--rgb-gas-xenon), 0.4); width: 4px; }
+      14%        { opacity: 0.7;  box-shadow: 0 0 6px var(--gas-argon), 0 0 14px rgba(var(--rgb-gas-argon), 0.7); width: 3px; }
+      45%        { opacity: 0.85; box-shadow: 0 0 4px var(--gas-argon), 0 0 10px rgba(var(--rgb-gas-argon), 0.5); }
+      46%        { opacity: 1.0;  box-shadow: 0 0 14px var(--gas-krypton), 0 0 28px rgba(var(--rgb-gas-krypton), 1.0), 0 0 50px rgba(var(--rgb-gas-helium), 0.4); width: 5px; }
+      47%        { opacity: 0.4;  box-shadow: none; width: 3px; }
+      48%        { opacity: 1.0;  box-shadow: 0 0 6px var(--gas-argon), 0 0 14px rgba(var(--rgb-gas-argon), 0.7), 0 0 30px rgba(var(--rgb-gas-radon), 0.25); }
+      80%        { opacity: 0.75; box-shadow: 0 0 4px var(--gas-argon), 0 0 10px rgba(var(--rgb-gas-argon), 0.5); }
+      81%        { opacity: 1.0;  box-shadow: 0 0 8px var(--gas-argon), 0 0 18px rgba(var(--rgb-gas-argon), 0.8), 0 0 35px rgba(var(--rgb-gas-xenon), 0.3); width: 4px; }
+      82%        { opacity: 1.0;  box-shadow: 0 0 6px var(--gas-argon), 0 0 14px rgba(var(--rgb-gas-argon), 0.7), 0 0 30px rgba(var(--rgb-gas-radon), 0.25); width: 3px; }
+    }
+
+    :host::after {
+      content: "";
+      position: absolute;
+      top: 0; right: 0;
+      width: 3px; height: 100%;
+      background: linear-gradient(180deg,
+        transparent                        0%,
+        rgba(var(--rgb-gas-argon), 0.5)   15%,
+        var(--gas-argon)                   35%,
+        var(--primary-color)               50%,
+        var(--gas-argon)                   65%,
+        rgba(var(--rgb-gas-argon), 0.5)   85%,
+        transparent                        100%);
+      box-shadow:
+        0 0 6px var(--gas-argon),
+        0 0 14px rgba(var(--rgb-gas-argon), 0.7),
+        0 0 30px rgba(var(--rgb-gas-radon), 0.25);
+      animation: edge-flicker 6s step-end infinite;
+      z-index: 10;
+    }
+
+    .menu .title {
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #fff;
+      text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color);
+      animation: title-glitch-rgb 11s step-end infinite, title-flicker 7s step-end infinite;
+    }
+
+    @keyframes menu-flicker {
+      0%,  100% { box-shadow: 0 0 8px #fff, 0 0 14px var(--gas-argon), 0 0 28px var(--gas-argon), 0 0 45px rgba(var(--rgb-gas-argon), 0.7), 0 0 70px rgba(var(--rgb-gas-radon), 0.2); }
+      7%         { box-shadow: 0 0 3px #fff, 0 0 6px var(--gas-argon), 0 0 12px var(--gas-argon); }
+      8%         { box-shadow: 0 0 12px #fff, 0 0 22px var(--gas-helium), 0 0 42px var(--gas-helium), 0 0 70px rgba(var(--rgb-gas-helium), 0.9), 0 0 110px rgba(var(--rgb-gas-krypton), 0.3); }
+      9%         { box-shadow: 0 0 8px #fff, 0 0 14px var(--gas-argon), 0 0 28px var(--gas-argon), 0 0 45px rgba(var(--rgb-gas-argon), 0.7), 0 0 70px rgba(var(--rgb-gas-radon), 0.2); }
+      55%        { box-shadow: 0 0 4px #fff, 0 0 8px var(--gas-argon), 0 0 18px var(--gas-argon); }
+      56%        { box-shadow: 0 0 10px #fff, 0 0 20px var(--gas-krypton), 0 0 38px var(--gas-krypton), 0 0 62px rgba(var(--rgb-gas-krypton), 0.8), 0 0 90px rgba(var(--rgb-gas-neon), 0.25); }
+      57%        { box-shadow: 0 0 8px #fff, 0 0 14px var(--gas-argon), 0 0 28px var(--gas-argon), 0 0 45px rgba(var(--rgb-gas-argon), 0.7), 0 0 70px rgba(var(--rgb-gas-radon), 0.2); }
+    }
+    .menu {
+      border-bottom: 3px solid #fff;
+      box-shadow:
+        0 0 8px #fff,
+        0 0 14px var(--gas-argon),
+        0 0 28px var(--gas-argon),
+        0 0 45px rgba(var(--rgb-gas-argon), 0.7),
+        0 0 70px rgba(var(--rgb-gas-radon), 0.2);
+      animation: menu-flicker 5s step-end infinite;
+    }
+
+    ha-md-list-item {
+      transition: transform 0.2s ease, background 0.2s ease;
+      border-radius: 8px;
+    }
+    ha-md-list-item:hover {
+      transform: translateX(4px);
+      background: rgba(var(--rgb-accent-color), 0.06) ;
+      box-shadow:
+        -3px 0 8px var(--blacklight-color),
+        -6px 0 15px rgba(var(--rgb-blacklight-color), 0.7),
+        inset 0 0 12px rgba(var(--rgb-accent-color), 0.08) !important;
+    }
+
+    ha-md-list-item:hover ha-icon,
+    ha-md-list-item:hover iron-icon,
+    ha-md-list-item:hover ha-svg-icon,
+    ha-md-list-item:hover ha-svg-icon[slot="start"],
+    ha-md-list-item:hover ha-icon[slot="start"] {
+    transform: scale(1.25) translateX(5px) rotate(-5deg);
+    transition: all 0.3s ease;
+    }
+    @keyframes border-pulse {
+      0%, 100% { border-left-width: 2px; }
+      50%       { border-left-width: 5px; }
+    }
+    ha-md-list-item.selected {
+      background: rgba(var(--rgb-primary-color), 0.07) ;
+      border-left: 2px solid var(--secondary-color);
+      border-radius: 8px;
+      animation: neon-flicker 7s step-end infinite, border-pulse 2.5s ease-in-out infinite;
+    }
+    ha-md-list-item.selected .item-text {
+      color: #fff;
+      text-shadow: 0 0 5px #fff, 0 0 12px var(--primary-color), 0 0 28px var(--primary-color);
+    }
+    ha-md-list-item ha-icon,
+    ha-md-list-item ha-svg-icon {
+      filter: drop-shadow(0 0 4px currentColor);
+      transition: all 0.3s ease;
+    }
+    ha-md-list-item:hover ha-icon,
+    ha-md-list-item:hover ha-svg-icon {
+      filter: drop-shadow(0 0 8px currentColor) saturate(1.5) brightness(1.2);
+      transform: scale(1.1);
+    }
+
+    /* ── Smartphone — animations OFF ── */
+    @media (max-width: 767px) {
+      :host, :host::after, :host::before { animation: none !important; }
+      .menu { animation: none !important; box-shadow: 0 0 8px var(--gas-argon) !important; }
+      .menu .title { animation: none !important; }
+      ha-md-list-item.selected { animation: none !important; }
+      ha-md-list-item:hover { transform: none !important; }
+    }
+
+    /* ── iPad — animations OFF (performance) ── */
+    @media (hover: none) and (pointer: coarse) and (min-width: 768px) {
+      :host,
+      :host::before,
+      :host::after,
+      .menu,
+      .menu .title,
+      ha-md-list-item,
+      ha-md-list-item.selected,
+      ha-md-list-item.selected .item-text {
+        animation: none !important;
+        transition: none !important;
+      }
+      .menu .title {
+        text-shadow: 0 0 5px #fff, 0 0 14px var(--primary-color);
+      }
+      ha-md-list-item.selected {
+        border-left: 2px solid var(--secondary-color);
+      }
+      ha-md-list-item.selected .item-text {
+        text-shadow: 0 0 8px var(--primary-color);
+      }
+    }

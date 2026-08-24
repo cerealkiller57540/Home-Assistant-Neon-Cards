@@ -1,0 +1,5 @@
+[CHANGE] Migrated settings to version 5
+
+[SPECIAL] Reset all cached OTA states due to internal changes.
+
+For more details, see https://github.com/Koenkk/zigbee2mqtt/discussions/24198

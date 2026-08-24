@@ -1,0 +1,175 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  SUNOLOGY — Puissances LISSÉES (batterie + grid meter) — rechargeable À CHAUD
+#  Deux capteurs : sensor.battery_power_lisse et sensor.grid_power_lisse.
+#  La télémétrie Sunology (gateway .57:20199) renvoie une puissance instantanée
+#  très bruitée : elle saute de -2000W à +2000W à la seconde (bruit
+#  d'échantillonnage + micro-corrections de régulation HUB_REMOTE). Sur un
+#  graphe, ça donne de faux « cycles » charge/décharge alors qu'en moyenne la
+#  batterie suit une tendance nette (cf analyse nuit 12→13/07 : décharge continue
+#  97%→55%, aucun vrai cycle).
+#
+#  ⚠️ On N'UTILISE PAS `platform: filter` / `platform: statistics` : ces
+#  plateformes sensor legacy ne se rechargent qu'au REDÉMARRAGE de HA, or on ne
+#  redémarre jamais la VM (tue le partage \\.60\config). Un capteur `template`
+#  avec trigger se recharge à chaud via `template.reload`.
+#
+#  Lissage (batterie uniquement) = moyenne mobile exponentielle (EMA) toutes
+#  les 10 s. alpha = 0.15 → constante de temps ~60 s (départ « léger »).
+#  Pour lisser davantage plus tard : baisser alpha (0.08 ≈ 2 min, 0.03 ≈ 5 min).
+#  Le grid, lui, recopie désormais la pince Envoy (voir section dédiée).
+#
+#  Source  : sensor.battery_power  (W, signe : >0 charge, <0 décharge)
+#  Résultat: sensor.battery_power_lisse
+# ═══════════════════════════════════════════════════════════════════════════
+
+template:
+  - trigger:
+      - platform: time_pattern
+        seconds: "/10"
+    sensor:
+      - name: "Battery Power lissé"
+        unique_id: battery_power_lisse
+        device_class: power
+        unit_of_measurement: "W"
+        state_class: measurement
+        icon: mdi:battery-charging
+        state: >
+          {% set src = states('sensor.battery_power') | float(none) %}
+          {% set prev = states('sensor.battery_power_lisse') | float(none) %}
+          {% set a = 0.15 %}
+          {% if src is none %}
+            {{ prev if prev is not none else 0 }}
+          {% elif prev is none %}
+            {{ src | round(0) }}
+          {% else %}
+            {{ (a * src + (1 - a) * prev) | round(0) }}
+          {% endif %}
+
+  # ── Grid power : FUSION pince Sunology + Envoy + Linky (v3, 2026-07-19) ──
+  # Trois sources, aucune parfaite seule :
+  #   · pince Sunology (energy_grid_..._net_power) : rapide (qq s) mais très
+  #     bruitée (spikes ±2-3 kW isolés) → seule, elle flingue les stats ;
+  #   · pince Envoy (envoy_..._current_net_power_consumption, kW) : juste et
+  #     propre mais pollée ~60 s → seule, trop lente (« 60s c'est pas top ») ;
+  #   · Linky STGE (buanderie_lixee_statuts, hex, bit 9 = sens de l'énergie
+  #     active : 0=soutirage 1=injection) : vérité du SIGNE, ~60 s aussi.
+  # Montage = filtre complémentaire (Kalman stationnaire à gains fixes) :
+  #   1. médiane glissante 3 échantillons (raw1/raw2) → élimine les spikes
+  #      isolés de la pince SANS ajouter de latence (contrairement à une EMA) ;
+  #   2. EMA α=0.3 tick 5 s → constante de temps ≈ 15 s (demande Chris) ;
+  #   3. biais = EMA lente β=0.02 de (Envoy − ema), TC ≈ 4 min : la valeur
+  #      affichée (ema + biais) converge vers le vrai chiffre compteur en
+  #      régime établi, la pince ne sert qu'à faire bouger l'aiguille vite ;
+  #   4. garde-fou STGE (idée Chris) : si le signe affiché contredit le bit 9
+  #      → 0 (« différentiel auto-bloquant » : plutôt zéro qu'un faux
+  #      import/export pendant une bascule). STGE illisible → pas de garde.
+  #   5. BANDE MORTE ±250 W quand la batterie régule (status master Storey
+  #      sensor.status_10_00_3b_3c_d4_04_2 ∈ CHARGING/DISCHARGING) :
+  #      l'auto-calibration Storey génère de VRAIS micro-échanges en cherchant
+  #      le zéro (mesuré nuit 18→19/07 en décharge : résidu médian +94 W,
+  #      P95 = 251 W, flip-flop import/export) → on affiche 0.
+  #      Batterie OFF/indispo → bande morte OFF, les petites valeurs comptent.
+  #   6. DÉTECTEUR D'OSCILLATION (fin de journée) : mesuré hier 17h30→19h
+  #      locale, la calibration fait osciller le réseau à ±1500-2700 W RÉELS
+  #      avec 13-16 changements de signe par 30 min… autour d'une moyenne ≈ 0
+  #      (médianes −51/+64/−4 W). Détection : `slow` = EMA ~5 min de la
+  #      médiane, `mad` = EMA ~100 s de |médiane − slow| (amplitude autour de
+  #      la moyenne). Si mad > 400 W ET |slow + bias| < 300 W → oscillation
+  #      autour de zéro → on affiche 0. Un vrai appel soutenu (four 2 kW)
+  #      fait monter |slow| au-delà de 300 W en ~2 min → il s'affiche.
+  # Convention partout : positif = import, négatif = export. kW Envoy → W.
+  # entity_id conservé (unique_id inchangé) : card + historique intacts.
+  # NB : les templates d'attributs voient l'état PRÉCÉDENT (this) → l'état
+  # affiché retarde d'un tick (5 s) sur les internes, sans importance.
+  - trigger:
+      - platform: time_pattern
+        seconds: "/5"
+    sensor:
+      - name: "Grid Power lissé"
+        unique_id: grid_power_lisse
+        device_class: power
+        unit_of_measurement: "W"
+        state_class: measurement
+        icon: mdi:transmission-tower
+        state: >
+          {% set attrs = this.attributes if this else {} %}
+          {% set ema = attrs.get('ema') | float(none) %}
+          {% set bias = attrs.get('bias') | float(0) %}
+          {% if ema is none %}
+            0
+          {% else %}
+            {% set w = (ema + bias) | round(0) %}
+            {% set stge = states('sensor.buanderie_lixee_statuts') | int(-1, 16) %}
+            {% if stge >= 0 %}
+              {% set injection = stge | bitwise_and(512) > 0 %}
+              {% set w = 0 if ((injection and w > 0) or (not injection and w < 0)) else w %}
+            {% endif %}
+            {% set slow = attrs.get('slow') | float(none) %}
+            {% set mad = attrs.get('mad') | float(0) %}
+            {% set batt_active = states('sensor.status_10_00_3b_3c_d4_04_2') in ['CHARGING', 'DISCHARGING'] %}
+            {% if slow is not none and mad > 400 and (slow + bias) | abs < 300 %}
+              0
+            {% elif batt_active and w | abs < 250 %}
+              0
+            {% else %}
+              {{ w }}
+            {% endif %}
+          {% endif %}
+        attributes:
+          raw1: >
+            {% set src = states('sensor.energy_grid_import_linky_export_linky_pos_net_power') | float(none) %}
+            {% set attrs = this.attributes if this else {} %}
+            {{ src if src is not none else attrs.get('raw1') | float(0) }}
+          raw2: >
+            {% set attrs = this.attributes if this else {} %}
+            {% set r1 = attrs.get('raw1') | float(none) %}
+            {{ r1 if r1 is not none else states('sensor.energy_grid_import_linky_export_linky_pos_net_power') | float(0) }}
+          ema: >
+            {% set src = states('sensor.energy_grid_import_linky_export_linky_pos_net_power') | float(none) %}
+            {% set attrs = this.attributes if this else {} %}
+            {% set prev = attrs.get('ema') | float(none) %}
+            {% set a = 0.3 %}
+            {% if src is none %}
+              {{ prev if prev is not none else 0 }}
+            {% else %}
+              {% set r1 = attrs.get('raw1') | float(none) %}
+              {% set r2 = attrs.get('raw2') | float(none) %}
+              {% set med = [src, r1 if r1 is not none else src, r2 if r2 is not none else src] | median %}
+              {{ (a * med + (1 - a) * prev) | round(1) if prev is not none else med | round(1) }}
+            {% endif %}
+          bias: >
+            {% set ref = states('sensor.envoy_122233025824_current_net_power_consumption') | float(none) %}
+            {% set attrs = this.attributes if this else {} %}
+            {% set ema = attrs.get('ema') | float(none) %}
+            {% set prev = attrs.get('bias') | float(0) %}
+            {% set b = 0.02 %}
+            {% if ref is none or ema is none %}
+              {{ prev | round(1) }}
+            {% else %}
+              {{ (b * (ref * 1000 - ema) + (1 - b) * prev) | round(1) }}
+            {% endif %}
+          slow: >
+            {% set src = states('sensor.energy_grid_import_linky_export_linky_pos_net_power') | float(none) %}
+            {% set attrs = this.attributes if this else {} %}
+            {% set prev = attrs.get('slow') | float(none) %}
+            {% if src is none %}
+              {{ prev if prev is not none else 0 }}
+            {% else %}
+              {% set r1 = attrs.get('raw1') | float(none) %}
+              {% set r2 = attrs.get('raw2') | float(none) %}
+              {% set med = [src, r1 if r1 is not none else src, r2 if r2 is not none else src] | median %}
+              {{ (0.017 * med + 0.983 * prev) | round(1) if prev is not none else med | round(1) }}
+            {% endif %}
+          mad: >
+            {% set src = states('sensor.energy_grid_import_linky_export_linky_pos_net_power') | float(none) %}
+            {% set attrs = this.attributes if this else {} %}
+            {% set slow = attrs.get('slow') | float(none) %}
+            {% set prev = attrs.get('mad') | float(0) %}
+            {% if src is none or slow is none %}
+              {{ prev | round(1) }}
+            {% else %}
+              {% set r1 = attrs.get('raw1') | float(none) %}
+              {% set r2 = attrs.get('raw2') | float(none) %}
+              {% set med = [src, r1 if r1 is not none else src, r2 if r2 is not none else src] | median %}
+              {{ (0.05 * ((med - slow) | abs) + 0.95 * prev) | round(1) }}
+            {% endif %}

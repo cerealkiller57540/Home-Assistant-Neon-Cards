@@ -1,0 +1,133 @@
+blueprint:
+  name: Filter positive or negative value changes in a sensor entity.
+  author: Arie Catsman (@catsmanac)
+  description: >
+
+    This blueprint will add either the positive or negative value changes in a source entity to a destination entity.
+    The destination entity will always increase.
+    
+    Use to split balancing entities like into import/export, charge/discharge, load/unload entities which always 
+    count up. Implement one for positive changes and one for negative changes as needed.
+
+    This blueprint requires the home assistant Uptime integration to be installed with a template sensor for
+    it configured. This uptime sensor is used to detect Home Assistant restarts and avoid long delays
+    before detecting value changes in the source entity after HA restart.
+    
+    This blueprint can handle HA outages or entity unavailable/unknown status by remembering the last good value
+    priot to these states. It will however not recognize if both positive and negative changes occur during those
+    situations, only the single net change over the outage can be be determined.
+
+  domain: template
+  input:
+    source_entity:
+      name: source entity
+      description: Source sensor entity to monitor for value changes
+      selector:
+        entity:
+          domain: sensor
+    changes:
+      name: type of change
+      description: Select if positive or negative value changes should be added to the destination sensor,
+      default: positive
+      selector:
+        select:
+          options:
+            - positive
+            - negative
+    uom:
+      name: Unit of Measurement
+      description: Unit of Measurement to use for the destination entity.
+    uptime:
+      name: Home Assistant uptime
+      description: Specify an Uptime integration sensor to use for HA startup detection
+      selector:
+        entity:
+          domain: sensor
+          device_class: duration
+    uptime_delay:
+      name: uptime delay
+      description: delay time in seconds for the uptime trigger after HA startup, default 10 seconds
+      default: 10
+    correction_value:
+      name: correction value
+      description: >
+        
+        One-time correction of the destination entity value, default 0. Can be used to set an initial value or 
+        apply a correction later. Only applied when this setting is changed from a previous specified correction value.
+        When changing this setting in your template, reload the template entities.
+
+      default: 0.0
+    decimals:
+      name: decimal places
+      description: number of decimal places to round destination value to, default 6
+      default: 6
+ 
+triggers:
+  - trigger: state
+    id: source_changed
+    entity_id: !input source_entity
+
+  - trigger: numeric_state
+    id: uptime_check
+    entity_id: !input uptime
+    above: !input uptime_delay
+
+condition:
+  - condition: template
+    # only trigger with 'normal' new value, not with 'unknown' or 'unavailable' or '0'
+    # 'unknown' or 'unavailable' or '0' for old is not an issue as we use stored previous new value from attributes
+    value_template: >
+
+      {{ ((trigger.to_state.state | float(0) != 0) and (trigger.id == 'source_changed')) or (( states(source_state)| float(0) != 0) and (trigger.id != 'source_changed')) }}
+
+variables:
+  source_state: !input source_entity
+  changes: !input changes
+  uptime: !input uptime
+  correction: !input correction_value
+  decimals: !input decimals
+  source_to_state: >
+    {{ states(source_state) }}
+  device_class: >
+    {{ state_attr(source_state, 'device_class') }}
+
+sensor:
+  #
+  # specified value changes (positive or negative) in source entity are added to the destination entity
+  # destination entity will always increase with absolute delta value. If new correction value specified
+  # (compared to stored one) add the correction value one time.
+  #
+  # Save new source value in destination attributes and use as old value in next run to
+  # - handle HA outages that don't trigger us when first value comes in 
+  # - device communication outages that cause source entity to have value 'unknown' or 'unavailable'.
+  # Save new correction_value in attributes to detect a changed value for it
+  #
+  state: >
+
+    {% set saved_previous_state = state_attr(this.entity_id, 'previous_state')| float(0) %}
+    {% set source_previous_state = (((trigger.from_state.state | float(0)))) if trigger.id == 'source_changed' else saved_previous_state %}
+    {# use saved previous value, fallback to from state if no previous one yet, fallback to source current value if neither #}
+    {% set state_change = source_to_state - (saved_previous_state or source_previous_state or source_to_state) %}
+    {% set delta = ([state_change, 0] | max) if changes == 'positive' else ([state_change, 0] | min | abs) %}
+    {# use diff between original start value and current start value as correction value #}
+    {% set correction_value =  (correction | float(0)) if ((correction | float(0)) != (state_attr(this.entity_id, 'last_correction')| float(0))) else 0 %}
+    {{ ((states(this.entity_id) | float(0)) + delta + correction_value) | round(decimals) }}
+
+  state_class: total_increasing
+  unit_of_measurement: !input uom
+  
+  attributes:
+
+    # save the to state value of the source entity in an attribute to be used next time as from state
+    previous_state: >
+
+      {{ source_to_state }}
+
+    device_class: >
+
+      {{ device_class }}
+
+    # remember last correction value to be able to detect a new one
+    last_correction: >
+
+      {{ correction }}

@@ -1,0 +1,23 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  WOL RackStation — Bouton « réveiller le NAS Synology .15 » depuis Home Assistant
+#
+#  Mécanisme : HA envoie un magic packet Wake-on-LAN à la MAC du NAS (eth0/bond0).
+#  Le WOL est activé côté NAS (ethtool : Wake-on: g). L'état on/off est déduit
+#  d'un ping sur 192.168.1.15.
+#
+#  - switch.wol_rackstation : ON = envoie le magic packet (réveille le NAS)
+#                             état allumé/éteint déduit d'un ping sur le host
+#
+#  MAC eth0/bond0 = 00:11:32:1B:12:1F (RS812+, bond0 LACP — eth1 = ...20 en secours).
+#  Extinction propre NON gérée ici (réveil + état seulement) ; si besoin un jour :
+#  ajouter `turn_off:` avec un shell_command ssh `synopoweroff`.
+#  NB : la plateforme legacy `binary_sensor: ping` est retirée de cette version de HA
+#  (passée en intégration UI) — inutile ici, le switch wake_on_lan a déjà son ping d'état.
+# ═══════════════════════════════════════════════════════════════════════════
+
+switch:
+  - platform: wake_on_lan
+    name: "WOL RackStation"
+    mac: "00:11:32:1B:12:1F"
+    host: 192.168.1.15
+    broadcast_address: 192.168.1.255

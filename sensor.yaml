@@ -1,0 +1,80 @@
+# ── Forecast.Solar multi-orientation (Est -55° / Sud 45° / Ouest 80°) ───────
+# Azimuts en convention Forecast.Solar (-180..180, 0=Sud)
+# Lat 48.582214, Lon 6.248329, inclinaison 27°
+# Résultats sommés dans templates.yaml → sensor.solar_forecast_today/tomorrow
+
+- platform: rest
+  name: "Solar Forecast Est"
+  unique_id: solar_forecast_est
+  # kWp = 0,75 physique ×1,5 (SOLAR_CORR) = 1.125. Le coeff est mis DANS l'URL pour que
+  # l'attribut watt_hours_day (lu par templates.yaml today_multi/tomorrow_multi) soit AUSSI
+  # corrigé — le value_template seul ne suffit pas (templates lit l'attribut, pas le .state).
+  # SOLAR_CORR = recalage du biais API forecast.solar gratuite (trop pessimiste). Mesuré été
+  # 2026 : réel/forecast ≈ 1,77 ; MODE HIVER PRUDENT = 1,5 (sous-corrige exprès). À ré-affiner
+  # avec des données d'hiver. Vraie install = 4,5 kWp / 12 panneaux. Voir project_solar_forecast_recal.
+  resource: "https://api.forecast.solar/estimate/48.582214/6.248329/27/-55/1.125"
+  scan_interval: 3600
+  value_template: >
+    {{ (value_json.result.watt_hours_day.values() | list | first | default(0) | float / 1000) | round(3) }}
+  json_attributes_path: "$.result"
+  json_attributes:
+    - watt_hours_day
+  unit_of_measurement: kWh
+  device_class: energy
+
+- platform: rest
+  name: "Solar Forecast Sud"
+  unique_id: solar_forecast_sud
+  # kWp 3,0 physique ×1,5 (SOLAR_CORR mode hiver) = 4.5 — cf. capteur Est ci-dessus.
+  resource: "https://api.forecast.solar/estimate/48.582214/6.248329/27/45/4.5"
+  scan_interval: 3600
+  value_template: >
+    {{ (value_json.result.watt_hours_day.values() | list | first | default(0) | float / 1000) | round(3) }}
+  json_attributes_path: "$.result"
+  json_attributes:
+    - watt_hours_day
+  unit_of_measurement: kWh
+  device_class: energy
+
+- platform: rest
+  name: "Solar Forecast Ouest"
+  unique_id: solar_forecast_ouest
+  # kWp 0,75 physique ×1,5 (SOLAR_CORR mode hiver) = 1.125 — cf. capteur Est ci-dessus.
+  resource: "https://api.forecast.solar/estimate/48.582214/6.248329/27/80/1.125"
+  scan_interval: 3600
+  value_template: >
+    {{ (value_json.result.watt_hours_day.values() | list | first | default(0) | float / 1000) | round(3) }}
+  json_attributes_path: "$.result"
+  json_attributes:
+    - watt_hours_day
+  unit_of_measurement: kWh
+  device_class: energy
+
+# Integration sensor: converts export power (W) to energy (kWh).
+# Source sensor.export_linky_pos is defined in templates.yaml.
+- platform: integration
+  source: sensor.export_linky_pos
+  name: Energie Exportée (Cumulé)
+  unique_id: export_linky_energy_v2
+  unit_prefix: k
+  unit_time: h
+  method: left
+
+# Statistiques salon pour calcul de tendance (dérive thermique)
+- platform: statistics
+  name: Salon Temp Mean 1h
+  unique_id: salon_temp_mean_1h
+  entity_id: sensor.thermometre_salon_temperature
+  state_characteristic: mean
+  max_age:
+    hours: 1
+  sampling_size: 30
+
+- platform: statistics
+  name: Salon Temp Mean 3h
+  unique_id: salon_temp_mean_3h
+  entity_id: sensor.thermometre_salon_temperature
+  state_characteristic: mean
+  max_age:
+    hours: 3
+  sampling_size: 60

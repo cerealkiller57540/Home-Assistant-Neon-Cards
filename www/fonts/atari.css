@@ -1,0 +1,57 @@
+/* --- Style "Standard" --- */
+@font-face {
+  font-family: 'Atari';
+  src: url('/local/fonts/SF Atarian System.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Atari';
+  src: url('/local/fonts/SF Atarian System Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Atari';
+  src: url('/local/fonts/SF Atarian System Italic.ttf') format('truetype');
+  font-weight: normal;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: 'Atari';
+  src: url('/local/fonts/SF Atarian System Bold Italic.ttf') format('truetype');
+  font-weight: bold;
+  font-style: italic;
+}
+
+/* --- Style "Extended" (Le look pur Atari Logo) --- */
+@font-face {
+  font-family: 'AtariExtended';
+  src: url('/local/fonts/SF Atarian System Extended.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'AtariExtended';
+  src: url('/local/fonts/SF Atarian System Extended Bold.ttf') format('truetype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'AtariExtended';
+  src: url('/local/fonts/SF Atarian System Extended Italic.ttf') format('truetype');
+  font-weight: normal;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: 'AtariExtended';
+  src: url('/local/fonts/SF Atarian System Extended Bold Italic.ttf') format('truetype');
+  font-weight: bold;
+  font-style: italic;
+}

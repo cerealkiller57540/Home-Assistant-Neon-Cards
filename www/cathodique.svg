@@ -1,0 +1,114 @@
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     id="svg-crt-cb2077" viewBox="0 0 128 128" version="1.1">
+  <defs>
+    <filter id="crt-phosphore" x="-4%" y="-4%" width="108%" height="108%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9 0.018" numOctaves="2" seed="5" result="noise"/>
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="0.5" xChannelSelector="R" yChannelSelector="G" result="warped"/>
+      <feGaussianBlur in="warped" stdDeviation="0.22" result="blurred"/>
+      <feBlend in="warped" in2="blurred" mode="screen" result="bloomed"/>
+      <feComponentTransfer in="bloomed">
+        <feFuncR type="linear" slope="0.04" intercept="0"/>
+        <feFuncG type="linear" slope="1.2"  intercept="0.03"/>
+        <feFuncB type="linear" slope="0.35" intercept="0.02"/>
+      </feComponentTransfer>
+    </filter>
+    <filter id="glow-green" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0  0 1 0 0 0.8  0 0 0 0 0.2  0 0 0 3 0" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-uv" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0.6 0 0 0 0.38  0 0 0 0 0  0 1 0 0 0.92  0 0 0 2.5 0" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-cy" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.8" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0  0 0.8 0 0 1  0 0 1 0 0.98  0 0 0 2 0" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="scanlines" x="0" y="0" width="1" height="2.5" patternUnits="userSpaceOnUse">
+      <rect x="0" y="0" width="1" height="1.8" fill="transparent"/>
+      <rect x="0" y="1.8" width="1" height="0.7" fill="rgba(0,0,0,0.32)"/>
+    </pattern>
+    <radialGradient id="vignette" cx="50%" cy="50%" r="65%">
+      <stop offset="45%" stop-color="transparent"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0.7)"/>
+    </radialGradient>
+    <linearGradient id="chassis-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#141420"/>
+      <stop offset="50%"  stop-color="#0b0b14"/>
+      <stop offset="100%" stop-color="#050508"/>
+    </linearGradient>
+    <radialGradient id="screen-bg" cx="45%" cy="40%" r="70%">
+      <stop offset="0%"   stop-color="#001a0d"/>
+      <stop offset="100%" stop-color="#000805"/>
+    </radialGradient>
+    <clipPath id="screen-clip">
+      <rect rx="8" ry="7" height="71" width="97" y="18" x="15.5"/>
+    </clipPath>
+    <style>
+      .scanline-roll{animation:roll 7s linear infinite}
+      .flicker{animation:flick 0.13s infinite alternate}
+      .cursor{animation:blink 1.05s step-end infinite}
+      /* .glitch{animation:glitch 9s infinite} */
+      @keyframes roll{from{transform:translateY(-80px)}to{transform:translateY(80px)}}
+      @keyframes flick{0%{opacity:0.96}100%{opacity:1.0}}
+      @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+      /* @keyframes glitch{0%,88%,100%{transform:translateX(0);opacity:1}89%{transform:translateX(-1.5px);opacity:0.85}91%{transform:translateX(2px);opacity:0.9}93%{transform:translateX(-1px);opacity:1}} */
+    </style>
+  </defs>
+
+  <!-- CHASSIS -->
+  <rect rx="10.87" ry="10.153" height="111.68" width="119.57" y="8" x="4.3"
+        fill="url(#chassis-bg)" stroke="rgba(98,0,234,0.6)" stroke-width="1.2"/>
+
+  <!-- ECRAN -->
+  <g clip-path="url(#screen-clip)">
+    <rect rx="8" ry="7" height="71" width="97" y="18" x="15.5" fill="url(#screen-bg)"/>
+    <g filter="url(#crt-phosphore)" class="glitch">
+      <text x="20" y="30" font-family="Courier New,monospace" font-size="4.5" fill="rgba(0,255,160,0.95)" letter-spacing="0.8">HEAT AGENT v2.0</text>
+      <line x1="18" y1="32.5" x2="109" y2="32.5" stroke="rgba(0,255,180,0.2)" stroke-width="0.3"/>
+      <text x="20" y="36" font-family="Courier New,monospace" font-size="3.8" fill="rgba(0,200,120,0.8)">PHASE  <tspan fill="rgba(0,255,180,1)" font-size="4.2">HC_PM</tspan></text>
+      <text x="20" y="43" font-family="Courier New,monospace" font-size="3.8" fill="rgba(0,200,120,0.8)">BIAS   <tspan fill="rgba(0,255,160,1)" font-size="4.2">+1.85 C</tspan><tspan fill="rgba(0,180,100,0.6)" font-size="3.2"> [plan]</tspan></text>
+      <text x="20" y="50" font-family="Courier New,monospace" font-size="3.8" fill="rgba(0,200,120,0.8)">EXT    <tspan fill="rgba(0,255,180,0.9)">14.5 C</tspan><tspan fill="rgba(0,180,100,0.55)" font-size="3.2"> x0.7</tspan></text>
+      <text x="20" y="57" font-family="Courier New,monospace" font-size="3.8" fill="rgba(0,200,120,0.8)">SALON  <tspan fill="rgba(0,255,180,0.9)">20.6 C</tspan></text>
+      <text x="20" y="64" font-family="Courier New,monospace" font-size="3.8" fill="rgba(0,200,120,0.8)">TARIF  <tspan fill="rgba(0,255,160,1)">HEURES CREUSES</tspan></text>
+      <text x="20" y="71" font-family="Courier New,monospace" font-size="3.8" fill="rgba(0,200,120,0.8)">SOLAR  <tspan fill="rgba(0,200,120,0.7)">564W</tspan><tspan fill="rgba(0,160,100,0.55)" font-size="3.2"> none</tspan></text>
+      <line x1="18" y1="74" x2="109" y2="74" stroke="rgba(0,255,180,0.15)" stroke-width="0.3"/>
+      <text x="20" y="79" font-family="Courier New,monospace" font-size="3.5" fill="rgba(0,160,100,0.7)">&gt; Confort OK. Plan applique.</text>
+      <rect x="20" y="81" width="3.5" height="5" fill="rgba(0,255,160,0.9)" class="cursor"/>
+    </g>
+    <rect rx="8" ry="7" height="71" width="97" y="18" x="15.5" fill="url(#scanlines)"/>
+    <rect x="15.5" y="-10" width="97" height="8" fill="rgba(0,255,160,0.04)" class="scanline-roll"/>
+    <rect x="15.5" y="-10" width="97" height="1.5" fill="rgba(0,255,160,0.07)" class="scanline-roll"/>
+    <rect rx="8" ry="7" height="71" width="97" y="18" x="15.5" fill="url(#vignette)"/>
+    <rect rx="8" ry="7" height="71" width="97" y="18" x="15.5" fill="rgba(0,255,140,0.01)" class="flicker"/>
+  </g>
+
+  <!-- Bordures ecran -->
+  <rect rx="8.5" ry="7.5" height="73" width="99" y="17" x="14.5"
+        fill="none" stroke="rgba(98,0,234,0.55)" stroke-width="0.8" filter="url(#glow-uv)"/>
+  <rect rx="7.5" ry="6.5" height="69" width="95" y="19" x="16.5"
+        fill="none" stroke="rgba(0,255,249,0.25)" stroke-width="0.5"/>
+
+
+
+
+
+  <!-- Logo Arasaka — centré sous la télé, teinte UV avec glow -->
+  <g transform="translate(64,104) scale(0.048) translate(-240,-220)" filter="url(#glow-cy)">
+    <animate attributeName="opacity" values="0.6;1;0.75;0.95;0.6" dur="2.5s" repeatCount="indefinite"/>
+    <path d="m 0,0 c -11.054,0 -22.288,-9.687 -22.288,-21.636 0,-11.949 9.979,-21.635 22.288,-21.635 h 10.143 v 7.033 L 6.332,-32.54 H 0 c 0,0 -11.232,1.232 -11.232,10.904 0,9.673 11.232,10.904 11.232,10.904 h 4.738 l 7.188,-6.978 v -25.561 h 11.055 v 30.006 L 9.317,0 Z" transform="matrix(1.3333333,0,0,-1.3333333,60.997333,306.5312)" fill="#B9F2FF"/>
+    <path d="m 0,0 c -11.054,0 -22.288,-9.687 -22.288,-21.636 0,-11.949 9.979,-21.635 22.288,-21.635 h 10.143 v 7.033 L 6.332,-32.54 H 0 c 0,0 -11.232,1.232 -11.232,10.904 0,9.673 11.232,10.904 11.232,10.904 h 4.738 l 7.188,-6.978 v -25.561 h 11.055 v 30.006 L 9.317,0 Z" transform="matrix(1.3333333,0,0,-1.3333333,187.558,306.5312)" fill="#B9F2FF"/>
+    <path d="m 0,0 h -9.317 c -11.054,0 -22.288,-9.687 -22.288,-21.636 0,-11.949 9.979,-21.635 22.288,-21.635 H 0.825 v 7.033 l -3.81,3.698 h -6.332 c 0,0 -11.233,1.232 -11.233,10.904 0,9.673 11.233,10.904 11.233,10.904 h 4.737 l 7.189,-6.978 v -25.561 h 11.055 v 30.006 z" transform="matrix(1.3333333,0,0,-1.3333333,430.50067,306.5312)" fill="#B9F2FF"/>
+    <path d="m 0,0 c -11.054,0 -22.288,-9.687 -22.288,-21.636 0,-11.949 9.979,-21.635 22.288,-21.635 h 10.143 v 7.033 L 6.332,-32.54 H 0 c 0,0 -11.232,1.232 -11.232,10.904 0,9.673 11.232,10.904 11.232,10.904 h 4.738 l 7.188,-6.978 v -25.561 h 11.055 v 30.006 L 9.317,0 Z" transform="matrix(1.3333333,0,0,-1.3333333,312.2292,306.5312)" fill="#B9F2FF"/>
+    <path d="m 0,0 h 21.333 c 3.803,0 3.536,-3.148 3.536,-3.148 v -4.309 h 11.055 v 7.578 c 0,0 0.622,10.934 -9.243,10.934 h -37.736 v -24.841 h 0.007 l 4.434,-2.971 h -4.441 v -7.488 H 0 v 3.055 L 16.638,-32.215 36.498,-32.217 0,-7.882 Z" transform="matrix(1.3333333,0,0,-1.3333333,109.17707,321.27147)" fill="#B9F2FF"/>
+    <path d="M 0,0 -19.861,-0.001 -36.498,-11.027 V 0 h -11.055 v -24.841 h 0.007 l 4.434,-2.971 h -4.441 V -35.3 h 11.055 v 3.055 L -19.861,-43.271 0,-43.272 -32.45,-21.636 Z" transform="matrix(1.3333333,0,0,-1.3333333,407.61453,306.53053)" fill="#B9F2FF"/>
+    <path d="m 0,0 -19.861,0.002 30.745,-20.5 H -4.695 c -3.803,0 -3.536,3.149 -3.536,3.149 v 4.308 h -11.055 v -7.577 c 0,0 -0.623,-10.935 9.243,-10.935 h 37.736 l -0.007,13.124 z" transform="matrix(1.3333333,0,0,-1.3333333,246.8568,322.15627)" fill="#B9F2FF"/>
+    <path d="M 0,0 -9.864,7.779 H -23.177 V -3.85 L 0,-3.85 Z" transform="matrix(1.3333333,0,0,-1.3333333,277.79227,316.92907)" fill="#B9F2FF"/>
+    <path d="m 0,0 c -31.518,0 -57.068,25.55 -57.068,57.068 0,31.518 25.55,57.068 57.068,57.068 31.518,0 57.068,-25.55 57.068,-57.068 C 57.068,25.55 31.518,0 0,0 m 0,123.328 c -36.594,0 -66.26,-29.665 -66.26,-66.26 0,-36.594 29.666,-66.26 66.26,-66.26 36.594,0 66.26,29.666 66.26,66.26 0,36.595 -29.666,66.26 -66.26,66.26" transform="matrix(1.3333333,0,0,-1.3333333,240,280.2096)" fill="#B9F2FF"/>
+    <path d="m 0,0 c -11.492,0 -20.808,-9.316 -20.808,-20.808 0,-3.888 1.07,-7.526 2.926,-10.64 l -10.953,-10.953 v 30.08 c 9.016,2.282 15.687,10.447 15.687,20.171 0,11.492 -9.316,20.808 -20.808,20.808 -11.491,0 -20.807,-9.316 -20.807,-20.808 0,-9.724 6.671,-17.889 15.687,-20.171 v -30.123 l -10.969,10.969 c 1.866,3.12 2.942,6.767 2.942,10.667 0,11.492 -9.316,20.808 -20.808,20.808 -11.492,0 -20.808,-9.316 -20.808,-20.808 0,-11.492 9.316,-20.808 20.808,-20.808 3.877,0 7.505,1.064 10.612,2.911 l 18.223,-18.223 v -24.053 c 1.687,-0.15 3.394,-0.231 5.12,-0.231 1.727,0 3.434,0.081 5.121,0.231 v 24.097 l 18.195,18.195 c 3.114,-1.857 6.751,-2.927 10.64,-2.927 11.492,0 20.808,9.316 20.808,20.808 C 20.808,-9.316 11.492,0 0,0" transform="matrix(1.3333333,0,0,-1.3333333,285.27413,169.2656)" fill="#B9F2FF"/>
+  </g>
+</svg>

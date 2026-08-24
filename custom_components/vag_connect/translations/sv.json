@@ -1,0 +1,2113 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Konfigurera VW Group Connect",
+        "description": "Hur vill du logga in?\n\n**Webbläsarinloggning (rekommenderas)** — öppna en URL på din telefon eller dator, logga in på ditt Brand ID-konto och godkänn enheten. Inget lösenord lagras någonsin i Home Assistant. Tillgängligt för Audi, SEAT och CUPRA.\n\n**E-post + lösenord (äldre metod)** — ange dina Brand ID-uppgifter direkt. Krävs för Volkswagen EU, Škoda och Porsche.",
+        "menu_options": {
+          "browser_login": "Webbläsarinloggning (rekommenderas)",
+          "email_password": "E-post + lösenord (äldre metod)",
+          "website_authproxy": "Volkswagen.de-webbplats (beta — skrivskyddad)",
+          "mbb_login": "Volkswagen EU — Varaktig inloggning (MBB, tvåvägs-alfa)"
+        }
+      },
+      "mbb_login": {
+        "title": "Volkswagen EU — Varaktig inloggning (MBB, ALFA)",
+        "description": "**Experimentell, frivillig — endast Volkswagen EU.** En bekräftelse i webbläsaren (inget lösenord lagras i Home Assistant) skapar en varaktig, förnybar token via det äldre MBB-backendet. Till skillnad från den skrivskyddade portalen överlever den omstarter och stöder tvåvägs fjärrlåsning/upplåsning. **Ange ditt VIN** (MBB-token kan inte lista ditt garage själv) och lägg till din S-PIN för att aktivera låsning/upplåsning. På nästa skärm visas en kort kod och en URL att öppna på valfri enhet.",
+        "data": {
+          "mbb_vins": "VIN (fordonsidentifieringsnummer)",
+          "spin": "S-PIN",
+          "scan_interval": "Uppdateringsintervall"
+        },
+        "data_description": {
+          "mbb_vins": "Ditt 17-teckens VIN (på vindrutan / registreringsbeviset). Flera bilar: separera med komma. Krävs — den varaktiga MBB-token fungerar per VIN men kan inte räkna upp ditt garage.",
+          "spin": "Valfri 4-siffrig säkerhets-PIN — krävs för fjärrlåsning/upplåsning.",
+          "scan_interval": "Minuter mellan hämtningar av fordonsdata."
+        }
+      },
+      "website_authproxy": {
+        "title": "Volkswagen.de-webbplats (BETA, skrivskyddad)",
+        "description": "**Experimental, opt-in.** Reads your Volkswagen via the volkswagen.de website login instead of the app backend. Volkswagen only, read-only (no remote commands). Sign in with your Volkswagen ID email and password. If your account uses email verification you will be asked for the code next. **Krav:** ditt Volkswagen ID måste vara fordonets huvudanvändare — bekräfta din identitet en gång på volkswagen.de (myVolkswagen → ditt fordon). Utan detta returnerar webbplatsen inga fordonsdata.",
+        "data": {
+          "username": "E-postadress",
+          "password": "Lösenord",
+          "scan_interval": "Uppdateringsintervall"
+        },
+        "data_description": {
+          "username": "E-postadressen för ditt Volkswagen ID-/myVolkswagen-konto.",
+          "password": "Ditt Volkswagen ID-lösenord.",
+          "scan_interval": "Hur ofta data hämtas (minuter). Minst: 5."
+        }
+      },
+      "website_authproxy_otp": {
+        "title": "Verifieringskod via e-post",
+        "description": "En verifieringskod skickades till e-postadressen för **{username}**.\n\nAnge koden för att slutföra inloggningen till kanalen för Volkswagen.de-webbplatsen (beta).",
+        "data": {
+          "mfa_code": "Verifieringskod"
+        },
+        "data_description": {
+          "mfa_code": "Kod från din inkorg — giltig i några minuter."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Logga in igen — {brand}",
+        "description": "Sessionen för **{username}** har löpt ut.\n\nAnge lösenordet igen.",
+        "data": {
+          "password": "Lösenord",
+          "spin": "S-PIN"
+        }
+      },
+      "reconfigure": {
+        "title": "Omkonfigurera VW Group Connect",
+        "description": "Ändra inloggningsuppgifter eller inställningar utan att ta bort integrationen.",
+        "data": {
+          "brand": "Fordonsvarumärke",
+          "username": "E-postadress",
+          "password": "Lösenord",
+          "spin": "S-PIN",
+          "country": "Region (endast Volkswagen USA/Kanada)",
+          "scan_interval": "Uppdateringsintervall"
+        }
+      },
+      "mfa": {
+        "title": "Tvåstegsverifiering",
+        "description": "En bekräftelsekod har skickats till **{username}**.\n\nAnge koden från din e-post eller autentiseringsapp.",
+        "data": {
+          "mfa_code": "Bekräftelsekod"
+        },
+        "data_description": {
+          "mfa_code": "6-siffrig kod — giltig i några minuter."
+        }
+      },
+      "email_password": {
+        "title": "Logga in med e-post + lösenord (äldre metod)",
+        "description": "Anslut ditt fordon till Home Assistant.\n\nVälj ditt märke och ange inloggningsuppgifterna från tillverkarens app.",
+        "data": {
+          "brand": "Fordonsmärke",
+          "username": "E-postadress",
+          "password": "Lösenord",
+          "spin": "S-PIN",
+          "country": "Region (endast Volkswagen USA/Kanada)",
+          "scan_interval": "Uppdateringsintervall",
+          "enable_mbb_commands": "Aktivera varaktiga tvåvägskommandon (MBB) — Car-Net Volkswagen / äldre Audi"
+        },
+        "data_description": {
+          "enable_mbb_commands": "Det varaktiga sättet att skicka fjärrkommandon (lås/lås upp, klimat) till en Volkswagen — via den äldre Car-Net/MBB-backenden, så att det överlever omstarter. För Car-Net-bilar (de flesta PHEV/förbränning, före ID); nyare ID/MEB-modeller stöds inte, så lämna det avstängt där. Avläsningar kommer fortfarande från portalen ovan; detta lägger bara till kommandokanalen och en engångsbekräftelse i webbläsaren (inget extra lösenord lagras).",
+          "brand": "Välj ditt märke — myAudi, WeConnect ID, MyŠkoda, SEAT, CUPRA, VW US/CA eller Porsche.",
+          "username": "E-postadress från tillverkarens app.",
+          "password": "Lösenord från appen.",
+          "spin": "Behövs bara för låsning. App → Säkerhet → S-PIN.",
+          "scan_interval": "Hur ofta data hämtas. Standard: 5 min. Minst: 3 min."
+        }
+      },
+      "browser_login": {
+        "title": "Webbläsarinloggning — välj ditt märke",
+        "description": "Välj märket på fordonet du vill ansluta. På nästa skärm ser du en kort kod och en URL att besöka på valfri enhet med webbläsare.",
+        "data": {
+          "brand": "Fordonsmärke",
+          "spin": "S-PIN",
+          "scan_interval": "Uppdateringsintervall"
+        },
+        "data_description": {
+          "brand": "Endast märken med stöd för webbläsarinloggning visas. Använd 'E-post + lösenord' för Volkswagen EU och Porsche.",
+          "scan_interval": "Minuter mellan fordonets datahämtningar.",
+          "spin": "Valfri 4-siffrig säkerhets-PIN för fjärråtgärder (lås, lås upp, klimat)."
+        }
+      },
+      "browser_login_pending": {
+        "title": "Begär inloggningskod…",
+        "description": "Ber IDP om en engångskod för enheten."
+      },
+      "browser_login_approve": {
+        "title": "Godkänn i din webbläsare",
+        "description": "Skanna QR-koden med din telefon, eller öppna URL:en på valfri enhet. Logga in på ditt Brand ID-konto om du blir ombedd, bekräfta koden, kryssa sedan i rutan nedan och klicka på Skicka.",
+        "data": {
+          "qr_code": "Skanna med telefonkameran för att öppna inloggningssidan",
+          "verification_url": "Eller öppna denna URL i valfri webbläsare",
+          "user_code": "Kod att bekräfta i webbläsaren",
+          "approved_in_browser": "Jag har godkänt i webbläsaren"
+        },
+        "data_description": {
+          "qr_code": "Rikta telefonkameran mot QR-koden. Inloggningssidan öppnas i telefonens webbläsare, förifylld med koden nedan.",
+          "verification_url": "Om du inte kan skanna: kopiera länken, öppna den på valfri enhet och logga in på ditt Brand ID-konto.",
+          "user_code": "Efter inloggningen bekräftar du denna kod i webbläsaren för att godkänna Home Assistant.",
+          "approved_in_browser": "Låt rutan vara ikryssad. Klicka på Skicka först när du har loggat in och bekräftat koden i webbläsaren."
+        }
+      },
+      "companion_adb": {
+        "title": "Extra telefon (ADB) — experimentell",
+        "description": "Läs av och styr din bil genom att köra den officiella appen på en extra Android-telefon via ADB. Detta är EXPERIMENTELLT och kräver ett aktivt val. Du behöver en andra telefon som förblir inloggad i märkesappen, med ADB över Wi-Fi aktiverat. En äldre telefon (Android 10 eller tidigare) ansluter direkt här; en modern telefon (Android 11+, trådlös felsökning) kräver tillägget \"VW Group App ADB Bridge\", som du sedan riktar detta mot. Volkswagen är verifierat; de övriga märkena är tills vidare skrivskyddade tills en skärmkarta från en verklig enhet har bekräftats. Ingenting rootas och inga app-token läses — integrationen läser bara av skärmen och trycker på knappar.",
+        "data": {
+          "brand": "Fordonsmärke",
+          "adb_host": "Telefonens IP-adress",
+          "adb_port": "ADB-port",
+          "vin": "VIN (bilen som appen visar)",
+          "spin": "S-PIN (valfritt)",
+          "companion_use_addon": "Anslut via tillägget ADB Bridge",
+          "companion_addon_token": "Tilläggets token"
+        },
+        "data_description": {
+          "adb_host": "Telefonens adress i ditt nätverk, t.ex. 192.168.1.42.",
+          "adb_port": "Vanligtvis 5555 för ADB över Wi-Fi.",
+          "vin": "Det 17 tecken långa VIN-numret för bilen som visas i appen.",
+          "companion_use_addon": "Kryssa i detta för en telefon med Android 11 eller nyare, som bara erbjuder trådlös felsökning. Ange sedan TILLÄGGETS adress ovan istället för telefonens.",
+          "companion_addon_token": "Behövs bara om du har angett api_token i tillägget."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Anslutning misslyckades. Kontrollera inloggningsuppgifter och internet.",
+      "unknown": "Okänt fel. Kontrollera loggarna.",
+      "terms_and_conditions": "Användarvillkor måste accepteras. Logga in i appen.",
+      "marketing_consent": "Nytt dataskyddssamtycke krävs. App → Profil → Samtycken.",
+      "two_factor_required": "Tvåfaktorsautentisering krävs. Logga in manuellt i appen.",
+      "email_two_factor_required": "E-post 2FA krävs. Kolla inkorgen (och skräp) efter en 6-siffrig kod, logga sedan in manuellt i appen.",
+      "too_many_requests": "Kontot är tillfälligt spärrat. Vänta 15 minuter.",
+      "invalid_credentials": "Felaktig e-postadress eller lösenord.",
+      "portal_interaction_required": "EU Data Act-portalen kräver en engångsåtgärd i din webbläsare eller varumärkesapp (t.ex. godkänna villkor, bekräfta samtycke, slutföra onboarding/regionval) innan huvudlös åtkomst fungerar. Detta är INTE ett lösenordsproblem — öppna portalen en gång i en webbläsare, slutför uppmaningen och försök igen.",
+      "upstream_unavailable": "VW backend tillfälligt otillgänglig. Detta är ett serverproblem hos VW, INTE ett autentiseringsfel. Vänta 5–15 minuter och försök igen. Konfigurera INTE om integrationen.",
+      "na_signin_attestation": "Din e-postadress och ditt lösenord är korrekta — Volkswagen North America blockerar nu den här inloggningen bakom en enhetsattesteringskontroll från Google (Play Integrity) som bara den officiella appen på en äkta telefon kan passera. Att ange lösenordet igen hjälper inte; det här är en serverspärr hos VW, inte ett problem med inloggningsuppgifterna. (Spåras: #1165.)",
+      "brand_not_dag_eligible": "Det valda märket stöder inte webbläsarinloggning. Använd flödet för e-post + lösenord i stället.",
+      "skoda_qr_retired": "Škodas lösenordsfria inloggning (QR) inaktiverades av Volkswagen och fungerar inte längre. Gå tillbaka och välj ”E-post + lösenord (äldre metod)”, välj sedan Škoda där och logga in med din MyŠkoda-e-post och ditt lösenord.",
+      "still_waiting_browser": "Väntar fortfarande på godkännande i webbläsaren. Öppna URL:en ovan, logga in, bekräfta koden och klicka sedan på Skicka igen.",
+      "companion_cannot_connect": "Det gick inte att nå telefonen via ADB. Kontrollera att den är ansluten till nätverket, att ADB över Wi-Fi är på och att du har godkänt felsökningsförfrågan.",
+      "companion_needs_addon": "Det här ser ut som en telefon med Android 11 eller nyare som använder trådlös felsökning, vilket den direkta anslutningen här inte klarar (den bygger på TLS och parkoppling). Installera tillägget 'VW Group App ADB Bridge' (github.com/its-me-prash/vwgroup-app-adb-bridge) och peka companion-anslutningen mot tillägget. Äldre telefoner (Android 10 eller tidigare) ansluter direkt här.",
+      "companion_app_not_found": "Anslöt till telefonen, men märkesappen är inte installerad på den.",
+      "companion_unknown_brand": "Det märket har ännu ingen förinställning för extra telefon."
+    },
+    "abort": {
+      "already_configured": "Det här kontot är redan konfigurerat.",
+      "reauth_successful": "Omautentisering lyckades.",
+      "reconfigure_successful": "Konfigurationen uppdaterades.",
+      "mbb_not_eligible": "Ditt fordon är inte behörigt för den varaktiga MBB-inloggningen — backend returnerade \"Unknown user\". Det är en nyare ID-/MEB-modell (ID.3/4/5, e-up osv.) som aldrig registrerades i det gamla Car-Net/MBB-systemet, så den varaktiga inloggningen och fjärrkommandona når den inte. Använd EU Data Act-portalkanalen (eller e-post + lösenord-inloggningen) för sådana fordon. MBB-inloggningen är för äldre Car-Net-bilar (de flesta laddhybrid-/förbränningsmodeller)."
+    },
+    "progress": {
+      "awaiting_browser_login": "Öppna {verification_uri} i valfri webbläsare, logga in med ditt Brand ID-konto och bekräfta koden {user_code}.",
+      "requesting_device_code": "Begär en engångsinloggningskod från IDP…"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "VW Group Connect — Inställningar",
+        "data": {
+          "scan_interval": "Uppdateringsintervall",
+          "spin": "S-PIN",
+          "battery_nominal_kwh": "Batteriets märkkapacitet (kWh, för hälsotillstånd)",
+          "enable_reverse_geocoding": "Omvänd geokodning (parkeringsadress)",
+          "read_only_mode": "Skrivskyddat läge",
+          "companion_read_charge_detail": "Companion: läs laddningsmål (navigerar i appen)",
+          "companion_wake_sleep": "Companion: väck skärmen för hämtning, släck efteråt",
+          "force_ppe_climate": "Audi PPE/PPC klimat-body (Q6/A6 e-tron, RS e-tron GT Facelift, A3 2024+ PHEV)",
+          "enable_push_mqtt": "Skoda push-uppdateringar (MQTT, EXPERIMENTELLT)",
+          "enable_push_fcm": "CUPRA/SEAT push-uppdateringar (FCM, EXPERIMENTELLT)",
+          "enable_push_audi_vw": "Audi/VW push updates (Cariad FCM, EXPERIMENTAL)",
+          "client_id_override": "OAuth client_id-åsidosättning (avancerade användare)",
+          "eu_data_act_auto_kickoff": "EU Data Act: starta automatiskt Custom Data Request",
+          "supplementary_authproxy": "Lägg till en Volkswagen.de-läskanal (slå samman data)",
+          "hide_empty_entities": "Dölj entiteter utan data",
+          "supplementary_eu_portal": "Lägg till en EU Data Act-portalläskanal",
+          "remove_supplementary_authproxy": "Ta bort vw.de-läskanalen",
+          "remove_supplementary_eu_portal": "Ta bort EU Data Act-portalläskanalen",
+          "supplementary_tibber": "Lägg till en Tibber-läskanal (laddningsdata för elbil)",
+          "remove_supplementary_tibber": "Ta bort Tibber-läskanalen",
+          "abrp_enable": "Aktivera ABRP-telemetri",
+          "abrp_api_key": "ABRP-api_key (utvecklarnyckel)",
+          "abrp_user_token": "ABRP-token (per fordon)",
+          "keep_raw_datasets": "Behåll rå EU Data Act-datauppsättningar (diagnostik)",
+          "test_cohort": "Hjälp till att förbättra VW Group Connect (frivillig testgrupp)",
+          "vweu_device_grant": "Lägg till VW EU Two-Way — kommandon + live-avläsningar (BETA)",
+          "remove_vweu_twoway": "Ta bort VW EU Two-Way (\u00e5terg\u00e5 till f\u00f6reg\u00e5ende kanal)"
+        },
+        "data_description": {
+          "scan_interval": "Hur ofta data hämtas (minuter). Minimum: 3.",
+          "spin": "S-PIN för dörrlåsning.",
+          "enable_reverse_geocoding": "Skickar parkerings-GPS till OpenStreetMap Nominatim för att hämta gata/stad. Av som standard (integritet).",
+          "read_only_mode": "När aktiverat skapas endast statussensorer — inga brytare, knappar, lås, klimat eller reglage som skickar kommandon. Användbart om du vill ha fordonstelemetri utan risk för oavsiktlig aktivering. Ladda om integrationen efter ändring.",
+          "companion_read_charge_detail": "Endast Companion (ADB). Läser även laddningsmål, effekt och återstående tid som ligger bakom laddningsdetaljvyn. Detta TRYCKER i appen för att navigera dit (ungefär var 15:e minut), så aktivera det först när du har bekräftat att flödet fungerar på din telefon. Av som standard. Ladda om efter ändring.",
+          "companion_wake_sleep": "Endast Companion (ADB). Väcker telefonens skärm före varje hämtning och släcker den igen efteråt, så att en låst eller sovande telefon visar appen under avläsningen utan att skärmen är tänd hela tiden. Av som standard. Ladda om efter ändring.",
+          "force_ppe_climate": "Endast Audi. Tvingar det nya PPE/PPC body-formatet (climatisationMode obligatoriskt, targetTemperature utelämnat) vid klimatstart. Aktivera bara om du äger en Q6 e-tron, A6 e-tron, RS e-tron GT Facelift eller A3 2024+ PHEV — annars svarar API:t med 400. Ladda om integrationen efter aktivering.",
+          "enable_push_mqtt": "EXPERIMENTELLT: Endast Skoda. Aktiverar MQTT-push i realtid från Skodas mysmob-backend (kräver Python-paketen aiomqtt + firebase-messaging — importeras för närvarande lazy, inte förinstallerade). Grundläggningsfas i v1.18.0; live-aktivering väntar på validering av community-testare. Om push inte är tillgängligt faller integrationen tyst tillbaka till pollning. Ladda om integrationen efter att du växlat inställningen.",
+          "enable_push_fcm": "EXPERIMENTELLT: Endast CUPRA/SEAT. Aktiverar Firebase Cloud Messaging-push i realtid från OLA-backend (kräver Python-paketet firebase-messaging — samma lazy-import som Skoda MQTT-växlingen i v1.18.0). Grundläggningsfas i v1.19.0; live-aktivering väntar på validering av community-testare. Om push inte är tillgängligt faller integrationen tyst tillbaka till pollning. Ladda om integrationen efter att du växlat inställningen.",
+          "enable_push_audi_vw": "EXPERIMENTAL: Audi/VW only. Enables real-time push notifications from Cariad FCM channel (same one myAudi/WeConnect mobile apps use — covers lock/unlock results, charging-state, climate, alarm). Requires firebase-messaging Python package (same as Skoda MQTT + CUPRA/SEAT FCM). Foundation phase in v1.23.0; live activation pending community-tester validation. If push is unavailable, the integration silently falls back to polling. Reload the integration after toggling.",
+          "client_id_override": "Nödutgång för avancerade användare för när communityn upptäcker ett nytt OAuth client_id i en ny VW Group-APK innan vår dagliga atlas-byggare fångar det. Klistra in hela strängen UUID@apps_vw-dilab_com här, så provar resolvern det FÖRST vid varje autentisering, med alla befintliga client_id:n kvar i kedjan som reserv. Lämna tomt för standardbeteende. Format: 8-4-4-4-12 hexadecimala siffror följt av @apps_vw-dilab_com. Felaktiga värden ignoreras tyst.",
+          "eu_data_act_auto_kickoff": "Endast meningsfullt när integrationen körs i skrivskyddat EU Data Act-portalläge (live-BFF-strategier har misslyckats). När den är PÅ kontrollerar koordinatorn vid start om det finns en aktiv 15-minuters Custom Data Request per VIN och skapar en om ingen finns. Igångsättningen innebär en 1-månads dataprenumeration på ditt konto i portalen, så detta är opt-in. Portalen accepterar HÖGST EN aktiv anpassad begäran per VIN åt gången. Av som standard.",
+          "abrp_enable": "Skicka livetelemetri till A Better Routeplanner. Kräver en api_key och en token per fordon. Av = inga utgående anrop.",
+          "abrp_api_key": "En utvecklar-/partnernyckel som du registrerar hos iternio (vi levererar ingen). Identifierar integrationen. Loggas aldrig.",
+          "abrp_user_token": "'Generic'-token från ABRP-appen: Inställningar -> din bil -> Live Data. Loggas aldrig.",
+          "keep_raw_datasets": "Endast användbart på EU Data Act-portalkanalen. När det är på sparas de senaste råa dataset-ZIP-filerna som portalen levererar på disken (under .storage, per fordon och med en storleksgräns), så att ett felaktigt eller saknat värde kan återskapas från exakt de byte som din bil skickade. Dessa filer innehåller din GPS-position, VIN och telemetri, så det är avstängt som standard – slå bara på det vid felsökning.",
+          "test_cohort": "Avstängt som standard. Slå på det här så får integrationen prova experimentella avläsningar från din bil — till exempel det pågående försöket att få fram GPS-position för Volkswagen-bilar i EU — och då och då visa en avisering, som du enkelt kan stänga, där du ombeds dela en diagnostikfil så att en ny funktion kan bekräftas för just din modell. Allt som delas rensas automatiskt innan det lämnar ditt system: inget VIN, ingen GPS, inga tokens och ingen e-post skickas någonsin med. Det är så nya funktioner låses upp — för din bil och för alla andra som kör samma modell — och du kan stänga av det igen när du vill.",
+          "vweu_device_grant": "Endast Volkswagen, BETA. Lägger till tvåvägsstyrning (lås/lås upp, klimat, laddning) och live-CARIAD-avläsningar genom att du loggar in med ditt Volkswagen ID. Volkswagen utfärdar bara en 1-timmestoken här, så ditt lösenord lagras för att förnya den automatiskt — det skickas endast till Volkswagens egen inloggningsserver och skrivs aldrig till loggar eller diagnostik. Om du hellre inte vill lagra ett lösenord, använd de skrivskyddade kanalerna istället. Om du kryssar i detta öppnas inloggningssteget."
+        }
+      },
+      "add_vwde": {
+        "title": "Volkswagen.de-webbplats (BETA, skrivskyddad)",
+        "description": "**Experimental, opt-in.** Reads your Volkswagen via the volkswagen.de website login instead of the app backend. Volkswagen only, read-only (no remote commands). Sign in with your Volkswagen ID email and password. If your account uses email verification you will be asked for the code next. **Krav:** ditt Volkswagen ID måste vara fordonets huvudanvändare — bekräfta din identitet en gång på volkswagen.de (myVolkswagen → ditt fordon). Utan detta returnerar webbplatsen inga fordonsdata.",
+        "data": {
+          "username": "E-postadress",
+          "password": "Lösenord",
+          "scan_interval": "Uppdateringsintervall"
+        },
+        "data_description": {
+          "username": "E-postadressen för ditt Volkswagen ID-/myVolkswagen-konto.",
+          "password": "Ditt Volkswagen ID-lösenord.",
+          "scan_interval": "Hur ofta data hämtas (minuter). Minst: 5."
+        }
+      },
+      "add_vwde_otp": {
+        "title": "Verifieringskod via e-post",
+        "description": "En verifieringskod skickades till e-postadressen för **{username}**.\n\nAnge koden för att slutföra inloggningen till kanalen för Volkswagen.de-webbplatsen (beta).",
+        "data": {
+          "mfa_code": "Verifieringskod"
+        },
+        "data_description": {
+          "mfa_code": "Kod från din inkorg — giltig i några minuter."
+        }
+      },
+      "add_portal": {
+        "title": "EU Data Act-portal — läskanal",
+        "description": "Logga in på EU Data Act-portalen (e-post + lösenord) för att lägga till SoC, laddning, mätarställning och service, sammanslaget med din primära kanal.",
+        "data": {
+          "username": "E-post",
+          "password": "Lösenord"
+        }
+      },
+      "add_tibber": {
+        "title": "Tibber — läskanal för elbil (OAuth2)",
+        "description": "Lägg till din elbils laddningsdata från Tibbers officiella Data-API som en skrivskyddad källa med lägsta prioritet — den fyller bara i luckor som bilens egna kanaler lämnar tomma och skriver aldrig över färskare data. Engångsinställning:\n\n1. Öppna {manage_url} och skapa en OAuth2-klient.\n2. Ange dess redirect-URI till exakt `{redirect_uri}`.\n3. Bevilja läsbehörigheterna (user, homes, vehicles).\n4. Klistra in klient-ID och klienthemlighet nedan.\n\nSkrivskyddad — Tibber kan inte styra din bil. Din bil måste redan vara ihopparad i Tibber-appen.",
+        "data": {
+          "tibber_client_id": "Tibber klient-ID",
+          "tibber_client_secret": "Tibber klienthemlighet"
+        }
+      },
+      "tibber_authorize": {
+        "title": "Tibber — godkänn åtkomst",
+        "description": "Öppna denna URL i en webbläsare, logga in på Tibber och tillåt åtkomst:\n\n{authorize_url}\n\nNär du har tillåtit åtkomst omdirigeras din webbläsare till en my.home-assistant.io-sida. Kopiera HELA adressen från adressfältet (den innehåller ?code=…) och klistra in den nedan.",
+        "data": {
+          "tibber_auth_response": "Omdirigerad URL (eller koden)"
+        }
+      },
+      "add_vweu_twoway": {
+        "title": "VW EU Two-Way (kommandon + live-avl\u00e4sningar, BETA)",
+        "description": "**Experimentell, frivillig — endast Volkswagen.** Lägger till tvåvägsstyrning (lås/lås upp, klimat, laddning) och live-CARIAD-avläsningar genom att du loggar in med ditt Volkswagen ID. Eftersom Volkswagen bara utfärdar en 1-timmestoken på den här vägen **lagras** ditt lösenord så att integrationen kan förnya den automatiskt. Det skickas endast till Volkswagens egen inloggningsserver och skrivs aldrig till loggar eller diagnostik. Vill du hellre inte lagra ett lösenord? Använd de skrivskyddade kanalerna istället. **Krav:** ditt Volkswagen ID måste vara fordonets huvudanvändare.",
+        "data": {
+          "username": "Email Address",
+          "password": "Password"
+        },
+        "data_description": {
+          "username": "E-postadressen f\u00f6r ditt Volkswagen ID-/myVolkswagen-konto.",
+          "password": "Ditt Volkswagen ID-l\u00f6senord. Anv\u00e4nds endast f\u00f6r att f\u00f6rnya 1-timmes-\u00e5tkomsttoken mot Volkswagens inloggningsserver; loggas aldrig och rensas bort fr\u00e5n diagnostik."
+        }
+      }
+    },
+    "error": {
+      "abrp_credentials_required": "För att aktivera ABRP måste du ange både api_key och fordonstoken.",
+      "invalid_auth": "Inloggningen misslyckades. Kontrollera din Volkswagen ID-e-post och ditt l\u00f6senord.",
+      "cannot_connect": "Kunde inte n\u00e5 Volkswagen. F\u00f6rs\u00f6k igen.",
+      "vweu_mfa_unsupported": "Det h\u00e4r kontot kr\u00e4ver en e-post- eller autentiseringskod, som VW EU Two-Way inte kan hantera \u00e4nnu. Anv\u00e4nd de skrivskyddade kanalerna ist\u00e4llet.",
+      "vweu_no_bff_data": "Inloggningen lyckades, men Volkswagen har \u00e4nnu inte returnerat n\u00e5gra live-data f\u00f6r den h\u00e4r bilen p\u00e5 det moderna backendet, s\u00e5 VW EU Two-Way aktiverades inte och din nuvarande kanal \u00e4r of\u00f6r\u00e4ndrad. F\u00f6rs\u00f6k igen senare, eller dela en diagnostikfil s\u00e5 att vi kan titta p\u00e5 det."
+    },
+    "abort": {
+      "not_volkswagen": "Den h\u00e4r kanalen \u00e4r endast tillg\u00e4nglig f\u00f6r Volkswagen.",
+      "vweu_twoway_vw_disabled": "Volkswagen inaktiverade den inloggning som den här kanalen använde den 2026-08-18, så den kan inte längre konfigureras. Live-avläsningar fungerar fortfarande via EU Data Act-portalen, och en varaktig kommandokanal via det klassiska Car-Net-backendet är i beta — se issue #584."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "fuel_level": {
+        "name": "Bränslenivå"
+      },
+      "battery_soc": {
+        "name": "Batterinivå"
+      },
+      "range_km": {
+        "name": "Räckvidd"
+      },
+      "electric_range_km": {
+        "name": "Elektrisk räckvidd"
+      },
+      "combustion_range_km": {
+        "name": "Bränsleräckvidd"
+      },
+      "total_range_km": {
+        "name": "Total räckvidd"
+      },
+      "odometer_km": {
+        "name": "Mätarställning"
+      },
+      "charging_state": {
+        "name": "Laddstatus"
+      },
+      "plug_state": {
+        "name": "Laddkontakt"
+      },
+      "target_soc": {
+        "name": "Laddningsmål"
+      },
+      "charging_power_kw": {
+        "name": "Laddeffekt"
+      },
+      "charging_rate_kmh": {
+        "name": "Laddningshastighet"
+      },
+      "charge_complete_eta": {
+        "name": "Laddning klar"
+      },
+      "charging_type": {
+        "name": "Laddningstyp"
+      },
+      "climatisation_state": {
+        "name": "Klimatanläggning"
+      },
+      "target_temperature": {
+        "name": "Måltemperatur"
+      },
+      "outside_temp": {
+        "name": "Utomhustemperatur"
+      },
+      "service_km": {
+        "name": "Nästa service"
+      },
+      "service_due_at": {
+        "name": "Servicedatum"
+      },
+      "service_due_in_days": {
+        "name": "Service om"
+      },
+      "oil_service_km": {
+        "name": "Nästa oljebyte"
+      },
+      "oil_service_at": {
+        "name": "Datum för oljebyte"
+      },
+      "oil_service_due_in_days": {
+        "name": "Oljebyte om"
+      },
+      "lights_count": {
+        "name": "Tända ljus (antal)"
+      },
+      "max_charge_current_a": {
+        "name": "Max laddström"
+      },
+      "vehicle_state": {
+        "name": "Bilstatus"
+      },
+      "connection_state": {
+        "name": "Anslutningsstatus"
+      },
+      "parking_address": {
+        "name": "Parkerad vid"
+      },
+      "parking_city": {
+        "name": "Stad"
+      },
+      "battery_temp": {
+        "name": "Batteritemperatur"
+      },
+      "voltage_12v": {
+        "name": "12V-batteri"
+      },
+      "wake_count_today": {
+        "name": "Väckningar idag"
+      },
+      "last_trip_distance_km": {
+        "name": "Senaste Resa — Avstånd"
+      },
+      "last_trip_avg_speed_kmh": {
+        "name": "Senaste Resa — Medel-Hastighet"
+      },
+      "last_trip_avg_fuel_consumption_l_100km": {
+        "name": "Senaste Resa — Medel-Bränsleförbrukning"
+      },
+      "last_trip_avg_electric_consumption_kwh_100km": {
+        "name": "Senaste Resa — Medel-Elförbrukning"
+      },
+      "software_version": {
+        "name": "Programvaruversion"
+      },
+      "total_charged_energy_kwh": {
+        "name": "Total Laddad Energi"
+      },
+      "last_charging_session_kwh": {
+        "name": "Senaste Sessionen — Energi"
+      },
+      "last_charging_session_duration_min": {
+        "name": "Senaste Sessionen — Längd"
+      },
+      "last_charging_session_start": {
+        "name": "Senaste laddning, start"
+      },
+      "last_charging_session_current_type": {
+        "name": "Senaste laddning, strömtyp"
+      },
+      "last_charging_power_curve_points": {
+        "name": "Senaste laddning, effektkurvpunkter"
+      },
+      "active_charging_profile_name": {
+        "name": "Aktiv Laddningsprofil"
+      },
+      "active_charging_profile_target_soc_pct": {
+        "name": "Aktiv Profil — Mål-laddning"
+      },
+      "next_charging_time": {
+        "name": "Nästa Laddning"
+      },
+      "charging_profiles_count": {
+        "name": "Antal Profiler"
+      },
+      "battery_care_target_soc_pct": {
+        "name": "Batteri-Vård — Mål-laddning"
+      },
+      "driving_score": {
+        "name": "Körpoäng"
+      },
+      "driving_score_class": {
+        "name": "Körpoäng-Klass"
+      },
+      "departure_timer_1_time": {
+        "name": "Avgångstimer 1"
+      },
+      "departure_timer_2_time": {
+        "name": "Avgångstimer 2"
+      },
+      "departure_timer_3_time": {
+        "name": "Avgångstimer 3"
+      },
+      "last_updated_at": {
+        "name": "Senast uppdaterad"
+      },
+      "last_seen_at": {
+        "name": "Fordon senast rapporterat"
+      },
+      "adblue_range_km": {
+        "name": "AdBlue-räckvidd"
+      },
+      "api_observer_findings": {
+        "name": "API-spanare"
+      },
+      "raw_api_fields": {
+        "name": "Råa API-fält"
+      },
+      "data_source_channel": {
+        "name": "Datakällkanal"
+      },
+      "error_reporter_count": {
+        "name": "Felrapportör"
+      },
+      "requests_remaining_today": {
+        "name": "Återstående API-förfrågningar"
+      },
+      "license_plate": {
+        "name": "Registreringsskylt"
+      },
+      "equipment_count": {
+        "name": "Antal utrustning"
+      },
+      "secondary_engine_range_km": {
+        "name": "Räckvidd sekundärmotor"
+      },
+      "secondary_engine_type": {
+        "name": "Sekundär motortyp"
+      },
+      "secondary_engine_fuel_level_pct": {
+        "name": "Bränslenivå sekundärmotor"
+      },
+      "subscription_expiry_at": {
+        "name": "Prenumeration löper ut"
+      },
+      "subscription_days_remaining": {
+        "name": "Prenumeration dagar kvar"
+      },
+      "battery_temp_max": {
+        "name": "Batteritemperatur (Max)"
+      },
+      "departure_timer_enabled_count": {
+        "name": "Aktiva avresetimer"
+      },
+      "fuel_tank_capacity_liters": {
+        "name": "Tankvolym"
+      },
+      "climate_running_requests_count": {
+        "name": "Väntande klimatförfrågningar"
+      },
+      "active_warning_lights_count": {
+        "name": "Aktiva varningslampor"
+      },
+      "last_lock_action": {
+        "name": "Senaste låsåtgärd"
+      },
+      "last_lock_action_at": {
+        "name": "Tid för senaste låsåtgärd"
+      },
+      "maintenance_report_captured_at": {
+        "name": "Serviceapport uppdaterad"
+      },
+      "primary_engine_fuel_level_pct": {
+        "name": "Bränslenivå (primär)"
+      },
+      "car_type": {
+        "name": "Fordonstyp"
+      },
+      "climate_timer_enabled_count": {
+        "name": "Aktiva klimattimer"
+      },
+      "primary_engine_type": {
+        "name": "Primär motortyp"
+      },
+      "steering_wheel_position": {
+        "name": "Ratt-position"
+      },
+      "primary_engine_soc_pct": {
+        "name": "12V-batteri laddning"
+      },
+      "next_charging_timer_id": {
+        "name": "Nästa timer (ID)"
+      },
+      "next_charging_timer_target_soc_reachable": {
+        "name": "Nästa timer — Mål-laddning nåbar"
+      },
+      "capabilities_count": {
+        "name": "Antal funktioner"
+      },
+      "tire_pressure_front_left_bar": {
+        "name": "Däcktryck Fram Vänster"
+      },
+      "tire_pressure_front_right_bar": {
+        "name": "Däcktryck Fram Höger"
+      },
+      "tire_pressure_rear_left_bar": {
+        "name": "Däcktryck Bak Vänster"
+      },
+      "tire_pressure_rear_right_bar": {
+        "name": "Däcktryck Bak Höger"
+      },
+      "lifetime_distance_km": {
+        "name": "Total Distans"
+      },
+      "lifetime_avg_fuel_consumption_l_100km": {
+        "name": "Genomsnittlig Bränsleförbrukning (Totalt)"
+      },
+      "lifetime_avg_electric_consumption_kwh_100km": {
+        "name": "Genomsnittlig Elförbrukning (Totalt)"
+      },
+      "last_alarm_at": {
+        "name": "Senaste Larm"
+      },
+      "heater_source": {
+        "name": "Värmekälla"
+      },
+      "climate_ready_at": {
+        "name": "Klimat Klart kl."
+      },
+      "warning_messages": {
+        "name": "Fordonsvarningar"
+      },
+      "service_campaigns": {
+        "name": "Serviceåtgärder"
+      },
+      "auxiliary_heating_remaining_min": {
+        "name": "Parkeringsvärmare, återstående tid"
+      },
+      "auxiliary_heating_status": {
+        "name": "Status för parkeringsvärmare"
+      },
+      "brake_fluid_change_due_at": {
+        "name": "Bromsvätskebyte förfaller"
+      },
+      "brake_pads_front_inspection_due_at": {
+        "name": "Kontroll av bromsbelägg fram"
+      },
+      "brake_pads_rear_inspection_due_at": {
+        "name": "Kontroll av bromsbelägg bak"
+      },
+      "preferred_workshop_address": {
+        "name": "Adress till föredragen verkstad"
+      },
+      "preferred_workshop_name": {
+        "name": "Föredragen verkstad"
+      },
+      "preferred_workshop_phone": {
+        "name": "Telefon till föredragen verkstad"
+      },
+      "adblue_level_pct": {
+        "name": "AdBlue-nivå"
+      },
+      "cng_level_pct": {
+        "name": "CNG-tanknivå"
+      },
+      "cng_range_km": {
+        "name": "CNG-räckvidd"
+      },
+      "primary_engine_range_km": {
+        "name": "Räckvidd primärmotor"
+      },
+      "charging_preferred_mode": {
+        "name": "Föredraget laddläge"
+      },
+      "pending_action_id": {
+        "name": "ID för väntande åtgärd"
+      },
+      "pending_action_type": {
+        "name": "Typ av väntande åtgärd"
+      },
+      "pending_action_status": {
+        "name": "Status för väntande åtgärd"
+      },
+      "refuel_trip_distance_km": {
+        "name": "Sträcka sedan tankning"
+      },
+      "refuel_trip_duration_min": {
+        "name": "Körtid sedan tankning"
+      },
+      "refuel_trip_avg_speed_kmh": {
+        "name": "Snitthastighet sedan tankning"
+      },
+      "refuel_trip_avg_fuel_consumption_l_100km": {
+        "name": "Snittbränsle sedan tankning"
+      },
+      "refuel_trip_avg_electric_consumption_kwh_100km": {
+        "name": "Snittenergi sedan tankning"
+      },
+      "refuel_trip_total_fuel_consumption_l": {
+        "name": "Totalt bränsle sedan tankning"
+      },
+      "refuel_trip_total_electric_consumption_kwh": {
+        "name": "Total energi sedan laddning"
+      },
+      "refuel_trip_recuperation_kwh": {
+        "name": "Återvinning sedan laddning"
+      },
+      "refuel_trip_timestamp": {
+        "name": "Tankningscykel startad"
+      },
+      "actual_charge_rate_kw": {
+        "name": "Aktuell laddeffekt"
+      },
+      "hv_battery_min_temperature_c": {
+        "name": "HV-batteritemperatur (min)"
+      },
+      "hv_battery_max_temperature_c": {
+        "name": "HV-batteritemperatur (max)"
+      },
+      "charge_max_ac_setting": {
+        "name": "Max AC-ström (inställning)"
+      },
+      "charge_max_ac_ampere": {
+        "name": "Max AC-ström (levererbar)"
+      },
+      "auto_release_ac_connector_state": {
+        "name": "Status för automatisk frigöring av kontakt"
+      },
+      "active_ventilation_state": {
+        "name": "Aktiv ventilation"
+      },
+      "active_ventilation_remaining_time_min": {
+        "name": "Aktiv ventilation återstår"
+      },
+      "battery_support_state": {
+        "name": "12V-batteristöd"
+      },
+      "evcc_charge_status": {
+        "name": "evcc-laddstatus"
+      },
+      "connection_state_battery_power_level": {
+        "name": "12V-batteriets laddnivå"
+      },
+      "last_trip_total_fuel_consumption_l": {
+        "name": "Senaste tur, totalt bränsle"
+      },
+      "last_trip_total_electric_consumption_kwh": {
+        "name": "Senaste tur, total energi"
+      },
+      "notifications_count": {
+        "name": "Antal aviseringar"
+      },
+      "last_notification_subject": {
+        "name": "Senaste avisering, ämne"
+      },
+      "last_notification_severity": {
+        "name": "Senaste avisering, allvarsgrad"
+      },
+      "engine_oil_temperature_c": {
+        "name": "Motoroljetemperatur"
+      },
+      "engine_coolant_temperature_c": {
+        "name": "Kylvätsketemperatur"
+      },
+      "last_trip_reset_at": {
+        "name": "Senaste turnollställning"
+      },
+      "battery_temp_c": {
+        "name": "Batteritemperatur"
+      },
+      "charging_settings_pending": {
+        "name": "Laddinställningar väntar"
+      },
+      "charging_status_pending": {
+        "name": "Laddkommandon väntar"
+      },
+      "charging_mode_pending": {
+        "name": "Laddlägesändringar väntar"
+      },
+      "charging_care_pending": {
+        "name": "Batterivårdsändringar väntar"
+      },
+      "climate_remaining_time_min": {
+        "name": "Klimat – återstående tid"
+      },
+      "climate_without_external_power": {
+        "name": "Klimat utan extern ström"
+      },
+      "climate_zone_front_left": {
+        "name": "Klimatzon fram vänster"
+      },
+      "climate_zone_front_right": {
+        "name": "Klimatzon fram höger"
+      },
+      "climate_zone_rear_left": {
+        "name": "Klimatzon bak vänster"
+      },
+      "climate_zone_rear_right": {
+        "name": "Klimatzon bak höger"
+      },
+      "climatisation_settings_pending": {
+        "name": "Klimatinställningar väntar"
+      },
+      "climatisation_status_pending": {
+        "name": "Klimatkommandon väntar"
+      },
+      "connection_active": {
+        "name": "Anslutning aktiv"
+      },
+      "connection_battery_power_level": {
+        "name": "Batterinivå (anslutning)"
+      },
+      "daily_power_budget_warning": {
+        "name": "Varning för daglig energibudget"
+      },
+      "insufficient_battery_level_warning": {
+        "name": "Varning för låg batterinivå"
+      },
+      "nav_target_soc_pct": {
+        "name": "Mål-laddnivå (navigation)"
+      },
+      "parking_map_url_dark": {
+        "name": "Parkeringskarta-URL (mörk)"
+      },
+      "parking_map_url_light": {
+        "name": "Parkeringskarta-URL (ljus)"
+      },
+      "plug_led_color": {
+        "name": "Laddkontaktens LED-färg"
+      },
+      "remaining_charge_time_nav_min": {
+        "name": "Återstående laddtid (navigation)"
+      },
+      "vehicle_nickname": {
+        "name": "Fordonets smeknamn"
+      },
+      "lifetime_avg_speed_kmh": {
+        "name": "Snitthastighet totalt"
+      },
+      "lifetime_travel_time_min": {
+        "name": "Körtid totalt"
+      },
+      "monthly_mileage_km": {
+        "name": "Månadssträcka"
+      },
+      "remaining_charge_time_min": {
+        "name": "Återstående laddtid"
+      },
+      "charging_scenario": {
+        "name": "Laddningsscenario"
+      },
+      "immediate_charge_action_state": {
+        "name": "Omedelbar laddningsåtgärd"
+      },
+      "profile_charge_reason": {
+        "name": "Laddningsorsak"
+      },
+      "charge_session_energy_kwh": {
+        "name": "Laddad energi"
+      },
+      "remaining_charge_time_bulk_min": {
+        "name": "Återstående tid till 80 % (snabbladdning)"
+      },
+      "odometer_state": {
+        "name": "Vägmätarstatus"
+      },
+      "instrument_cluster_time": {
+        "name": "Fordonsklocka"
+      },
+      "hv_battery_state": {
+        "name": "HV-batteristatus"
+      },
+      "data_error_detail": {
+        "name": "Datafel"
+      },
+      "external_power_supply_state": {
+        "name": "Extern strömförsörjning"
+      },
+      "charging_reason": {
+        "name": "Laddningsorsak"
+      },
+      "charging_error_code": {
+        "name": "Laddningsfelkod"
+      },
+      "remaining_time_target_soc": {
+        "name": "Laddningsmål (återstående tid)"
+      },
+      "charge_led_color": {
+        "name": "Laddportens LED-färg"
+      },
+      "charge_led_pattern": {
+        "name": "Laddportens LED-mönster"
+      },
+      "last_report_id": {
+        "name": "Rapport-ID"
+      },
+      "climate_energy_consumption_kwh": {
+        "name": "Klimatets energiförbrukning"
+      },
+      "residual_energy_consumption_kwh": {
+        "name": "Förbrukning fordonsnät"
+      },
+      "battery_climatization_energy_kwh": {
+        "name": "Energi batteriklimatisering"
+      },
+      "last_trip_avg_recuperation_kwh_100km": {
+        "name": "Återvinning resa (snitt)"
+      },
+      "lifetime_avg_recuperation_kwh_100km": {
+        "name": "Total återvinning (snitt)"
+      },
+      "last_trip_avg_aux_consumption_kwh_100km": {
+        "name": "Tillbehörsförbrukning senaste resan (snitt)"
+      },
+      "lifetime_avg_aux_consumption_kwh_100km": {
+        "name": "Tillbehörsförbrukning totalt (snitt)"
+      },
+      "lifetime_avg_gas_consumption_kg_100km": {
+        "name": "Gasförbrukning totalt (snitt)"
+      },
+      "lifetime_range_gain_km": {
+        "name": "Vunnen räckvidd totalt"
+      },
+      "lifetime_zero_emission_km": {
+        "name": "Nollutsläppssträcka totalt"
+      },
+      "last_trip_avg_gas_consumption_kg_100km": {
+        "name": "Gasförbrukning senaste resan (snitt)"
+      },
+      "last_trip_range_gain_km": {
+        "name": "Vunnen räckvidd senaste resan"
+      },
+      "last_trip_zero_emission_km": {
+        "name": "Nollutsläppssträcka senaste resan"
+      },
+      "charger_update_trigger": {
+        "name": "Utlösare laddaruppdatering"
+      },
+      "report_trigger": {
+        "name": "Rapportutlösare"
+      },
+      "climate_mode": {
+        "name": "Klimatläge"
+      },
+      "active_target_soc": {
+        "name": "Aktivt laddmål"
+      },
+      "charge_time_display": {
+        "name": "Laddtidsdetaljer"
+      },
+      "charging_plug1_flap_lock_state": {
+        "name": "Lås laddlucka 1"
+      },
+      "charging_plug1_flap_state": {
+        "name": "Laddlucka 1"
+      },
+      "charging_plug1_infrastructure_state": {
+        "name": "Status laddpunkt 1"
+      },
+      "charging_plug1_lock_state": {
+        "name": "Lås laddkontakt 1"
+      },
+      "charging_plug2_connectionstate": {
+        "name": "Anslutning laddport 2"
+      },
+      "charging_plug2_flap_lock_state": {
+        "name": "Lås laddlucka 2"
+      },
+      "charging_plug2_flap_state": {
+        "name": "Laddlucka 2"
+      },
+      "charging_plug2_infrastructure_state": {
+        "name": "Status laddpunkt 2"
+      },
+      "charging_plug2_lock_state": {
+        "name": "Lås laddkontakt 2"
+      },
+      "battery_available_kwh": {
+        "name": "Tillgänglig batterienergi"
+      },
+      "battery_cap_kwh": {
+        "name": "Batterikapacitet (energi)"
+      },
+      "battery_soh_pct": {
+        "name": "Batterihälsa (hälsotillstånd)"
+      },
+      "trip_total_cost": {
+        "name": "Total reskostnad"
+      },
+      "trip_fuel_cost": {
+        "name": "Bränslekostnad resa"
+      },
+      "trip_electricity_cost": {
+        "name": "Elkostnad resa"
+      },
+      "trip_cng_cost": {
+        "name": "Fordonsgaskostnad resa"
+      },
+      "oil_level_pct": {
+        "name": "Oljenivå (procent)"
+      },
+      "dataset_key": {
+        "name": "Datauppsättningsnyckel"
+      },
+      "charge_mode_selection": {
+        "name": "Valt laddningsläge"
+      },
+      "max_charge_current_ac": {
+        "name": "Max AC-laddström"
+      },
+      "auto_unlock_charge_port": {
+        "name": "Lås upp laddluckan automatiskt"
+      },
+      "charge_bulk_threshold_pct": {
+        "name": "Snabbladdningströskel"
+      },
+      "charge_rate_unit": {
+        "name": "Enhet för laddhastighet"
+      },
+      "lifetime_trip_distance_km": {
+        "name": "Långtidsreslängd"
+      },
+      "lifetime_trip_start_odometer_km": {
+        "name": "Mätarställning vid start (långtid)"
+      },
+      "last_trip_start_odometer_km": {
+        "name": "Mätarställning vid senaste resans start"
+      },
+      "oil_level_liters": {
+        "name": "Oljenivå (liter)"
+      },
+      "oil_level_additional_pct": {
+        "name": "Extra oljenivå"
+      },
+      "tyre_pressure_diff_fl": {
+        "name": "Däcktrycksavvikelse vänster fram"
+      },
+      "tyre_pressure_diff_fr": {
+        "name": "Däcktrycksavvikelse höger fram"
+      },
+      "tyre_pressure_diff_rl": {
+        "name": "Däcktrycksavvikelse vänster bak"
+      },
+      "tyre_pressure_diff_rr": {
+        "name": "Däcktrycksavvikelse höger bak"
+      },
+      "tyre_pressure_diff_spare": {
+        "name": "Däcktrycksavvikelse reservhjul"
+      },
+      "tyre_pressure_actual_fl": {
+        "name": "Däcktryck fram vänster"
+      },
+      "tyre_pressure_actual_fr": {
+        "name": "Däcktryck fram höger"
+      },
+      "tyre_pressure_actual_rl": {
+        "name": "Däcktryck bak vänster (faktiskt)"
+      },
+      "tyre_pressure_actual_rr": {
+        "name": "Däcktryck bak höger (faktiskt)"
+      },
+      "tyre_pressure_actual_spare": {
+        "name": "Däcktryck reservhjul (faktiskt)"
+      },
+      "tyre_pressure_required_fl": {
+        "name": "Däcktryck fram vänster (mål)"
+      },
+      "tyre_pressure_required_fr": {
+        "name": "Däcktryck fram höger (mål)"
+      },
+      "tyre_pressure_required_rl": {
+        "name": "Däcktryck bak vänster (mål)"
+      },
+      "tyre_pressure_required_rr": {
+        "name": "Däcktryck bak höger (mål)"
+      },
+      "tyre_pressure_required_spare": {
+        "name": "Däcktryck reservhjul (mål)"
+      },
+      "parking_lights_state": {
+        "name": "Parkeringsljus"
+      },
+      "aux_battery_energy_pct": {
+        "name": "Nivå hjälpbatteri"
+      },
+      "aux_battery_bem_alert_at": {
+        "name": "Larmtid hjälpbatteri"
+      },
+      "current_speed_kmh": {
+        "name": "Hastighet"
+      },
+      "ignition_state": {
+        "name": "Tändning"
+      },
+      "brake_pressure_indication": {
+        "name": "Bromstrycksindikering"
+      },
+      "dashboard_warnings_raw": {
+        "name": "Varningslampor (rådata)"
+      },
+      "climate_error_code": {
+        "name": "Felkod klimatanläggning"
+      },
+      "window_heating_error_code": {
+        "name": "Felkod rutvärme"
+      },
+      "lpg_range_km": {
+        "name": "Räckvidd gasol"
+      },
+      "engine_status": {
+        "name": "Motorstatus"
+      },
+      "trip_avg_aux_consumption_kwh": {
+        "name": "Snittförbrukning kringutrustning"
+      },
+      "departure_charge_kwh": {
+        "name": "Laddning till avgång"
+      },
+      "tire_pressure_fl_state": {
+        "name": "Däckstatus vänster fram"
+      },
+      "tire_pressure_fl_errorcode": {
+        "name": "Däckfelkod vänster fram"
+      },
+      "tire_pressure_fr_state": {
+        "name": "Däckstatus höger fram"
+      },
+      "tire_pressure_fr_errorcode": {
+        "name": "Däckfelkod höger fram"
+      },
+      "tire_pressure_rl_state": {
+        "name": "Däckstatus vänster bak"
+      },
+      "tire_pressure_rl_errorcode": {
+        "name": "Däckfelkod vänster bak"
+      },
+      "tire_pressure_rr_state": {
+        "name": "Däckstatus höger bak"
+      },
+      "tire_pressure_rr_errorcode": {
+        "name": "Däckfelkod höger bak"
+      },
+      "next_charge_timer_start_at": {
+        "name": "Nästa laddstart"
+      },
+      "next_charge_timer_finish_at": {
+        "name": "Nästa laddslut"
+      },
+      "next_charge_target_reachability": {
+        "name": "Laddmål nåbart"
+      },
+      "next_charge_timer_number": {
+        "name": "Nästa laddningstimer (nummer)"
+      },
+      "ascent_slope_consumption": {
+        "name": "Lutningsförbrukning (uppför)"
+      },
+      "descent_slope_consumption": {
+        "name": "Lutningsförbrukning (nedför)"
+      },
+      "report_type": {
+        "name": "Rapporttyp"
+      },
+      "result_app": {
+        "name": "Resultat appdata"
+      },
+      "result_master": {
+        "name": "Resultat masterdata"
+      },
+      "update_reason": {
+        "name": "Senaste uppdateringsorsak"
+      },
+      "start_stop_action": {
+        "name": "Laddningsstart/stopp-åtgärd"
+      },
+      "start_stop_modification": {
+        "name": "Start/stopp-ändring"
+      },
+      "bidi_max_charge_level_pct": {
+        "name": "Dubbelriktad laddning max. laddnivå"
+      },
+      "bidi_min_charge_level_pct": {
+        "name": "Dubbelriktad laddning min. laddnivå"
+      },
+      "bidi_energy_used": {
+        "name": "Använd bidirektionell energi"
+      },
+      "bidi_energy_used_threshold": {
+        "name": "Gräns för använd bidirektionell energi"
+      },
+      "bidi_cycles": {
+        "name": "Bidirektionella laddningscykler"
+      },
+      "bidi_cycles_threshold": {
+        "name": "Gräns för bidirektionella laddningscykler"
+      },
+      "bidi_operating_hours": {
+        "name": "Bidirektionella drifttimmar"
+      },
+      "bidi_operating_hours_threshold": {
+        "name": "Gräns för bidirektionella drifttimmar"
+      },
+      "bidi_quota": {
+        "name": "Bidirektionell laddningskvot"
+      },
+      "bidi_quota_threshold": {
+        "name": "Gräns för bidirektionell laddningskvot"
+      },
+      "sunroof_position_pct": {
+        "name": "Soltakets position"
+      },
+      "spoiler_position_pct": {
+        "name": "Spoilerposition"
+      },
+      "battery_care_score": {
+        "name": "Batterivårdspoäng"
+      },
+      "battery_care_score_threshold": {
+        "name": "Tröskel för batterivårdspoäng"
+      },
+      "cabin_temp": {
+        "name": "Kupétemperatur"
+      },
+      "charge_target_time": {
+        "name": "Tidpunkt för laddningsmål"
+      },
+      "max_number_users": {
+        "name": "Max antal användare"
+      },
+      "charging_profiles_pending": {
+        "name": "Laddningsprofiländringar väntar"
+      },
+      "climatisation_timers_pending": {
+        "name": "Klimattimerändringar väntar"
+      },
+      "calibration_need_detected": {
+        "name": "Batterikalibrering behövs"
+      },
+      "calibration_request_initial": {
+        "name": "Kalibreringsbegäran"
+      },
+      "calibration_request_escalation_1": {
+        "name": "Påminnelse om kalibrering"
+      },
+      "calibration_request_escalation_2": {
+        "name": "Sista påminnelsen om kalibrering"
+      },
+      "calibration_request_method": {
+        "name": "Kalibreringsmetod"
+      },
+      "calibration_failure": {
+        "name": "Kalibreringsfel"
+      },
+      "calibration_failure_reason": {
+        "name": "Orsak till kalibreringsfel"
+      },
+      "preferred_charge_mode": {
+        "name": "Föredraget laddningsläge"
+      },
+      "last_refuel_quantity": {
+        "name": "Senaste tankning – mängd"
+      },
+      "last_refuel_cost": {
+        "name": "Senaste tankning – kostnad"
+      },
+      "last_refuel_currency": {
+        "name": "Valuta för senaste tankning"
+      },
+      "last_refuel_fuel_type": {
+        "name": "Senaste bränsle"
+      },
+      "last_refuel_station": {
+        "name": "Senaste bensinstation"
+      },
+      "last_refuel_at": {
+        "name": "Tid för senaste tankning"
+      },
+      "parking_location": {
+        "name": "Parkeringsplats"
+      },
+      "parking_cost": {
+        "name": "Parkeringskostnad"
+      },
+      "parking_currency": {
+        "name": "Parkeringsvaluta"
+      },
+      "parking_started_at": {
+        "name": "Parkering startade"
+      },
+      "parking_ended_at": {
+        "name": "Parkering avslutades"
+      },
+      "reminder_technical_inspection": {
+        "name": "Besiktningspåminnelse"
+      },
+      "reminder_seasonal_tyre_change": {
+        "name": "Däckbytespåminnelse"
+      },
+      "reminder_first_aid_kit": {
+        "name": "Påminnelse om första hjälpen"
+      },
+      "reminder_tyre_repair_kit": {
+        "name": "Påminnelse om däckreparationssats"
+      }
+    },
+    "binary_sensor": {
+      "mbb_two_way_available": {
+        "name": "MBB tvåvägs tillgänglig"
+      },
+      "doors_locked": {
+        "name": "Dörrar låsta"
+      },
+      "doors_open": {
+        "name": "Dörrar öppna"
+      },
+      "driver_braking_active": {
+        "name": "Föraren bromsar"
+      },
+      "windows_open": {
+        "name": "Fönster öppna"
+      },
+      "plug_connected": {
+        "name": "Laddkabel ansluten"
+      },
+      "is_charging": {
+        "name": "Laddar"
+      },
+      "climatisation_active": {
+        "name": "Klimatisering aktiv"
+      },
+      "is_driving": {
+        "name": "På väg"
+      },
+      "is_online": {
+        "name": "Fordon nåbart"
+      },
+      "connector_locked": {
+        "name": "Laddkontakt låst"
+      },
+      "trunk_locked": {
+        "name": "Bagageutrymme låst"
+      },
+      "sunroof_open": {
+        "name": "Soltak"
+      },
+      "window_heating_front": {
+        "name": "Värmning frontskiva"
+      },
+      "window_heating_back": {
+        "name": "Värmning bakruta"
+      },
+      "lights_on": {
+        "name": "Ljus tända"
+      },
+      "warning_active": {
+        "name": "Fordonsvarning aktiv"
+      },
+      "warning_engine": {
+        "name": "Motorvarning"
+      },
+      "warning_oil": {
+        "name": "Oljenivåvarning"
+      },
+      "warning_tyre": {
+        "name": "Däcktrycksvarning"
+      },
+      "warning_brakes": {
+        "name": "Bromsvarning"
+      },
+      "warning_12v_low": {
+        "name": "12V-batteri svagt"
+      },
+      "ota_update_available": {
+        "name": "Programvaruuppdatering tillgänglig"
+      },
+      "battery_care_enabled": {
+        "name": "Batteri-Vård Aktiv"
+      },
+      "auto_unlock_when_charged": {
+        "name": "Lås upp automatiskt vid fulladdning"
+      },
+      "climate_at_unlock": {
+        "name": "Klimat vid upplåsning"
+      },
+      "window_heating_enabled": {
+        "name": "Rutvärme aktiverad"
+      },
+      "air_conditioning_without_external_power": {
+        "name": "AC utan extern ström"
+      },
+      "subscription_active": {
+        "name": "Prenumeration aktiv"
+      },
+      "ignition_on": {
+        "name": "Tändning"
+      },
+      "daily_power_budget_available": {
+        "name": "Daglig energibudget tillgänglig"
+      },
+      "vehicle_at_saved_location": {
+        "name": "Vid sparad plats"
+      },
+      "battery_protection_limit_on": {
+        "name": "12V-batteriskydd"
+      },
+      "tire_pressure_warning": {
+        "name": "Däcktryck Varning"
+      },
+      "departure_timer_1_enabled": {
+        "name": "Avgångstimer 1 Aktiv"
+      },
+      "departure_timer_2_enabled": {
+        "name": "Avgångstimer 2 Aktiv"
+      },
+      "departure_timer_3_enabled": {
+        "name": "Avgångstimer 3 Aktiv"
+      },
+      "alarm_active": {
+        "name": "Larm Aktivt"
+      },
+      "siren_active": {
+        "name": "Siren Aktiv"
+      },
+      "camping_mode": {
+        "name": "Campingläge"
+      },
+      "oil_level_warning": {
+        "name": "Oljenivå"
+      },
+      "seat_heating": {
+        "name": "Sätesvärme"
+      },
+      "parking_light": {
+        "name": "Parkeringsljus"
+      },
+      "external_power": {
+        "name": "Extern ström tillgänglig"
+      },
+      "battery_care": {
+        "name": "Batteriskyddsläge"
+      },
+      "energy_flow": {
+        "name": "Energiflöde aktivt"
+      },
+      "area_alarm": {
+        "name": "Geofence-larm"
+      },
+      "auto_release_ac_connector": {
+        "name": "Automatisk frigöring av AC-kontakt"
+      },
+      "optimised_battery_use": {
+        "name": "Optimerad batterianvändning"
+      },
+      "sunroof_rear_closed": {
+        "name": "Bakre soltak"
+      },
+      "roof_cover_closed": {
+        "name": "Sufflett"
+      },
+      "permission_is_owner": {
+        "name": "Kontot är primär ägare"
+      },
+      "permission_can_command": {
+        "name": "Kontot kan skicka kommandon"
+      },
+      "external_power_available": {
+        "name": "Extern strömförsörjning tillgänglig"
+      },
+      "hood_open": {
+        "name": "Motorhuv öppen"
+      },
+      "trunk_open": {
+        "name": "Bagagelucka öppen"
+      },
+      "warning_inspection": {
+        "name": "Service krävs"
+      },
+      "parking_brake_engaged": {
+        "name": "Parkeringsbroms"
+      },
+      "parking_light_left": {
+        "name": "Parkeringsljus (vänster)"
+      },
+      "parking_light_right": {
+        "name": "Parkeringsljus (höger)"
+      },
+      "energy_flow_active": {
+        "name": "Energiflöde"
+      },
+      "battery_care_mode_active": {
+        "name": "Batterivårdsläge"
+      },
+      "bonnet_locked": {
+        "name": "Motorhuv låst"
+      },
+      "closures_secured": {
+        "name": "Alla öppningar säkrade"
+      },
+      "service_hatch_open": {
+        "name": "Servicelucka öppen"
+      },
+      "spoiler_open": {
+        "name": "Spoiler utfälld"
+      },
+      "oil_dipstick_active": {
+        "name": "Oljesticka aktiv"
+      },
+      "fuel_level_estimated": {
+        "name": "Bränslenivå uppskattad"
+      },
+      "climatisation_at_unlock": {
+        "name": "Klimatisering vid upplåsning"
+      },
+      "mirror_heating_enabled": {
+        "name": "Spegelvärme"
+      },
+      "climate_zone_front_left_enabled": {
+        "name": "Klimatzon fram vänster"
+      },
+      "climate_zone_front_right_enabled": {
+        "name": "Klimatzon fram höger"
+      },
+      "mirror_heating_active": {
+        "name": "Spegelvärme aktiv"
+      },
+      "climate_zone_active_front_left": {
+        "name": "Klimatzon fram vänster aktiv"
+      },
+      "climate_zone_active_front_right": {
+        "name": "Klimatzon fram höger aktiv"
+      },
+      "climate_zone_active_rear_left": {
+        "name": "Klimatzon bak vänster aktiv"
+      },
+      "climate_zone_active_rear_right": {
+        "name": "Klimatzon bak höger aktiv"
+      },
+      "abrp_data_changed": {
+        "name": "ABRP-data ändrad"
+      },
+      "climatisation_without_hv_power": {
+        "name": "Klimatanläggning utan extern ström"
+      },
+      "door_front_left": {
+        "name": "Dörr fram vänster"
+      },
+      "door_front_right": {
+        "name": "Dörr fram höger"
+      },
+      "door_rear_left": {
+        "name": "Dörr bak vänster"
+      },
+      "door_rear_right": {
+        "name": "Dörr bak höger"
+      },
+      "door_trunk": {
+        "name": "Baklucka"
+      },
+      "door_bonnet": {
+        "name": "Motorhuv"
+      },
+      "light_left": {
+        "name": "Ljus vänster"
+      },
+      "light_right": {
+        "name": "Ljus höger"
+      },
+      "window_front_left": {
+        "name": "Fönster fram vänster"
+      },
+      "window_front_right": {
+        "name": "Fönster fram höger"
+      },
+      "window_rear_left": {
+        "name": "Fönster bak vänster"
+      },
+      "window_rear_right": {
+        "name": "Fönster bak höger"
+      },
+      "climate_zone_front_left": {
+        "name": "Klimatzon fram vänster"
+      },
+      "climate_zone_front_right": {
+        "name": "Klimatzon fram höger"
+      },
+      "climate_zone_rear_left": {
+        "name": "Klimatzon bak vänster"
+      },
+      "climate_zone_rear_right": {
+        "name": "Klimatzon bak höger"
+      },
+      "climate_without_external_power": {
+        "name": "Klimat utan extern ström"
+      },
+      "connection_active": {
+        "name": "Anslutning aktiv"
+      },
+      "daily_power_budget_warning": {
+        "name": "Varning för daglig energibudget"
+      },
+      "insufficient_battery_level_warning": {
+        "name": "Varning för låg batterinivå"
+      },
+      "mandatory_consent_given": {
+        "name": "Obligatoriskt samtycke givet"
+      },
+      "marketing_consent_given": {
+        "name": "Marknadsföringssamtycke givet"
+      }
+    },
+    "switch": {
+      "lock_switch": {
+        "name": "Dörrlås"
+      },
+      "climatisation_switch": {
+        "name": "Klimatisering"
+      },
+      "charging_switch": {
+        "name": "Laddning"
+      },
+      "window_heating_switch": {
+        "name": "Rutavfrostning"
+      },
+      "ventilation_switch": {
+        "name": "Kabin-Ventilation"
+      },
+      "aux_heating_switch": {
+        "name": "Värmare (Webasto)"
+      },
+      "departure_timer_1_switch": {
+        "name": "Avgångstimer 1"
+      },
+      "departure_timer_2_switch": {
+        "name": "Avgångstimer 2"
+      },
+      "departure_timer_3_switch": {
+        "name": "Avgångstimer 3"
+      },
+      "battery_care_switch": {
+        "name": "Batterivård"
+      },
+      "camping_switch": {
+        "name": "Campingläge"
+      },
+      "auto_unlock_plug_switch": {
+        "name": "Lås upp laddkontakten automatiskt"
+      },
+      "active_ventilation_switch": {
+        "name": "Aktiv ventilation"
+      }
+    },
+    "number": {
+      "target_soc_number": {
+        "name": "Laddningsmål"
+      },
+      "climate_temp_number": {
+        "name": "Klimattemperatur"
+      },
+      "target_soc": {
+        "name": "Laddningsmål"
+      },
+      "target_temperature": {
+        "name": "Klimatiseringstemperatur"
+      },
+      "min_soc": {
+        "name": "Minsta laddning (PHEV)"
+      },
+      "max_charge_current": {
+        "name": "Max laddström"
+      },
+      "auxheat_duration": {
+        "name": "Parkeringsvärmare varaktighet"
+      },
+      "auxheat_target_temp": {
+        "name": "Parkeringsvärmare måltemperatur"
+      },
+      "battery_care_target": {
+        "name": "Mål för batterivård"
+      },
+      "scan_interval": {
+        "name": "Avläsningsintervall"
+      }
+    },
+    "button": {
+      "flash_button": {
+        "name": "Ljussignal"
+      },
+      "refresh_button": {
+        "name": "Uppdatera data"
+      },
+      "wake_button": {
+        "name": "Väck fordonet"
+      },
+      "data_act_request_button": {
+        "name": "Skapa EU Data Act-databegäran"
+      },
+      "companion_reset_button": {
+        "name": "Återställ companion-anslutning"
+      }
+    },
+    "climate": {
+      "climate": {
+        "name": "Kupévärmare"
+      }
+    },
+    "device_tracker": {
+      "position": {
+        "name": "Position"
+      }
+    },
+    "select": {
+      "charge_mode_select": {
+        "name": "Laddningsläge",
+        "state": {
+          "manual": "Manuell",
+          "timer": "Timer",
+          "preferred_charging_times": "Föredragna laddningstider",
+          "only_own_current": "Endast egen el",
+          "immediate_discharging": "Ladda ur nu",
+          "timer_charging_climatization": "Tidsstyrd laddning med klimatanläggning"
+        }
+      },
+      "skoda_charge_current_select": {
+        "name": "Max. laddström",
+        "state": {
+          "maximum": "Maximal",
+          "reduced": "Reducerad"
+        }
+      }
+    },
+    "time": {
+      "departure_timer_1_time_set": {
+        "name": "Avgångstimer 1 — Tid"
+      },
+      "departure_timer_2_time_set": {
+        "name": "Avgångstimer 2 — Tid"
+      },
+      "departure_timer_3_time_set": {
+        "name": "Avgångstimer 3 — Tid"
+      }
+    },
+    "image": {
+      "render_icon": {
+        "name": "3/4 vy ikon"
+      },
+      "render_small": {
+        "name": "3/4 vy liten"
+      },
+      "render_medium": {
+        "name": "3/4 vy medium"
+      },
+      "render_side_sm": {
+        "name": "Sidoprofil liten"
+      },
+      "render_side_lg": {
+        "name": "Sidoprofil stor"
+      },
+      "render_angle_hd": {
+        "name": "3/4 vy HD"
+      },
+      "render_angle_lg": {
+        "name": "3/4 vy stor"
+      },
+      "vehicle_render": {
+        "name": "Fordonsrendering"
+      }
+    },
+    "lock": {
+      "door_lock": {
+        "name": "Dörrlås"
+      }
+    },
+    "event": {
+      "push_event": {
+        "name": "Push-händelse",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "operation-request": "Åtgärdsbegäran",
+              "service-event": "Servicehändelse",
+              "account-event": "Kontohändelse",
+              "vehicle-event": "Fordonshändelse",
+              "alarm": "Larm",
+              "other": "Övrigt",
+              "lock_state": "Låsstatus",
+              "charging_state": "Laddningsstatus",
+              "climate_state": "Klimatstatus"
+            }
+          }
+        }
+      }
+    },
+    "update": {
+      "software_update": {
+        "name": "Programvaruuppdatering"
+      }
+    },
+    "calendar": {
+      "charging_schedule": {
+        "name": "Laddningsschema"
+      },
+      "service": {
+        "name": "Serviceschema"
+      }
+    }
+  },
+  "issues": {
+    "vweu_twoway_disabled": {
+      "title": "VW EU Two-Way: inaktiverad av Volkswagen",
+      "description": "Den 2026-08-18 inaktiverade Volkswagen den inloggning som kanalen VW EU Two-Way (moderna CARIAD-backendet) anv\u00e4nde, s\u00e5 dess 1-timmestoken kan inte l\u00e4ngre f\u00f6rnyas och tv\u00e5v\u00e4gskommandon via den kanalen har slutat fungera. Detta \u00e4r en \u00e4ndring p\u00e5 Volkswagens sida \u2014 inget \u00e4r felkonfigurerat hos dig, och ditt konto \u00e4r inte i fara (felet intr\u00e4ffar innan n\u00e5got l\u00f6senord skickas).\n\n**Dina live-avl\u00e4sningar fungerar fortfarande** via EU Data Act-portalen, s\u00e5 dina sensorer p\u00e5verkas inte.\n\n**F\u00f6r tv\u00e5v\u00e4gskommandon (l\u00e5s/l\u00e5s upp, klimat, laddning):** en varaktig ers\u00e4ttning via det klassiska Car-Net-backendet (MBB) \u2014 som Volkswagen INTE har inaktiverat \u2014 \u00e4r nu i beta. Se issue #584 f\u00f6r hur du aktiverar och testar den.\n\nDu kan ta bort den nu inaktiva kanalen n\u00e4r som helst under integrationens inst\u00e4llningar (VW EU Two-Way \u2192 ta bort). Det h\u00e4r meddelandet \u00e4r endast informativt; integrationen forts\u00e4tter att k\u00f6ras p\u00e5 dina l\u00e4skanaler.\n\n**Tips:** aktivera bara EN tv\u00e5v\u00e4gsintegration f\u00f6r en och samma bil \u00e5t g\u00e5ngen. VW har hastighetsbegr\u00e4nsningar och kan tillf\u00e4lligt l\u00e5sa ett konto som flera appar hamrar p\u00e5 samtidigt \u2014 n\u00e4r det h\u00e4nder kan inte ens den officiella VW-appen styra bilen, vilket \u00e4r tecknet p\u00e5 att det \u00e4r en kontosp\u00e4rr, inte den h\u00e4r integrationen."
+    },
+    "two_factor_required": {
+      "title": "Tvåfaktorsautentisering krävs — {brand}",
+      "description": "Ditt {brand}-konto ({username}) kräver en e-postbekräftelsekod.\n\n**Engångsfix:**\n1. Öppna **{brand}-appen** på din telefon\n2. Logga in manuellt\n3. Bekräfta koden som skickats via e-post\n4. Starta om Home Assistant\n\nEfter det här engångssteget sparar integrationen inloggningstoken — du behöver inte upprepa det här."
+    },
+    "email_two_factor_required": {
+      "title": "E-post 2FA — kolla din inkorg",
+      "description": "Ditt {brand}-konto ({username}) kräver en **e-postbekräftelsekod**.\n\n**Engångsfix:**\n1. **Kolla din e-post** (och skräppost) — 6-siffrig kod från VAG IDP\n2. Öppna **{brand}-appen**\n3. Logga in manuellt och ange koden\n4. Starta om Home Assistant"
+    },
+    "terms_and_conditions": {
+      "title": "Acceptera villkor — {brand}",
+      "description": "Det finns nya användarvillkor för {brand} ({username}).\n\n1. Öppna {brand}-appen\n2. Logga in och acceptera villkoren\n3. Starta om Home Assistant"
+    },
+    "marketing_consent": {
+      "title": "Samtycke krävs — {brand}",
+      "description": "Ett nytt dataskyddssamtycke krävs för {brand} ({username}).\n\nÖppna appen → Profil → Samtycken → bekräfta → starta om Home Assistant."
+    },
+    "too_many_requests": {
+      "title": "Kontot är tillfälligt spärrat — {brand}",
+      "description": "Kontot {brand} ({username}) är tillfälligt spärrat på grund av för många förfrågningar.\n\n**Vänta 15 minuter** och starta om Home Assistant.\nTips: Öka uppdateringsintervallet till minst 15 minuter."
+    },
+    "auth_failed": {
+      "title": "Inloggning misslyckades — {brand}",
+      "description": "Anslutningen till {brand} ({username}) misslyckades.\n\nInställningar → Enheter och tjänster → VW Group Connect → ⋮ → Omkonfigurera."
+    },
+    "vehicle_data_scout_findings": {
+      "title": "API-spanare — {count} nytt fält på {brand}",
+      "description": "API-spanaren hittade **{count}** nya fält i {brand}-API-svaret som VW Group Connect inte läser ännu.\n\nDet betyder oftast att din bil har en funktion eller firmware-version som vi inte har kartlagt — och **att skicka in den här rapporten är precis det som låter oss bygga stöd för den**, för din bil och alla andra med samma modell.\n\n**1-klick-rapport:** klicka på **Läs mer** nedan för att öppna ett förifyllt GitHub-ärende.\n\n**Ännu mer användbart:** bifoga din diagnostik — Inställningar → Enheter och tjänster → VW Group Connect → ⋮ → **Ladda ner diagnostik**. Den innehåller nu hela API-svaret med de nya fälten i sitt sammanhang, vilket är precis vad vi behöver för att göra dem till entiteter.\n\n_Allt maskeras automatiskt: VIN maskeras, GPS tas bort, tokens, användar-ID, e-postadresser och registreringsskyltar rensas bort. Ingenting delas någonsin om du inte bifogar det själv._"
+    },
+    "error_reporter_findings": {
+      "title": "Felrapportör — {count} senaste fel på {brand}",
+      "description": "Felrapportören fångade **{count}** senaste integrationsfel för {brand}.\n\nAtt rapportera dem hjälper oss hitta buggar som bara uppstår på vissa fordon eller firmware-versioner.\n\n**1-klick-rapport:**\n📤 Klicka på **Läs mer** nedan för att öppna ett förifyllt GitHub-ärende.\n\n**För Facebook / forum:** Inställningar → Enheter → VW Group Connect → Diagnostik → Ladda ner — rapporten ingår, VIN och tokens maskerade.\n\n_Integritet: VIN maskerade, Bearer/JWT/UUID/e-post-tokens borttagna från meddelanden och tracebacks. Inga inloggningsuppgifter._"
+    },
+    "quota_low": {
+      "title": "Låg API-kvot — {remaining} förfrågningar kvar idag",
+      "description": "Ditt VAG-konto närmar sig den dagliga gränsen för API-förfrågningar ({remaining} av {limit} kvar, {pct}%).\n\nFör att skydda mot kvotlåsning (tillverkarens backend kan tillfälligt stänga av kontot när den dagliga gränsen nås) kan du överväga att:\n\n1. **Öka uppdateringsintervallet** — Inställningar → Enheter och tjänster → VW Group Connect → Konfigurera → Uppdateringsintervall (för närvarande vanligtvis 5–10 min)\n2. **Minska antalet andra VAG-integrationer** som körs på samma konto (var och en räknas mot samma kvot)\n3. **Vänta på den dagliga återställningen** — vanligtvis runt midnatt i tillverkarens hemtidszon\n\nDenna varning försvinner automatiskt när antalet kvarvarande förfrågningar återhämtar sig."
+    },
+    "quota_critical": {
+      "title": "API-kvot KRITISK — {remaining} förfrågningar kvar idag",
+      "description": "Ditt VAG-konto har färre än 25 API-förfrågningar kvar idag ({remaining} av {limit}, {pct}%). Tillverkarens backend kan tillfälligt stänga av kontot om du gör slut på budgeten.\n\n**Omedelbar åtgärd:**\n1. **Pausa pollningen** — Inställningar → Enheter och tjänster → VW Group Connect → Konfigurera → Uppdateringsintervall → ställ in på 30 min eller mer\n2. Undvik manuella uppdateringar/väckningar av fordonet tills budgeten återställs\n\nDenna varning försvinner automatiskt när antalet kvarvarande förfrågningar återhämtar sig."
+    },
+    "account_locked": {
+      "title": "{brand}-kontot verkar vara tillfälligt låst",
+      "description": "Märkets backend har returnerat **3 låsklassade autentiseringssvar** de senaste 30 minuterna (senast HTTP {last_status}). Detta betyder vanligtvis att VW tillfälligt har blockerat det underliggande märkeskontot efter för många misslyckade försök att förnya token.\n\nLåset släpper vanligtvis inom **några timmar upp till 24 timmar**. Integrationen har slutat göra nya försök så att låsperioden inte förlängs.\n\n**Medan du väntar**:\n\n1. Logga **inte** in och ut ur tillverkarens app upprepade gånger — det förlänger låset.\n2. Vänta minst 1–2 timmar och öppna sedan den officiella tillverkarappen på din telefon. Om appen loggar in dig utan problem har backend låst upp ditt konto.\n3. När det är upplåst höjer du `scan_interval` i Inställningar → Enheter och tjänster → VW Group Connect → Konfigurera till 15–30 minuter för att minska framtida belastning.\n4. Valfritt: aktivera det skrivskyddade EU Data Act-portalläget via OptionsFlow för att hålla en del data flödande vid framtida incidenter.\n\nDenna varning försvinner automatiskt första gången nästa token-förnyelse lyckas."
+    },
+    "data_act_no_data": {
+      "title": "EU Data Act-portalen: ingen fordonsdata ännu ({brand})",
+      "description": "EU Data Act-portalen loggade in för {brand} men returnerar ännu ingen fordonsdata.\n\nIntegrationen skapar den kontinuerliga databegäran åt dig automatiskt, så de vanliga orsakerna till ett tomt flöde är:\n\n1. **Datadelningssamtycke inte beviljat för den här bilen.** På portalen beviljar du EU Data Act-datadelningssamtycket per fordon, en gång. Tills du gör det skapas begäran men förblir tom — det här är den vanligaste orsaken.\n2. **Bilen har inte skickat något nytt ännu.** En ny datamängd publiceras först efter att bilen har körts, laddats eller låsts/låsts upp, så en helt ny begäran kan ta 15–60 minuter (eller en kort körtur) innan den börjar fyllas.\n3. **Ett avbrott på VW:s sida.** VW rapporterade ett varumärkesövergripande avbrott i EU Data Act-portalen från slutet av maj 2026; så länge det pågår returnerar portalen tom data för alla verktyg och återhämtar sig märke för märke.\n\n**Snabbaste kollen:** öppna `eu-data-act.drivesomethinggreater.com`, logga in och bekräfta (a) att datadelningssamtycket är beviljat för den här bilen och (b) att det finns en aktiv kontinuerlig (15-minuters) databegäran med alla kluster ikryssade. Om du inte ser någon data där heller ligger felet hos VW — integrationen kan inte göra något förrän VW återställer det.\n\nDet här är den skrivskyddade portal-betan — varningen försvinner av sig själv när data kommer in."
+    },
+    "data_act_browser_missing": {
+      "description": "Du aktiverade headless-webbläsar-fallbacken för EU Data Act-portalen, men Python-paketet `playwright` är inte installerat i din Home Assistant-container.\n\n**För att installera:** öppna HA-containerns skal (Tillägg → Terminal & SSH, eller `docker exec` för en manuell installation) och kör:\n\n```\npip install playwright\nplaywright install chromium\n```\n\nChromium-nedladdningen är stor (runt 100 MB), därför är detta beroende valfritt i stället för inbyggt i integrationen. Starta om Home Assistant efter installationen.\n\nAlternativt kan du stänga av reglaget under Inställningar → Enheter & tjänster → VW Group Connect → Konfigurera → 'EU Data Act-portalen: headless-webbläsar-fallback'.",
+      "title": "EU Data Act-portalen: valfritt paket 'playwright' saknas"
+    },
+    "data_act_session_expired": {
+      "description": "{brand}-portalen på `eu-data-act.drivesomethinggreater.com` svarade med HTTP 401 på ett API-anrop för en Custom Data Request, vilket betyder att sessionscookies har gått ut. Portalen stöder inte tokenförnyelse i bakgrunden, så Home Assistant kan inte återställa detta automatiskt.\n\n**Vad du ska göra:** Inställningar → Enheter & tjänster → VW Group Connect → 3-punktsmeny → Konfigurera om → ange dina uppgifter igen. Nästa konfigurationscykel öppnar portalsessionen på nytt och integrationen återupptar hämtningen av den aktiva Custom Data Request.\n\nDen här varningen försvinner av sig själv så snart nästa API-anrop till portalen lyckas.",
+      "title": "EU Data Act-portalsessionen har gått ut – autentisera på nytt"
+    },
+    "ola_headers_outdated": {
+      "description": "VW Groups backend för onlinetjänster (OLA) avvisade **{count}** förfrågningar i rad för {brand} med HTTP 403 Forbidden.\n\nDet här är en **server-sidig låsning från VW** — varken en uppdatering, headerändring eller ny inloggning åtgärdar det. VW kräver nu en Google-signerad enhetsattesterings-token (Firebase App Check / Play Integrity) plus en web-application-firewall-token på SEAT/CUPRA-backenden — den officiella appen skapar dem från ett härdat, Google-signerat bygge, vilket en öppen-källkodsklient inte kan återskapa. Fjärr**kommandon** för {brand} (och SEAT) kommer därför sannolikt inte tillbaka.\n\nFordons**data** kommer fortfarande via det skrivskyddade EU Data Act-portalen där det är tillgängligt — det är vägen framåt för dessa märken. Detta ligger helt hos VW; inget att åtgärda på din sida. (Spåras: #464.)",
+      "title": "{brand}-kommandon blockerade av VW (enhetsattestering) — {count} 403-fel i rad"
+    },
+    "vw_na_data_forbidden": {
+      "title": "Volkswagen US/CA: fordonsdata blockerad (HTTP 403)",
+      "description": "Ditt Volkswagen-konto loggade in och ditt garage lästes, men databegärandena per fordon (status, laddning, klimat) avvisas med HTTP 403 Forbidden.\n\nEn vanlig orsak är ett inaktivt Car-Net-/VW Connect-abonnemang. Men det händer också när abonnemanget är aktivt och MyVW-appen visar aktuella data. I så fall tillåter VW helt enkelt inte den här tredjepartsklienten att läsa fordonet, och det finns inget att ändra på din sida.\n\n**Vad du gör:**\n\n1. Öppna den officiella MyVW-appen och kontrollera att ditt Remote Access-/Car-Net-abonnemang är aktivt för den här bilen.\n2. Om det har löpt ut, förnya det via VW och vänta sedan på nästa avläsning.\n\nIntegrationen fortsätter visa den senast cachade datan. Den här varningen försvinner av sig själv så snart en databegäran lyckas igen."
+    },
+    "vw_na_data_forbidden_attestation": {
+      "title": "Volkswagen US/CA: fordonsdata blockerad av VW (enhetsattestering)",
+      "description": "Ditt Volkswagen-konto loggade in och ditt garage lästes, men databegärandena per fordon (status, laddning, klimat) avvisas med HTTP 403 Forbidden, och svaret bär en **enhetsattesterings**-markering.\n\nDet här är en **serversidig låsning från VW**, inte ett abonnemangsproblem och inget som en ny inloggning kan lösa — att förnya Car-Net hjälper alltså inte. VW kräver nu en Google-signerad enhetsattesteringstoken (Firebase App Check / Play Integrity) som den officiella appen skapar från ett härdat bygge, vilket en öppen källkodsklient inte kan återskapa.\n\nIntegrationen fortsätter visa den senast cachade datan. Den här varningen försvinner av sig själv om VW öppnar dataplanet igen."
+    },
+    "supplementary_reauth": {
+      "title": "Volkswagen.de-läskanalen behöver loggas in igen",
+      "description": "Den kompletterande volkswagen.de-läskanalen kunde inte återuppta sin session (Volkswagen vill ha engångskoden via e-post igen). Fordonets huvuddata påverkas inte. Öppna integrationens alternativ och kör \"Lägg till en Volkswagen.de-läskanal\" igen för att återställa de extra vw.de-data."
+    },
+    "meb_commands_unavailable": {
+      "title": "Fjärrkommandon är inte tillgängliga för den här bilen ({brand})",
+      "description": "Du aktiverade MBB-fjärrkommandon när du konfigurerade {brand}, men det här är en bil i MEB-/ID-familjen (ID.3/4/5/7, Enyaq, Born, Q4). VW:s MEB-backend stöder inte den hållbara Car-Net-kommandovägen — den hållbara inloggningen svarade \"Unknown user\" — så lås-, klimat- och laddningskommandon kan inte skickas.\n\nPosten behålls som **skrivskyddad**: fordonsdata kommer fortfarande via EU Data Act-portalen, du ser bara inga kommandoentiteter. Det här är en känd begränsning i VW:s MEB-plattform, inte ett konfigurationsfel — du kan stänga det här meddelandet."
+    },
+    "refresh_interval_too_frequent": {
+      "title": "{brand}: uppdateringsintervallet är för tätt",
+      "description": "{brand} utfärdar kortlivade åtkomsttoken, så vid ditt nuvarande uppdateringsintervall på **{current} minuter** måste nästan varje hämtning förnya token. Det utlöser skyddet mot förnyelsestormar — en gräns för hur ofta integrationen får förnya, som finns för att förhindra att märkeskontot låses — och data slutar uppdateras tills skyddet återställs.\n\nDetta är ett problem med pollningsfrekvensen, inte ett inloggningsproblem: att autentisera på nytt löser det inte.\n\n**Lösningen:** höj uppdateringsintervallet till **{recommended} minuter** eller mer i Inställningar → Enheter och tjänster → VW Group Connect → Konfigurera. Det håller token-förnyelserna under gränsen och data flödande.\n\nDenna varning försvinner automatiskt första gången en token-förnyelse lyckas igen."
+    },
+    "mandatory_consent_missing": {
+      "title": "Škoda: obligatoriskt samtycke ej accepterat",
+      "description": "Ditt {brand}-konto har inte accepterat ett obligatoriskt tjänstesamtycke, så vissa data eller funktioner kan vara otillgängliga. Öppna MyŠkoda-appen och acceptera det begärda samtycket — den här notisen försvinner av sig själv."
+    },
+    "test_cohort_share_request": {
+      "title": "Hjälp till att bekräfta en ny funktion — vill du dela ditt testresultat?",
+      "description": "Tack för att du gick med i den frivilliga testgruppen. Din bil ingår i ett eller flera experiment — till exempel att återställa GPS-position eller batteriets hälsa (State-of-Health) för VW:s EU-bilar via volkswagen.de-kanalen, eller att fånga exakt hur bilens backend svarar på ett kommando. För att kunna bekräfta resultatet på olika modeller och plattformar vore det till verklig hjälp om du delade en diagnostikfil: gå till Settings → Devices & Services → VW Group Connect → trepunktsmenyn → Ladda ner diagnostik, och bifoga sedan filen till det aktuella testar-ärendet på GitHub.\n\nExporten rensas automatiskt innan du laddar ner den — inget VIN, ingen GPS, inga tokens eller e-postadresser ingår — så den är trygg att dela offentligt. Du ser det här bara för att du valde att delta; du kan avfärda meddelandet, och om du stänger av testgruppen igen i integrationens inställningar upphör de här aviseringarna helt. Tack för att du hjälper till att låsa upp funktioner för alla som kör din modell."
+    },
+    "stale_data": {
+      "title": "{vin}: fordonsdata har inte uppdaterats på {age} h",
+      "description": "De senaste uppgifterna som din bil rapporterade samlades in för **ungefär {age} timmar sedan**, trots att integrationen fortfarande hämtar data utan problem. Det kan bero på två saker: bilen kan helt enkelt stå parkerad i viloläge (helt normalt — inget att göra), eller så kan dess dataflöde enligt EU Data Act ha upphört och slutat leverera färska värden.\n\nVärdena du ser just nu är de senast kända, inte realtidsvärden. Om bilen har körts eller laddats sedan dess och den här varningen ändå står kvar, har dataflödet med största sannolikhet gått ut: öppna volkswagen.de → bilens datainställningar och förnya/begär datadelningen på nytt, eller lägg till kanalen igen.\n\nVarningen försvinner automatiskt så snart ett färskare värde kommer in."
+    }
+  },
+  "services": {
+    "start_climate_control": {
+      "name": "Starta klimatstyrning (utökad)",
+      "description": "Starta förkonditionering med enskilda sätesvärmare, rutvärme, klimatläge och beteende vid upplåsning. Gäller endast Audi och VW EU (CARIAD BFF). Övriga märken faller tillbaka på den grundläggande tjänsten `start_climatisation`. Alla nyttolastfält utom `device_id` är valfria - utelämnade fält behåller märkets standardvärde.",
+      "fields": {
+        "device_id": {
+          "name": "Fordon",
+          "description": "Fordonet som tar emot förkonditioneringskommandot."
+        },
+        "temp_c": {
+          "name": "Måltemperatur (C)",
+          "description": "Kupéns måltemperatur i grader Celsius (15 till 30, steg 0,5)."
+        },
+        "glass_heating": {
+          "name": "Rutvärme",
+          "description": "Aktivera vindrute- och bakrutevärme tillsammans med förkonditioneringen av kupén."
+        },
+        "seat_fl": {
+          "name": "Sätesvärme fram vänster",
+          "description": "Aktivera sätesvärme på framsätet till vänster."
+        },
+        "seat_fr": {
+          "name": "Sätesvärme fram höger",
+          "description": "Aktivera sätesvärme på framsätet till höger."
+        },
+        "seat_rl": {
+          "name": "Sätesvärme bak vänster",
+          "description": "Aktivera sätesvärme på baksätet till vänster."
+        },
+        "seat_rr": {
+          "name": "Sätesvärme bak höger",
+          "description": "Aktivera sätesvärme på baksätet till höger."
+        },
+        "climatisation_at_unlock": {
+          "name": "Fortsätt klimatiseringen vid upplåsning",
+          "description": "Håll förkonditioneringen igång efter att fordonet låsts upp."
+        },
+        "climatisation_mode": {
+          "name": "Klimatiseringsläge",
+          "description": "Komfort (full effekt) eller ekonomi (reducerad effekt, längre drifttid)."
+        }
+      }
+    },
+    "update_charging_settings": {
+      "name": "Uppdatera laddningsinställningar (SEAT/CUPRA)",
+      "description": "Uppdatera SEAT/CUPRA-laddningsplanen i ett anrop. Ställer in valfri kombination av mål-laddningsnivå, maximal AC-laddström och flaggan för automatisk upplåsning vid fulladdning. Övriga märken avvisas på koordinatorns dispatch-nivå.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "VIN för fordonet som ska uppdateras."
+        },
+        "target_soc": {
+          "name": "Mål-laddningsnivå (%)",
+          "description": "Mål-laddningsnivå mellan 20 och 100 procent."
+        },
+        "max_charge_current": {
+          "name": "Maximal AC-laddström",
+          "description": "Backend-enum, maximal eller reducerad."
+        },
+        "auto_unlock_charge": {
+          "name": "Lås upp kontakten automatiskt vid fulladdning",
+          "description": "När detta är aktiverat låser kontakten upp sig själv när laddningen är klar."
+        }
+      }
+    },
+    "execute_vehicle_action": {
+      "name": "Utför fordonsåtgärd",
+      "description": "Samlad tjänst som skickar en fordonsåtgärd vald från en rullgardinsmeny. Motsvarar att anropa den enskilda tjänsten med samma namn men är lättare att hitta i Home Assistants Lovelace-tjänstväljare. Alla befintliga enskilda tjänster (vag_connect.lock, vag_connect.start_climatisation osv.) fortsätter fungera oförändrat.",
+      "fields": {
+        "device_id": {
+          "name": "Fordon",
+          "description": "Fordonsenheten som åtgärden ska utföras på."
+        },
+        "action": {
+          "name": "Åtgärd",
+          "description": "Vilken åtgärd som ska skickas."
+        }
+      }
+    },
+    "open_app": {
+      "description": "Utlöser händelsen `vag_connect_open_app` på HA:s händelsebuss med nyttolastfälten `vin`, `brand`, `deeplink_url` och `action` så att ett Lovelace-kort kan öppna märkets nativa mobilapp (myAudi, WeConnect, MyŠkoda, MySEAT, MyCUPRA, My Porsche eller VW US) på den anropande enheten. Integrationen kan inte själv öppna URL:er på en telefon; dashboardkortet ansvarar för att navigera `window.location.href = deeplink_url` på iOS / Android.",
+      "fields": {
+        "action": {
+          "description": "Valfritt sökvägssegment som läggs till djuplänken så att märkets app går direkt till en sektion. Standardvärdet `open` öppnar appen på startskärmen.",
+          "name": "App-åtgärd"
+        },
+        "vin": {
+          "description": "VIN för fordonet vars märkesapp ska öppnas.",
+          "name": "VIN"
+        }
+      },
+      "name": "Öppna märkets app (djuplänk)"
+    },
+    "abrp_send": {
+      "name": "Skicka telemetri till ABRP",
+      "description": "Bygger och skickar fordonets aktuella telemetri till A Better Routeplanner.",
+      "fields": {
+        "device_id": {
+          "name": "Fordon",
+          "description": "Fordonet som ska laddas upp (eller använd VIN)."
+        },
+        "vin": {
+          "name": "VIN",
+          "description": "Fordonets VIN (alternativ till enhet)."
+        },
+        "api_key": {
+          "name": "Åsidosätt api_key",
+          "description": "Valfritt. Ersätter den lagrade utvecklarnyckeln. Loggas aldrig."
+        },
+        "token": {
+          "name": "Åsidosätt token",
+          "description": "Valfritt. Ersätter den lagrade fordonstoken. Loggas aldrig."
+        }
+      }
+    },
+    "set_location_target_soc": {
+      "name": "Ange laddmål efter plats",
+      "description": "Anger laddmålet för en viss laddprofil (Škoda, platsbaserat).",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "Fordonets VIN."
+        },
+        "profile_id": {
+          "name": "Profil-ID",
+          "description": "ID för laddprofilen (från laddprofil-sensorn)."
+        },
+        "target": {
+          "name": "Laddmål (%)",
+          "description": "Laddmål mellan 20 och 100 procent."
+        }
+      }
+    },
+    "set_seat_heating": {
+      "name": "Ställ in sätesvärme",
+      "description": "Slår på sätesvärme per säte (Škoda). Endast de angivna sätena ändras.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "Fordonets VIN."
+        },
+        "front_left": {
+          "name": "Vänster fram"
+        },
+        "front_right": {
+          "name": "Höger fram"
+        },
+        "rear_left": {
+          "name": "Vänster bak"
+        },
+        "rear_right": {
+          "name": "Höger bak"
+        }
+      }
+    },
+    "ask_assistant": {
+      "name": "Fråga Škodas AI-assistent (Laura)",
+      "description": "Skickar en fritextfråga till MyŠkoda AI-assistenten \"Laura\" (endast Škoda) och returnerar svaret via response_variable (summary = svarstext, session_id för uppföljning). Endast rådgivande — ruttplanering + produktfrågor, ingen fordonsstyrning.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "VIN från kontot."
+        },
+        "prompt": {
+          "name": "Fråga / prompt",
+          "description": "Fritext till assistenten."
+        },
+        "timezone": {
+          "name": "Tidszon",
+          "description": "Valfritt (IANA, t.ex. Europe/Zurich). Standard är HA-systemets tidszon."
+        },
+        "session_id": {
+          "name": "Sessions-ID",
+          "description": "Valfritt. Från ett tidigare svar, för att fortsätta samma kontext."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "vehicle_not_found": {
+      "message": "Fordon med VIN {vin} hittades inte."
+    },
+    "spin_required": {
+      "message": "S-PIN krävs för denna åtgärd. Konfigurera den under Inställningar → Enheter och tjänster → VW Group Connect → Konfigurera."
+    },
+    "feature_not_supported": {
+      "message": "Funktionen {feature} stöds inte av ditt fordon eller den nuvarande API-klienten. Åtgärden skickades inte."
+    },
+    "wake_budget_exhausted": {
+      "message": "Dagligt väckningsbudget förbrukad ({count}/{budget}). För att skydda 12V-batteriet skickas inga fler väckningsförfrågningar förrän midnatt UTC. Se sensor.wake_count_today."
+    },
+    "wake_cooldown_active": {
+      "message": "Wake-up nedkylning aktiv ({remaining_s}s kvar). För att skydda 12V-batteriet är väckningar begränsade till en var {cooldown_min}:e minut per fordon."
+    },
+    "read_only_mode_active": {
+      "message": "Skrivskyddat läge är aktiverat i integrationsalternativen. Inaktivera det under Inställningar → Enheter och tjänster → VW Group Connect → Konfigurera för att skicka fordonskommandon."
+    },
+    "read_only_portal_active": {
+      "message": "Det här fordonet ansluter via VW:s skrivskyddade EU Data Act-portal, så fjärrkommandon (lås, klimat, laddning) är inte tillgängliga för det. Det här är ingen inställning du kan slå av eller på — portalkanalen har ingen kommandoväg."
+    },
+    "read_only_attestation_blocked": {
+      "message": "VW blockerar fjärrkommandon för SEAT/CUPRA bakom en enhetskontroll från Google (Play Integrity / App Check) som bara den officiella appen på en riktig telefon klarar. Lås, klimat och laddning kan därför inte skickas härifrån. Det är en permanent blockering på VW:s serversida, inte en inställning du kan stänga av. Fordonsdata uppdateras fortfarande via EU Data Act-portalen."
+    },
+    "export_file_not_allowed": {
+      "message": "Home Assistant får inte läsa {path}. Lägg exportfilen i konfigurationsmappen (eller en mapp som anges under allowlist_external_dirs) och ange sökvägen igen."
+    },
+    "export_file_not_found": {
+      "message": "Ingen fil hittades på {path}. Kontrollera sökvägen. Ett relativt namn söks i konfigurationsmappen."
+    },
+    "export_file_no_data": {
+      "message": "Filen innehöll ingen läsbar EU Data Act-datamängd. Kontrollera att det är den .zip du laddade ner från VW:s dataportal för den här bilen."
+    },
+    "historical_portal_not_ready": {
+      "message": "EU Data Act-portalen är inte redo ännu. Vänta tills integrationen har hämtat data en gång efter installationen och försök sedan med den historiska exporten igen."
+    }
+  },
+  "selector": {
+    "execute_vehicle_action_options": {
+      "options": {
+        "lock": "Lås",
+        "unlock": "Lås upp",
+        "start_climatisation": "Starta klimatisering",
+        "stop_climatisation": "Stoppa klimatisering",
+        "start_charging": "Starta laddning",
+        "stop_charging": "Stoppa laddning",
+        "flash_lights": "Blinka med ljusen",
+        "start_window_heating": "Starta rutvärme",
+        "stop_window_heating": "Stoppa rutvärme",
+        "wake_vehicle": "Väck fordonet",
+        "start_aux_heating": "Starta parkeringsvärmare",
+        "stop_aux_heating": "Stoppa parkeringsvärmare",
+        "start_ventilation": "Starta ventilation",
+        "stop_ventilation": "Stoppa ventilation"
+      }
+    }
+  }
+}

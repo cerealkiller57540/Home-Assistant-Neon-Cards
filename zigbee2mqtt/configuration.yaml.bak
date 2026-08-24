@@ -1,0 +1,131 @@
+version: 5
+mqtt:
+  base_topic: zigbee2mqtt
+  server: mqtt://core-mosquitto:1883
+  user: mqtt
+  password: mqtt
+  version: 5
+serial:
+  rtscts: false
+  baudrate: 115200
+  port: >-
+    /dev/serial/by-id/usb-SONOFF_SONOFF_Dongle_Plus_MG24_8a95bf1a41a1ef11b789926661ce3355-if00-port0
+  adapter: ember
+advanced:
+  log_level: info
+  channel: 25
+  network_key:
+    - 51
+    - 100
+    - 201
+    - 35
+    - 13
+    - 204
+    - 164
+    - 123
+    - 39
+    - 159
+    - 24
+    - 164
+    - 87
+    - 134
+    - 173
+    - 3
+  pan_id: 44247
+  ext_pan_id:
+    - 209
+    - 57
+    - 169
+    - 241
+    - 27
+    - 202
+    - 55
+    - 79
+  transmit_power: 20
+  elapsed: true
+  last_seen: ISO_8601
+frontend:
+  enabled: true
+  port: 8099
+homeassistant:
+  enabled: true
+  experimental_event_entities: true
+devices:
+  '0x58e6c5fffe33913c':
+    friendly_name: Prise Frigo
+    icon: device_icons/8eba82b6f95008cf492a1fca7cddeb2b.png
+  '0xd885acfffeef3f88':
+    friendly_name: Prise TV Salon
+    icon: device_icons/8eba82b6f95008cf492a1fca7cddeb2b.png
+  '0x98a316fffe752710':
+    friendly_name: Switch Portail
+    icon: device_icons/7cde448351bc18dee95a09f2087fcd97.png
+  '0x98a316fffe7a02d4':
+    friendly_name: Switch Porte Garage
+    icon: device_icons/7cde448351bc18dee95a09f2087fcd97.png
+  '0x48f6eefffed9f1cc':
+    friendly_name: Lumiere Garage
+    icon: device_icons/7cde448351bc18dee95a09f2087fcd97.png
+  '0xa4c138aeefefccdf':
+    friendly_name: Détecteur presence
+    retain: false
+    icon: device_icons/6cd3dca250fd519d5d2a825e5ec08247.png
+  '0x180df9fffe54fe82':
+    friendly_name: NodOn Capteur
+    icon: device_icons/cc27932088e6b9eb9eb81fdd95a33151.png
+  '0x00158d000638e9c8':
+    friendly_name: Lixee
+    retain: true
+    energy_phase: single_phase
+    linky_mode: standard
+    production: 'false'
+    tarif: auto
+    icon: device_icons/1c37703df07a4abb0004d40083fb50a7.png
+    homeassistant:
+      name: Lixee
+    optimistic: true
+  '0xa4c138084cabffff':
+    friendly_name: Prise Chambre
+    energy_precision: 3
+    power_precision: 3
+    current_precision: 3
+    icon: device_icons/ea15b6649c61c2adbd967f387cdec98e.png
+  '0xa4c138861cf3b197':
+    friendly_name: Capteur vibrations
+    optimistic: false
+    filtered_attributes: []
+    icon: device_icons/53ab90a63bb68727d33b8583678cb4b1.png
+    retain: false
+    debounce: 5
+    qos: 0
+  '0xa4c138099e8fffff':
+    friendly_name: Thermomètre salon
+    disable_automatic_update_check: false
+    retain: true
+    temperature_precision: 2
+    humidity_precision: 2
+    filtered_cache:
+      - voltage
+    icon: device_icons/de034599e67da74632b22b77933661d2.png
+    qos: 1
+  '0xa4c138059a82ffff':
+    friendly_name: PC cave a vin
+    icon: device_icons/ea15b6649c61c2adbd967f387cdec98e.png
+  '0xa4c138059a6fffff':
+    friendly_name: PC hydroponie
+    icon: device_icons/ea15b6649c61c2adbd967f387cdec98e.png
+  '0xa4c138845d3441a8':
+    friendly_name: PC Sunology
+    icon: device_icons/92aac3428c0132fdb4fcd48548babdf2.png
+  '0xa4c1386caa89a18e':
+    friendly_name: PC tondeuse
+    icon: device_icons/92aac3428c0132fdb4fcd48548babdf2.png
+  '0xc09b9efffef1a5fd':
+    friendly_name: Ouverture porte fenêtre
+    retain: true
+  '0xc02cedfffee885f9':
+    friendly_name: Clim Chambre
+  '0x449fdafffe34178a':
+    friendly_name: Capteur Portail
+availability:
+  enabled: false

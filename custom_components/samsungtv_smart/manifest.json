@@ -1,0 +1,30 @@
+{
+  "domain": "samsungtv_smart",
+  "name": "SamsungTV Smart and Art Mode",
+  "after_dependencies": [
+    "smartthings",
+    "folder",
+    "local_file"
+  ],
+  "codeowners": [
+    "@TheFab21"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "http",
+    "application_credentials"
+  ],
+  "documentation": "https://github.com/TheFab21/ha-samsungtv-smart",
+  "integration_type": "device",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/TheFab21/ha-samsungtv-smart/issues",
+  "requirements": [
+    "websocket-client!=1.4.0,>=0.58.0",
+    "wakeonlan>=2.0.0",
+    "aiofiles>=0.8.0",
+    "casttube>=0.2.1",
+    "Pillow>=10.0.0",
+    "pillow-heif>=0.13.0"
+  ],
+  "version": "8.5.3"
+}

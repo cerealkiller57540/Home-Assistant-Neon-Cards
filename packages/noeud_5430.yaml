@@ -1,0 +1,31 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  NŒUD CYBER .80 — Dell Latitude 5430 Rugged
+#
+#  Ne contient QUE le bouton MAJ + son état : jumeau de maj_53.yaml, mais avec
+#  un topic NAMESPACÉ par machine.
+#
+#  ⚠️ TOPIC : "home/nodes/maj/5430/set", PAS "home/nodes/maj/set" (celui du .53).
+#     Le topic du .53 n'a pas d'identifiant de machine : le réutiliser lancerait
+#     l'apt upgrade sur LES DEUX machines au même appui.
+#
+#  ℹ️ Métriques (CPU, RAM %, disque %, température, batterie, process, réseau) :
+#     elles viennent de l'INTÉGRATION GLANCES (sensor.dell_5430_*), ajoutée
+#     le 2026-07-25, comme pour .53. Des capteurs template convertissaient
+#     auparavant les octets/s et les octets du reporter MQTT en % et en Mbit/s ;
+#     Glances fournit directement les bonnes unités, ils ont donc été supprimés.
+# ═══════════════════════════════════════════════════════════════════════════
+
+mqtt:
+  button:
+    - name: "MAJ noeud 5430"
+      unique_id: maj_5430_button
+      command_topic: "home/nodes/maj/5430/set"
+      payload_press: "RUN"
+      icon: mdi:package-up
+      qos: 1
+
+  sensor:
+    - name: "MAJ 5430 état"
+      unique_id: maj_5430_etat
+      state_topic: "home/nodes/maj/5430/state"
+      icon: mdi:update

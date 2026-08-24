@@ -1,0 +1,17 @@
+# =============================================================================
+#  Météo Cyber — commentaire généré en direct par Hermes (LLM)
+#  Coexiste avec meteo_cyber_animateur.yaml (pool de phrases HA statique).
+#  Écrit par le cron Hermes "meteo-cyber-hermes" (toutes les 30 min) via
+#  ha_call_service input_text.set_value. Voir memory reference_hermes_agent.
+# =============================================================================
+input_text:
+  meteo_cyber_hermes:
+    name: "🤖 Météo Cyber — Hermes"
+    max: 255
+    icon: mdi:robot-outline
+
+input_datetime:
+  meteo_cyber_hermes_maj:
+    name: "🤖 Météo Cyber — dernière génération"
+    has_date: true
+    has_time: true

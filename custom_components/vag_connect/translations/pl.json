@@ -1,0 +1,2113 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Skonfiguruj VW Group Connect",
+        "description": "Jak chcesz się zalogować?\n\n**Logowanie przez przeglądarkę (zalecane)** — otwórz adres URL na telefonie lub laptopie, zaloguj się na konto Brand ID i zatwierdź urządzenie. Żadne hasło nie jest przechowywane w Home Assistant. Dostępne dla Audi, SEAT i CUPRA.\n\n**E-mail + hasło (starsza metoda)** — wprowadź bezpośrednio dane logowania Brand ID. Wymagane dla Volkswagen EU, Škoda i Porsche.",
+        "menu_options": {
+          "browser_login": "Logowanie przez przeglądarkę (zalecane)",
+          "email_password": "E-mail + hasło (starsza metoda)",
+          "website_authproxy": "Witryna Volkswagen.de (beta — tylko do odczytu)",
+          "mbb_login": "Volkswagen EU — Trwałe logowanie (MBB, dwukierunkowa alfa)"
+        }
+      },
+      "mbb_login": {
+        "title": "Volkswagen EU — Trwałe logowanie (MBB, ALFA)",
+        "description": "**Eksperymentalne, opcjonalne — tylko Volkswagen EU.** Potwierdzenie w przeglądarce (bez zapisywania hasła w Home Assistant) tworzy trwały, odnawialny token za pośrednictwem starego backendu MBB. W odróżnieniu od portalu tylko do odczytu przetrwa restarty i obsługuje dwukierunkowe zdalne ryglowanie/odryglowanie. **Wpisz swój VIN** (token MBB nie potrafi sam wylistować garażu) i dodaj kod S-PIN, aby włączyć ryglowanie/odryglowanie. Na następnym ekranie zobaczysz krótki kod i adres URL do otwarcia na dowolnym urządzeniu.",
+        "data": {
+          "mbb_vins": "VIN (numer identyfikacyjny pojazdu)",
+          "spin": "S-PIN",
+          "scan_interval": "Interwał aktualizacji"
+        },
+        "data_description": {
+          "mbb_vins": "Twój 17-znakowy VIN (na szybie / w dowodzie rejestracyjnym). Kilka aut: oddziel przecinkiem. Wymagane — trwały token MBB działa per VIN, ale nie potrafi wylistować garażu.",
+          "spin": "Opcjonalny 4-cyfrowy PIN bezpieczeństwa — wymagany do zdalnego ryglowania/odryglowania.",
+          "scan_interval": "Minuty między odpytaniami danych pojazdu."
+        }
+      },
+      "website_authproxy": {
+        "title": "Witryna Volkswagen.de (BETA, tylko do odczytu)",
+        "description": "**Experimental, opt-in.** Reads your Volkswagen via the volkswagen.de website login instead of the app backend. Volkswagen only, read-only (no remote commands). Sign in with your Volkswagen ID email and password. If your account uses email verification you will be asked for the code next. **Wymóg:** Twoje Volkswagen ID musi być głównym użytkownikiem pojazdu — jednorazowo potwierdź tożsamość na volkswagen.de (myVolkswagen → Twój pojazd). Bez tego strona nie zwraca żadnych danych.",
+        "data": {
+          "username": "Adres e-mail",
+          "password": "Hasło",
+          "scan_interval": "Interwał aktualizacji"
+        },
+        "data_description": {
+          "username": "Adres e-mail Twojego konta Volkswagen ID / myVolkswagen.",
+          "password": "Hasło do Twojego konta Volkswagen ID.",
+          "scan_interval": "Jak często pobierane są dane (w minutach). Minimum: 5."
+        }
+      },
+      "website_authproxy_otp": {
+        "title": "Kod weryfikacyjny e-mail",
+        "description": "Kod weryfikacyjny został wysłany na adres e-mail dla **{username}**.\n\nWprowadź kod, aby dokończyć logowanie do kanału witryny Volkswagen.de (beta).",
+        "data": {
+          "mfa_code": "Kod weryfikacyjny"
+        },
+        "data_description": {
+          "mfa_code": "Kod z Twojej skrzynki e-mail — ważny przez kilka minut."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Ponowne logowanie — {brand}",
+        "description": "Sesja dla **{username}** wygasła.\n\nWprowadź ponownie swoje hasło.",
+        "data": {
+          "password": "Hasło",
+          "spin": "S-PIN"
+        }
+      },
+      "reconfigure": {
+        "title": "Skonfiguruj ponownie VW Group Connect",
+        "description": "Zmień dane logowania lub ustawienia bez usuwania integracji.",
+        "data": {
+          "brand": "Marka pojazdu",
+          "username": "Adres e-mail",
+          "password": "Hasło",
+          "spin": "S-PIN",
+          "country": "Region (tylko Volkswagen USA/Kanada)",
+          "scan_interval": "Interwał aktualizacji"
+        }
+      },
+      "mfa": {
+        "title": "Weryfikacja dwuetapowa",
+        "description": "Kod potwierdzający został wysłany do **{username}**.\n\nWprowadź kod z e-maila lub aplikacji uwierzytelniającej.",
+        "data": {
+          "mfa_code": "Kod potwierdzający"
+        },
+        "data_description": {
+          "mfa_code": "6-cyfrowy kod — ważny przez kilka minut."
+        }
+      },
+      "email_password": {
+        "title": "Logowanie za pomocą adresu e-mail + hasła (starsza metoda)",
+        "description": "Połącz swój pojazd z Home Assistant.\n\nWybierz markę i wprowadź dane logowania z aplikacji producenta.",
+        "data": {
+          "brand": "Marka pojazdu",
+          "username": "Adres e-mail",
+          "password": "Hasło",
+          "spin": "S-PIN",
+          "country": "Region (tylko Volkswagen USA/Kanada)",
+          "scan_interval": "Interwał aktualizacji",
+          "enable_mbb_commands": "Włącz trwałe polecenia dwukierunkowe (MBB) — Car-Net Volkswagen / starsze Audi"
+        },
+        "data_description": {
+          "enable_mbb_commands": "Trwały sposób wysyłania poleceń zdalnych (zablokuj/odblokuj, klimatyzacja) do Volkswagena — przez starszy backend Car-Net/MBB, więc przetrwa ponowne uruchomienia. Dla samochodów Car-Net (większość PHEV/spalinowych, sprzed ID); nowsze modele ID/MEB nie są obsługiwane, więc zostaw to wyłączone. Odczyty nadal pochodzą z portalu powyżej; to dodaje jedynie kanał poleceń i jednorazowe potwierdzenie w przeglądarce (żadne dodatkowe hasło nie jest przechowywane).",
+          "brand": "Wybierz markę — myAudi, WeConnect ID, MyŠkoda, SEAT, CUPRA, VW US/CA lub Porsche.",
+          "username": "Adres e-mail z aplikacji producenta.",
+          "password": "Hasło z aplikacji.",
+          "spin": "Wymagany tylko do blokowania. Aplikacja → Bezpieczeństwo → S-PIN.",
+          "scan_interval": "Jak często pobierane są dane. Domyślnie: 5 min. Minimum: 3 min."
+        }
+      },
+      "browser_login": {
+        "title": "Logowanie przez przeglądarkę — wybierz markę",
+        "description": "Wybierz markę pojazdu, który chcesz połączyć. Na następnym ekranie zobaczysz krótki kod oraz adres URL do otwarcia na dowolnym urządzeniu z przeglądarką.",
+        "data": {
+          "brand": "Marka pojazdu",
+          "spin": "S-PIN",
+          "scan_interval": "Interwał aktualizacji"
+        },
+        "data_description": {
+          "brand": "Wyświetlane są tylko marki obsługujące logowanie przez przeglądarkę. Dla Volkswagen EU i Porsche użyj 'E-mail + hasło'.",
+          "scan_interval": "Minuty między odpytaniami danych pojazdu.",
+          "spin": "Opcjonalny 4-cyfrowy PIN bezpieczeństwa do akcji zdalnych (blokowanie, odblokowanie, klimatyzacja)."
+        }
+      },
+      "browser_login_pending": {
+        "title": "Żądanie kodu logowania…",
+        "description": "Prośba do IDP o jednorazowy kod urządzenia."
+      },
+      "browser_login_approve": {
+        "title": "Zatwierdź w przeglądarce",
+        "description": "Zeskanuj kod QR telefonem lub otwórz adres URL na dowolnym urządzeniu. Zaloguj się do konta Brand ID, jeśli zostaniesz o to poproszony, potwierdź kod, a następnie zaznacz pole poniżej i kliknij Zatwierdź.",
+        "data": {
+          "qr_code": "Zeskanuj aparatem telefonu, aby otworzyć stronę logowania",
+          "verification_url": "Lub otwórz ten adres URL w dowolnej przeglądarce",
+          "user_code": "Kod do potwierdzenia w przeglądarce",
+          "approved_in_browser": "Zatwierdziłem w przeglądarce"
+        },
+        "data_description": {
+          "qr_code": "Skieruj aparat telefonu na kod QR. Strona logowania otworzy się w przeglądarce telefonu z wypełnionym kodem poniżej.",
+          "verification_url": "Jeśli nie możesz zeskanować: skopiuj ten link, otwórz go na dowolnym urządzeniu i zaloguj się do konta Brand ID.",
+          "user_code": "Po zalogowaniu potwierdź ten kod w przeglądarce, aby zatwierdzić Home Assistant.",
+          "approved_in_browser": "Pozostaw zaznaczone. Kliknij Zatwierdź dopiero po zalogowaniu i potwierdzeniu kodu w przeglądarce."
+        }
+      },
+      "companion_adb": {
+        "title": "Telefon pomocniczy (ADB) — eksperymentalne",
+        "description": "Odczytuj dane i steruj swoim samochodem, obsługując oficjalną aplikację na zapasowym telefonie z Androidem przez ADB. To funkcja EKSPERYMENTALNA i opcjonalna. Potrzebujesz drugiego telefonu, który pozostaje zalogowany w aplikacji marki, z włączonym ADB przez Wi-Fi. Starszy telefon (Android 10 lub wcześniejszy) łączy się tutaj bezpośrednio; nowszy telefon (Android 11 lub nowszy, debugowanie bezprzewodowe) wymaga dodatku „VW Group App ADB Bridge”, na który następnie kierujesz to połączenie. Volkswagen jest zweryfikowany; pozostałe marki są na razie tylko do odczytu, dopóki nie zostanie potwierdzona mapa ekranu z prawdziwego urządzenia. Nic nie jest rootowane i żadne tokeny aplikacji nie są odczytywane — integracja jedynie odczytuje ekran i naciska przyciski.",
+        "data": {
+          "brand": "Marka pojazdu",
+          "adb_host": "Adres IP telefonu",
+          "adb_port": "Port ADB",
+          "vin": "VIN (samochód wyświetlany w aplikacji)",
+          "spin": "S-PIN (opcjonalnie)",
+          "companion_use_addon": "Połącz przez dodatek ADB Bridge",
+          "companion_addon_token": "Token dodatku"
+        },
+        "data_description": {
+          "adb_host": "Adres telefonu w Twojej sieci, np. 192.168.1.42.",
+          "adb_port": "Zwykle 5555 dla ADB przez Wi-Fi.",
+          "vin": "17-znakowy VIN samochodu wyświetlanego w aplikacji.",
+          "companion_use_addon": "Zaznacz tę opcję dla telefonu z Androidem 11 lub nowszym, który oferuje wyłącznie debugowanie bezprzewodowe. Następnie wpisz powyżej adres DODATKU zamiast adresu telefonu.",
+          "companion_addon_token": "Wymagane tylko, jeśli ustawiłeś api_token w dodatku."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Połączenie nieudane. Sprawdź dane logowania i internet.",
+      "unknown": "Nieznany błąd. Sprawdź logi.",
+      "terms_and_conditions": "Warunki użytkowania muszą być zaakceptowane. Zaloguj się w aplikacji.",
+      "marketing_consent": "Wymagana nowa zgoda. Aplikacja → Profil → Zgody.",
+      "two_factor_required": "Wymagane uwierzytelnianie dwuskładnikowe. Zaloguj się ręcznie w aplikacji.",
+      "email_two_factor_required": "Wymagane 2FA przez e-mail. Sprawdź skrzynkę (i spam) w poszukiwaniu 6-cyfrowego kodu, następnie zaloguj się ręcznie w aplikacji.",
+      "too_many_requests": "Konto tymczasowo zablokowane. Poczekaj 15 minut.",
+      "invalid_credentials": "Nieprawidłowy e-mail lub hasło.",
+      "portal_interaction_required": "Portal EU Data Act wymaga jednorazowej czynności w przeglądarce lub aplikacji marki (np. zaakceptowania warunków, potwierdzenia zgody, dokończenia onboardingu/wyboru regionu), zanim zadziała dostęp bez interfejsu. To NIE jest problem z hasłem — otwórz portal raz w przeglądarce, wykonaj polecenie i spróbuj ponownie.",
+      "upstream_unavailable": "Backend VW chwilowo niedostępny. To problem po stronie serwera VW, a NIE błąd uwierzytelniania. Poczekaj 5–15 minut i spróbuj ponownie. NIE konfiguruj integracji ponownie.",
+      "na_signin_attestation": "Twój e-mail i hasło są prawidłowe — Volkswagen w Ameryce Północnej blokuje teraz to logowanie za pomocą kontroli atestacji urządzenia Google (Play Integrity), którą może przejść tylko oficjalna aplikacja na prawdziwym telefonie. Ponowne wpisanie hasła nie pomoże; to blokada po stronie serwera VW, a nie problem z danymi logowania. (Śledzone w zgłoszeniu #1165.)",
+      "brand_not_dag_eligible": "Wybrana marka nie obsługuje logowania przez przeglądarkę. Użyj zamiast tego metody e-mail + hasło.",
+      "skoda_qr_retired": "Logowanie bez hasła (QR) marki Škoda zostało wyłączone przez Volkswagena i już nie działa. Wróć i wybierz „E-mail + hasło (starsza metoda)”, a następnie wybierz tam markę Škoda i zaloguj się przy użyciu adresu e-mail i hasła do MyŠkoda.",
+      "still_waiting_browser": "Nadal trwa oczekiwanie na zatwierdzenie w przeglądarce. Otwórz powyższy adres URL, zaloguj się, potwierdź kod, a następnie ponownie kliknij Zatwierdź.",
+      "companion_cannot_connect": "Nie można połączyć się z telefonem przez ADB. Sprawdź, czy jest w sieci, czy ADB przez Wi-Fi jest włączone oraz czy zaakceptowano monit o debugowanie.",
+      "companion_needs_addon": "To wygląda na telefon z Androidem 11 lub nowszym z debugowaniem bezprzewodowym, którego bezpośrednie połączenie stąd nie obsługuje (wymaga TLS i parowania). Zainstaluj dodatek „VW Group App ADB Bridge” (github.com/its-me-prash/vwgroup-app-adb-bridge) i wskaż go tutaj. Starsze telefony (Android 10 lub wcześniejszy) łączą się bezpośrednio.",
+      "companion_app_not_found": "Połączono z telefonem, ale aplikacja marki nie jest na nim zainstalowana.",
+      "companion_unknown_brand": "Ta marka nie ma jeszcze gotowego profilu telefonu pomocniczego."
+    },
+    "abort": {
+      "already_configured": "To konto jest już skonfigurowane.",
+      "reauth_successful": "Ponowne uwierzytelnianie zakończone sukcesem.",
+      "reconfigure_successful": "Konfiguracja zaktualizowana pomyślnie.",
+      "mbb_not_eligible": "Twój pojazd nie kwalifikuje się do trwałego logowania MBB — backend zwrócił „Unknown user”. To nowszy model ID / MEB (ID.3/4/5, e-up itp.), który nigdy nie był zarejestrowany w starym systemie Car-Net/MBB, więc trwałe logowanie i polecenia zdalne nie mogą go osiągnąć. Dla takich pojazdów użyj kanału portalu EU Data Act (lub logowania e-mail + hasło). Logowanie MBB jest przeznaczone dla starszych aut Car-Net (większość modeli hybryd plug-in / spalinowych)."
+    },
+    "progress": {
+      "awaiting_browser_login": "Otwórz {verification_uri} w dowolnej przeglądarce, zaloguj się na konto Brand ID i potwierdź kod {user_code}.",
+      "requesting_device_code": "Żądanie jednorazowego kodu logowania od IDP…"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "VW Group Connect — Ustawienia",
+        "data": {
+          "scan_interval": "Interwał aktualizacji",
+          "spin": "S-PIN",
+          "battery_nominal_kwh": "Pojemność znamionowa akumulatora (kWh, do stanu zdrowia)",
+          "enable_reverse_geocoding": "Geokodowanie odwrotne (adres parkowania)",
+          "read_only_mode": "Tryb tylko do odczytu",
+          "companion_read_charge_detail": "Companion: odczyt celu ładowania (nawiguje w aplikacji)",
+          "companion_wake_sleep": "Companion: wybudź ekran do odpytania, potem uśpij",
+          "force_ppe_climate": "Audi PPE/PPC klimat-body (Q6/A6 e-tron, RS e-tron GT Facelift, A3 2024+ PHEV)",
+          "enable_push_mqtt": "Aktualizacje push Skoda (MQTT, EKSPERYMENTALNE)",
+          "enable_push_fcm": "Aktualizacje push CUPRA/SEAT (FCM, EKSPERYMENTALNE)",
+          "enable_push_audi_vw": "Audi/VW push updates (Cariad FCM, EXPERIMENTAL)",
+          "client_id_override": "Zastąpienie client_id OAuth (użytkownicy zaawansowani)",
+          "eu_data_act_auto_kickoff": "EU Data Act: automatyczne uruchomienie Custom Data Request",
+          "supplementary_authproxy": "Dodaj kanał odczytu Volkswagen.de (scal dane)",
+          "hide_empty_entities": "Ukryj encje bez danych",
+          "supplementary_eu_portal": "Dodaj kanał odczytu portalu EU Data Act",
+          "remove_supplementary_authproxy": "Usuń kanał odczytu vw.de",
+          "remove_supplementary_eu_portal": "Usuń kanał odczytu portalu EU Data Act",
+          "supplementary_tibber": "Dodaj kanał odczytu Tibber (dane ładowania EV)",
+          "remove_supplementary_tibber": "Usuń kanał odczytu Tibber",
+          "abrp_enable": "Włącz wysyłanie telemetrii ABRP",
+          "abrp_api_key": "api_key ABRP (klucz dewelopera)",
+          "abrp_user_token": "Token ABRP (na pojazd)",
+          "keep_raw_datasets": "Zachowuj surowe zestawy danych EU Data Act (diagnostyka)",
+          "test_cohort": "Pomóż ulepszać VW Group Connect (dobrowolna grupa testowa)",
+          "vweu_device_grant": "Dodaj VW EU Two-Way — polecenia + odczyty na żywo (BETA)",
+          "remove_vweu_twoway": "Usu\u0144 VW EU Two-Way (przywr\u00f3\u0107 poprzedni kana\u0142)"
+        },
+        "data_description": {
+          "scan_interval": "Jak często pobierane są dane (minuty). Minimum: 3.",
+          "spin": "S-PIN do blokowania drzwi.",
+          "enable_reverse_geocoding": "Wysyła GPS parkowania do OpenStreetMap Nominatim, aby uzyskać ulicę/miasto. Domyślnie wyłączone (prywatność).",
+          "read_only_mode": "Po włączeniu tworzone są tylko czujniki statusu — bez przełączników, przycisków, blokad, klimatu czy suwaków wysyłających polecenia. Przydatne gdy chcesz telemetrię pojazdu bez ryzyka przypadkowego uruchomienia. Przeładuj integrację po włączeniu.",
+          "companion_read_charge_detail": "Tylko Companion (ADB). Odczytuje dodatkowo cel ładowania, moc i pozostały czas, które są ukryte za ekranem szczegółów ładowania. Aby tam przejść, integracja DOTYKA ekranu aplikacji (mniej więcej co 15 minut), więc włącz to dopiero po sprawdzeniu, że taki przebieg działa na Twoim telefonie. Domyślnie wyłączone. Po zmianie przeładuj integrację.",
+          "companion_wake_sleep": "Tylko Companion (ADB). Wybudza ekran telefonu przed każdym odpytaniem i usypia go po nim, dzięki czemu zablokowany lub uśpiony telefon pokazuje aplikację podczas odczytu bez trzymania ekranu włączonego na stałe. Domyślnie wyłączone. Po zmianie przeładuj integrację.",
+          "force_ppe_climate": "Tylko Audi. Wymusza nowy format PPE/PPC (climatisationMode obowiązkowy, targetTemperature pominięty) przy starcie klimatyzacji. Włącz tylko jeśli masz Q6 e-tron, A6 e-tron, RS e-tron GT Facelift lub A3 2024+ PHEV — w przeciwnym razie API zwraca 400. Po włączeniu przeładuj integrację.",
+          "enable_push_mqtt": "EKSPERYMENTALNE: tylko Skoda. Włącza push MQTT w czasie rzeczywistym z backendu Skoda mysmob (wymaga pakietów Python aiomqtt + firebase-messaging — obecnie importowanych leniwie, nie preinstalowanych). Faza wstępna w v1.18.0; aktywacja na żywo oczekuje na walidację przez testerów społeczności. Jeśli push jest niedostępny, integracja po cichu wraca do odpytywania. Po przełączeniu przeładuj integrację.",
+          "enable_push_fcm": "EKSPERYMENTALNE: tylko CUPRA/SEAT. Włącza push Firebase Cloud Messaging w czasie rzeczywistym z backendu OLA (wymaga pakietu Python firebase-messaging — ten sam leniwy import co przełącznik MQTT Skoda w v1.18.0). Faza wstępna w v1.19.0; aktywacja na żywo oczekuje na walidację przez testerów społeczności. Jeśli push jest niedostępny, integracja po cichu wraca do odpytywania. Po przełączeniu przeładuj integrację.",
+          "enable_push_audi_vw": "EXPERIMENTAL: Audi/VW only. Enables real-time push notifications from Cariad FCM channel (same one myAudi/WeConnect mobile apps use — covers lock/unlock results, charging-state, climate, alarm). Requires firebase-messaging Python package (same as Skoda MQTT + CUPRA/SEAT FCM). Foundation phase in v1.23.0; live activation pending community-tester validation. If push is unavailable, the integration silently falls back to polling. Reload the integration after toggling.",
+          "client_id_override": "Furtka dla zaawansowanych użytkowników na wypadek, gdy społeczność wypatrzy nowy client_id OAuth w nowym APK VW Group, zanim wychwyci go nasz codzienny kreator atlasu. Wklej tutaj pełny ciąg UUID@apps_vw-dilab_com, a resolver spróbuje go NAJPIERW przy każdym uwierzytelnieniu, zachowując wszystkie istniejące client_id w łańcuchu jako rozwiązanie awaryjne. Pozostaw puste dla domyślnego zachowania. Format: cyfry szesnastkowe 8-4-4-4-12, po których następuje @apps_vw-dilab_com. Nieprawidłowe wartości są po cichu ignorowane.",
+          "eu_data_act_auto_kickoff": "Ma znaczenie tylko wtedy, gdy integracja działa w trybie portalu EU Data Act tylko do odczytu (strategie live BFF zawiodły). Gdy WŁĄCZONE, koordynator sprawdza przy uruchomieniu, czy dla danego VIN istnieje aktywny 15-minutowy Custom Data Request, i tworzy go, jeśli żaden nie istnieje. Uruchomienie wiąże się z miesięczną subskrypcją danych na Twoim koncie w portalu, więc jest to opcja włączana dobrowolnie. Portal akceptuje NAJWYŻEJ JEDNO aktywne żądanie niestandardowe na VIN jednocześnie. Domyślnie wyłączone.",
+          "abrp_enable": "Wysyłaj telemetrię na żywo do A Better Routeplanner. Wymaga api_key oraz tokenu na pojazd. Wyłączone = brak połączeń wychodzących.",
+          "abrp_api_key": "Klucz dewelopera/partnera rejestrowany w iternio (nie dostarczamy go). Identyfikuje integrację. Nigdy nie jest logowany.",
+          "abrp_user_token": "Token 'Generic' z aplikacji ABRP: Ustawienia -> Twój samochód -> Live Data. Nigdy nie jest logowany.",
+          "keep_raw_datasets": "Przydatne tylko na kanale portalu EU Data Act. Po włączeniu ostatnie surowe pliki ZIP z danymi dostarczane przez portal są przechowywane na dysku (w .storage, na pojazd i z limitem rozmiaru), aby błędną lub brakującą wartość można było odtworzyć z dokładnie tych bajtów, które wysłał samochód. Te pliki zawierają Twoją lokalizację GPS, VIN i telemetrię, dlatego domyślnie są wyłączone – włącz je tylko podczas rozwiązywania problemów.",
+          "test_cohort": "Domyślnie wyłączone. Włącz tę opcję, aby integracja mogła próbować eksperymentalnych odczytów danych z Twojego samochodu — na przykład trwającej próby odzyskania pozycji GPS w samochodach Volkswagena z UE — i od czasu do czasu wyświetlać powiadomienie (które możesz zamknąć) z prośbą o udostępnienie pliku diagnostycznego, dzięki czemu nowa funkcja może zostać potwierdzona dla Twojego modelu. Wszystko, co udostępniasz, jest automatycznie anonimizowane, zanim opuści Twój system: nigdy nie zawiera numeru VIN, danych GPS, tokenów ani adresu e-mail. Właśnie w ten sposób odblokowywane są nowe funkcje — dla Twojego samochodu i wszystkich, którzy jeżdżą tym samym modelem — a w każdej chwili możesz ją z powrotem wyłączyć.",
+          "vweu_device_grant": "Tylko Volkswagen, BETA. Dodaje sterowanie dwukierunkowe (ryglowanie/odryglowanie, klimatyzacja, ładowanie) oraz odczyty na żywo z CARIAD po zalogowaniu się przy użyciu Volkswagen ID. Volkswagen wydaje tutaj token ważny tylko 1 godzinę, więc Twoje hasło jest przechowywane, aby móc odnawiać go automatycznie — jest wysyłane wyłącznie do własnego serwera logowania Volkswagena i nigdy nie trafia do logów ani diagnostyki. Jeśli wolisz nie przechowywać hasła, użyj zamiast tego kanałów tylko do odczytu. Zaznaczenie tej opcji otwiera krok logowania."
+        }
+      },
+      "add_vwde": {
+        "title": "Witryna Volkswagen.de (BETA, tylko do odczytu)",
+        "description": "**Experimental, opt-in.** Reads your Volkswagen via the volkswagen.de website login instead of the app backend. Volkswagen only, read-only (no remote commands). Sign in with your Volkswagen ID email and password. If your account uses email verification you will be asked for the code next. **Wymóg:** Twoje Volkswagen ID musi być głównym użytkownikiem pojazdu — jednorazowo potwierdź tożsamość na volkswagen.de (myVolkswagen → Twój pojazd). Bez tego strona nie zwraca żadnych danych.",
+        "data": {
+          "username": "Adres e-mail",
+          "password": "Hasło",
+          "scan_interval": "Interwał aktualizacji"
+        },
+        "data_description": {
+          "username": "Adres e-mail Twojego konta Volkswagen ID / myVolkswagen.",
+          "password": "Hasło do Twojego konta Volkswagen ID.",
+          "scan_interval": "Jak często pobierane są dane (w minutach). Minimum: 5."
+        }
+      },
+      "add_vwde_otp": {
+        "title": "Kod weryfikacyjny e-mail",
+        "description": "Kod weryfikacyjny został wysłany na adres e-mail dla **{username}**.\n\nWprowadź kod, aby dokończyć logowanie do kanału witryny Volkswagen.de (beta).",
+        "data": {
+          "mfa_code": "Kod weryfikacyjny"
+        },
+        "data_description": {
+          "mfa_code": "Kod z Twojej skrzynki e-mail — ważny przez kilka minut."
+        }
+      },
+      "add_portal": {
+        "title": "Portal EU Data Act — kanał odczytu",
+        "description": "Zaloguj się do portalu EU Data Act (e-mail + hasło), aby dodać SoC, ładowanie, przebieg i serwis, scalone z kanałem głównym.",
+        "data": {
+          "username": "E-mail",
+          "password": "Hasło"
+        }
+      },
+      "add_tibber": {
+        "title": "Tibber — kanał odczytu EV (OAuth2)",
+        "description": "Dodaj dane ładowania swojego EV z oficjalnego Data API Tibbera jako źródło tylko do odczytu o najniższym priorytecie — uzupełnia jedynie luki, które własne kanały auta pozostawiają puste, i nigdy nie nadpisuje świeższych danych. Konfiguracja jednorazowa:\n\n1. Otwórz {manage_url} i utwórz klienta OAuth2.\n2. Ustaw jego redirect URI dokładnie na `{redirect_uri}`.\n3. Przyznaj zakresy odczytu (user, homes, vehicles).\n4. Wklej poniżej client ID i client secret.\n\nTylko do odczytu — Tibber nie może wydawać poleceń Twojemu autu. Twoje auto musi być już sparowane w aplikacji Tibber.",
+        "data": {
+          "tibber_client_id": "Identyfikator klienta Tibber",
+          "tibber_client_secret": "Klucz tajny klienta Tibber"
+        }
+      },
+      "tibber_authorize": {
+        "title": "Tibber — autoryzuj dostęp",
+        "description": "Otwórz ten adres URL w przeglądarce, zaloguj się do Tibbera i zezwól na dostęp:\n\n{authorize_url}\n\nPo udzieleniu dostępu przeglądarka przekieruje Cię na stronę my.home-assistant.io. Skopiuj CAŁY adres z paska adresu (zawiera ?code=…) i wklej go poniżej.",
+        "data": {
+          "tibber_auth_response": "Adres przekierowania (lub sam kod)"
+        }
+      },
+      "add_vweu_twoway": {
+        "title": "VW EU Two-Way (polecenia + odczyty na \u017cywo, BETA)",
+        "description": "**Eksperymentalne, opcjonalne — tylko Volkswagen.** Dodaje sterowanie dwukierunkowe (ryglowanie/odryglowanie, klimatyzacja, ładowanie) oraz odczyty na żywo z CARIAD po zalogowaniu się przy użyciu Volkswagen ID. Ponieważ Volkswagen wydaje na tej ścieżce token ważny tylko 1 godzinę, Twoje hasło jest **przechowywane**, aby integracja mogła odnawiać go automatycznie. Jest wysyłane wyłącznie do własnego serwera logowania Volkswagena i nigdy nie trafia do logów ani diagnostyki. Wolisz nie przechowywać hasła? Użyj zamiast tego kanałów tylko do odczytu. **Wymóg:** Twoje Volkswagen ID musi być głównym użytkownikiem pojazdu.",
+        "data": {
+          "username": "Email Address",
+          "password": "Password"
+        },
+        "data_description": {
+          "username": "Adres e-mail Twojego konta Volkswagen ID / myVolkswagen.",
+          "password": "Has\u0142o do Twojego konta Volkswagen ID. U\u017cywane wy\u0142\u0105cznie do odnawiania godzinnego tokenu dost\u0119pu na serwerze logowania Volkswagena; nigdy nie jest logowane i jest usuwane z diagnostyki."
+        }
+      }
+    },
+    "error": {
+      "abrp_credentials_required": "Aby włączyć ABRP, musisz podać zarówno api_key, jak i token pojazdu.",
+      "invalid_auth": "Logowanie nieudane. Sprawd\u017a adres e-mail i has\u0142o do Volkswagen ID.",
+      "cannot_connect": "Nie uda\u0142o si\u0119 po\u0142\u0105czy\u0107 z Volkswagenem. Spr\u00f3buj ponownie.",
+      "vweu_mfa_unsupported": "To konto wymaga kodu z e-maila lub aplikacji uwierzytelniaj\u0105cej, czego VW EU Two-Way jeszcze nie obs\u0142uguje. U\u017cyj zamiast tego kana\u0142\u00f3w tylko do odczytu.",
+      "vweu_no_bff_data": "Zalogowano, ale Volkswagen nie zwr\u00f3ci\u0142 jeszcze \u017cadnych danych na \u017cywo dla tego auta z nowoczesnego backendu, wi\u0119c VW EU Two-Way nie zosta\u0142 w\u0142\u0105czony, a Tw\u00f3j obecny kana\u0142 pozostaje bez zmian. Spr\u00f3buj ponownie p\u00f3\u017aniej lub udost\u0119pnij plik diagnostyczny, aby\u015bmy mogli si\u0119 temu przyjrze\u0107."
+    },
+    "abort": {
+      "not_volkswagen": "Ten kana\u0142 jest dost\u0119pny wy\u0142\u0105cznie dla Volkswagena.",
+      "vweu_twoway_vw_disabled": "Volkswagen wyłączył 18.08.2026 logowanie, z którego korzystał ten kanał, więc nie można go już skonfigurować. Odczyty na żywo nadal działają przez portal EU Data Act, a trwały kanał poleceń przez klasyczny backend Car-Net jest w wersji beta — zobacz zgłoszenie #584."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "fuel_level": {
+        "name": "Poziom paliwa"
+      },
+      "battery_soc": {
+        "name": "Poziom baterii"
+      },
+      "range_km": {
+        "name": "Zasięg"
+      },
+      "electric_range_km": {
+        "name": "Zasięg elektryczny"
+      },
+      "combustion_range_km": {
+        "name": "Zasięg paliwa"
+      },
+      "total_range_km": {
+        "name": "Zasięg łączny"
+      },
+      "odometer_km": {
+        "name": "Przebieg"
+      },
+      "charging_state": {
+        "name": "Status ładowania"
+      },
+      "plug_state": {
+        "name": "Wtyczka ładowania"
+      },
+      "target_soc": {
+        "name": "Cel ładowania"
+      },
+      "charging_power_kw": {
+        "name": "Moc ładowania"
+      },
+      "charging_rate_kmh": {
+        "name": "Prędkość ładowania"
+      },
+      "charge_complete_eta": {
+        "name": "Koniec ładowania"
+      },
+      "charging_type": {
+        "name": "Typ ładowania"
+      },
+      "climatisation_state": {
+        "name": "Klimatyzacja"
+      },
+      "target_temperature": {
+        "name": "Temperatura docelowa"
+      },
+      "outside_temp": {
+        "name": "Temperatura zewnętrzna"
+      },
+      "service_km": {
+        "name": "Następny przegląd"
+      },
+      "service_due_at": {
+        "name": "Data przeglądu"
+      },
+      "service_due_in_days": {
+        "name": "Przegląd za"
+      },
+      "oil_service_km": {
+        "name": "Następna wymiana oleju"
+      },
+      "oil_service_at": {
+        "name": "Data wymiany oleju"
+      },
+      "oil_service_due_in_days": {
+        "name": "Wymiana oleju za"
+      },
+      "lights_count": {
+        "name": "Włączone światła (liczba)"
+      },
+      "max_charge_current_a": {
+        "name": "Maks. prąd ładowania"
+      },
+      "vehicle_state": {
+        "name": "Status auta"
+      },
+      "connection_state": {
+        "name": "Status połączenia"
+      },
+      "parking_address": {
+        "name": "Zaparkowany"
+      },
+      "parking_city": {
+        "name": "Miasto"
+      },
+      "battery_temp": {
+        "name": "Temperatura baterii"
+      },
+      "voltage_12v": {
+        "name": "Akumulator 12V"
+      },
+      "wake_count_today": {
+        "name": "Wybudzenia dziś"
+      },
+      "last_trip_distance_km": {
+        "name": "Ostatnia Trasa — Dystans"
+      },
+      "last_trip_avg_speed_kmh": {
+        "name": "Ostatnia Trasa — Średnia Prędkość"
+      },
+      "last_trip_avg_fuel_consumption_l_100km": {
+        "name": "Ostatnia Trasa — Średnie Zużycie Paliwa"
+      },
+      "last_trip_avg_electric_consumption_kwh_100km": {
+        "name": "Ostatnia Trasa — Średnie Zużycie Energii"
+      },
+      "software_version": {
+        "name": "Wersja Oprogramowania"
+      },
+      "total_charged_energy_kwh": {
+        "name": "Łączna Naładowana Energia"
+      },
+      "last_charging_session_kwh": {
+        "name": "Ostatnia Sesja — Energia"
+      },
+      "last_charging_session_duration_min": {
+        "name": "Ostatnia Sesja — Czas Trwania"
+      },
+      "last_charging_session_start": {
+        "name": "Ostatnia sesja ładowania, początek"
+      },
+      "last_charging_session_current_type": {
+        "name": "Ostatnia sesja ładowania, typ prądu"
+      },
+      "last_charging_power_curve_points": {
+        "name": "Ostatnia sesja ładowania, punkty krzywej mocy"
+      },
+      "active_charging_profile_name": {
+        "name": "Aktywny Profil Ładowania"
+      },
+      "active_charging_profile_target_soc_pct": {
+        "name": "Aktywny Profil — Docelowe Naładowanie"
+      },
+      "next_charging_time": {
+        "name": "Następne Ładowanie"
+      },
+      "charging_profiles_count": {
+        "name": "Liczba Profili"
+      },
+      "battery_care_target_soc_pct": {
+        "name": "Ochrona Baterii — Docelowe Naładowanie"
+      },
+      "driving_score": {
+        "name": "Wynik Jazdy"
+      },
+      "driving_score_class": {
+        "name": "Klasa Wyniku Jazdy"
+      },
+      "departure_timer_1_time": {
+        "name": "Harmonogram odjazdu 1"
+      },
+      "departure_timer_2_time": {
+        "name": "Harmonogram odjazdu 2"
+      },
+      "departure_timer_3_time": {
+        "name": "Harmonogram odjazdu 3"
+      },
+      "last_updated_at": {
+        "name": "Ostatnia aktualizacja"
+      },
+      "last_seen_at": {
+        "name": "Pojazd ostatnio zgłoszony"
+      },
+      "adblue_range_km": {
+        "name": "Zasięg AdBlue"
+      },
+      "api_observer_findings": {
+        "name": "Obserwator API"
+      },
+      "raw_api_fields": {
+        "name": "Surowe pola API"
+      },
+      "data_source_channel": {
+        "name": "Kanał źródła danych"
+      },
+      "error_reporter_count": {
+        "name": "Raporter błędów"
+      },
+      "requests_remaining_today": {
+        "name": "Pozostałe żądania API"
+      },
+      "license_plate": {
+        "name": "Tablica rejestracyjna"
+      },
+      "equipment_count": {
+        "name": "Liczba wyposażenia"
+      },
+      "secondary_engine_range_km": {
+        "name": "Zasięg silnika dodatkowego"
+      },
+      "secondary_engine_type": {
+        "name": "Typ silnika dodatkowego"
+      },
+      "secondary_engine_fuel_level_pct": {
+        "name": "Poziom paliwa silnika dodatkowego"
+      },
+      "subscription_expiry_at": {
+        "name": "Subskrypcja wygasa"
+      },
+      "subscription_days_remaining": {
+        "name": "Pozostałe dni subskrypcji"
+      },
+      "battery_temp_max": {
+        "name": "Temperatura akumulatora (Maks)"
+      },
+      "departure_timer_enabled_count": {
+        "name": "Aktywne timery odjazdu"
+      },
+      "fuel_tank_capacity_liters": {
+        "name": "Pojemność baku"
+      },
+      "climate_running_requests_count": {
+        "name": "Oczekujące żądania klimatyzacji"
+      },
+      "active_warning_lights_count": {
+        "name": "Aktywne kontrolki ostrzegawcze"
+      },
+      "last_lock_action": {
+        "name": "Ostatnia akcja blokady"
+      },
+      "last_lock_action_at": {
+        "name": "Czas ostatniej blokady"
+      },
+      "maintenance_report_captured_at": {
+        "name": "Raport serwisowy zaktualizowany"
+      },
+      "primary_engine_fuel_level_pct": {
+        "name": "Poziom paliwa (główny)"
+      },
+      "car_type": {
+        "name": "Typ pojazdu"
+      },
+      "climate_timer_enabled_count": {
+        "name": "Aktywne timery klimatyzacji"
+      },
+      "primary_engine_type": {
+        "name": "Typ silnika głównego"
+      },
+      "steering_wheel_position": {
+        "name": "Położenie kierownicy"
+      },
+      "primary_engine_soc_pct": {
+        "name": "Naładowanie akumulatora 12V"
+      },
+      "next_charging_timer_id": {
+        "name": "Następny timer (ID)"
+      },
+      "next_charging_timer_target_soc_reachable": {
+        "name": "Następny timer — Docelowe naładowanie osiągalne"
+      },
+      "capabilities_count": {
+        "name": "Liczba funkcji"
+      },
+      "tire_pressure_front_left_bar": {
+        "name": "Ciśnienie Opony Przód Lewy"
+      },
+      "tire_pressure_front_right_bar": {
+        "name": "Ciśnienie Opony Przód Prawy"
+      },
+      "tire_pressure_rear_left_bar": {
+        "name": "Ciśnienie Opony Tył Lewy"
+      },
+      "tire_pressure_rear_right_bar": {
+        "name": "Ciśnienie Opony Tył Prawy"
+      },
+      "lifetime_distance_km": {
+        "name": "Całkowita Odległość"
+      },
+      "lifetime_avg_fuel_consumption_l_100km": {
+        "name": "Średnie Zużycie Paliwa (Całość)"
+      },
+      "lifetime_avg_electric_consumption_kwh_100km": {
+        "name": "Średnie Zużycie Energii (Całość)"
+      },
+      "last_alarm_at": {
+        "name": "Ostatni Alarm"
+      },
+      "heater_source": {
+        "name": "Źródło Ogrzewania"
+      },
+      "climate_ready_at": {
+        "name": "Klimat Gotowy O"
+      },
+      "warning_messages": {
+        "name": "Ostrzeżenia pojazdu"
+      },
+      "service_campaigns": {
+        "name": "Akcje serwisowe"
+      },
+      "auxiliary_heating_remaining_min": {
+        "name": "Ogrzewanie postojowe, pozostały czas"
+      },
+      "auxiliary_heating_status": {
+        "name": "Stan ogrzewania postojowego"
+      },
+      "brake_fluid_change_due_at": {
+        "name": "Wymiana płynu hamulcowego wymagana"
+      },
+      "brake_pads_front_inspection_due_at": {
+        "name": "Przegląd przednich klocków hamulcowych"
+      },
+      "brake_pads_rear_inspection_due_at": {
+        "name": "Przegląd tylnych klocków hamulcowych"
+      },
+      "preferred_workshop_address": {
+        "name": "Adres preferowanego warsztatu"
+      },
+      "preferred_workshop_name": {
+        "name": "Preferowany warsztat"
+      },
+      "preferred_workshop_phone": {
+        "name": "Telefon preferowanego warsztatu"
+      },
+      "adblue_level_pct": {
+        "name": "Poziom AdBlue"
+      },
+      "cng_level_pct": {
+        "name": "Poziom zbiornika CNG"
+      },
+      "cng_range_km": {
+        "name": "Zasięg na CNG"
+      },
+      "primary_engine_range_km": {
+        "name": "Zasięg silnika głównego"
+      },
+      "charging_preferred_mode": {
+        "name": "Preferowany tryb ładowania"
+      },
+      "pending_action_id": {
+        "name": "ID oczekującej akcji"
+      },
+      "pending_action_type": {
+        "name": "Typ oczekującej akcji"
+      },
+      "pending_action_status": {
+        "name": "Stan oczekującej akcji"
+      },
+      "refuel_trip_distance_km": {
+        "name": "Dystans od tankowania"
+      },
+      "refuel_trip_duration_min": {
+        "name": "Czas jazdy od tankowania"
+      },
+      "refuel_trip_avg_speed_kmh": {
+        "name": "Śr. prędkość od tankowania"
+      },
+      "refuel_trip_avg_fuel_consumption_l_100km": {
+        "name": "Śr. zużycie paliwa od tankowania"
+      },
+      "refuel_trip_avg_electric_consumption_kwh_100km": {
+        "name": "Śr. zużycie energii od tankowania"
+      },
+      "refuel_trip_total_fuel_consumption_l": {
+        "name": "Całkowite paliwo od tankowania"
+      },
+      "refuel_trip_total_electric_consumption_kwh": {
+        "name": "Całkowita energia od ładowania"
+      },
+      "refuel_trip_recuperation_kwh": {
+        "name": "Rekuperacja od ładowania"
+      },
+      "refuel_trip_timestamp": {
+        "name": "Początek cyklu tankowania"
+      },
+      "actual_charge_rate_kw": {
+        "name": "Aktualna moc ładowania"
+      },
+      "hv_battery_min_temperature_c": {
+        "name": "Temperatura akumulatora HV (min.)"
+      },
+      "hv_battery_max_temperature_c": {
+        "name": "Temperatura akumulatora HV (maks.)"
+      },
+      "charge_max_ac_setting": {
+        "name": "Maks. prąd AC (ustawienie)"
+      },
+      "charge_max_ac_ampere": {
+        "name": "Maks. prąd AC (dostępny)"
+      },
+      "auto_release_ac_connector_state": {
+        "name": "Stan automatycznego zwolnienia złącza"
+      },
+      "active_ventilation_state": {
+        "name": "Aktywna wentylacja"
+      },
+      "active_ventilation_remaining_time_min": {
+        "name": "Pozostała aktywna wentylacja"
+      },
+      "battery_support_state": {
+        "name": "Wsparcie akumulatora 12V"
+      },
+      "evcc_charge_status": {
+        "name": "Stan ładowania evcc"
+      },
+      "connection_state_battery_power_level": {
+        "name": "Poziom naładowania akumulatora 12V"
+      },
+      "last_trip_total_fuel_consumption_l": {
+        "name": "Ostatnia podróż, paliwo całkowite"
+      },
+      "last_trip_total_electric_consumption_kwh": {
+        "name": "Ostatnia podróż, energia całkowita"
+      },
+      "notifications_count": {
+        "name": "Liczba powiadomień"
+      },
+      "last_notification_subject": {
+        "name": "Ostatnie powiadomienie, temat"
+      },
+      "last_notification_severity": {
+        "name": "Ostatnie powiadomienie, ważność"
+      },
+      "engine_oil_temperature_c": {
+        "name": "Temperatura oleju silnikowego"
+      },
+      "engine_coolant_temperature_c": {
+        "name": "Temperatura płynu chłodzącego"
+      },
+      "last_trip_reset_at": {
+        "name": "Ostatnie zerowanie podróży"
+      },
+      "battery_temp_c": {
+        "name": "Temperatura akumulatora"
+      },
+      "charging_settings_pending": {
+        "name": "Ustawienia ładowania oczekują"
+      },
+      "charging_status_pending": {
+        "name": "Polecenia ładowania oczekują"
+      },
+      "charging_mode_pending": {
+        "name": "Zmiany trybu ładowania oczekują"
+      },
+      "charging_care_pending": {
+        "name": "Zmiany ochrony baterii oczekują"
+      },
+      "climate_remaining_time_min": {
+        "name": "Klimatyzacja – pozostały czas"
+      },
+      "climate_without_external_power": {
+        "name": "Klimatyzacja bez zasilania zewnętrznego"
+      },
+      "climate_zone_front_left": {
+        "name": "Strefa klimatyzacji przód lewa"
+      },
+      "climate_zone_front_right": {
+        "name": "Strefa klimatyzacji przód prawa"
+      },
+      "climate_zone_rear_left": {
+        "name": "Strefa klimatyzacji tył lewa"
+      },
+      "climate_zone_rear_right": {
+        "name": "Strefa klimatyzacji tył prawa"
+      },
+      "climatisation_settings_pending": {
+        "name": "Ustawienia klimatyzacji oczekują"
+      },
+      "climatisation_status_pending": {
+        "name": "Polecenia klimatyzacji oczekują"
+      },
+      "connection_active": {
+        "name": "Połączenie aktywne"
+      },
+      "connection_battery_power_level": {
+        "name": "Poziom baterii (połączenie)"
+      },
+      "daily_power_budget_warning": {
+        "name": "Ostrzeżenie o dziennym limicie energii"
+      },
+      "insufficient_battery_level_warning": {
+        "name": "Ostrzeżenie o zbyt niskim poziomie baterii"
+      },
+      "nav_target_soc_pct": {
+        "name": "Docelowy poziom ładowania (nawigacja)"
+      },
+      "parking_map_url_dark": {
+        "name": "URL mapy parkowania (ciemna)"
+      },
+      "parking_map_url_light": {
+        "name": "URL mapy parkowania (jasna)"
+      },
+      "plug_led_color": {
+        "name": "Kolor LED wtyczki"
+      },
+      "remaining_charge_time_nav_min": {
+        "name": "Pozostały czas ładowania (nawigacja)"
+      },
+      "vehicle_nickname": {
+        "name": "Pseudonim pojazdu"
+      },
+      "lifetime_avg_speed_kmh": {
+        "name": "Średnia prędkość (całość)"
+      },
+      "lifetime_travel_time_min": {
+        "name": "Czas jazdy (całość)"
+      },
+      "monthly_mileage_km": {
+        "name": "Miesięczny przebieg"
+      },
+      "remaining_charge_time_min": {
+        "name": "Pozostały czas ładowania"
+      },
+      "charging_scenario": {
+        "name": "Scenariusz ładowania"
+      },
+      "immediate_charge_action_state": {
+        "name": "Stan natychmiastowego ładowania"
+      },
+      "profile_charge_reason": {
+        "name": "Powód ładowania"
+      },
+      "charge_session_energy_kwh": {
+        "name": "Naładowana energia"
+      },
+      "remaining_charge_time_bulk_min": {
+        "name": "Pozostały czas do 80% (szybkie ładowanie)"
+      },
+      "odometer_state": {
+        "name": "Stan licznika"
+      },
+      "instrument_cluster_time": {
+        "name": "Zegar pojazdu"
+      },
+      "hv_battery_state": {
+        "name": "Stan akumulatora WN"
+      },
+      "data_error_detail": {
+        "name": "Błąd danych"
+      },
+      "external_power_supply_state": {
+        "name": "Zasilanie zewnętrzne"
+      },
+      "charging_reason": {
+        "name": "Powód ładowania"
+      },
+      "charging_error_code": {
+        "name": "Kod błędu ładowania"
+      },
+      "remaining_time_target_soc": {
+        "name": "Docelowe naładowanie (pozostały czas)"
+      },
+      "charge_led_color": {
+        "name": "Kolor LED portu ładowania"
+      },
+      "charge_led_pattern": {
+        "name": "Wzór LED portu ładowania"
+      },
+      "last_report_id": {
+        "name": "ID raportu"
+      },
+      "climate_energy_consumption_kwh": {
+        "name": "Zużycie energii klimatyzacji"
+      },
+      "residual_energy_consumption_kwh": {
+        "name": "Zużycie sieci pokładowej"
+      },
+      "battery_climatization_energy_kwh": {
+        "name": "Energia klimatyzacji akumulatora"
+      },
+      "last_trip_avg_recuperation_kwh_100km": {
+        "name": "Rekuperacja w trasie (śr.)"
+      },
+      "lifetime_avg_recuperation_kwh_100km": {
+        "name": "Rekuperacja całkowita (śr.)"
+      },
+      "last_trip_avg_aux_consumption_kwh_100km": {
+        "name": "Zużycie odbiorników dod. ostatnia trasa (śr.)"
+      },
+      "lifetime_avg_aux_consumption_kwh_100km": {
+        "name": "Zużycie odbiorników dod. łącznie (śr.)"
+      },
+      "lifetime_avg_gas_consumption_kg_100km": {
+        "name": "Zużycie gazu łącznie (śr.)"
+      },
+      "lifetime_range_gain_km": {
+        "name": "Uzyskany zasięg łącznie"
+      },
+      "lifetime_zero_emission_km": {
+        "name": "Dystans bezemisyjny łącznie"
+      },
+      "last_trip_avg_gas_consumption_kg_100km": {
+        "name": "Zużycie gazu ostatnia trasa (śr.)"
+      },
+      "last_trip_range_gain_km": {
+        "name": "Uzyskany zasięg ostatnia trasa"
+      },
+      "last_trip_zero_emission_km": {
+        "name": "Dystans bezemisyjny ostatnia trasa"
+      },
+      "charger_update_trigger": {
+        "name": "Wyzwalacz aktualizacji ładowarki"
+      },
+      "report_trigger": {
+        "name": "Wyzwalacz raportu"
+      },
+      "climate_mode": {
+        "name": "Tryb klimatyzacji"
+      },
+      "active_target_soc": {
+        "name": "Aktywny cel ładowania"
+      },
+      "charge_time_display": {
+        "name": "Szczegóły czasu ładowania"
+      },
+      "charging_plug1_flap_lock_state": {
+        "name": "Blokada klapki ładowania 1"
+      },
+      "charging_plug1_flap_state": {
+        "name": "Klapka ładowania 1"
+      },
+      "charging_plug1_infrastructure_state": {
+        "name": "Stan punktu ładowania 1"
+      },
+      "charging_plug1_lock_state": {
+        "name": "Blokada wtyczki ładowania 1"
+      },
+      "charging_plug2_connectionstate": {
+        "name": "Połączenie gniazda ładowania 2"
+      },
+      "charging_plug2_flap_lock_state": {
+        "name": "Blokada klapki ładowania 2"
+      },
+      "charging_plug2_flap_state": {
+        "name": "Klapka ładowania 2"
+      },
+      "charging_plug2_infrastructure_state": {
+        "name": "Stan punktu ładowania 2"
+      },
+      "charging_plug2_lock_state": {
+        "name": "Blokada wtyczki ładowania 2"
+      },
+      "battery_available_kwh": {
+        "name": "Dostępna energia akumulatora"
+      },
+      "battery_cap_kwh": {
+        "name": "Pojemność akumulatora (energia)"
+      },
+      "battery_soh_pct": {
+        "name": "Kondycja akumulatora (stan zdrowia)"
+      },
+      "trip_total_cost": {
+        "name": "Całkowity koszt podróży"
+      },
+      "trip_fuel_cost": {
+        "name": "Koszt paliwa podróży"
+      },
+      "trip_electricity_cost": {
+        "name": "Koszt energii podróży"
+      },
+      "trip_cng_cost": {
+        "name": "Koszt CNG podróży"
+      },
+      "oil_level_pct": {
+        "name": "Poziom oleju (procent)"
+      },
+      "dataset_key": {
+        "name": "Klucz zestawu danych"
+      },
+      "charge_mode_selection": {
+        "name": "Wybrany tryb ładowania"
+      },
+      "max_charge_current_ac": {
+        "name": "Maks. prąd ładowania AC"
+      },
+      "auto_unlock_charge_port": {
+        "name": "Auto-odblokowanie gniazda ładowania"
+      },
+      "charge_bulk_threshold_pct": {
+        "name": "Próg szybkiego ładowania"
+      },
+      "charge_rate_unit": {
+        "name": "Jednostka szybkości ładowania"
+      },
+      "lifetime_trip_distance_km": {
+        "name": "Dystans podróży długoterminowej"
+      },
+      "lifetime_trip_start_odometer_km": {
+        "name": "Przebieg na początku (długoterm.)"
+      },
+      "last_trip_start_odometer_km": {
+        "name": "Przebieg na początku ostatniej podróży"
+      },
+      "oil_level_liters": {
+        "name": "Poziom oleju (litry)"
+      },
+      "oil_level_additional_pct": {
+        "name": "Dodatkowy poziom oleju"
+      },
+      "tyre_pressure_diff_fl": {
+        "name": "Odchyłka ciśnienia opony przód lewy"
+      },
+      "tyre_pressure_diff_fr": {
+        "name": "Odchyłka ciśnienia opony przód prawy"
+      },
+      "tyre_pressure_diff_rl": {
+        "name": "Odchyłka ciśnienia opony tył lewy"
+      },
+      "tyre_pressure_diff_rr": {
+        "name": "Odchyłka ciśnienia opony tył prawy"
+      },
+      "tyre_pressure_diff_spare": {
+        "name": "Odchyłka ciśnienia koła zapasowego"
+      },
+      "tyre_pressure_actual_fl": {
+        "name": "Ciśnienie opony przód lewy"
+      },
+      "tyre_pressure_actual_fr": {
+        "name": "Ciśnienie opony przód prawy"
+      },
+      "tyre_pressure_actual_rl": {
+        "name": "Ciśnienie opony tył lewy (rzeczywiste)"
+      },
+      "tyre_pressure_actual_rr": {
+        "name": "Ciśnienie opony tył prawy (rzeczywiste)"
+      },
+      "tyre_pressure_actual_spare": {
+        "name": "Ciśnienie koła zapasowego (rzeczywiste)"
+      },
+      "tyre_pressure_required_fl": {
+        "name": "Ciśnienie opony przód lewy (docelowe)"
+      },
+      "tyre_pressure_required_fr": {
+        "name": "Ciśnienie opony przód prawy (docelowe)"
+      },
+      "tyre_pressure_required_rl": {
+        "name": "Ciśnienie opony tył lewy (docelowe)"
+      },
+      "tyre_pressure_required_rr": {
+        "name": "Ciśnienie opony tył prawy (docelowe)"
+      },
+      "tyre_pressure_required_spare": {
+        "name": "Ciśnienie koła zapasowego (docelowe)"
+      },
+      "parking_lights_state": {
+        "name": "Światła postojowe"
+      },
+      "aux_battery_energy_pct": {
+        "name": "Poziom akumulatora pomocniczego"
+      },
+      "aux_battery_bem_alert_at": {
+        "name": "Czas alarmu akumulatora pomocniczego"
+      },
+      "current_speed_kmh": {
+        "name": "Prędkość"
+      },
+      "ignition_state": {
+        "name": "Zapłon"
+      },
+      "brake_pressure_indication": {
+        "name": "Wskazanie ciśnienia hamowania"
+      },
+      "dashboard_warnings_raw": {
+        "name": "Kontrolki ostrzegawcze (surowe)"
+      },
+      "climate_error_code": {
+        "name": "Kod błędu klimatyzacji"
+      },
+      "window_heating_error_code": {
+        "name": "Kod błędu ogrzewania szyb"
+      },
+      "lpg_range_km": {
+        "name": "Zasięg LPG"
+      },
+      "engine_status": {
+        "name": "Stan silnika"
+      },
+      "trip_avg_aux_consumption_kwh": {
+        "name": "Śr. zużycie dodatkowe"
+      },
+      "departure_charge_kwh": {
+        "name": "Ładowanie do wyjazdu"
+      },
+      "tire_pressure_fl_state": {
+        "name": "Stan opony przód lewa"
+      },
+      "tire_pressure_fl_errorcode": {
+        "name": "Kod błędu opony przód lewa"
+      },
+      "tire_pressure_fr_state": {
+        "name": "Stan opony przód prawa"
+      },
+      "tire_pressure_fr_errorcode": {
+        "name": "Kod błędu opony przód prawa"
+      },
+      "tire_pressure_rl_state": {
+        "name": "Stan opony tył lewa"
+      },
+      "tire_pressure_rl_errorcode": {
+        "name": "Kod błędu opony tył lewa"
+      },
+      "tire_pressure_rr_state": {
+        "name": "Stan opony tył prawa"
+      },
+      "tire_pressure_rr_errorcode": {
+        "name": "Kod błędu opony tył prawa"
+      },
+      "next_charge_timer_start_at": {
+        "name": "Następny start ładowania"
+      },
+      "next_charge_timer_finish_at": {
+        "name": "Następny koniec ładowania"
+      },
+      "next_charge_target_reachability": {
+        "name": "Osiągalność celu ładowania"
+      },
+      "next_charge_timer_number": {
+        "name": "Numer następnego harmonogramu ładowania"
+      },
+      "ascent_slope_consumption": {
+        "name": "Zużycie na wzniesieniu (pod górę)"
+      },
+      "descent_slope_consumption": {
+        "name": "Zużycie na wzniesieniu (z górki)"
+      },
+      "report_type": {
+        "name": "Typ raportu"
+      },
+      "result_app": {
+        "name": "Wynik danych aplikacji"
+      },
+      "result_master": {
+        "name": "Wynik danych podstawowych"
+      },
+      "update_reason": {
+        "name": "Powód ostatniej aktualizacji"
+      },
+      "start_stop_action": {
+        "name": "Akcja start/stop ładowania"
+      },
+      "start_stop_modification": {
+        "name": "Modyfikacja start/stop"
+      },
+      "bidi_max_charge_level_pct": {
+        "name": "Ładowanie dwukierunkowe maks. poziom naładowania"
+      },
+      "bidi_min_charge_level_pct": {
+        "name": "Ładowanie dwukierunkowe min. poziom naładowania"
+      },
+      "bidi_energy_used": {
+        "name": "Zużyta energia dwukierunkowa"
+      },
+      "bidi_energy_used_threshold": {
+        "name": "Limit zużytej energii dwukierunkowej"
+      },
+      "bidi_cycles": {
+        "name": "Cykle ładowania dwukierunkowego"
+      },
+      "bidi_cycles_threshold": {
+        "name": "Limit cykli ładowania dwukierunkowego"
+      },
+      "bidi_operating_hours": {
+        "name": "Godziny pracy dwukierunkowej"
+      },
+      "bidi_operating_hours_threshold": {
+        "name": "Limit godzin pracy dwukierunkowej"
+      },
+      "bidi_quota": {
+        "name": "Przydział ładowania dwukierunkowego"
+      },
+      "bidi_quota_threshold": {
+        "name": "Limit przydziału ładowania dwukierunkowego"
+      },
+      "sunroof_position_pct": {
+        "name": "Pozycja dachu przesuwnego"
+      },
+      "spoiler_position_pct": {
+        "name": "Pozycja spojlera"
+      },
+      "battery_care_score": {
+        "name": "Wynik trybu ochrony akumulatora"
+      },
+      "battery_care_score_threshold": {
+        "name": "Próg wyniku trybu ochrony akumulatora"
+      },
+      "cabin_temp": {
+        "name": "Temperatura w kabinie"
+      },
+      "charge_target_time": {
+        "name": "Docelowy czas ładowania"
+      },
+      "max_number_users": {
+        "name": "Maks. liczba użytkowników"
+      },
+      "charging_profiles_pending": {
+        "name": "Zmiany profilu ładowania oczekują"
+      },
+      "climatisation_timers_pending": {
+        "name": "Zmiany timera klimatyzacji oczekują"
+      },
+      "calibration_need_detected": {
+        "name": "Wymagana kalibracja akumulatora"
+      },
+      "calibration_request_initial": {
+        "name": "Prośba o kalibrację"
+      },
+      "calibration_request_escalation_1": {
+        "name": "Przypomnienie o kalibracji"
+      },
+      "calibration_request_escalation_2": {
+        "name": "Ostatnie przypomnienie o kalibracji"
+      },
+      "calibration_request_method": {
+        "name": "Metoda kalibracji"
+      },
+      "calibration_failure": {
+        "name": "Błąd kalibracji"
+      },
+      "calibration_failure_reason": {
+        "name": "Przyczyna błędu kalibracji"
+      },
+      "preferred_charge_mode": {
+        "name": "Preferowany tryb ładowania"
+      },
+      "last_refuel_quantity": {
+        "name": "Ilość ostatniego tankowania"
+      },
+      "last_refuel_cost": {
+        "name": "Koszt ostatniego tankowania"
+      },
+      "last_refuel_currency": {
+        "name": "Waluta ostatniego tankowania"
+      },
+      "last_refuel_fuel_type": {
+        "name": "Ostatnie paliwo"
+      },
+      "last_refuel_station": {
+        "name": "Ostatnia stacja"
+      },
+      "last_refuel_at": {
+        "name": "Czas ostatniego tankowania"
+      },
+      "parking_location": {
+        "name": "Miejsce parkowania"
+      },
+      "parking_cost": {
+        "name": "Koszt parkowania"
+      },
+      "parking_currency": {
+        "name": "Waluta parkowania"
+      },
+      "parking_started_at": {
+        "name": "Początek parkowania"
+      },
+      "parking_ended_at": {
+        "name": "Koniec parkowania"
+      },
+      "reminder_technical_inspection": {
+        "name": "Przypomnienie o przeglądzie"
+      },
+      "reminder_seasonal_tyre_change": {
+        "name": "Przypomnienie o zmianie opon"
+      },
+      "reminder_first_aid_kit": {
+        "name": "Przypomnienie o apteczce"
+      },
+      "reminder_tyre_repair_kit": {
+        "name": "Przypomnienie o zestawie naprawczym"
+      }
+    },
+    "binary_sensor": {
+      "mbb_two_way_available": {
+        "name": "MBB dwukierunkowy dostępny"
+      },
+      "doors_locked": {
+        "name": "Drzwi zablokowane"
+      },
+      "doors_open": {
+        "name": "Drzwi otwarte"
+      },
+      "driver_braking_active": {
+        "name": "Hamowanie kierowcy"
+      },
+      "windows_open": {
+        "name": "Okna otwarte"
+      },
+      "plug_connected": {
+        "name": "Kabel ładowania podłączony"
+      },
+      "is_charging": {
+        "name": "Ładuje się"
+      },
+      "climatisation_active": {
+        "name": "Klimatyzacja aktywna"
+      },
+      "is_driving": {
+        "name": "W trasie"
+      },
+      "is_online": {
+        "name": "Pojazd dostępny"
+      },
+      "connector_locked": {
+        "name": "Wtyczka zablokowana"
+      },
+      "trunk_locked": {
+        "name": "Bagażnik zamknięty"
+      },
+      "sunroof_open": {
+        "name": "Dach przesuwny"
+      },
+      "window_heating_front": {
+        "name": "Ogrzewanie przedniej szyby"
+      },
+      "window_heating_back": {
+        "name": "Ogrzewanie tylnej szyby"
+      },
+      "lights_on": {
+        "name": "Światła włączone"
+      },
+      "warning_active": {
+        "name": "Ostrzeżenie pojazdu"
+      },
+      "warning_engine": {
+        "name": "Ostrzeżenie silnika"
+      },
+      "warning_oil": {
+        "name": "Ostrzeżenie poziomu oleju"
+      },
+      "warning_tyre": {
+        "name": "Ostrzeżenie ciśnienia opon"
+      },
+      "warning_brakes": {
+        "name": "Ostrzeżenie hamulców"
+      },
+      "warning_12v_low": {
+        "name": "Słaba bateria 12V"
+      },
+      "ota_update_available": {
+        "name": "Dostępna aktualizacja oprogramowania"
+      },
+      "battery_care_enabled": {
+        "name": "Ochrona Baterii Aktywna"
+      },
+      "auto_unlock_when_charged": {
+        "name": "Automatyczne odblokowanie po naładowaniu"
+      },
+      "climate_at_unlock": {
+        "name": "Klimatyzacja przy odblokowaniu"
+      },
+      "window_heating_enabled": {
+        "name": "Ogrzewanie szyb włączone"
+      },
+      "air_conditioning_without_external_power": {
+        "name": "Klimatyzacja bez zasilania zewnętrznego"
+      },
+      "subscription_active": {
+        "name": "Subskrypcja aktywna"
+      },
+      "ignition_on": {
+        "name": "Zapłon"
+      },
+      "daily_power_budget_available": {
+        "name": "Dzienny budżet energii dostępny"
+      },
+      "vehicle_at_saved_location": {
+        "name": "W zapisanej lokalizacji"
+      },
+      "battery_protection_limit_on": {
+        "name": "Ochrona akumulatora 12V"
+      },
+      "tire_pressure_warning": {
+        "name": "Ostrzeżenie Ciśnienia Opon"
+      },
+      "departure_timer_1_enabled": {
+        "name": "Timer Odjazdu 1 Aktywny"
+      },
+      "departure_timer_2_enabled": {
+        "name": "Timer Odjazdu 2 Aktywny"
+      },
+      "departure_timer_3_enabled": {
+        "name": "Timer Odjazdu 3 Aktywny"
+      },
+      "alarm_active": {
+        "name": "Alarm Aktywny"
+      },
+      "siren_active": {
+        "name": "Syrena Aktywna"
+      },
+      "camping_mode": {
+        "name": "Tryb kempingowy"
+      },
+      "oil_level_warning": {
+        "name": "Poziom oleju"
+      },
+      "seat_heating": {
+        "name": "Podgrzewanie foteli"
+      },
+      "parking_light": {
+        "name": "Światło postojowe"
+      },
+      "external_power": {
+        "name": "Zasilanie zewnętrzne dostępne"
+      },
+      "battery_care": {
+        "name": "Tryb ochrony akumulatora"
+      },
+      "energy_flow": {
+        "name": "Przepływ energii aktywny"
+      },
+      "area_alarm": {
+        "name": "Alarm geofence"
+      },
+      "auto_release_ac_connector": {
+        "name": "Automatyczne zwolnienie złącza AC"
+      },
+      "optimised_battery_use": {
+        "name": "Zoptymalizowane użycie akumulatora"
+      },
+      "sunroof_rear_closed": {
+        "name": "Tylny szyberdach"
+      },
+      "roof_cover_closed": {
+        "name": "Dach składany"
+      },
+      "permission_is_owner": {
+        "name": "Konto jest głównym właścicielem"
+      },
+      "permission_can_command": {
+        "name": "Konto może wysyłać polecenia"
+      },
+      "external_power_available": {
+        "name": "Zasilanie zewnętrzne dostępne"
+      },
+      "hood_open": {
+        "name": "Maska otwarta"
+      },
+      "trunk_open": {
+        "name": "Bagażnik otwarty"
+      },
+      "warning_inspection": {
+        "name": "Przegląd wymagany"
+      },
+      "parking_brake_engaged": {
+        "name": "Hamulec postojowy"
+      },
+      "parking_light_left": {
+        "name": "Światło postojowe (lewe)"
+      },
+      "parking_light_right": {
+        "name": "Światło postojowe (prawe)"
+      },
+      "energy_flow_active": {
+        "name": "Przepływ energii"
+      },
+      "battery_care_mode_active": {
+        "name": "Tryb ochrony akumulatora"
+      },
+      "bonnet_locked": {
+        "name": "Maska zablokowana"
+      },
+      "closures_secured": {
+        "name": "Wszystkie otwory zabezpieczone"
+      },
+      "service_hatch_open": {
+        "name": "Klapa serwisowa otwarta"
+      },
+      "spoiler_open": {
+        "name": "Spojler wysunięty"
+      },
+      "oil_dipstick_active": {
+        "name": "Bagnet oleju aktywny"
+      },
+      "fuel_level_estimated": {
+        "name": "Poziom paliwa szacowany"
+      },
+      "climatisation_at_unlock": {
+        "name": "Klimatyzacja przy odblokowaniu"
+      },
+      "mirror_heating_enabled": {
+        "name": "Podgrzewanie lusterek"
+      },
+      "climate_zone_front_left_enabled": {
+        "name": "Strefa klimatyczna przód lewa"
+      },
+      "climate_zone_front_right_enabled": {
+        "name": "Strefa klimatyczna przód prawa"
+      },
+      "mirror_heating_active": {
+        "name": "Podgrzewanie lusterek aktywne"
+      },
+      "climate_zone_active_front_left": {
+        "name": "Strefa klimatyczna przód lewa aktywna"
+      },
+      "climate_zone_active_front_right": {
+        "name": "Strefa klimatyczna przód prawa aktywna"
+      },
+      "climate_zone_active_rear_left": {
+        "name": "Strefa klimatyczna tył lewa aktywna"
+      },
+      "climate_zone_active_rear_right": {
+        "name": "Strefa klimatyczna tył prawa aktywna"
+      },
+      "abrp_data_changed": {
+        "name": "Dane ABRP zmienione"
+      },
+      "climatisation_without_hv_power": {
+        "name": "Klimatyzacja bez zasilania zewnętrznego"
+      },
+      "door_front_left": {
+        "name": "Drzwi przednie lewe"
+      },
+      "door_front_right": {
+        "name": "Drzwi przednie prawe"
+      },
+      "door_rear_left": {
+        "name": "Drzwi tylne lewe"
+      },
+      "door_rear_right": {
+        "name": "Drzwi tylne prawe"
+      },
+      "door_trunk": {
+        "name": "Bagażnik"
+      },
+      "door_bonnet": {
+        "name": "Maska"
+      },
+      "light_left": {
+        "name": "Światło lewe"
+      },
+      "light_right": {
+        "name": "Światło prawe"
+      },
+      "window_front_left": {
+        "name": "Szyba przednia lewa"
+      },
+      "window_front_right": {
+        "name": "Szyba przednia prawa"
+      },
+      "window_rear_left": {
+        "name": "Szyba tylna lewa"
+      },
+      "window_rear_right": {
+        "name": "Szyba tylna prawa"
+      },
+      "climate_zone_front_left": {
+        "name": "Strefa klimatyzacji przód lewa"
+      },
+      "climate_zone_front_right": {
+        "name": "Strefa klimatyzacji przód prawa"
+      },
+      "climate_zone_rear_left": {
+        "name": "Strefa klimatyzacji tył lewa"
+      },
+      "climate_zone_rear_right": {
+        "name": "Strefa klimatyzacji tył prawa"
+      },
+      "climate_without_external_power": {
+        "name": "Klimatyzacja bez zasilania zewnętrznego"
+      },
+      "connection_active": {
+        "name": "Połączenie aktywne"
+      },
+      "daily_power_budget_warning": {
+        "name": "Ostrzeżenie o dziennym limicie energii"
+      },
+      "insufficient_battery_level_warning": {
+        "name": "Ostrzeżenie o zbyt niskim poziomie baterii"
+      },
+      "mandatory_consent_given": {
+        "name": "Udzielono wymaganej zgody"
+      },
+      "marketing_consent_given": {
+        "name": "Udzielono zgody marketingowej"
+      }
+    },
+    "switch": {
+      "lock_switch": {
+        "name": "Blokada drzwi"
+      },
+      "climatisation_switch": {
+        "name": "Klimatyzacja"
+      },
+      "charging_switch": {
+        "name": "Ładowanie"
+      },
+      "window_heating_switch": {
+        "name": "Ogrzewanie szyb"
+      },
+      "ventilation_switch": {
+        "name": "Wentylacja Kabiny"
+      },
+      "aux_heating_switch": {
+        "name": "Ogrzewanie Postojowe (Webasto)"
+      },
+      "departure_timer_1_switch": {
+        "name": "Timer odjazdu 1"
+      },
+      "departure_timer_2_switch": {
+        "name": "Timer odjazdu 2"
+      },
+      "departure_timer_3_switch": {
+        "name": "Timer odjazdu 3"
+      },
+      "battery_care_switch": {
+        "name": "Ochrona baterii"
+      },
+      "camping_switch": {
+        "name": "Tryb kempingowy"
+      },
+      "auto_unlock_plug_switch": {
+        "name": "Automatyczne odblokowanie wtyczki ładowania"
+      },
+      "active_ventilation_switch": {
+        "name": "Aktywna wentylacja"
+      }
+    },
+    "number": {
+      "target_soc_number": {
+        "name": "Cel ładowania"
+      },
+      "climate_temp_number": {
+        "name": "Temperatura klimatyzacji"
+      },
+      "target_soc": {
+        "name": "Cel ładowania"
+      },
+      "target_temperature": {
+        "name": "Temperatura klimatyzacji"
+      },
+      "min_soc": {
+        "name": "Minimalny poziom (PHEV)"
+      },
+      "max_charge_current": {
+        "name": "Maks. prąd ładowania"
+      },
+      "auxheat_duration": {
+        "name": "Czas ogrzewania postojowego"
+      },
+      "auxheat_target_temp": {
+        "name": "Docelowa temperatura ogrzewania postojowego"
+      },
+      "battery_care_target": {
+        "name": "Cel ochrony baterii"
+      },
+      "scan_interval": {
+        "name": "Interwał odpytywania"
+      }
+    },
+    "button": {
+      "flash_button": {
+        "name": "Mignięcie światłami"
+      },
+      "refresh_button": {
+        "name": "Odśwież dane"
+      },
+      "wake_button": {
+        "name": "Obudź pojazd"
+      },
+      "data_act_request_button": {
+        "name": "Utwórz żądanie danych EU Data Act"
+      },
+      "companion_reset_button": {
+        "name": "Resetuj połączenie companion"
+      }
+    },
+    "climate": {
+      "climate": {
+        "name": "Klimatyzacja postojowa"
+      }
+    },
+    "device_tracker": {
+      "position": {
+        "name": "Pozycja"
+      }
+    },
+    "select": {
+      "charge_mode_select": {
+        "name": "Tryb ładowania",
+        "state": {
+          "manual": "Ręczny",
+          "timer": "Harmonogram",
+          "preferred_charging_times": "Preferowane godziny ładowania",
+          "only_own_current": "Tylko własna energia",
+          "immediate_discharging": "Rozładuj teraz",
+          "timer_charging_climatization": "Ładowanie z harmonogramem i klimatyzacją"
+        }
+      },
+      "skoda_charge_current_select": {
+        "name": "Maks. prąd ładowania",
+        "state": {
+          "maximum": "Maksymalny",
+          "reduced": "Zmniejszony"
+        }
+      }
+    },
+    "time": {
+      "departure_timer_1_time_set": {
+        "name": "Czasomierz Wyjazdu 1 — Godzina"
+      },
+      "departure_timer_2_time_set": {
+        "name": "Czasomierz Wyjazdu 2 — Godzina"
+      },
+      "departure_timer_3_time_set": {
+        "name": "Czasomierz Wyjazdu 3 — Godzina"
+      }
+    },
+    "image": {
+      "render_icon": {
+        "name": "Widok 3/4 ikona"
+      },
+      "render_small": {
+        "name": "Widok 3/4 mały"
+      },
+      "render_medium": {
+        "name": "Widok 3/4 średni"
+      },
+      "render_side_sm": {
+        "name": "Profil boczny mały"
+      },
+      "render_side_lg": {
+        "name": "Profil boczny duży"
+      },
+      "render_angle_hd": {
+        "name": "Widok 3/4 HD"
+      },
+      "render_angle_lg": {
+        "name": "Widok 3/4 duży"
+      },
+      "vehicle_render": {
+        "name": "Render pojazdu"
+      }
+    },
+    "lock": {
+      "door_lock": {
+        "name": "Zamek drzwi"
+      }
+    },
+    "event": {
+      "push_event": {
+        "name": "Zdarzenie push",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "operation-request": "Żądanie operacji",
+              "service-event": "Zdarzenie serwisowe",
+              "account-event": "Zdarzenie konta",
+              "vehicle-event": "Zdarzenie pojazdu",
+              "alarm": "Alarm",
+              "other": "Inne",
+              "lock_state": "Stan zamków",
+              "charging_state": "Stan ładowania",
+              "climate_state": "Stan klimatyzacji"
+            }
+          }
+        }
+      }
+    },
+    "update": {
+      "software_update": {
+        "name": "Aktualizacja oprogramowania"
+      }
+    },
+    "calendar": {
+      "charging_schedule": {
+        "name": "Harmonogram ładowania"
+      },
+      "service": {
+        "name": "Harmonogram serwisowy"
+      }
+    }
+  },
+  "issues": {
+    "vweu_twoway_disabled": {
+      "title": "VW EU Two-Way: wy\u0142\u0105czone przez Volkswagena",
+      "description": "18.08.2026 Volkswagen wy\u0142\u0105czy\u0142 logowanie, z kt\u00f3rego korzysta\u0142 kana\u0142 VW EU Two-Way (nowoczesny backend CARIAD), wi\u0119c jego godzinny token nie mo\u017ce ju\u017c by\u0107 odnawiany, a polecenia dwukierunkowe przez ten kana\u0142 przesta\u0142y dzia\u0142a\u0107. To zmiana po stronie Volkswagena \u2014 nic nie jest \u017ale skonfigurowane u Ciebie, a Twoje konto nie jest zagro\u017cone (b\u0142\u0105d wyst\u0119puje, zanim jakiekolwiek has\u0142o zostanie wys\u0142ane).\n\n**Twoje odczyty na \u017cywo nadal dzia\u0142aj\u0105** przez portal EU Data Act, wi\u0119c Twoje czujniki pozostaj\u0105 bez zmian.\n\n**Dla polece\u0144 dwukierunkowych (ryglowanie/odryglowanie, klimatyzacja, \u0142adowanie):** trwa\u0142y zamiennik przez klasyczny backend Car-Net (MBB) \u2014 kt\u00f3rego Volkswagen NIE wy\u0142\u0105czy\u0142 \u2014 jest teraz w wersji beta. Zobacz zg\u0142oszenie #584, aby dowiedzie\u0107 si\u0119, jak go w\u0142\u0105czy\u0107 i przetestowa\u0107.\n\nNieaktywny ju\u017c kana\u0142 mo\u017cesz w ka\u017cdej chwili usun\u0105\u0107 w opcjach integracji (VW EU Two-Way \u2192 usu\u0144). To komunikat informacyjny; integracja nadal dzia\u0142a na Twoich kana\u0142ach odczytu.\n\n**Wskaz\u00f3wka:** dla danego auta w\u0142\u0105czaj tylko JEDN\u0104 integracj\u0119 dwukierunkow\u0105 naraz. VW ogranicza liczb\u0119 \u017c\u0105da\u0144 i mo\u017ce tymczasowo zablokowa\u0107 konto, kt\u00f3re kilka aplikacji odpytuje jednocze\u015bnie \u2014 gdy tak si\u0119 stanie, nawet oficjalna aplikacja VW nie mo\u017ce sterowa\u0107 autem, co jest sygna\u0142em, \u017ce to blokada konta, a nie ta integracja."
+    },
+    "two_factor_required": {
+      "title": "Wymagane uwierzytelnianie dwuskładnikowe — {brand}",
+      "description": "Twoje konto {brand} ({username}) wymaga kodu weryfikacyjnego z e-maila.\n\n**Jednorazowa naprawa:**\n1. Otwórz aplikację **{brand}** na telefonie\n2. Zaloguj się ręcznie\n3. Potwierdź kod przesłany e-mailem\n4. Uruchom ponownie Home Assistant\n\nPo tym jednorazowym kroku integracja zapisze token logowania — nie będziesz musiał tego powtarzać."
+    },
+    "email_two_factor_required": {
+      "title": "2FA przez e-mail — sprawdź skrzynkę",
+      "description": "Twoje konto {brand} ({username}) wymaga **kodu weryfikacyjnego e-mail**.\n\n**Jednorazowa naprawa:**\n1. **Sprawdź e-mail** (i spam) — 6-cyfrowy kod od VAG IDP\n2. Otwórz aplikację **{brand}**\n3. Zaloguj się ręcznie i wprowadź kod\n4. Uruchom ponownie Home Assistant"
+    },
+    "terms_and_conditions": {
+      "title": "Akceptacja warunków — {brand}",
+      "description": "Pojawiły się nowe warunki użytkowania dla {brand} ({username}).\n\n1. Otwórz aplikację {brand}\n2. Zaloguj się i zaakceptuj warunki\n3. Uruchom ponownie Home Assistant"
+    },
+    "marketing_consent": {
+      "title": "Wymagana zgoda — {brand}",
+      "description": "Wymagana jest nowa zgoda dotycząca prywatności dla {brand} ({username}).\n\nAplikacja → Profil → Zgody → potwierdź → uruchom ponownie HA."
+    },
+    "too_many_requests": {
+      "title": "Konto tymczasowo zablokowane — {brand}",
+      "description": "Konto {brand} ({username}) zostało tymczasowo zablokowane z powodu zbyt wielu żądań.\n\n**Poczekaj 15 minut** i uruchom ponownie Home Assistant.\nWskazówka: zwiększ interwał aktualizacji do co najmniej 15 minut."
+    },
+    "auth_failed": {
+      "title": "Logowanie nieudane — {brand}",
+      "description": "Połączenie z {brand} ({username}) nie powiodło się.\n\nUstawienia → Urządzenia i usługi → VW Group Connect → ⋮ → Skonfiguruj ponownie."
+    },
+    "vehicle_data_scout_findings": {
+      "title": "Obserwator API — {count} nowe pole(a) w {brand}",
+      "description": "Obserwator API wykrył **{count}** nowe pole(a) w odpowiedzi API {brand}, których VW Group Connect jeszcze nie odczytuje.\n\nZazwyczaj oznacza to, że Twój samochód ma funkcję lub wersję firmware, której jeszcze nie zmapowaliśmy — a **przesłanie tego raportu to właśnie to, co pozwala nam zbudować jej obsługę**, dla Twojego auta i wszystkich z tym samym modelem.\n\n**Raport jednym kliknięciem:** kliknij **Dowiedz się więcej** poniżej, aby otworzyć wstępnie wypełnione zgłoszenie GitHub.\n\n**Jeszcze bardziej pomocne:** dołącz diagnostykę — Ustawienia → Urządzenia i usługi → VW Group Connect → ⋮ → **Pobierz diagnostykę**. Zawiera teraz pełną odpowiedź API z nowymi polami w kontekście, czyli dokładnie to, czego potrzebujemy, aby zamienić je na encje.\n\n_Wszystko jest anonimizowane automatycznie: VIN-y zamaskowane, GPS usunięty, tokeny, identyfikatory użytkownika, e-maile i tablice rejestracyjne wymazane. Nic nie jest nigdy udostępniane, chyba że sam to dołączysz._"
+    },
+    "error_reporter_findings": {
+      "title": "Raporter błędów — {count} ostatnich błędów dla {brand}",
+      "description": "Raporter błędów uchwycił **{count}** ostatnich błędów integracji z {brand}.\n\nZgłaszanie pomaga znaleźć błędy występujące tylko w określonych pojazdach lub wersjach firmware.\n\n**Raport jednym kliknięciem:**\n📤 Kliknij **Dowiedz się więcej** poniżej, aby otworzyć wstępnie wypełnione zgłoszenie GitHub.\n\n**Dla Facebooka / forum:** Ustawienia → Urządzenia → VW Group Connect → Diagnostyka → Pobierz — raport zawarty, VIN-y i tokeny zamaskowane.\n\n_Prywatność: VIN-y zamaskowane, tokeny Bearer/JWT/UUID/e-mail usunięte z wiadomości i tracebacków. Brak danych logowania._"
+    },
+    "quota_low": {
+      "title": "Niski limit API — pozostało dziś {remaining} żądań",
+      "description": "Twoje konto VAG zbliża się do dziennego limitu żądań API (pozostało {remaining} z {limit}, {pct}%).\n\nAby uchronić się przed blokadą z powodu przekroczenia limitu (backend producenta może tymczasowo zawiesić konto po osiągnięciu dziennego limitu), rozważ:\n\n1. **Zwiększ interwał aktualizacji** — Ustawienia → Urządzenia i usługi → VW Group Connect → Konfiguruj → Interwał aktualizacji (obecnie zwykle 5–10 min)\n2. **Ogranicz inne integracje VAG** działające na tym samym koncie (każda liczy się do tego samego limitu)\n3. **Poczekaj na dzienne zresetowanie** — zwykle około północy w strefie czasowej kraju producenta\n\nTo ostrzeżenie znika automatycznie, gdy liczba pozostałych żądań się odbuduje."
+    },
+    "quota_critical": {
+      "title": "KRYTYCZNY limit API — pozostało dziś {remaining} żądań",
+      "description": "Twoje konto VAG ma dziś mniej niż 25 pozostałych żądań API (pozostało {remaining} z {limit}, {pct}%). Backend producenta może tymczasowo zawiesić konto, jeśli wyczerpiesz budżet.\n\n**Natychmiastowe działanie:**\n1. **Wstrzymaj odpytywanie** — Ustawienia → Urządzenia i usługi → VW Group Connect → Konfiguruj → Interwał aktualizacji → ustaw na 30 min lub więcej\n2. Unikaj ręcznych odświeżeń / wybudzania pojazdu do czasu zresetowania budżetu\n\nTo ostrzeżenie znika automatycznie, gdy liczba pozostałych żądań się odbuduje."
+    },
+    "account_locked": {
+      "title": "Konto {brand} wydaje się tymczasowo zablokowane",
+      "description": "Backend marki zwrócił **3 odpowiedzi uwierzytelniania klasy blokującej** w ciągu ostatnich 30 minut (ostatnio HTTP {last_status}). Zwykle oznacza to, że VW tymczasowo zablokował powiązane konto marki po zbyt wielu nieudanych próbach odświeżenia tokenu.\n\nBlokada zwykle znika w ciągu **od kilku godzin do 24 godzin**. Integracja przestała ponawiać próby, aby nie wydłużać okna blokady.\n\n**W czasie oczekiwania**:\n\n1. **Nie** loguj się / wyloguj wielokrotnie w aplikacji producenta — to wydłuża blokadę.\n2. Poczekaj co najmniej 1-2 godziny, a następnie otwórz oficjalną aplikację producenta na telefonie. Jeśli aplikacja zaloguje Cię bez problemu, backend odblokował Twoje konto.\n3. Po odblokowaniu zwiększ `scan_interval` w Ustawienia → Urządzenia i usługi → VW Group Connect → Konfiguruj do 15-30 minut, aby zmniejszyć przyszłe obciążenie.\n4. Opcjonalnie: włącz tryb portalu EU Data Act tylko do odczytu za pomocą OptionsFlow, aby utrzymać przepływ części danych podczas przyszłych incydentów.\n\nTo ostrzeżenie znika automatycznie przy pierwszym udanym odświeżeniu tokenu."
+    },
+    "data_act_no_data": {
+      "title": "Portal EU Data Act: brak danych pojazdu ({brand})",
+      "description": "Portal EU Data Act zalogował się dla {brand}, ale nie zwraca jeszcze żadnych danych pojazdu.\n\nIntegracja tworzy ciągłe żądanie danych za Ciebie automatycznie, więc typowe przyczyny pustego strumienia danych to:\n\n1. **Brak udzielonej zgody na udostępnianie danych dla tego samochodu.** W portalu udzielasz zgody na udostępnianie danych w ramach EU Data Act osobno dla każdego pojazdu, jednorazowo. Dopóki tego nie zrobisz, żądanie jest tworzone, ale pozostaje puste — to najczęstsza przyczyna.\n2. **Samochód nie wysłał jeszcze nic nowego.** Nowy zestaw danych jest publikowany dopiero po jeździe, ładowaniu lub zamknięciu/otwarciu samochodu, więc świeżo utworzone żądanie może potrzebować od 15 do 60 minut (lub krótkiej przejażdżki), zanim zacznie się wypełniać.\n3. **Awaria po stronie VW.** VW zgłosił awarię portalu EU Data Act obejmującą wszystkie marki od końca maja 2026; dopóki trwa, portal zwraca puste dane dla każdego narzędzia i jest stopniowo przywracany marka po marce.\n\n**Najszybsze sprawdzenie:** otwórz `eu-data-act.drivesomethinggreater.com`, zaloguj się i potwierdź, że (a) zgoda na udostępnianie danych została udzielona dla tego samochodu oraz (b) istnieje aktywne ciągłe (15-minutowe) żądanie danych z zaznaczonymi wszystkimi klastrami. Jeśli tam również nie widzisz danych, problem leży po stronie VW — integracja nic nie może zrobić, dopóki VW tego nie przywróci.\n\nTo wersja beta portalu tylko do odczytu — ostrzeżenie zniknie samo, gdy tylko pojawią się dane."
+    },
+    "data_act_browser_missing": {
+      "description": "Włączyłeś rezerwowy tryb przeglądarki headless dla portalu EU Data Act, ale pakiet Pythona `playwright` nie jest zainstalowany w Twoim kontenerze Home Assistant.\n\n**Aby zainstalować:** otwórz powłokę kontenera HA (Dodatki → Terminal & SSH lub `docker exec` przy instalacji ręcznej) i uruchom:\n\n```\npip install playwright\nplaywright install chromium\n```\n\nPobranie chromium jest duże (około 100 MB), dlatego ta zależność jest opcjonalna, a nie dołączona do integracji. Po instalacji uruchom ponownie Home Assistant.\n\nAlternatywnie wyłącz przełącznik w Ustawienia → Urządzenia i usługi → VW Group Connect → Konfiguruj → 'Portal EU Data Act: rezerwowy tryb przeglądarki headless'.",
+      "title": "Portal EU Data Act: brak opcjonalnego pakietu 'playwright'"
+    },
+    "data_act_session_expired": {
+      "description": "Portal {brand} pod adresem `eu-data-act.drivesomethinggreater.com` zwrócił HTTP 401 na wywołanie API Custom Data Request, co oznacza, że pliki cookie sesji wygasły. Portal nie obsługuje odświeżania tokenu w tle, więc Home Assistant nie może tego naprawić automatycznie.\n\n**Co zrobić:** Ustawienia → Urządzenia i usługi → VW Group Connect → menu z 3 kropkami → Skonfiguruj ponownie → wprowadź ponownie swoje dane logowania. Następny cykl konfiguracji ponownie otworzy sesję portalu, a integracja wznowi odpytywanie aktywnego Custom Data Request.\n\nTo ostrzeżenie zniknie samo, gdy tylko następne wywołanie API portalu się powiedzie.",
+      "title": "Sesja portalu EU Data Act wygasła – zaloguj się ponownie"
+    },
+    "ola_headers_outdated": {
+      "description": "Backend usług online VW Group (OLA) odrzucił **{count}** żądań z rzędu dla {brand} z błędem HTTP 403 Forbidden.\n\nTo **blokada po stronie serwera VW** — nie naprawi tego aktualizacja, zmiana nagłówka ani ponowne logowanie. VW wymaga teraz podpisanego przez Google tokenu atestacji urządzenia (Firebase App Check / Play Integrity) oraz tokenu zapory aplikacyjnej na backendzie SEAT/CUPRA — oficjalna aplikacja generuje je z utwardzonej, podpisanej przez Google kompilacji, czego klient open-source nie odtworzy. Dlatego zdalne **polecenia** dla {brand} (i SEAT) prawdopodobnie nie wrócą.\n\n**Dane** pojazdu nadal napływają przez portal EU Data Act (tylko odczyt), gdy są dostępne — to droga naprzód dla tych marek. To w pełni po stronie VW; po Twojej stronie nic do zrobienia. (Śledzone: #464.)",
+      "title": "Polecenia {brand} zablokowane przez VW (atestacja urządzenia) — {count} kolejnych błędów 403"
+    },
+    "vw_na_data_forbidden": {
+      "title": "Volkswagen US/CA: dane pojazdu zablokowane (HTTP 403)",
+      "description": "Twoje konto Volkswagen zalogowało się i odczytano Twój garaż, ale żądania danych dla pojazdu (status, ładowanie, klimatyzacja) są odrzucane z błędem HTTP 403 Forbidden.\n\nCzęstą przyczyną jest nieaktywna subskrypcja Car-Net / VW Connect. Ale zdarza się to również, gdy subskrypcja jest aktywna, a aplikacja MyVW pokazuje aktualne dane. W takim przypadku VW po prostu nie autoryzuje tego klienta innej firmy do odczytu pojazdu i po Twojej stronie nie ma nic do zmiany.\n\n**Co zrobić:**\n\n1. Otwórz oficjalną aplikację MyVW i sprawdź, czy Twoja subskrypcja Remote Access / Car-Net jest aktywna dla tego auta.\n2. Jeśli wygasła, odnów ją przez VW, a następnie poczekaj na kolejne odpytanie.\n\nIntegracja nadal pokazuje ostatnie dane zapisane w pamięci podręcznej. To ostrzeżenie zniknie samo, gdy tylko żądanie danych znów się powiedzie."
+    },
+    "vw_na_data_forbidden_attestation": {
+      "title": "Volkswagen US/CA: dane pojazdu zablokowane przez VW (atestacja urządzenia)",
+      "description": "Twoje konto Volkswagen zalogowało się i odczytano Twój garaż, ale żądania danych dla pojazdu (status, ładowanie, klimatyzacja) są odrzucane z błędem HTTP 403 Forbidden, a odpowiedź zawiera znacznik **atestacji urządzenia**.\n\nTo **blokada po stronie serwera VW**, a nie problem z subskrypcją ani coś, co da się naprawić ponownym logowaniem — odnowienie Car-Net więc nie pomoże. VW wymaga teraz podpisanego przez Google tokenu atestacji urządzenia (Firebase App Check / Play Integrity), który oficjalna aplikacja generuje z utwardzonej kompilacji, a klient open source nie jest w stanie go odtworzyć.\n\nIntegracja nadal pokazuje ostatnie dane zapisane w pamięci podręcznej. To ostrzeżenie zniknie samo, jeśli VW ponownie otworzy warstwę danych."
+    },
+    "supplementary_reauth": {
+      "title": "Kanał odczytu Volkswagen.de wymaga ponownego logowania",
+      "description": "Dodatkowy kanał odczytu volkswagen.de nie mógł wznowić sesji (Volkswagen ponownie prosi o jednorazowy kod e-mail). Główne dane pojazdu pozostają nienaruszone. Otwórz opcje tej integracji i ponownie uruchom „Dodaj kanał odczytu Volkswagen.de”, aby przywrócić dodatkowe dane vw.de."
+    },
+    "meb_commands_unavailable": {
+      "title": "Polecenia zdalne nie są dostępne dla tego samochodu ({brand})",
+      "description": "Podczas konfiguracji {brand} włączono polecenia zdalne MBB, ale to pojazd z rodziny MEB / ID (ID.3/4/5/7, Enyaq, Born, Q4). Backend MEB VW nie obsługuje trwałej ścieżki poleceń Car-Net — trwałe logowanie odpowiedziało „Unknown user” — więc nie można wysyłać poleceń blokady, klimatyzacji ani ładowania.\n\nWpis pozostaje **tylko do odczytu**: dane pojazdu nadal napływają przez portal EU Data Act, po prostu nie zobaczysz encji poleceń. To znane ograniczenie platformy MEB VW, a nie błąd konfiguracji — możesz zamknąć to powiadomienie."
+    },
+    "refresh_interval_too_frequent": {
+      "title": "{brand}: zbyt częsty interwał aktualizacji",
+      "description": "{brand} wydaje krótkotrwałe tokeny dostępu, więc przy Twoim obecnym interwale aktualizacji wynoszącym **{current} minut** niemal każde odpytywanie musi odświeżać token. To uruchamia zabezpieczenie przed burzą odświeżeń — limit tego, jak często integracja może odświeżać token, mający zapobiec zablokowaniu konta marki — i dane przestają się aktualizować, dopóki zabezpieczenie się nie zresetuje.\n\nTo problem z częstotliwością odpytywania, a nie z logowaniem: ponowne uwierzytelnienie go nie rozwiąże.\n\n**Rozwiązanie:** zwiększ interwał aktualizacji do **{recommended} minut** lub więcej w Ustawienia → Urządzenia i usługi → VW Group Connect → Konfiguruj. Dzięki temu odświeżenia tokenów pozostają poniżej limitu, a dane nadal napływają.\n\nTo ostrzeżenie znika automatycznie przy pierwszym ponownym udanym odświeżeniu tokenu."
+    },
+    "mandatory_consent_missing": {
+      "title": "Škoda: nie zaakceptowano wymaganej zgody",
+      "description": "Twoje konto {brand} nie zaakceptowało wymaganej zgody serwisowej, więc część danych lub funkcji może być niedostępna. Otwórz aplikację MyŠkoda i zaakceptuj wymaganą zgodę — to powiadomienie zniknie samo."
+    },
+    "test_cohort_share_request": {
+      "title": "Pomóż potwierdzić nową funkcję — udostępnisz wynik testu?",
+      "description": "Dziękujemy za dołączenie do dobrowolnej kohorty testowej. Twój samochód bierze udział w jednym lub kilku eksperymentach — na przykład w odzyskiwaniu lokalizacji GPS albo stanu zdrowia akumulatora (State-of-Health) dla samochodów VW z rynku UE poprzez kanał volkswagen.de, lub w ustaleniu, jak dokładnie backend Twojego samochodu odpowiada na polecenie. Aby potwierdzić wynik na różnych modelach i platformach, naprawdę pomogłoby, gdybyś udostępnił plik diagnostyczny: przejdź do Settings → Devices & Services → VW Group Connect → menu z trzema kropkami → Download diagnostics, a następnie dołącz plik do odpowiedniego zgłoszenia dla testerów na GitHub.\n\nEksport jest automatycznie anonimizowany, zanim go pobierzesz — nie zawiera numeru VIN, danych GPS, tokenów ani adresu e-mail — więc można go bezpiecznie opublikować. Widzisz to tylko dlatego, że sam(a) się na to zgłosiłeś; możesz to zignorować, a ponowne wyłączenie kohorty testowej w opcjach integracji całkowicie zatrzyma te powiadomienia. Dziękujemy, że pomagasz odblokować nowe funkcje dla wszystkich, którzy jeżdżą Twoim modelem."
+    },
+    "stale_data": {
+      "title": "{vin}: dane pojazdu nie odświeżyły się od {age} h",
+      "description": "Ostatnie dane przesłane przez Twój samochód zostały zarejestrowane około **{age} godz. temu**, mimo że integracja nadal poprawnie odpytuje serwer. Mogą być tego dwie przyczyny: samochód może być po prostu zaparkowany i uśpiony (to normalne — nie musisz nic robić) albo jego kanał danych w ramach EU Data Act wygasł i przestał dostarczać świeże odczyty.\n\nWartości, które teraz widzisz, to ostatnie znane, a nie dane na żywo. Jeśli od tego czasu samochód był używany lub podłączony do ładowania, a to ostrzeżenie wciąż się wyświetla, kanał danych najprawdopodobniej wygasł: otwórz volkswagen.de → ustawienia danych swojego samochodu i odnów/ponownie zażądaj udostępniania danych albo dodaj kanał od nowa.\n\nTo ostrzeżenie zniknie automatycznie w chwili, gdy nadejdzie świeższy odczyt."
+    }
+  },
+  "services": {
+    "start_climate_control": {
+      "name": "Uruchom klimatyzację (rozszerzone)",
+      "description": "Uruchamia wstępne przygotowanie klimatyczne z indywidualnymi podgrzewaczami foteli, ogrzewaniem szyb, trybem klimatyzacji i zachowaniem po odblokowaniu. Dotyczy tylko Audi i VW EU (CARIAD BFF). Inne marki korzystają z podstawowej usługi `start_climatisation`. Wszystkie pola ładunku oprócz `device_id` są opcjonalne — pominięte pola zachowują domyślne ustawienia marki.",
+      "fields": {
+        "device_id": {
+          "name": "Pojazd",
+          "description": "Pojazd, który otrzymuje polecenie wstępnego przygotowania klimatycznego."
+        },
+        "temp_c": {
+          "name": "Temperatura docelowa (C)",
+          "description": "Docelowa temperatura kabiny w stopniach Celsjusza (od 15 do 30, co 0,5)."
+        },
+        "glass_heating": {
+          "name": "Ogrzewanie szyb",
+          "description": "Włącz ogrzewanie przedniej i tylnej szyby wraz z wstępnym przygotowaniem klimatycznym kabiny."
+        },
+        "seat_fl": {
+          "name": "Ogrzewanie fotela przedniego lewego",
+          "description": "Włącz ogrzewanie fotela przedniego lewego."
+        },
+        "seat_fr": {
+          "name": "Ogrzewanie fotela przedniego prawego",
+          "description": "Włącz ogrzewanie fotela przedniego prawego."
+        },
+        "seat_rl": {
+          "name": "Ogrzewanie fotela tylnego lewego",
+          "description": "Włącz ogrzewanie fotela tylnego lewego."
+        },
+        "seat_rr": {
+          "name": "Ogrzewanie fotela tylnego prawego",
+          "description": "Włącz ogrzewanie fotela tylnego prawego."
+        },
+        "climatisation_at_unlock": {
+          "name": "Kontynuuj klimatyzację po odblokowaniu",
+          "description": "Utrzymuj wstępne przygotowanie klimatyczne po odblokowaniu pojazdu."
+        },
+        "climatisation_mode": {
+          "name": "Tryb klimatyzacji",
+          "description": "Komfort (pełna moc) lub ekonomiczny (zmniejszona moc, dłuższy czas pracy)."
+        }
+      }
+    },
+    "update_charging_settings": {
+      "name": "Aktualizuj ustawienia ładowania (SEAT/CUPRA)",
+      "description": "Aktualizuje plan ładowania SEAT/CUPRA w jednym wywołaniu. Ustawia dowolną kombinację docelowego poziomu naładowania, maksymalnego prądu ładowania AC oraz flagi automatycznego odblokowania po naładowaniu. Inne marki są odrzucane na poziomie dyspozytora koordynatora.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "VIN pojazdu do zaktualizowania."
+        },
+        "target_soc": {
+          "name": "Docelowy poziom naładowania (%)",
+          "description": "Docelowy poziom naładowania między 20 a 100 procent."
+        },
+        "max_charge_current": {
+          "name": "Maksymalny prąd ładowania AC",
+          "description": "Wartość enum backendu, maksymalny lub zmniejszony."
+        },
+        "auto_unlock_charge": {
+          "name": "Automatyczne odblokowanie wtyczki po pełnym naładowaniu",
+          "description": "Gdy włączone, złącze odblokowuje się samo po zakończeniu ładowania."
+        }
+      }
+    },
+    "execute_vehicle_action": {
+      "name": "Wykonaj akcję pojazdu",
+      "description": "Ujednolicona usługa, która wysyła akcję pojazdu wybraną z listy rozwijanej. Odpowiada wywołaniu usługi o tej samej nazwie dla danej akcji, ale łatwiej ją znaleźć w selektorze usług Lovelace w Home Assistant. Wszystkie istniejące usługi dla poszczególnych akcji (vag_connect.lock, vag_connect.start_climatisation itd.) działają bez zmian.",
+      "fields": {
+        "device_id": {
+          "name": "Pojazd",
+          "description": "Urządzenie pojazdu, na którym ma zostać wykonana akcja."
+        },
+        "action": {
+          "name": "Akcja",
+          "description": "Którą akcję wysłać."
+        }
+      }
+    },
+    "open_app": {
+      "description": "Wyzwala zdarzenie `vag_connect_open_app` na magistrali zdarzeń HA z polami ładunku `vin`, `brand`, `deeplink_url` i `action`, aby karta Lovelace mogła otworzyć natywną aplikację mobilną marki (myAudi, WeConnect, MyŠkoda, MySEAT, MyCUPRA, My Porsche lub VW US) na urządzeniu wywołującym. Integracja nie potrafi sama otworzyć adresów URL na telefonie; za nawigację `window.location.href = deeplink_url` w iOS / Android odpowiada karta pulpitu.",
+      "fields": {
+        "action": {
+          "description": "Opcjonalny segment ścieżki dołączany do deeplinku, aby aplikacja marki przeszła bezpośrednio do sekcji. Domyślne `open` otwiera aplikację na ekranie głównym.",
+          "name": "Akcja aplikacji"
+        },
+        "vin": {
+          "description": "VIN pojazdu, którego aplikacja marki ma zostać otwarta.",
+          "name": "VIN"
+        }
+      },
+      "name": "Otwórz natywną aplikację marki (deeplink)"
+    },
+    "abrp_send": {
+      "name": "Wyślij telemetrię do ABRP",
+      "description": "Tworzy i wysyła bieżącą telemetrię pojazdu do A Better Routeplanner.",
+      "fields": {
+        "device_id": {
+          "name": "Pojazd",
+          "description": "Pojazd do wysłania (lub użyj VIN)."
+        },
+        "vin": {
+          "name": "VIN",
+          "description": "VIN pojazdu (alternatywa dla urządzenia)."
+        },
+        "api_key": {
+          "name": "Zastąp api_key",
+          "description": "Opcjonalnie. Zastępuje zapisany klucz dewelopera. Nigdy nie jest logowany."
+        },
+        "token": {
+          "name": "Zastąp token",
+          "description": "Opcjonalnie. Zastępuje zapisany token pojazdu. Nigdy nie jest logowany."
+        }
+      }
+    },
+    "set_location_target_soc": {
+      "name": "Ustaw docelowe naładowanie dla lokalizacji",
+      "description": "Ustawia docelowe naładowanie konkretnego profilu ładowania (Škoda, zależnie od lokalizacji).",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "VIN pojazdu."
+        },
+        "profile_id": {
+          "name": "ID profilu",
+          "description": "ID profilu ładowania (z czujnika profili ładowania)."
+        },
+        "target": {
+          "name": "Docelowe naładowanie (%)",
+          "description": "Docelowe naładowanie od 20 do 100 procent."
+        }
+      }
+    },
+    "set_seat_heating": {
+      "name": "Ustaw podgrzewanie foteli",
+      "description": "Włącza podgrzewanie poszczególnych foteli (Škoda). Zmieniają się tylko podane fotele.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "VIN pojazdu."
+        },
+        "front_left": {
+          "name": "Przód lewy"
+        },
+        "front_right": {
+          "name": "Przód prawy"
+        },
+        "rear_left": {
+          "name": "Tył lewy"
+        },
+        "rear_right": {
+          "name": "Tył prawy"
+        }
+      }
+    },
+    "ask_assistant": {
+      "name": "Zapytaj asystenta AI Škoda (Laura)",
+      "description": "Wysyła prompt tekstowy do asystenta AI MyŠkoda „Laura\" (tylko Škoda) i zwraca odpowiedź przez response_variable (summary = tekst odpowiedzi, session_id do kontynuacji). Wyłącznie doradczo — planowanie tras + pytania o produkt, bez sterowania pojazdem.",
+      "fields": {
+        "vin": {
+          "name": "VIN",
+          "description": "VIN z konta."
+        },
+        "prompt": {
+          "name": "Pytanie / prompt",
+          "description": "Dowolny tekst dla asystenta."
+        },
+        "timezone": {
+          "name": "Strefa czasowa",
+          "description": "Opcjonalnie (IANA, np. Europe/Zurich). Domyślnie strefa systemu HA."
+        },
+        "session_id": {
+          "name": "ID sesji",
+          "description": "Opcjonalnie. Z poprzedniej odpowiedzi, aby kontynuować ten sam kontekst."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "vehicle_not_found": {
+      "message": "Pojazd z VIN {vin} nie znaleziony."
+    },
+    "spin_required": {
+      "message": "S-PIN jest wymagany do tej akcji. Skonfiguruj go w Ustawienia → Urządzenia i usługi → VW Group Connect → Konfiguruj."
+    },
+    "feature_not_supported": {
+      "message": "Funkcja {feature} nie jest obsługiwana przez Twój pojazd lub obecnego klienta API. Akcja nie została wysłana."
+    },
+    "wake_budget_exhausted": {
+      "message": "Wyczerpany dzienny budżet wybudzeń ({count}/{budget}). Aby chronić akumulator 12V, dalsze wybudzenia nie są wysyłane do północy UTC. Zobacz sensor.wake_count_today."
+    },
+    "wake_cooldown_active": {
+      "message": "Cooldown wybudzania aktywny (pozostało {remaining_s}s). Aby chronić akumulator 12V, wybudzanie ograniczone do jednego co {cooldown_min} minut na pojazd."
+    },
+    "read_only_mode_active": {
+      "message": "Tryb tylko do odczytu jest włączony w opcjach integracji. Wyłącz go w Ustawienia → Urządzenia i usługi → VW Group Connect → Skonfiguruj, aby wysyłać polecenia do pojazdu."
+    },
+    "read_only_portal_active": {
+      "message": "Ten pojazd łączy się przez tylko-do-odczytu portal EU Data Act firmy VW, więc polecenia zdalne (zamykanie, klimatyzacja, ładowanie) nie są dla niego dostępne. To nie jest ustawienie, które możesz przełączyć — kanał portalu nie ma żadnej ścieżki poleceń."
+    },
+    "read_only_attestation_blocked": {
+      "message": "VW blokuje zdalne polecenia dla SEAT/CUPRA za weryfikacją urządzenia Google (Play Integrity / App Check), którą przechodzi tylko oficjalna aplikacja na prawdziwym telefonie. Dlatego z tego miejsca nie można wysłać zamykania, klimatyzacji ani ładowania. To trwała blokada po stronie serwera VW, a nie ustawienie, które można wyłączyć. Dane pojazdu są nadal aktualizowane przez portal EU Data Act."
+    },
+    "export_file_not_allowed": {
+      "message": "Home Assistant nie ma uprawnień do odczytu {path}. Umieść plik eksportu w folderze konfiguracji (lub w folderze wymienionym w allowlist_external_dirs) i podaj jego ścieżkę ponownie."
+    },
+    "export_file_not_found": {
+      "message": "Nie znaleziono pliku w {path}. Sprawdź ścieżkę. Nazwa względna jest szukana w folderze konfiguracji."
+    },
+    "export_file_no_data": {
+      "message": "Ten plik nie zawierał czytelnego zestawu danych EU Data Act. Upewnij się, że to plik .zip pobrany z portalu danych VW dla tego auta."
+    },
+    "historical_portal_not_ready": {
+      "message": "Portal EU Data Act nie jest jeszcze gotowy. Poczekaj, aż integracja wykona jedno odpytanie po konfiguracji, a następnie ponów eksport historyczny."
+    }
+  },
+  "selector": {
+    "execute_vehicle_action_options": {
+      "options": {
+        "lock": "Zablokuj",
+        "unlock": "Odblokuj",
+        "start_climatisation": "Uruchom klimatyzację",
+        "stop_climatisation": "Zatrzymaj klimatyzację",
+        "start_charging": "Rozpocznij ładowanie",
+        "stop_charging": "Zatrzymaj ładowanie",
+        "flash_lights": "Mrugnij światłami",
+        "start_window_heating": "Uruchom ogrzewanie szyb",
+        "stop_window_heating": "Zatrzymaj ogrzewanie szyb",
+        "wake_vehicle": "Wybudź pojazd",
+        "start_aux_heating": "Uruchom ogrzewanie postojowe",
+        "stop_aux_heating": "Zatrzymaj ogrzewanie postojowe",
+        "start_ventilation": "Uruchom wentylację",
+        "stop_ventilation": "Zatrzymaj wentylację"
+      }
+    }
+  }
+}

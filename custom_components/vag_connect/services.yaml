@@ -1,0 +1,832 @@
+# v2.10.0 unified action dispatcher. One service with a dropdown
+# instead of N separate services. Pattern observed in
+# arjenvrh/audi_connect_ha v2.1.0 (single ``execute_vehicle_action``
+# with an ``action`` select). All per-action services below
+# (lock, unlock, start_climatisation, ...) keep working unchanged so
+# existing automations are NOT broken; this service is purely an
+# easier-to-find UX surface in the Lovelace service picker.
+execute_vehicle_action:
+  name: Execute Vehicle Action
+  description: >-
+    Unified service that dispatches a vehicle action selected from a
+    dropdown. Equivalent to calling the per-action service of the
+    same name but easier to find in the Home Assistant Lovelace
+    "service" picker. All existing per-action services (vag_connect.lock,
+    vag_connect.start_climatisation, etc) keep working unchanged.
+  fields:
+    device_id:
+      name: Vehicle
+      description: The vehicle device to act on.
+      required: true
+      selector:
+        device:
+          integration: vag_connect
+    action:
+      name: Action
+      description: Which action to dispatch.
+      required: true
+      selector:
+        select:
+          translation_key: execute_vehicle_action_options
+          options:
+            - lock
+            - unlock
+            - start_climatisation
+            - stop_climatisation
+            - start_charging
+            - stop_charging
+            - flash_lights
+            - start_window_heating
+            - stop_window_heating
+            - wake_vehicle
+            - start_aux_heating
+            - stop_aux_heating
+            - start_ventilation
+            - stop_ventilation
+
+# v2.2.3 — Community easter-egg. Spawned by humorous FB-thread
+# pointing out "VAG" reads differently in English (Si Gregory + Ben
+# Johnson + Evets David + Stuart McBride + Jordan Waeles' Pandas-style
+# show_vag() joke). Creates a persistent_notification with the credits
+# + list of currently connected vehicles. No vehicle target — account
+# level.
+show_vag:
+  name: "🥚 show_vag() — Community Easter Egg"
+  description: >-
+    Erstellt eine persistente Benachrichtigung mit den Credits der
+    Community-Mitglieder, die die VAG → VW Group Umbenennung angestoßen
+    haben (HA UK + HA Ideas Facebook-Gruppen, 2026-05). Inkludiert eine
+    Liste aller aktuell verbundenen Fahrzeuge. — Creates a persistent
+    notification crediting the community members who triggered the
+    rename discussion, plus a list of all currently connected vehicles.
+  fields: {}
+
+refresh_vehicle:
+  name: Fahrzeugdaten aktualisieren (Cloud-Cache)
+  description: >-
+    Pollt den Hersteller-Server für die zwischengespeicherten Fahrzeugdaten
+    aller Fahrzeuge dieses Kontos. Weckt das Auto NICHT auf — die Daten
+    sind so aktuell wie der letzte Server-Sync. Verwende stattdessen
+    "Auto wecken" wenn du eine frische Live-Messung vom Auto willst
+    (zählt aufs tägliche Wakeup-Budget).
+  fields: {}
+
+# v1.13.0 (#63 Phase 3) — semantic-clear alias for refresh_vehicle.
+# Same behaviour, but the name makes the cloud-cache-only nature
+# explicit. Old name stays active for backwards-compat.
+refresh_cloud_cache:
+  name: Cloud-Cache aktualisieren (kein Wakeup)
+  description: >-
+    Identisch zu "refresh_vehicle" — pollt nur den Server-Cache, weckt
+    das Auto NICHT auf. Empfohlener neuer Name ab v1.13.0 für klarere
+    Semantik (refresh_vehicle bleibt funktionsfähig).
+  fields: {}
+
+lock:
+  name: Fahrzeug verriegeln
+  description: Verriegelt die Türen des angegebenen Fahrzeugs.
+  fields:
+    vin:
+      name: Fahrzeugidentifikationsnummer (VIN)
+      description: Die VIN des Fahrzeugs.
+      required: true
+      example: "WVWZZZ00000000000"
+      selector:
+        text:
+
+unlock:
+  name: Fahrzeug entriegeln
+  description: Entriegelt die Türen des angegebenen Fahrzeugs. S-PIN erforderlich.
+  fields:
+    vin:
+      name: Fahrzeugidentifikationsnummer (VIN)
+      description: Die VIN des Fahrzeugs.
+      required: true
+      example: "WVWZZZ00000000000"
+      selector:
+        text:
+
+start_climatisation:
+  name: Klimatisierung starten
+  description: Startet die Vorklimatisierung des Fahrzeugs.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+
+stop_climatisation:
+  name: Klimatisierung stoppen
+  description: Stoppt die Klimatisierung des Fahrzeugs.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+
+start_charging:
+  name: Laden starten
+  description: Startet den Ladevorgang (nur Elektrofahrzeuge).
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+
+stop_charging:
+  name: Laden stoppen
+  description: Stoppt den Ladevorgang.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+
+flash_lights:
+  name: Lichtsignal
+  description: >-
+    Löst das Fahrzeugsignal aus, um das Auto zu finden. Ohne Angaben blinkt es
+    10 Sekunden ohne Hupe, wie bisher.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+    duration_seconds:
+      name: Dauer
+      description: >-
+        Dauer des Signals in Sekunden. Wird von Volkswagen und Audi
+        unterstützt; andere Marken nutzen ihre eigene Vorgabe.
+      required: false
+      default: 10
+      selector:
+        select:
+          options:
+            - "10"
+            - "20"
+            - "30"
+    signal_type:
+      name: Signalart
+      description: >-
+        Nur Blinken oder Hupe und Blinken. Wird von Volkswagen, Audi und Škoda
+        unterstützt; bei anderen Marken bleibt es beim Blinken.
+      required: false
+      default: lights_only
+      selector:
+        select:
+          options:
+            - label: Nur Blinken
+              value: lights_only
+            - label: Hupe und Blinken
+              value: horn_and_lights
+
+start_window_heating:
+  name: Fensterheizung starten
+  description: Startet die Fensterheizung des Fahrzeugs.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+
+stop_window_heating:
+  name: Fensterheizung stoppen
+  description: Stoppt die Fensterheizung des Fahrzeugs.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+
+wake_vehicle:
+  name: Fahrzeug aufwecken
+  description: Weckt das Fahrzeug auf und erzwingt eine Status-Aktualisierung.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+
+request_historical_export:
+  name: Einmaligen Verlaufsexport anfordern
+  description: >-
+    Fordert beim EU-Data-Act-Portal einen einmaligen Verlaufsexport an
+    (Konfigurations-Snapshot: Timer, Ladeprofile, Klimaeinstellungen). Das
+    Portal erstellt die ZIP asynchron (~30 Min, bis zu 24 h). Danach mit
+    "Verlaufsexport übernehmen" abholen. Nur für Portal-/EU-Data-Act-Fahrzeuge.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+
+import_historical_export:
+  name: Verlaufsexport übernehmen
+  description: >-
+    Holt einen bereitstehenden einmaligen Verlaufsexport ab und ergänzt dessen
+    Konfigurationsfelder im Live-Datensatz (nur Lücken füllen — Live-Telemetrie
+    wird nie überschrieben). Vorher "Einmaligen Verlaufsexport anfordern" und
+    einige Minuten warten, bis die Datei bereit ist.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+
+import_export_file:
+  name: Export-Datei importieren
+  description: >-
+    Importiert eine EU-Data-Act-Export-ZIP, die du selbst aus dem VW-Datenportal
+    heruntergeladen hast, ohne Portal-Verbindung. Ergänzt nur Lücken im
+    Live-Datensatz (Live-Telemetrie wird nie überschrieben). Die Datei muss in
+    einem für Home Assistant erlaubten Ordner liegen (z. B. im Konfig-Ordner);
+    ein relativer Name wird im Konfig-Ordner gesucht.
+  fields:
+    vin:
+      name: VIN
+      description: Fahrzeug, in das die Datei importiert wird.
+      required: true
+      selector:
+        text:
+    file:
+      name: Datei
+      description: >-
+        Pfad zur heruntergeladenen Export-ZIP, z. B. "export.zip" (im
+        Konfig-Ordner) oder "/share/export.zip".
+      required: true
+      example: export.zip
+      selector:
+        text:
+
+set_target_soc:
+  name: Ladeziel setzen
+  description: Setzt das Ladeziel des Fahrzeugs in Prozent.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+    target:
+      name: Ladeziel (%)
+      required: true
+      selector:
+        number:
+          min: 20
+          max: 100
+          step: 5
+          unit_of_measurement: "%"
+
+set_location_target_soc:
+  name: Standort-Ladeziel setzen
+  description: Setzt das Ladeziel eines bestimmten Lade-Profils (Škoda, standortabhängig).
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+    profile_id:
+      name: Profil-ID
+      description: ID des Lade-Profils (aus dem Lade-Profile-Sensor).
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 10
+          step: 1
+          mode: box
+    target:
+      name: Ladeziel (%)
+      required: true
+      selector:
+        number:
+          min: 20
+          max: 100
+          step: 5
+          unit_of_measurement: "%"
+
+set_seat_heating:
+  name: Sitzheizung setzen
+  description: Schaltet die Sitzheizung pro Sitz (Škoda). Nur angegebene Sitze werden geändert.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+    front_left:
+      name: Vorne links
+      selector:
+        boolean:
+    front_right:
+      name: Vorne rechts
+      selector:
+        boolean:
+    rear_left:
+      name: Hinten links
+      selector:
+        boolean:
+    rear_right:
+      name: Hinten rechts
+      selector:
+        boolean:
+
+set_climatisation_temperature:
+  name: Klimatemperatur setzen
+  description: Setzt die Zieltemperatur der Vorklimatisierung.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+    temperature:
+      name: Temperatur (°C)
+      required: true
+      selector:
+        number:
+          min: 16
+          max: 30
+          step: 0.5
+          unit_of_measurement: "°C"
+
+set_departure_timer:
+  name: Abfahrtstimer setzen
+  description: Aktiviert, deaktiviert oder setzt die Abfahrtszeit eines Departure Timers (1–3). Nur bei EVs und PHEVs mit CARIAD-Backend (Audi, VW, Škoda, SEAT/CUPRA).
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+    timer_id:
+      name: Timer-Nummer
+      description: Welcher Timer (1, 2 oder 3).
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 3
+          step: 1
+    enabled:
+      name: Aktiviert
+      description: Timer ein- oder ausschalten.
+      required: true
+      selector:
+        boolean:
+    departure_time:
+      name: Abfahrtszeit
+      description: Optional. "HH:MM" (z.B. "07:30") oder ISO-Datetime. Leer lassen um nur enabled zu ändern.
+      required: false
+      selector:
+        text:
+    recurring_on:
+      name: Wochentage (Weekly Preheat)
+      description: >-
+        v2.0.0 [NEW v2.0] Optional. Liste der Wochentage für wöchentliches
+        Vorklimatisieren (z.B. ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY",
+        "FRIDAY"]). Wenn gesetzt, schaltet der Timer auf wiederkehrend
+        und feuert an jedem genannten Tag. Akzeptiert MONDAY–SUNDAY in
+        beliebiger Schreibweise. Wird von Porsche ignoriert (PPA hat keinen
+        Weekday-Field). VW NA + Audi/VW EU + (perspektivisch) Skoda
+        unterstützen das Feld.
+      required: false
+      selector:
+        select:
+          multiple: true
+          options:
+            - MONDAY
+            - TUESDAY
+            - WEDNESDAY
+            - THURSDAY
+            - FRIDAY
+            - SATURDAY
+            - SUNDAY
+
+# v1.14.0 (#28) — Audi-only ICE Remote Engine Start/Stop.
+engine_start:
+  name: Motor starten (Audi ICE)
+  description: >-
+    Startet den Verbrennungsmotor remote (Audi-only, S-PIN erforderlich).
+    Zwei-Schritt-Flow: PUT /vehicle/v1/engine/{VIN}/userpromptproof + POST /vehicle/v1/engine/{VIN}/start.
+    Nur für Audi-Modelle mit ICE/Hybrid + aktivem Audi connect Plus Abo.
+    Der S-PIN wird aus der gespeicherten Konfiguration genommen — landet NIE im Service-Call-Log.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+engine_stop:
+  name: Motor stoppen (Audi ICE)
+  description: >-
+    Stoppt den Verbrennungsmotor remote (Audi-only, kein S-PIN nötig).
+    Single POST /vehicle/v1/engine/{VIN}/stop.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+
+# v1.17.1 (Bruno-Collection) — SEAT/CUPRA new commands.
+start_ventilation:
+  name: Lüftung starten (SEAT/CUPRA)
+  description: >-
+    Startet die Kabinen-Lüftung ohne Heizung (SEAT/CUPRA only).
+    Endpoint Bruno seq 31 — POST /v1/vehicles/{vin}/ventilation/start.
+    Capability-gated über Phase 3.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+stop_ventilation:
+  name: Lüftung stoppen (SEAT/CUPRA)
+  description: Stoppt die Kabinen-Lüftung. Bruno seq 32.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+start_aux_heating:
+  name: Standheizung starten (SEAT/CUPRA Webasto)
+  description: >-
+    Startet die Webasto-Standheizung remote (SEAT/CUPRA only, S-PIN
+    erforderlich). Bruno seq 29 — POST /v1/vehicles/{vin}/auxiliary-heating/start
+    mit SecToken (S-PIN-derived). A/B-Fallback zu pycupra-Pfad
+    /api/auxiliary-heating/v1/{vin}/start. Der S-PIN wird aus der
+    gespeicherten Konfiguration genommen — landet NIE im Service-Call-Log.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+stop_aux_heating:
+  name: Standheizung stoppen (SEAT/CUPRA Webasto)
+  description: >-
+    Stoppt die Webasto-Standheizung. Bruno seq 30 — POST
+    /v1/vehicles/{vin}/auxiliary-heating/stop (kein SecToken nötig).
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+send_destination:
+  name: Navigationsziel senden (SEAT/CUPRA/Škoda)
+  description: >-
+    Sendet eine Adresse + GPS-Koordinaten an die Fahrzeug-Navigation.
+    SEAT/CUPRA (OLA) und ab v3.0.0 auch Škoda (mysmob
+    api/v3/maps/navigation/destination). Schließt Issue #36. Adress-Felder
+    sind optional; latitude + longitude + name sind Pflicht.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+    latitude:
+      name: Breitengrad
+      description: Breitengrad in Dezimalgraden (-90 bis 90, z.B. 47.39).
+      required: true
+      selector:
+        text:
+    longitude:
+      name: Längengrad
+      description: Längengrad in Dezimalgraden (-180 bis 180, z.B. 8.21).
+      required: true
+      selector:
+        text:
+    name:
+      name: Ziel-Bezeichnung
+      description: Name des Ziels (z.B. "Zuhause", "Büro").
+      required: true
+      selector:
+        text:
+    city:
+      name: Stadt
+      required: false
+      selector:
+        text:
+    country:
+      name: Land (ISO 3166-1 alpha-2)
+      required: false
+      selector:
+        text:
+    state:
+      name: Bundesland
+      required: false
+      selector:
+        text:
+    street:
+      name: Straße
+      required: false
+      selector:
+        text:
+    house_number:
+      name: Hausnummer
+      required: false
+      selector:
+        text:
+    zip_code:
+      name: PLZ
+      required: false
+      selector:
+        text:
+
+# v2.0.0 (Big-Bang) — POI charging-station lookup via Cariad-BFF.
+# Returns up to ``max_results`` station dicts within ``radius_m`` metres.
+# Service uses response-variable (HA 2024.4+) so callers receive the
+# list directly. Backed by ``GET /charging-stations/v1/locations``.
+find_charging_stations:
+  name: Ladestationen suchen (POI Lookup)
+  description: >-
+    Sucht Ladestationen rund um den angegebenen Standort über die
+    Cariad-BFF POI-API (nur Audi + VW EU). Rückgabe per
+    ``response_variable`` als Liste mit Stations-Details (id, name,
+    address, location, operator, maxPowerInKW, connectorTypes,
+    availability). Beispiel: ``action: vag_connect.find_charging_stations``
+    mit ``data: {vin: WAUZZZ..., latitude: 47.3769, longitude: 8.5417,
+    radius_m: 5000, max_results: 25}`` und ``response_variable: result``.
+  fields:
+    vin:
+      name: VIN
+      description: VIN aus dem Konto. Bestimmt welche Cariad-BFF-Session den Lookup ausführt.
+      required: true
+      selector:
+        text:
+    latitude:
+      name: Breitengrad
+      description: Breitengrad in Dezimalgraden (-90 bis 90).
+      required: true
+      selector:
+        text:
+    longitude:
+      name: Längengrad
+      description: Längengrad in Dezimalgraden (-180 bis 180).
+      required: true
+      selector:
+        text:
+    radius_m:
+      name: Suchradius (Meter)
+      description: Optional. Standard 5000 m (5 km). Max 100 km.
+      required: false
+      default: 5000
+      selector:
+        number:
+          min: 100
+          max: 100000
+          step: 100
+          unit_of_measurement: m
+    max_results:
+      name: Max. Ergebnisse
+      description: Optional. Standard 25 — bis zu 100 möglich.
+      required: false
+      default: 25
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+
+ask_assistant:
+  name: Škoda AI-Assistenten fragen (Laura)
+  description: >-
+    Schickt einen Freitext-Prompt an den MyŠkoda AI-Assistenten „Laura"
+    (nur Škoda) und gibt die Antwort per ``response_variable`` zurück
+    (``summary`` = Antworttext, ``session_id`` für Folgefragen). Rein
+    beratend — Routenplanung + Produkt-Fragen, keine Fahrzeug-Steuerung.
+    Beispiel: ``action: vag_connect.ask_assistant`` mit ``data: {vin:
+    TMB..., prompt: "Reicht meine Ladung bis München?"}`` und
+    ``response_variable: laura``.
+  fields:
+    vin:
+      name: VIN
+      description: VIN aus dem Konto.
+      required: true
+      selector:
+        text:
+    prompt:
+      name: Frage / Prompt
+      description: Freitext an den Assistenten.
+      required: true
+      selector:
+        text:
+          multiline: true
+    timezone:
+      name: Zeitzone
+      description: Optional (IANA, z. B. Europe/Zurich). Standard = HA-Systemzeitzone.
+      required: false
+      selector:
+        text:
+    session_id:
+      name: Session-ID
+      description: Optional. Aus einer vorherigen Antwort, für Folgefragen im selben Kontext.
+      required: false
+      selector:
+        text:
+
+# v2.8.0 quick-win B — open the brand's native mobile app via deeplink.
+# This service does NOT open anything itself; it fires the event
+# ``vag_connect_open_app`` on the HA bus with payload
+# ``{vin, brand, deeplink_url, action}``. A Lovelace card subscribes
+# to that event and navigates ``window.location.href = deeplink_url``
+# on the calling device (iOS or Android). The brand and full deeplink
+# URL are resolved by the integration from ``DEEPLINK_SCHEMES`` in
+# ``const.py``.
+open_app:
+  name: Open native brand app (deeplink)
+  description: >-
+    Fires the ``vag_connect_open_app`` event with the fields
+    ``vin``, ``brand``, ``deeplink_url`` and ``action`` so a dashboard
+    card can open the brand's native mobile app (myAudi, WeConnect,
+    MyŠkoda, MySEAT, MyCUPRA, My Porsche or VW US) on the calling
+    device. The integration itself cannot open URLs on a phone; the
+    dashboard card is responsible for ``window.location.href`` on
+    iOS / Android.
+  fields:
+    vin:
+      name: VIN
+      description: VIN of the vehicle whose brand-app should open.
+      required: true
+      example: "WVWZZZ00000000000"
+      selector:
+        text:
+    action:
+      name: App action
+      description: >-
+        Optional. Path segment appended to the deeplink so the brand
+        app can route directly to a section. Default ``open`` opens
+        the app to its home screen.
+      required: false
+      default: open
+      selector:
+        select:
+          options:
+            - open
+            - lock
+            - unlock
+            - climate_on
+            - climate_off
+            - charging
+
+# v2.10.0. Rich climate-start. Per-seat heating, glass heating,
+# climatisation mode, at-unlock behaviour. Applies to Audi + VW EU
+# (CARIAD BFF); other brands fall through to the basic
+# ``start_climatisation`` service because the OLA / mysmob / PPA
+# backends reject the extra payload fields.
+start_climate_control:
+  name: Start Climate Control (Rich)
+  description: >-
+    Start pre-conditioning with individual seat heaters, glass heating,
+    climate mode and at-unlock behaviour. Only applies to Audi and VW
+    EU (CARIAD BFF) - other brands fall through to the basic
+    start_climatisation service. All payload fields except device_id
+    are optional - omitted fields keep the brand default.
+  fields:
+    device_id:
+      name: Vehicle
+      required: true
+      selector:
+        device:
+          integration: vag_connect
+    temp_c:
+      name: Target temperature (C)
+      selector:
+        number:
+          min: 15
+          max: 30
+          step: 0.5
+          unit_of_measurement: "C"
+    glass_heating:
+      name: Glass heating
+      selector: {boolean: {}}
+    seat_fl:
+      name: Front-left seat heating
+      selector: {boolean: {}}
+    seat_fr:
+      name: Front-right seat heating
+      selector: {boolean: {}}
+    seat_rl:
+      name: Rear-left seat heating
+      selector: {boolean: {}}
+    seat_rr:
+      name: Rear-right seat heating
+      selector: {boolean: {}}
+    climatisation_at_unlock:
+      name: Continue climate when unlocked
+      selector: {boolean: {}}
+    climatisation_mode:
+      name: Climatisation mode
+      selector:
+        select:
+          options:
+            - comfort
+            - economy
+
+# v2.15.5 — push the vehicle's current telemetry to A Better Routeplanner
+# (iternio /tlm/send). Target by device or VIN. The api_key + token are
+# read from the integration options (ABRP section) when omitted here; pass
+# them inline only if you prefer to keep them in the automation. Neither is
+# ever written to the log. On success the "ABRP data changed" binary sensor
+# resets so the shipped blueprint won't re-upload the same snapshot.
+abrp_send:
+  name: Send telemetry to ABRP
+  description: >-
+    Build and POST the targeted vehicle's current telemetry (SoC, GPS,
+    charging state, range, temperatures, odometer) to A Better Routeplanner.
+    The developer api_key and the per-vehicle ABRP token are taken from the
+    integration options unless supplied here. This sends GPS off-device — it
+    only runs when you call it (or via the shipped blueprint).
+  fields:
+    device_id:
+      name: Vehicle
+      description: The vehicle device to upload. Either this or vin is required.
+      required: false
+      selector:
+        device:
+          integration: vag_connect
+    vin:
+      name: VIN
+      description: VIN of the vehicle. Alternative to device_id.
+      required: false
+      example: "WVWZZZ00000000000"
+      selector:
+        text:
+    api_key:
+      name: ABRP api_key (optional override)
+      description: >-
+        Developer/partner key from iternio. Leave empty to use the key stored
+        in the integration options. Never logged.
+      required: false
+      selector:
+        text:
+    token:
+      name: ABRP token (optional override)
+      description: >-
+        Per-vehicle "Generic" token from the ABRP app (Settings → car → Live
+        Data). Leave empty to use the token stored in the integration
+        options. Never logged.
+      required: false
+      selector:
+        text:
+
+# v2.10.0 Group B - SEAT/CUPRA settable charge plan.
+# Maps to POST /v1/vehicles/{vin}/charging/actions/update-settings.
+# At least one of the optional fields must be provided; an empty body
+# is rejected with a ServiceValidationError. Other brands ignore the
+# service (MISSING_CAPABILITY classification at the coordinator level).
+update_charging_settings:
+  name: Update Charging Settings (SEAT/CUPRA)
+  description: >-
+    Update the SEAT/CUPRA charge plan in one call. Sets any combination
+    of target state of charge, maximum AC charge current and the
+    auto-unlock-when-charged flag. Backed by the OLA endpoint
+    POST /v1/vehicles/{vin}/charging/actions/update-settings. Other
+    brands are rejected at the coordinator dispatch level.
+  fields:
+    vin:
+      name: VIN
+      required: true
+      selector:
+        text:
+    target_soc:
+      name: Target state of charge (%)
+      description: Target state of charge between 20 and 100 percent.
+      required: false
+      selector:
+        number:
+          min: 20
+          max: 100
+          step: 5
+          unit_of_measurement: "%"
+    max_charge_current:
+      name: Maximum AC charge current
+      description: Backend enum, ``maximum`` or ``reduced``.
+      required: false
+      selector:
+        select:
+          options:
+            - maximum
+            - reduced
+    auto_unlock_charge:
+      name: Auto-unlock plug when fully charged
+      description: When true the connector unlocks itself once charging is complete.
+      required: false
+      selector:
+        boolean: {}

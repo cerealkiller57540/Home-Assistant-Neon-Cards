@@ -1,0 +1,172 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Choose Account Type",
+        "description": "Select your account type for the Dreame Mower integration.",
+        "data": {
+          "account_type": "Account Type"
+        }
+      },
+      "dreame": {
+        "data": {
+          "username": "Username",
+          "password": "Password",
+          "country": "Server country"
+        },
+        "description": "Log in to the Dreamehome cloud."
+      },
+      "mova": {
+        "data": {
+          "username": "Username",
+          "password": "Password",
+          "country": "Server country"
+        },
+        "description": "Log in to the MOVAhome cloud."
+      },
+      "devices": {
+        "data": {
+          "devices": "Supported Devices"
+        },
+        "description": "Please select the Dreame Mower device you want to setup."
+      },
+      "options": {
+        "data": {
+          "name": "Device Name",
+          "notify": "Notification Types"
+        },
+        "description": "Configure your Dreame Mower device name and notification preferences."
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect. Check your network and try again. See Home Assistant logs for details.",
+      "unsupported": "Device model is not supported by this integration.",
+      "credentials_incomplete": "Username, password and country are all required.",
+      "login_error": "Login failed. Check your username and password. Make sure you selected the correct account type (Dreamehome vs MOVAhome).",
+      "no_devices": "No supported mower found in this account. Make sure you picked the right account type — MOVAhome for MOVA devices, Dreamehome for Dreame — and that the device is added to that app. You can also try a different server country.",
+      "invalid_account_type": "Invalid account type selected."
+    },
+    "abort": {
+      "cannot_connect": "Failed to connect.",
+      "already_configured": "This device is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Notification Settings",
+        "description": "Configure which notification types you want to receive from your Dreame Mower.",
+        "data": {
+          "notify": "Notification Types",
+          "map_rotation": "Map Rotation",
+          "map_show_title": "Show Map Title",
+          "map_show_legend": "Show Map Legend",
+          "map_padding": "Map Padding (pixels)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "no_status": "No Status",
+          "mowing": "Mowing",
+          "standby": "Standby",
+          "paused": "Paused",
+          "paused_due_to_errors": "Paused due to errors",
+          "returning_to_station_to_charge": "Returning to station to charge",
+          "charging": "Charging",
+          "mapping": "Mapping",
+          "charging_complete": "Charging complete",
+          "updating": "Updating",
+          "charging_paused_high_temperature": "Charging paused: battery temperature too high",
+          "charging_paused_low_temperature": "Charging paused: battery temperature too low",
+          "maintenance_paused": "Paused at maintenance point"
+        }
+      },
+      "charging_status": {
+        "name": "Charging Status",
+        "state": {
+          "not_docked": "Not docked",
+          "charging": "Charging",
+          "not_charging": "Not charging",
+          "charging_completed": "Charging completed",
+          "return_to_charge": "Return to charge",
+          "charging_paused_high_temperature": "Charging paused: battery temperature too high",
+          "charging_paused_low_temperature": "Charging paused: battery temperature too low"
+        }
+      },
+      "mowing_progress": {
+        "name": "Mowing Progress"
+      },
+      "bluetooth_connection": {
+        "name": "Bluetooth"
+      },
+      "dnd_status": {
+        "name": "Do Not Disturb"
+      },
+      "charging_schedule": {
+        "name": "Charging Schedule"
+      },
+      "timezone": {
+        "name": "Timezone"
+      },
+      "device_code": {
+        "name": "Device code"
+      },
+      "current_task": {
+        "name": "Current task",
+        "state": {
+          "idle": "No task",
+          "starting": "Starting",
+          "mowing": "Mowing",
+          "paused": "Paused",
+          "finished": "Finished",
+          "failed": "Failed",
+          "exit": "Stopped",
+          "returning_to_dock": "Returning to dock"
+        }
+      },
+      "consumable_blade_health": {
+        "name": "Blade Health"
+      },
+      "consumable_brush_health": {
+        "name": "Brush Health"
+      },
+      "consumable_robot_health": {
+        "name": "Robot Maintenance Health"
+      }
+    },
+    "binary_sensor": {
+      "firmware_update_available": {
+        "name": "Firmware Update Available"
+      }
+    },
+    "button": {
+      "reset_blade": {
+        "name": "Reset Blade Counter"
+      },
+      "reset_brush": {
+        "name": "Reset Brush Counter"
+      },
+      "reset_robot_maintenance": {
+        "name": "Reset Robot Maintenance Counter"
+      },
+      "dock_without_stopping": {
+        "name": "Dock Without Stopping Task"
+      }
+    },
+    "camera": {
+      "map_camera": {
+        "name": "Map"
+      }
+    },
+    "number": {
+      "cutting_height": {
+        "name": "Cutting Height"
+      }
+    }
+  }
+}

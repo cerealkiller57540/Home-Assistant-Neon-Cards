@@ -1,0 +1,442 @@
+# Copyright 2026 Prash Balan (@its-me-prash) — GNU AGPL v3.0-or-later
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""Exceptions for the VW Group Connect CARIAD API client."""
+
+from __future__ import annotations
+
+from enum import StrEnum
+
+
+class CommandProfile(StrEnum):
+    """Per-VIN command-routing profile.
+
+    Different VAG vehicles speak the same authentication backend (CARIAD)
+    but expose commands at different URL prefixes. The most common split:
+    pre-2024 Audis use ``/vehicle/v1/`` for everything, while newer
+    premium models (RS e-tron GT, Q6 e-tron, A3 2024+ on PPC/PPE) use
+    ``/vehicle/v2/`` paths and reject ``/v1/`` with HTTP 404.
+
+    Currently used by ``AudiClient`` to remember which prefix worked for
+    a given VIN, so a 404-induced fallback only happens once per VIN per
+    integration lifetime. Other brand clients ignore the profile until
+    they grow analogous needs.
+
+    The full enum is defined upfront so future sessions (PPE, MBB
+    legacy, mysmob v3, …) can extend the same dispatch table without
+    breaking existing serialised state.
+    """
+
+    UNKNOWN = "unknown"
+    CARIAD_BFF_V1 = "cariad_bff_v1"
+    CARIAD_BFF_V2 = "cariad_bff_v2"
+    AUDI_PPE = "audi_ppe"
+    AUDI_PREMIUM = "audi_premium"
+    LEGACY_MBB = "legacy_mbb"
+    MEB_ID = "meb_id"
+    SEAT_CUPRA_OLA = "seat_cupra_ola"
+    SKODA_MYSMOB = "skoda_mysmob"
+    SKODA_MYSMOB_V3 = "skoda_mysmob_v3"
+    PORSCHE_PPA = "porsche_ppa"
+    VW_NA = "vw_na"
+
+
+class CommandFailureReason(StrEnum):
+    """Why a vehicle command failed.
+
+    Used by the coordinator to decide whether an entity should be hidden,
+    flagged as not-entitled, or just shown as temporarily unavailable.
+    Three failures that look similar at the HTTP layer can have very
+    different correct responses:
+
+    - ``MISSING_CAPABILITY`` — the vehicle's VIN is not registered for the
+      feature in the manufacturer backend (e.g. CUPRA Born without
+      honk-and-flash). Hide the entity at next reload.
+    - ``SUBSCRIPTION_EXPIRED`` — paid online-services subscription expired.
+      Same vehicle would support the command if the user renewed; surface
+      a clear error, do NOT hide the entity.
+    - ``NOT_ENTITLED`` — free tier (e.g. We Connect Go) that never
+      included remote commands. Same handling as expired but with
+      different user messaging.
+    - ``WRONG_API_PROFILE`` — newer model uses a different endpoint
+      version. Needs the per-VIN command profile from #61.
+    - ``VEHICLE_UNREACHABLE`` — car offline / asleep / out of coverage.
+      Transient — entity stays available.
+    - ``SPIN_REQUIRED`` — already raised as ``ServiceValidationError``
+      before reaching the API; included here for completeness.
+    - ``INVALID_PAYLOAD`` — our bug. Fix and ship.
+    - ``BACKEND_ERROR`` — manufacturer 5xx or unexpected 4xx body.
+      Transient; do not derive long-term decisions.
+    - ``ATTESTATION_LOCKED`` — VW put this plane behind device attestation
+      (Firebase App Check / Play Integrity), which an open-source client
+      can't satisfy. Distinct from NOT_ENTITLED: it's NOT a subscription
+      problem, so messaging must not send users chasing a phantom renewal.
+      Commands are gone on this channel; reads continue via the portal.
+    - ``UNKNOWN`` — default. Don't make assumptions.
+    """
+
+    MISSING_CAPABILITY = "missing_capability"
+    SUBSCRIPTION_EXPIRED = "subscription_expired"
+    NOT_ENTITLED = "not_entitled"
+    WRONG_API_PROFILE = "wrong_api_profile"
+    VEHICLE_UNREACHABLE = "vehicle_unreachable"
+    SPIN_REQUIRED = "spin_required"
+    INVALID_PAYLOAD = "invalid_payload"
+    BACKEND_ERROR = "backend_error"
+    ATTESTATION_LOCKED = "attestation_locked"
+    UNKNOWN = "unknown"
+
+
+def classify_command_failure(exc: BaseException) -> CommandFailureReason:
+    """Map a CARIAD ``APIError`` (or any exception) to a failure reason.
+
+    Conservative on purpose — when in doubt return ``UNKNOWN`` or
+    ``BACKEND_ERROR`` rather than ``MISSING_CAPABILITY``. The latter
+    leads to entities being permanently hidden, so we only return it for
+    backend responses that explicitly say so.
+
+    v1.9.1 (Capability-Filter Phase 2, #56) — body-content sniffing for
+    common subscription / spin-error markers so the coordinator can
+    auto-update ``FeatureState`` instead of treating every 4xx as
+    ``BACKEND_ERROR``. Verified marker strings:
+
+    - ``spin_error`` / ``spinState`` — confirmed live on Audi S6 C8 2021
+      (#92): CARIAD BFF returns ``403`` with body
+      ``{"error":{"message":"spin_error", "spinState":"DEFINED",
+      "remainingTries":3}}`` when S-PIN is required but absent.
+    - ``subscription`` / ``expired`` / ``license_required`` — the
+      vocabulary used by upstream #47 and migendi's #42 reports
+      for paid online-services lapses.
+    - ``not_entitled`` / ``entitlement`` — the OLA vocabulary used by
+      gleeballs's free-tier We Connect Go report (#51).
+
+    If the body has none of these markers we fall back to the
+    HTTP-status-only classification.
+    """
+    # v2.17.1 (#666) — a locally-raised SpinError (our own guard, e.g. an MBB
+    # lock/climate/charge command issued with no S-PIN configured) is a clean
+    # "S-PIN required", not an UNKNOWN crash that bubbles as a raw traceback.
+    if isinstance(exc, SpinError):
+        return CommandFailureReason.SPIN_REQUIRED
+    if not isinstance(exc, APIError):
+        return CommandFailureReason.UNKNOWN
+
+    status = getattr(exc, "status", 0) or 0
+    body = str(exc).lower()
+
+    # Body-content first — these are unambiguous markers regardless of
+    # which 4xx the backend used.
+    if "missing-capability" in body or "missing_capability" in body:
+        return CommandFailureReason.MISSING_CAPABILITY
+    if "spin_error" in body or "spinstate" in body:
+        return CommandFailureReason.SPIN_REQUIRED
+    # v2.17.3 — the classic Car-Net MBB rolesrights reply for a wrong S-PIN
+    # (``mbbc.rolesandrights.invalidSecurityPin``). Without this marker it fell
+    # through to the bare ``status == 403`` → NOT_ENTITLED branch, which wrongly
+    # flags the account as unentitled and sends the user chasing a phantom
+    # subscription renewal. It's just a wrong PIN — actionable, non-hiding.
+    if "invalidsecuritypin" in body or "invalid security pin" in body:
+        return CommandFailureReason.SPIN_REQUIRED
+    # A LOCKED S-PIN (``mbbc.rolesandrights.securityPinLocked``, after too many
+    # wrong tries) is ALSO a spin problem, not an entitlement one. Without this
+    # marker it fell through to the bare ``status == 403`` → NOT_ENTITLED
+    # branch, which HID the command entities for ~24h and told the user to chase
+    # a phantom subscription renewal — seen live on a Golf GTE once the S-PIN
+    # locked. It's the S-PIN: unlock it in the brand app, then retry. Actionable,
+    # non-hiding.
+    if (
+        "securitypinlocked" in body
+        or "security pin locked" in body
+        or "pinlocked" in body
+    ):
+        return CommandFailureReason.SPIN_REQUIRED
+    if "subscription" in body and ("expired" in body or "lapsed" in body):
+        return CommandFailureReason.SUBSCRIPTION_EXPIRED
+    if (
+        "not_entitled" in body
+        or "not-entitled" in body
+        or "license_required" in body
+        or "license-required" in body
+        or "entitlement" in body
+    ):
+        return CommandFailureReason.NOT_ENTITLED
+    # b13 — device-attestation lock (Firebase App Check / Play Integrity).
+    # VW is rolling attestation across its planes in 2026 (it already killed
+    # OLA reads with ``missing-device-token``). An open-source client cannot
+    # produce these Google-signed tokens, so it's a hard wall — but it is NOT
+    # a subscription/entitlement problem, and must not be mislabeled as one
+    # (that sends users chasing a phantom renewal). Keyed on the body marker,
+    # never on a bare 403, so genuine entitlement 403s still classify below.
+    if (
+        "missing-device-token" in body
+        or "missing_device_token" in body
+        or "forbidden device detected" in body
+        or "x-firebase-appcheck" in body
+        or "firebase-appcheck" in body
+        or "appcheck" in body
+        or "play integrity" in body
+        or "play_integrity" in body
+        # v2.17.1 (#666 sweep) — SEAT/CUPRA's wall is AWS WAF, a different
+        # SDK challenge but the same "device-attestation, not a subscription
+        # problem" class. Classify it here so a WAF block gets the right
+        # message instead of a phantom-renewal one.
+        or "x-amzn-waf-action" in body
+        or "aws-waf-token" in body
+        or "aws-waf" in body
+        or "waftokenunavailable" in body
+    ):
+        return CommandFailureReason.ATTESTATION_LOCKED
+
+    # v1.20.3 — Cariad-BFF wraps real upstream backend issues in
+    # fake-404 responses with a specific body marker. User-report
+    # 2026-05-07 (Audi A4 B9 + Q5 2021 + VW Golf 7) showed all 3
+    # vehicles WITH active Audi Connect Plus subscriptions hit the
+    # same 404 for write commands. Body sample:
+    #   {"error":{"message":"Not Found",
+    #     "info":"Upstream service responded with an unexpected status",
+    #     "code":4112,"group":2,"retry":true}}
+    # The ``retry:true`` + "Upstream service" marker = transient
+    # backend issue, NOT missing capability. Classify as
+    # BACKEND_ERROR so the entity stays visible (user can retry)
+    # instead of being hidden by Capability-Filter Phase 3.
+    if (
+        "upstream service responded" in body
+        or "\"retry\":true" in body
+        or "'retry': true" in body
+    ):
+        return CommandFailureReason.BACKEND_ERROR
+
+    # v2.20.0 — authoritative CARIAD numeric error code. The BFF error envelope
+    # carries a numeric ``code`` (the official app's ``BFFError$Code`` enum,
+    # e.g. 4112=missingCapability, 4007=connectivityLicenseInactive,
+    # 4297=vehicleIsInDeepSleep) that decodes into a named reason. Read it from
+    # the RAW body (not the lowercased str(exc), whose keys/casing are lossy).
+    # Placed AFTER the retry:true guard above so a transient upstream wrap —
+    # which reuses e.g. code 4112 with retry:true — stays BACKEND_ERROR rather
+    # than being mis-read as a permanent missing capability that hides the
+    # entity. Only the unambiguous codes are mapped; the rest fall through.
+    from ._bff_error_codes import (  # noqa: PLC0415
+        bff_error_retryable,
+        decode_bff_error,
+        reason_for_bff_code,
+    )
+
+    body_raw = getattr(exc, "body", "") or ""
+    decoded = decode_bff_error(body_raw)
+    if decoded is not None:
+        mapped = reason_for_bff_code(decoded[0])
+        if mapped is not None:
+            # A retryable upstream wrap must stay transient (entity visible),
+            # never a permanent verdict — even when it reuses a "permanent"
+            # code. Robust to JSON whitespace (the substring guard above is not).
+            if bff_error_retryable(body_raw):
+                return CommandFailureReason.BACKEND_ERROR
+            return mapped
+
+    # Fall back to status-code-only classification.
+    if status == 403:
+        return CommandFailureReason.NOT_ENTITLED
+    if status == 404:
+        # 404 without a body marker is ambiguous: could mean we have
+        # the wrong URL (integration bug) OR backend route doesn't
+        # exist for this model (missing capability). Keep as
+        # WRONG_API_PROFILE — Capability-Filter Phase 2 records the
+        # failure for entity-availability tracking but doesn't
+        # permanently hide. Phase 3 only hides on confirmed missing-
+        # capability body markers.
+        return CommandFailureReason.WRONG_API_PROFILE
+    if status >= 500:
+        return CommandFailureReason.BACKEND_ERROR
+    if status == 400:
+        # 400 with `internal-error` is ambiguous — could be expired
+        # subscription, could be a transient backend error, could be
+        # our payload. We can't tell from the HTTP layer alone, so we
+        # return BACKEND_ERROR (the safe default) and let the
+        # coordinator decide based on entitlement state if known.
+        return CommandFailureReason.BACKEND_ERROR
+    return CommandFailureReason.UNKNOWN
+
+
+class CariadError(Exception):
+    """Base exception for all CARIAD client errors."""
+
+
+class AuthenticationError(CariadError):
+    """Login failed — wrong credentials or account issue."""
+
+
+class NorthAmericaAttestationError(AuthenticationError):
+    """#1165/#659 — VW North America blocks the sign-in token exchange behind
+    Play-Integrity device attestation (~2026-07-30). The con-veh host 401s with a
+    CarnetSP INVALID_REQUEST body BEFORE any vehicle read, so it looks identical to
+    a wrong password and NA owners loop re-entering credentials. Raised so the
+    config flow can surface the real reason instead of ``invalid_credentials``."""
+
+
+class TermsAndConditionsError(AuthenticationError):
+    """Terms and conditions must be accepted in the app before API access."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Terms and conditions pending. Open the brand app, sign in, and accept."
+        )
+
+
+class MarketingConsentError(AuthenticationError):
+    """New privacy/marketing consent required."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Privacy consent required. App → Profile → Consents."
+        )
+
+
+class TwoFactorRequiredError(AuthenticationError):
+    """2FA challenge — must be resolved once in the app."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "2FA required. Sign in manually in the brand app once to confirm."
+        )
+
+
+class EmailTwoFactorRequiredError(TwoFactorRequiredError):
+    """v2.2.0 (#183 follow-on) — Email-OTP 2FA challenge.
+
+    Discriminated subclass of ``TwoFactorRequiredError`` for the case
+    where the IDP issued an **email OTP** rather than an authenticator-
+    app TOTP code. Detected via the ``/u/email-challenge`` URL fragment
+    (Auth0 path) or ``email-otp`` / ``email-code`` body markers (Legacy
+    path).
+
+    UX matters: Email-2FA users need to check their **inbox** (and
+    potentially spam) for a 6-digit code from VAG IDP, while TOTP users
+    need their authenticator-app rolling code. Different messages →
+    different mental models.
+
+    Both flows ultimately need a one-time human ack in the brand app
+    before headless API access works, so the Repair-issue surfacing is
+    identical except for the actionable text. ``isinstance(err,
+    TwoFactorRequiredError)`` keeps the existing handler chain working.
+    """
+
+    def __init__(self) -> None:
+        # Skip parent's __init__ — we want the more specific message
+        AuthenticationError.__init__(
+            self,
+            "Email 2FA required. Check your inbox (and spam) for a 6-digit "
+            "code from VAG IDP, then sign in manually in the brand app once.",
+        )
+
+
+class PortalInteractionRequiredError(AuthenticationError):
+    """v2.15.4 (#527) — the EU Data Act portal login stopped on a step that
+    needs a one-time human action in the browser/app, but is NOT a wrong-
+    credentials case.
+
+    Examples: a portal onboarding / region-selection wall, a soft block, or
+    any signin-service interstitial we recognise as non-credential but that
+    doesn't fit the existing T&C / marketing-consent / 2FA buckets.
+
+    Distinct from ``AuthenticationError`` so the config-flow + coordinator
+    surface a non-credential message — #527 reporters with valid passwords
+    were being told to "check email and password" because the portal
+    connector flattened every non-redirect landing to the credential
+    catch-all. Carrying a specific (secret-free) reason lets the UI explain
+    what actually happened.
+    """
+
+    def __init__(self, reason: str = "") -> None:
+        msg = (
+            "EU Data Act portal login needs a one-time action in the browser "
+            "or brand app before headless access works"
+        )
+        if reason:
+            msg += f" ({reason})"
+        msg += ". This is NOT a wrong-password problem."
+        super().__init__(msg)
+        self.reason = reason
+
+
+class RateLimitError(CariadError):
+    """Account temporarily blocked by VAG rate limiter."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Account temporarily rate-limited. Wait 15 minutes, then retry."
+        )
+
+
+class UpstreamUnavailableError(CariadError):
+    """v2.5.7 (#313 follow-on) — VAG backend (CARIAD-BFF / Azure WAF)
+    is returning HTTP 5xx on requests that would normally succeed.
+
+    Distinct from ``AuthenticationError`` so the config-flow + Repair
+    surface can show a non-credentials message: it's NOT the user's
+    password, it's VW's server side. Users were re-configuring their
+    integration during the 2026-05-28 + 2026-05-29 502-storms because
+    the failure looked like "wrong credentials" — this exception class
+    + dedicated strings.json key prevents that misdiagnosis.
+
+    Cross-references for the 502-storm class of failure:
+    - evcc #30280 + #30324 (2026-05-29)
+    - ioBroker.vw-connect #425 + #426 (2026-05-28 14:00 UTC onward)
+    - our #309 moltke69 + 9mrcookie9 fresh dumps (2026-05-29)
+    """
+
+    def __init__(self, status: int, brand: str = "") -> None:
+        msg = (
+            f"VAG backend temporarily unavailable (HTTP {status})"
+        )
+        if brand:
+            msg += f" for brand {brand}"
+        msg += (
+            ". This is a server-side issue at VW, not a credentials problem. "
+            "Please wait 5–15 minutes and try again. Do NOT reconfigure the "
+            "integration."
+        )
+        super().__init__(msg)
+        self.status = status
+        self.brand = brand
+
+
+class TokenExpiredError(CariadError):
+    """Access token expired and could not be refreshed."""
+
+
+class SpinError(CariadError):
+    """S-PIN required or incorrect — needed for lock/unlock commands."""
+
+
+class VehicleNotFoundError(CariadError):
+    """VIN not found in the account garage."""
+
+    def __init__(self, vin: str) -> None:
+        super().__init__(f"Vehicle {vin} not found in account garage.")
+        self.vin = vin
+
+
+class VehicleCommandError(CariadError):
+    """Remote command rejected or timed out."""
+
+    def __init__(self, command: str, reason: str = "") -> None:
+        msg = f"Command '{command}' failed"
+        if reason:
+            msg += f": {reason}"
+        super().__init__(msg)
+        self.command = command
+
+
+class APIError(CariadError):
+    """Unexpected API response."""
+
+    def __init__(self, status: int, url: str, body: str = "") -> None:
+        super().__init__(f"API error {status} for {url}: {body[:200]}")
+        self.status = status
+        self.url = url
+        # v2.9.0 - keep the raw body around so callers can inspect for
+        # backend-specific markers (e.g. account-lock detection in
+        # base.py reads 403 bodies for throttling-marker substrings).
+        # Truncated to 4 KB so a hostile redirect to an HTML error page
+        # cannot blow up memory when we keep the exception in a
+        # sliding-window history.
+        self.body = body[:4096] if isinstance(body, str) else ""

@@ -1,0 +1,172 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Wählen Sie den Kontotyp",
+        "description": "Wählen Sie Ihren Kontotyp für die Integration von Dreame Mower aus.",
+        "data": {
+          "account_type": "Kontotyp"
+        }
+      },
+      "dreame": {
+        "data": {
+          "username": "Benutzername",
+          "password": "Passwort",
+          "country": "Cloudserver"
+        },
+        "description": "Melden Sie sich in der Dreamehome Cloud an."
+      },
+      "mova": {
+        "data": {
+          "username": "Benutzername",
+          "password": "Passwort",
+          "country": "Serverland"
+        },
+        "description": "Melden Sie sich in der Movahome Cloud an."
+      },
+      "devices": {
+        "data": {
+          "devices": "Unterstützte Geräte"
+        },
+        "description": "Bitte wählen Sie das Dreame Mower -Gerät aus, das Sie einrichten möchten."
+      },
+      "options": {
+        "data": {
+          "name": "Gerätename",
+          "notify": "Benachrichtigungstypen"
+        },
+        "description": "Konfigurieren Sie Ihren Geräten Namen und die Benachrichtigungseinstellungen für den Dreame Mower."
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbindung fehlgeschlagen. Überprüfen Sie Ihr Netzwerk und versuchen Sie es erneut. Weitere Details finden Sie in den Home Assistant-Protokollen.",
+      "unsupported": "Dieses Gerätemodell wird von dieser Integration nicht unterstützt.",
+      "credentials_incomplete": "Benutzername, Passwort und Land sind erforderlich.",
+      "login_error": "Anmeldung fehlgeschlagen. Überprüfen Sie Benutzername und Passwort. Stellen Sie sicher, dass Sie den richtigen Kontotyp ausgewählt haben (Dreamehome vs. MOVAhome).",
+      "no_devices": "Kein unterstützter Mäher in diesem Konto gefunden. Stellen Sie sicher, dass Sie den richtigen Kontotyp gewählt haben – MOVAhome für MOVA-Geräte, Dreamehome für Dreame – und dass das Gerät in der entsprechenden App hinzugefügt ist. Sie können auch ein anderes Serverland ausprobieren.",
+      "invalid_account_type": "Ungültiger Kontotyp ausgewählt."
+    },
+    "abort": {
+      "cannot_connect": "Fehlgeschlagene Verbindung.",
+      "already_configured": "Dieses Gerät ist bereits konfiguriert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Optionen",
+        "description": "Konfigurieren Sie die Benachrichtigungseinstellungen für die Integration von Dreame Mäher.",
+        "data": {
+          "notify": "Benachrichtigungstypen",
+          "map_rotation": "Kartenrotation",
+          "map_show_title": "Kartentitel anzeigen",
+          "map_show_legend": "Kartenlegende anzeigen",
+          "map_padding": "Kartenrand (Pixel)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "no_status": "Kein Status",
+          "mowing": "Mähen",
+          "standby": "Standby",
+          "paused": "Pause",
+          "paused_due_to_errors": "Aufgrund von Fehlern angehalten",
+          "returning_to_station_to_charge": "Rückkehr zur Station, um zu laden",
+          "charging": "Wird geladen",
+          "mapping": "Karttierung",
+          "charging_complete": "Vollständig geladen",
+          "updating": "Wird aktualisiert",
+          "charging_paused_high_temperature": "Laden pausiert: Batterietemperatur zu hoch",
+          "charging_paused_low_temperature": "Laden pausiert: Batterietemperatur zu niedrig",
+          "maintenance_paused": "Pausiert am Wartungspunkt"
+        }
+      },
+      "charging_status": {
+        "name": "Ladestatus",
+        "state": {
+          "not_docked": "Nicht angedockt",
+          "charging": "Wird geladen",
+          "not_charging": "Wird nicht aufgeladen",
+          "charging_completed": "Vollständig geladen",
+          "return_to_charge": "Rückkehr zum Laden",
+          "charging_paused_high_temperature": "Laden pausiert: Batterietemperatur zu hoch",
+          "charging_paused_low_temperature": "Laden pausiert: Batterietemperatur zu niedrig"
+        }
+      },
+      "mowing_progress": {
+        "name": "Mäh Fortschritt"
+      },
+      "bluetooth_connection": {
+        "name": "Bluetooth"
+      },
+      "dnd_status": {
+        "name": "Bitte nicht stören"
+      },
+      "charging_schedule": {
+        "name": "Ladeplan"
+      },
+      "timezone": {
+        "name": "Zeitzone"
+      },
+      "device_code": {
+        "name": "Gerätecode"
+      },
+      "current_task": {
+        "name": "Aktuelle Aufgabe",
+        "state": {
+          "idle": "Keine Aufgabe",
+          "starting": "Startet",
+          "mowing": "Mähen",
+          "paused": "Pausiert",
+          "finished": "Abgeschlossen",
+          "failed": "Fehlgeschlagen",
+          "exit": "Gestoppt",
+          "returning_to_dock": "Rückkehr zur Station"
+        }
+      },
+      "consumable_blade_health": {
+        "name": "Klingenverschleiß"
+      },
+      "consumable_brush_health": {
+        "name": "Bürstenverschleiß"
+      },
+      "consumable_robot_health": {
+        "name": "Wartungszustand"
+      }
+    },
+    "binary_sensor": {
+      "firmware_update_available": {
+        "name": "Firmware-Update verfügbar"
+      }
+    },
+    "camera": {
+      "map_camera": {
+        "name": "Karte"
+      }
+    },
+    "button": {
+      "reset_blade": {
+        "name": "Klingenzähler zurücksetzen"
+      },
+      "reset_brush": {
+        "name": "Bürstenzähler zurücksetzen"
+      },
+      "reset_robot_maintenance": {
+        "name": "Wartungszähler zurücksetzen"
+      },
+      "dock_without_stopping": {
+        "name": "Andocken ohne Aufgabe zu stoppen"
+      }
+    },
+    "number": {
+      "cutting_height": {
+        "name": "Schnitthöhe"
+      }
+    }
+  }
+}

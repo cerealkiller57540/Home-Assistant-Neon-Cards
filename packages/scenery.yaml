@@ -1,0 +1,53 @@
+scenery:
+  lights:
+    # ── Salon (2 ampoules RGB) ────────────────────────────────────────────────
+    - entity_id:
+        - light.smart_led_bulb_2
+        - light.smart_led_bulb
+      favorite_colors:
+        - color_temp_kelvin: 2700   # Chaud
+        - color_temp_kelvin: 4000   # Neutre
+        - color_temp_kelvin: 6500   # Froid
+        - rgb_color: [0, 255, 249]  # Cyan néon
+        - rgb_color: [98, 0, 234]   # Violet UV
+        - rgb_color: [255, 45, 107] # Rose magenta
+        - rgb_color: [100, 0, 180]  # Violet
+        - rgb_color: [0, 255, 80]   # Vert néon
+      profile_select:
+        off_option: "Éteint"
+
+    # ── Cuisine (4 ampoules RGB) ──────────────────────────────────────────────
+    - entity_id:
+        - light.smart_led_bulb_1
+        - light.smart_led_bulb_2_2
+        - light.smart_led_bulb_3
+        - light.smart_led_bulb_4
+      favorite_colors:
+        - color_temp_kelvin: 2700   # Chaud
+        - color_temp_kelvin: 4000   # Neutre
+        - color_temp_kelvin: 6500   # Froid
+        - rgb_color: [0, 255, 249]  # Cyan néon
+        - rgb_color: [98, 0, 234]   # Violet UV
+        - rgb_color: [255, 45, 107] # Rose magenta
+        - rgb_color: [100, 0, 180]  # Violet
+        - rgb_color: [0, 255, 80]   # Vert néon
+      profile_select:
+        off_option: "Éteint"
+
+    # ── Salle de bain (6 ampoules RGB) ───────────────────────────────────────
+    - entity_id:
+        - light.smart_led_bulb_sdb_1
+        - light.smart_led_bulb_sdb_2
+        - light.smart_led_bulb_sdb_3
+        - light.smart_led_bulb_sdb_4
+        - light.smart_led_bulb_sdb_5
+        - light.smart_led_bulb_sdb_6
+      favorite_colors:
+        - color_temp_kelvin: 2700   # Matin doux
+        - rgb_color: [255, 140, 20] # Soir ambré
+        - rgb_color: [60, 0, 0]     # Nuit veilleuse rouge faible
+        - rgb_color: [0, 80, 255]   # Bain - bleu
+        - rgb_color: [140, 0, 255]  # Bain - violet
+        - rgb_color: [0, 200, 120]  # Bain - vert
+      profile_select:
+        off_option: "Éteint"

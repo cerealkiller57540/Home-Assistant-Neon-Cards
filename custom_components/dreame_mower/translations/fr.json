@@ -1,0 +1,172 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Choisissez le type de compte",
+        "description": "Sélectionnez votre type de compte pour l'intégration Dreame Mower.",
+        "data": {
+          "account_type": "Type de compte"
+        }
+      },
+      "dreame": {
+        "data": {
+          "username": "Nom d'utilisateur",
+          "password": "Mot de passe",
+          "country": "Pays de serveur"
+        },
+        "description": "Connectez-vous au cloud Dreamehome."
+      },
+      "mova": {
+        "data": {
+          "username": "Nom d'utilisateur",
+          "password": "Mot de passe",
+          "country": "Pays de serveur"
+        },
+        "description": "Connectez-vous au cloud Movahome."
+      },
+      "devices": {
+        "data": {
+          "devices": "Appareils pris en charge"
+        },
+        "description": "Veuillez sélectionner le robot tondeuse Dreame que vous souhaitez configurer."
+      },
+      "options": {
+        "data": {
+          "name": "Nom de l'appareil",
+          "notify": "Types de notification"
+        },
+        "description": "Configurez le nom de votre robot tondeuse Dreame et les préférences de notification."
+      }
+    },
+    "error": {
+      "cannot_connect": "Échec de la connexion. Vérifiez votre réseau et réessayez. Consultez les journaux Home Assistant pour plus de détails.",
+      "unsupported": "Ce modèle d'appareil n'est pas pris en charge par cette intégration.",
+      "credentials_incomplete": "Le nom d'utilisateur, le mot de passe et le pays sont obligatoires.",
+      "login_error": "Échec de la connexion. Vérifiez votre nom d'utilisateur et mot de passe. Assurez-vous d'avoir sélectionné le bon type de compte (Dreamehome vs MOVAhome).",
+      "no_devices": "Aucune tondeuse compatible trouvée dans ce compte. Assurez-vous d'avoir choisi le bon type de compte — MOVAhome pour les appareils MOVA, Dreamehome pour Dreame — et que l'appareil est ajouté à l'application correspondante. Vous pouvez aussi essayer un autre pays de serveur.",
+      "invalid_account_type": "Type de compte invalide sélectionné."
+    },
+    "abort": {
+      "cannot_connect": "Échec de la connexion.",
+      "already_configured": "Cet appareil est déjà configuré."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "description": "Configurer les paramètres de notification pour l'intégration de la tondeuse Dreame.",
+        "data": {
+          "notify": "Types de notification",
+          "map_rotation": "Rotation de la carte",
+          "map_show_title": "Afficher le titre de la carte",
+          "map_show_legend": "Afficher la légende de la carte",
+          "map_padding": "Marge de la carte (pixels)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Statut",
+        "state": {
+          "no_status": "Pas de statut",
+          "mowing": "En tonte",
+          "standby": "Attente",
+          "paused": "En pause",
+          "paused_due_to_errors": "Pause en raison d'erreurs",
+          "returning_to_station_to_charge": "Retour à la station pour charger",
+          "charging": "Chargement",
+          "mapping": "Cartographie",
+          "charging_complete": "Chargement terminé",
+          "updating": "Mise à jour",
+          "charging_paused_high_temperature": "Charge pausée : température de la batterie trop élevée",
+          "charging_paused_low_temperature": "Charge pausée : température de la batterie trop basse",
+          "maintenance_paused": "En pause au point d'entretien"
+        }
+      },
+      "charging_status": {
+        "name": "Statut de charge",
+        "state": {
+          "not_docked": "Pas amarré",
+          "charging": "En charge",
+          "not_charging": "Pas en charge",
+          "charging_completed": "Charge terminée",
+          "return_to_charge": "Retour à la station de charge",
+          "charging_paused_high_temperature": "Charge pausée : température de la batterie trop élevée",
+          "charging_paused_low_temperature": "Charge pausée : température de la batterie trop basse"
+        }
+      },
+      "mowing_progress": {
+        "name": "Progression de la tonte"
+      },
+      "bluetooth_connection": {
+        "name": "Bluetooth"
+      },
+      "dnd_status": {
+        "name": "Ne pas déranger"
+      },
+      "charging_schedule": {
+        "name": "Calendrier de charge"
+      },
+      "timezone": {
+        "name": "Fuseau horaire"
+      },
+      "device_code": {
+        "name": "Code de périphérique"
+      },
+      "current_task": {
+        "name": "Tâche actuelle",
+        "state": {
+          "idle": "Aucune tâche",
+          "starting": "Démarrage",
+          "mowing": "En tonte",
+          "paused": "En pause",
+          "finished": "Terminée",
+          "failed": "Échouée",
+          "exit": "Arrêtée",
+          "returning_to_dock": "Retour à la station"
+        }
+      },
+      "consumable_blade_health": {
+        "name": "État des lames"
+      },
+      "consumable_brush_health": {
+        "name": "État de la brosse"
+      },
+      "consumable_robot_health": {
+        "name": "État de maintenance"
+      }
+    },
+    "binary_sensor": {
+      "firmware_update_available": {
+        "name": "Mise à jour du micrologiciel disponible"
+      }
+    },
+    "camera": {
+      "map_camera": {
+        "name": "Carte"
+      }
+    },
+    "button": {
+      "reset_blade": {
+        "name": "Réinitialiser le compteur des lames"
+      },
+      "reset_brush": {
+        "name": "Réinitialiser le compteur de brosse"
+      },
+      "reset_robot_maintenance": {
+        "name": "Réinitialiser le compteur de maintenance"
+      },
+      "dock_without_stopping": {
+        "name": "Revenir à la base sans arrêter la tâche"
+      }
+    },
+    "number": {
+      "cutting_height": {
+        "name": "Hauteur de coupe"
+      }
+    }
+  }
+}

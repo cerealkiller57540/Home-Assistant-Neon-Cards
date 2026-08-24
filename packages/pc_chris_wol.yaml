@@ -1,0 +1,18 @@
+# PC CHRIS (.48) — Wake-on-LAN
+#
+# switch.pc_chris expose DEUX choses en une entité :
+#   - l'ÉTAT : ping sur `host` (le PC répond → on, sinon → off)
+#   - l'ACTION : turn_on envoie la trame magique sur `mac`
+#
+# `turn_off` est volontairement ABSENT → réveil seulement, pas d'extinction
+# (aucun agent d'arrêt n'est installé côté PC ; cf. choix du 2026-07-20).
+#
+# La VM HAOS est en mode *bridged* sur les deux NIC de la .53, donc le
+# broadcast WoL atteint bien le LAN — vérifié avant écriture.
+# Le .48 est une réservation DHCP → l'IP du ping est stable.
+
+switch:
+  - platform: wake_on_lan
+    name: PC Chris
+    mac: "A0-36-BC-BA-47-0B"
+    host: 192.168.1.48

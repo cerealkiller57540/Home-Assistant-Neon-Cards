@@ -1,0 +1,172 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Wybierz typ konta",
+        "description": "Wybierz typ konta dla integracji kosiarki Dreame.",
+        "data": {
+          "account_type": "Typ konta"
+        }
+      },
+      "dreame": {
+        "data": {
+          "username": "Nazwa użytkownika",
+          "password": "Hasło",
+          "country": "Kraj serwera"
+        },
+        "description": "Zaloguj się do chmury Dreamehome."
+      },
+      "mova": {
+        "data": {
+          "username": "Nazwa użytkownika",
+          "password": "Hasło",
+          "country": "Kraj serwera"
+        },
+        "description": "Zaloguj się do chmury Movahome."
+      },
+      "devices": {
+        "data": {
+          "devices": "Obsługiwane urządzenia"
+        },
+        "description": "Wybierz urządzenie Dreame Mower, które chcesz skonfigurować."
+      },
+      "options": {
+        "data": {
+          "name": "Nazwa urządzenia",
+          "notify": "Typy powiadomień"
+        },
+        "description": "Skonfiguruj nazwę urządzenia Dreame Mower i preferencje powiadomień."
+      }
+    },
+    "error": {
+      "cannot_connect": "Połączenie nie powiodło się. Sprawdź sieć i spróbuj ponownie. Szczegóły znajdziesz w dziennikach Home Assistant.",
+      "unsupported": "Ten model urządzenia nie jest obsługiwany przez tę integrację.",
+      "credentials_incomplete": "Nazwa użytkownika, hasło i kraj są wymagane.",
+      "login_error": "Logowanie nie powiodło się. Sprawdź nazwę użytkownika i hasło. Upewnij się, że wybrałeś właściwy typ konta (Dreamehome vs MOVAhome).",
+      "no_devices": "Nie znaleziono obsługiwanej kosiarki na tym koncie. Upewnij się, że wybrano właściwy typ konta — MOVAhome dla urządzeń MOVA, Dreamehome dla Dreame — oraz że urządzenie zostało dodane do tej aplikacji. Możesz też spróbować innego kraju serwera.",
+      "invalid_account_type": "Wybrano nieprawidłowy typ konta."
+    },
+    "abort": {
+      "cannot_connect": "Nie udało się połączyć.",
+      "already_configured": "To urządzenie jest już skonfigurowane."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opcje",
+        "description": "Skonfiguruj ustawienia powiadomień integracji kosiarki Dreame.",
+        "data": {
+          "notify": "Typy powiadomień",
+          "map_rotation": "Obrót mapy",
+          "map_show_title": "Pokaż tytuł mapy",
+          "map_show_legend": "Pokaż legendę mapy",
+          "map_padding": "Margines mapy (piksele)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "no_status": "Brak statusu",
+          "mowing": "Koszenie",
+          "standby": "Czuwanie",
+          "paused": "Zatrzymany",
+          "paused_due_to_errors": "Zatrzymany z powodu błędów",
+          "returning_to_station_to_charge": "Powrót do stacji w celu ładowania",
+          "charging": "Ładowanie",
+          "mapping": "Mapowanie",
+          "charging_complete": "Ładowanie zakończone",
+          "updating": "Aktualizacja",
+          "charging_paused_high_temperature": "Ładowanie wstrzymane: temperatura baterii zbyt wysoka",
+          "charging_paused_low_temperature": "Ładowanie wstrzymane: temperatura baterii zbyt niska",
+          "maintenance_paused": "Wstrzymano w punkcie konserwacji"
+        }
+      },
+      "charging_status": {
+        "name": "Status ładowania",
+        "state": {
+          "not_docked": "Nie zadokowany",
+          "charging": "Ładowanie",
+          "not_charging": "Brak ładowania",
+          "charging_completed": "Ładowanie zakończone",
+          "return_to_charge": "Powrót do ładowania",
+          "charging_paused_high_temperature": "Ładowanie wstrzymane: temperatura baterii zbyt wysoka",
+          "charging_paused_low_temperature": "Ładowanie wstrzymane: temperatura baterii zbyt niska"
+        }
+      },
+      "mowing_progress": {
+        "name": "Postęp koszenia"
+      },
+      "bluetooth_connection": {
+        "name": "Bluetooth"
+      },
+      "dnd_status": {
+        "name": "Nie przeszkadzać"
+      },
+      "charging_schedule": {
+        "name": "Harmonogram ładowania"
+      },
+      "timezone": {
+        "name": "Strefa czasowa"
+      },
+      "device_code": {
+        "name": "Kod urządzenia"
+      },
+      "current_task": {
+        "name": "Obecne zadanie",
+        "state": {
+          "idle": "Brak zadania",
+          "starting": "Uruchamianie",
+          "mowing": "Koszenie",
+          "paused": "Wstrzymane",
+          "finished": "Zakończone",
+          "failed": "Niepowodzenie",
+          "exit": "Zatrzymane",
+          "returning_to_dock": "Powrót do stacji"
+        }
+      },
+      "consumable_blade_health": {
+        "name": "Stan ostrzy"
+      },
+      "consumable_brush_health": {
+        "name": "Stan szczotki"
+      },
+      "consumable_robot_health": {
+        "name": "Stan konserwacji"
+      }
+    },
+    "binary_sensor": {
+      "firmware_update_available": {
+        "name": "Dostępna aktualizacja oprogramowania"
+      }
+    },
+    "camera": {
+      "map_camera": {
+        "name": "Mapa"
+      }
+    },
+    "button": {
+      "reset_blade": {
+        "name": "Zresetuj licznik ostrzy"
+      },
+      "reset_brush": {
+        "name": "Zresetuj licznik szczotki"
+      },
+      "reset_robot_maintenance": {
+        "name": "Zresetuj licznik konserwacji"
+      },
+      "dock_without_stopping": {
+        "name": "Dokowanie bez zatrzymywania zadania"
+      }
+    },
+    "number": {
+      "cutting_height": {
+        "name": "Wysokość koszenia"
+      }
+    }
+  }
+}

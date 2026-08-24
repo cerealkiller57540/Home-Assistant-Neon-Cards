@@ -1,0 +1,78 @@
+Starting Zigbee2MQTT without watchdog.
+[2026-02-02 22:00:51] [32minfo[39m: 	z2m: Logging to console, file (filename: log.log)
+[2026-02-02 22:00:51] [32minfo[39m: 	z2m: Starting Zigbee2MQTT version 2.8.0 (commit #unknown)
+[2026-02-02 22:00:51] [32minfo[39m: 	z2m: Starting zigbee-herdsman (9.0.2)
+[2026-02-02 22:00:52] [32minfo[39m: 	zh:adapter:discovery: Matched adapter: {"path":"/dev/ttyUSB0","manufacturer":"SONOFF","serialNumber":"8a95bf1a41a1ef11b789926661ce3355","pnpId":"usb-SONOFF_SONOFF_Dongle_Plus_MG24_8a95bf1a41a1ef11b789926661ce3355-if00-port0","vendorId":"10c4","productId":"ea60"} => ember: 4
+[2026-02-02 22:00:52] [32minfo[39m: 	zh:ember: Using default stack config.
+[2026-02-02 22:00:52] [32minfo[39m: 	zh:ember: ======== Ember Adapter Starting ========
+[2026-02-02 22:00:52] [32minfo[39m: 	zh:ember:ezsp: ======== EZSP starting ========
+[2026-02-02 22:00:52] [32minfo[39m: 	zh:ember:uart:ash: ======== ASH Adapter reset ========
+[2026-02-02 22:00:52] [32minfo[39m: 	zh:ember:uart:ash: RTS/CTS config is off, enabling software flow control.
+[2026-02-02 22:00:52] [32minfo[39m: 	zh:ember:uart:ash: Serial port opened
+[2026-02-02 22:00:52] [32minfo[39m: 	zh:ember:uart:ash: ======== ASH starting ========
+[2026-02-02 22:00:57] [32minfo[39m: 	zh:ember:uart:ash: ======== ASH Adapter reset ========
+[2026-02-02 22:00:57] [32minfo[39m: 	zh:ember:uart:ash: ======== ASH starting ========
+[2026-02-02 22:00:59] [32minfo[39m: 	zh:ember:uart:ash: ======== ASH connected ========
+[2026-02-02 22:00:59] [32minfo[39m: 	zh:ember:uart:ash: ======== ASH started ========
+[2026-02-02 22:00:59] [32minfo[39m: 	zh:ember:ezsp: ======== EZSP started ========
+[2026-02-02 22:00:59] [32minfo[39m: 	zh:ember: Adapter EZSP protocol version (13) lower than Host. Switched.
+[2026-02-02 22:00:59] [32minfo[39m: 	zh:ember: Adapter version info: {"ezsp":13,"revision":"7.4.5 [GA]","build":0,"major":7,"minor":4,"patch":5,"special":0,"type":170}
+[2026-02-02 22:00:59] [32minfo[39m: 	zh:ember: [STACK STATUS] Network up.
+[2026-02-02 22:00:59] [32minfo[39m: 	zh:ember: [INIT TC] Adapter network does not match config. Leaving network...
+[2026-02-02 22:01:01] [32minfo[39m: 	zh:ember: [STACK STATUS] Network down.
+[2026-02-02 22:01:01] [32minfo[39m: 	zh:ember: [INIT TC] Forming from backup.
+[2026-02-02 22:01:01] [32minfo[39m: 	zh:ember: [INIT FORM] Forming new network with: {"panId":44247,"extendedPanId":[209,57,169,241,27,202,55,79],"radioTxPower":5,"radioChannel":11,"joinMethod":0,"nwkManagerId":0,"nwkUpdateId":0,"channels":134215680}
+[2026-02-02 22:01:01] [32minfo[39m: 	zh:ember: [STACK STATUS] Network up.
+[2026-02-02 22:01:01] [32minfo[39m: 	zh:ember: [INIT FORM] New network formed!
+[2026-02-02 22:01:01] [32minfo[39m: 	zh:ember: [CONCENTRATOR] Started source route discovery. 1247ms until next broadcast.
+[2026-02-02 22:01:01] [32minfo[39m: 	z2m: zigbee-herdsman started (restored)
+[2026-02-02 22:01:01] [32minfo[39m: 	z2m: Coordinator firmware version: '{"meta":{"build":0,"ezsp":13,"major":7,"minor":4,"patch":5,"revision":"7.4.5 [GA]","special":0,"type":170},"type":"EmberZNet"}'
+[2026-02-02 22:01:01] [32minfo[39m: 	z2m: Currently 0 devices are joined.
+[2026-02-02 22:01:01] [32minfo[39m: 	z2m: Connecting to MQTT server at mqtt://core-mosquitto:1883
+[2026-02-02 22:01:02] [32minfo[39m: 	z2m: Connected to MQTT server
+[2026-02-02 22:01:02] [32minfo[39m: 	z2m:mqtt: MQTT publish: topic 'zigbee2mqtt/bridge/state', payload '{"state":"online"}'
+[2026-02-02 22:01:02] [32minfo[39m: 	z2m: Started frontend on port 8099
+[2026-02-02 22:01:02] [32minfo[39m: 	z2m: Zigbee2MQTT started!
+[2026-02-02 22:01:07] [32minfo[39m: 	z2m:mqtt: MQTT publish: topic 'homeassistant/binary_sensor/1221051039810110150109113116116_0x449fdafffe99b696/connection_state/config', payload '{"default_entity_id":"binary_sensor.zigbee2mqtt_bridge_connection_state","device":{"hw_version":"EmberZNet 7.4.5 [GA]","identifiers":["zigbee2mqtt_bridge_0x449fdafffe99b696"],"manufacturer":"Zigbee2MQTT","model":"Bridge","name":"Zigbee2MQTT Bridge","sw_version":"2.8.0"},"device_class":"connectivity","entity_category":"diagnostic","name":"Connection state","object_id":"zigbee2mqtt_bridge_connection_state","origin":{"name":"Zigbee2MQTT","sw":"2.8.0","url":"https://www.zigbee2mqtt.io"},"payload_off":"offline","payload_on":"online","state_topic":"zigbee2mqtt/bridge/state","unique_id":"bridge_0x449fdafffe99b696_connection_state_zigbee2mqtt","value_template":"{{ value_json.state }}"}'
+[2026-02-02 22:01:07] [32minfo[39m: 	z2m:mqtt: MQTT publish: topic 'homeassistant/binary_sensor/1221051039810110150109113116116_0x449fdafffe99b696/restart_required/config', payload '{"availability":[{"topic":"zigbee2mqtt/bridge/state","value_template":"{{ value_json.state }}"}],"availability_mode":"all","default_entity_id":"binary_sensor.zigbee2mqtt_bridge_restart_required","device":{"hw_version":"EmberZNet 7.4.5 [GA]","identifiers":["zigbee2mqtt_bridge_0x449fdafffe99b696"],"manufacturer":"Zigbee2MQTT","model":"Bridge","name":"Zigbee2MQTT Bridge","sw_version":"2.8.0"},"device_class":"problem","enabled_by_default":false,"entity_category":"diagnostic","name":"Restart required","object_id":"zigbee2mqtt_bridge_restart_required","origin":{"name":"Zigbee2MQTT","sw":"2.8.0","url":"https://www.zigbee2mqtt.io"},"payload_off":false,"payload_on":true,"state_topic":"zigbee2mqtt/bridge/info","unique_id":"bridge_0x449fdafffe99b696_restart_required_zigbee2mqtt","value_template":"{{ value_json.restart_required }}"}'
+[2026-02-02 22:01:08] [32minfo[39m: 	z2m:mqtt: MQTT publish: topic 'homeassistant/button/1221051039810110150109113116116_0x449fdafffe99b696/restart/config', payload '{"availability":[{"topic":"zigbee2mqtt/bridge/state","value_template":"{{ value_json.state }}"}],"availability_mode":"all","command_topic":"zigbee2mqtt/bridge/request/restart","default_entity_id":"button.zigbee2mqtt_bridge_restart","device":{"hw_version":"EmberZNet 7.4.5 [GA]","identifiers":["zigbee2mqtt_bridge_0x449fdafffe99b696"],"manufacturer":"Zigbee2MQTT","model":"Bridge","name":"Zigbee2MQTT Bridge","sw_version":"2.8.0"},"device_class":"restart","name":"Restart","object_id":"zigbee2mqtt_bridge_restart","origin":{"name":"Zigbee2MQTT","sw":"2.8.0","url":"https://www.zigbee2mqtt.io"},"payload_press":"","unique_id":"bridge_0x449fdafffe99b696_restart_zigbee2mqtt"}'
+[2026-02-02 22:01:08] [32minfo[39m: 	z2m:mqtt: MQTT publish: topic 'homeassistant/select/1221051039810110150109113116116_0x449fdafffe99b696/log_level/config', payload '{"availability":[{"topic":"zigbee2mqtt/bridge/state","value_template":"{{ value_json.state }}"}],"availability_mode":"all","command_template":"{\"options\": {\"advanced\": {\"log_level\": \"{{ value }}\" } } }","command_topic":"zigbee2mqtt/bridge/request/options","default_entity_id":"select.zigbee2mqtt_bridge_log_level","device":{"hw_version":"EmberZNet 7.4.5 [GA]","identifiers":["zigbee2mqtt_bridge_0x449fdafffe99b696"],"manufacturer":"Zigbee2MQTT","model":"Bridge","name":"Zigbee2MQTT Bridge","sw_version":"2.8.0"},"entity_category":"config","name":"Log level","object_id":"zigbee2mqtt_bridge_log_level","options":["error","warning","info","debug"],"origin":{"name":"Zigbee2MQTT","sw":"2.8.0","url":"https://www.zigbee2mqtt.io"},"state_topic":"zigbee2mqtt/bridge/info","unique_id":"bridge_0x449fdafffe99b696_log_level_zigbee2mqtt","value_template":"{{ value_json.log_level | lower }}"}'
+[2026-02-02 22:01:08] [32minfo[39m: 	z2m:mqtt: MQTT publish: topic 'homeassistant/sensor/1221051039810110150109113116116_0x449fdafffe99b696/version/config', payload '{"availability":[{"topic":"zigbee2mqtt/bridge/state","value_template":"{{ value_json.state }}"}],"availability_mode":"all","default_entity_id":"sensor.zigbee2mqtt_bridge_version","device":{"hw_version":"EmberZNet 7.4.5 [GA]","identifiers":["zigbee2mqtt_bridge_0x449fdafffe99b696"],"manufacturer":"Zigbee2MQTT","model":"Bridge","name":"Zigbee2MQTT Bridge","sw_version":"2.8.0"},"entity_category":"diagnostic","icon":"mdi:zigbee","name":"Version","object_id":"zigbee2mqtt_bridge_version","origin":{"name":"Zigbee2MQTT","sw":"2.8.0","url":"https://www.zigbee2mqtt.io"},"state_topic":"zigbee2mqtt/bridge/info","unique_id":"bridge_0x449fdafffe99b696_version_zigbee2mqtt","value_template":"{{ value_json.version }}"}'
+[2026-02-02 22:01:08] [32minfo[39m: 	z2m:mqtt: MQTT publish: topic 'homeassistant/sensor/1221051039810110150109113116116_0x449fdafffe99b696/coordinator_version/config', payload '{"availability":[{"topic":"zigbee2mqtt/bridge/state","value_template":"{{ value_json.state }}"}],"availability_mode":"all","default_entity_id":"sensor.zigbee2mqtt_bridge_coordinator_version","device":{"hw_version":"EmberZNet 7.4.5 [GA]","identifiers":["zigbee2mqtt_bridge_0x449fdafffe99b696"],"manufacturer":"Zigbee2MQTT","model":"Bridge","name":"Zigbee2MQTT Bridge","sw_version":"2.8.0"},"enabled_by_default":false,"entity_category":"diagnostic","icon":"mdi:chip","name":"Coordinator version","object_id":"zigbee2mqtt_bridge_coordinator_version","origin":{"name":"Zigbee2MQTT","sw":"2.8.0","url":"https://www.zigbee2mqtt.io"},"state_topic":"zigbee2mqtt/bridge/info","unique_id":"bridge_0x449fdafffe99b696_coordinator_version_zigbee2mqtt","value_template":"{{ value_json.coordinator.meta.revision }}"}'
+[2026-02-02 22:01:08] [32minfo[39m: 	z2m:mqtt: MQTT publish: topic 'homeassistant/sensor/1221051039810110150109113116116_0x449fdafffe99b696/network_map/config', payload '{"availability":[{"topic":"zigbee2mqtt/bridge/state","value_template":"{{ value_json.state }}"}],"availability_mode":"all","default_entity_id":"sensor.zigbee2mqtt_bridge_network_map","device":{"hw_version":"EmberZNet 7.4.5 [GA]","identifiers":["zigbee2mqtt_bridge_0x449fdafffe99b696"],"manufacturer":"Zigbee2MQTT","model":"Bridge","name":"Zigbee2MQTT Bridge","sw_version":"2.8.0"},"enabled_by_default":false,"entity_category":"diagnostic","json_attributes_template":"{{ value_json.data.value | tojson }}","json_attributes_topic":"zigbee2mqtt/bridge/response/networkmap","name":"Network map","object_id":"zigbee2mqtt_bridge_network_map","origin":{"name":"Zigbee2MQTT","sw":"2.8.0","url":"https://www.zigbee2mqtt.io"},"state_topic":"zigbee2mqtt/bridge/response/networkmap","unique_id":"bridge_0x449fdafffe99b696_network_map_zigbee2mqtt","value_template":"{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"}'
+[2026-02-02 22:01:08] [32minfo[39m: 	z2m:mqtt: MQTT publish: topic 'homeassistant/switch/1221051039810110150109113116116_0x449fdafffe99b696/permit_join/config', payload '{"availability":[{"topic":"zigbee2mqtt/bridge/state","value_template":"{{ value_json.state }}"}],"availability_mode":"all","command_topic":"zigbee2mqtt/bridge/request/permit_join","default_entity_id":"switch.zigbee2mqtt_bridge_permit_join","device":{"hw_version":"EmberZNet 7.4.5 [GA]","identifiers":["zigbee2mqtt_bridge_0x449fdafffe99b696"],"manufacturer":"Zigbee2MQTT","model":"Bridge","name":"Zigbee2MQTT Bridge","sw_version":"2.8.0"},"icon":"mdi:human-greeting-proximity","name":"Permit join","object_id":"zigbee2mqtt_bridge_permit_join","origin":{"name":"Zigbee2MQTT","sw":"2.8.0","url":"https://www.zigbee2mqtt.io"},"payload_off":"{\"time\": 0}","payload_on":"{\"time\": 254}","state_off":"false","state_on":"true","state_topic":"zigbee2mqtt/bridge/info","unique_id":"bridge_0x449fdafffe99b696_permit_join_zigbee2mqtt","value_template":"{{ value_json.permit_join | lower }}"}'
+[2026-02-02 22:11:02] [32minfo[39m: 	z2m:mqtt: MQTT publish: topic 'zigbee2mqtt/bridge/health', payload '{"response_time":1770066662792,"os":{"load_average":[2.87,2.36,2.01],"memory_used_mb":3266.41,"memory_percent":83.7067},"process":{"uptime_sec":617,"memory_used_mb":300.41,"memory_percent":7.6986},"mqtt":{"connected":true,"queued":0,"published":25,"received":13},"devices":{}}'
+[2026-02-02 22:21:02] [32minfo[39m: 	z2m:mqtt: MQTT publish: topic 'zigbee2mqtt/bridge/health', payload '{"response_time":1770067262773,"os":{"load_average":[1.98,2.41,2.16],"memory_used_mb":3384.42,"memory_percent":86.731},"process":{"uptime_sec":1217,"memory_used_mb":517.64,"memory_percent":13.2652},"mqtt":{"connected":true,"queued":0,"published":27,"received":13},"devices":{}}'
+[2026-02-02 22:21:06] [31merror[39m: 	zh:ember:uart:ash: Received ERROR from adapter, with code=ERROR_EXCEEDED_MAXIMUM_ACK_TIMEOUT_COUNT.
+[2026-02-02 22:21:06] [31merror[39m: 	zh:ember:uart:ash: ASH disconnected | Adapter status: ASH_NCP_FATAL_ERROR
+[2026-02-02 22:21:06] [31merror[39m: 	zh:ember:ezsp: Fatal error, status=ASH_NCP_FATAL_ERROR. Last Frame: [FRAME: ID=38:"GET_EUI64" Seq=38 Len=13]
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash: ASH COUNTERS since last clear:
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   Total frames: RX=48, TX=85
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   Cancelled   : RX=0, TX=0
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   DATA frames : RX=43, TX=39
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   DATA bytes  : RX=321, TX=426
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   Retry frames: RX=3, TX=0
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   ACK frames  : RX=0, TX=43
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   NAK frames  : RX=0, TX=1
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   nRdy frames : RX=0, TX=0
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   CRC errors      : RX=0
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   Comm errors     : RX=0
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   Length < minimum: RX=0
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   Length > maximum: RX=0
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   Bad controls    : RX=0
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   Bad lengths     : RX=0
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   Bad ACK numbers : RX=4
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   Out of buffers  : RX=0
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   Retry dupes     : RX=0
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   Out of sequence : RX=0
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash:   ACK timeouts    : RX=0
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash: Port closed, error=null
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:uart:ash: ======== ASH stopped ========
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember:ezsp: ======== EZSP stopped ========
+[2026-02-02 22:21:06] [32minfo[39m: 	zh:ember: ======== Ember Adapter Stopped ========
+[2026-02-02 22:21:06] [31merror[39m: 	z2m: Adapter disconnected, stopping
+[2026-02-02 22:21:06] [32minfo[39m: 	z2m:mqtt: MQTT publish: topic 'zigbee2mqtt/bridge/state', payload '{"state":"offline"}'
+[2026-02-02 22:21:06] [32minfo[39m: 	z2m: Disconnecting from MQTT server
+[2026-02-02 22:21:06] [32minfo[39m: 	z2m: Stopping zigbee-herdsman...
+[2026-02-02 22:21:06] [32minfo[39m: 	z2m: Stopped zigbee-herdsman
+[2026-02-02 22:21:06] [32minfo[39m: 	z2m: Stopped Zigbee2MQTT

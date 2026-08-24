@@ -1,0 +1,553 @@
+blade-runner-2049:
+  # ══════════════════════════════════════════════════════════
+  # 🌆 BLADE RUNNER 2049 THEME
+  # Ambiance sombre, reposante, cyan/magenta
+  # ══════════════════════════════════════════════════════════
+  
+  # ===== PALETTE =====
+  cyan-glow: "#00E5FF"
+  magenta-glow: "#FF006E"
+  deep-black: "#0A0A0F"
+  dark-blue: "#121218"
+  soft-purple: "#2A1B3D"
+  dim-cyan: "#1A3344"
+  
+  # Effects
+  glass-blur: "blur(12px) saturate(180%)"
+  smooth-ease: "cubic-bezier(0.4, 0.0, 0.2, 1)"
+  
+  # Font
+  primary-font-family: "'Inter', 'Roboto', 'SF Pro Display', -apple-system, sans-serif"
+  
+  # ===== BASE COLORS =====
+  primary-color: "var(--cyan-glow)"
+  primary-background-color: "var(--deep-black)"
+  primary-text-color: "#E8F4F8"
+  secondary-text-color: "rgba(232, 244, 248, 0.7)"
+  secondary-color: "var(--magenta-glow)"
+  
+  # ===== WALLPAPER =====
+  lovelace-background: "center / cover no-repeat fixed, repeating-linear-gradient(0deg, transparent 0px, transparent 49px, rgba(0, 229, 255, 0.08) 49px, rgba(0, 229, 255, 0.08) 50px), repeating-linear-gradient(90deg, transparent 0px, transparent 49px, rgba(255, 0, 110, 0.06) 49px, rgba(255, 0, 110, 0.06) 50px), linear-gradient(180deg, #0A0A0F 0%, #121218 50%, #0F0A14 100%)"
+  
+  # ===== DARK MODE =====
+  modes:
+    dark:
+      # Backgrounds
+      primary-background-color: "#0A0A0F"
+      secondary-background-color: "#121218"
+      
+      # Text
+      primary-text-color: "#E8F4F8"
+      secondary-text-color: "rgba(232, 244, 248, 0.65)"
+      disabled-text-color: "rgba(232, 244, 248, 0.3)"
+      
+      # Colors
+      primary-color: "var(--cyan-glow)"
+      accent-color: "var(--magenta-glow)"
+      
+      # App Header
+      app-header-background-color: "rgba(18, 18, 24, 0.85)"
+      app-header-text-color: "#E8F4F8"
+      
+      # Sidebar
+      sidebar-background-color: "rgba(18, 18, 24, 0.60)"
+      sidebar-text-color: "#E8F4F8"
+      sidebar-icon-color: "var(--cyan-glow)"
+      sidebar-selected-background-color: "rgba(0, 229, 255, 0.12)"
+      sidebar-selected-text-color: "var(--cyan-glow)"
+      sidebar-selected-icon-color: "var(--cyan-glow)"
+      
+      # Cards
+      card-background-color: "rgba(18, 18, 24, 0.75)"
+      ha-card-background: "rgba(18, 18, 24, 0.65)"
+      ha-card-backdrop-filter: "var(--glass-blur)"
+      ha-card-border-radius: "16px"
+      ha-card-border-width: "1px"
+      ha-card-border-color: "rgba(0, 229, 255, 0.15)"
+      ha-card-box-shadow: "0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 229, 255, 0.08)"
+      
+      # States
+      state-icon-color: "var(--cyan-glow)"
+      state-icon-active-color: "var(--magenta-glow)"
+      state-active-color: "var(--magenta-glow)"
+      state-inactive-color: "rgba(232, 244, 248, 0.3)"
+      
+      # Switches
+      switch-checked-button-color: "var(--magenta-glow)"
+      switch-checked-track-color: "rgba(255, 0, 110, 0.5)"
+      switch-unchecked-button-color: "rgba(232, 244, 248, 0.3)"
+      switch-unchecked-track-color: "rgba(232, 244, 248, 0.1)"
+      
+      # Sliders
+      slider-color: "var(--cyan-glow)"
+      slider-secondary-color: "var(--magenta-glow)"
+      slider-track-color: "rgba(0, 229, 255, 0.2)"
+      
+      # Dialogs
+      dialog-backdrop-filter: "var(--glass-blur)"
+      dialog-background-color: "rgba(18, 18, 24, 0.95)"
+      mdc-dialog-scrim-color: "rgba(10, 10, 15, 0.8)"
+      
+      # Other
+      divider-color: "rgba(0, 229, 255, 0.12)"
+      error-color: "#FF3D71"
+      success-color: "#00E5FF"
+      warning-color: "#FFB020"
+      info-color: "var(--cyan-glow)"
+      
+      # RGB values (for rgba usage)
+      rgb-primary-color: "0, 229, 255"
+      rgb-accent-color: "255, 0, 110"
+      
+  # ===== CARD-MOD =====
+  card-mod-theme: blade-runner-2049
+  
+  card-mod-card: |
+    ha-card {
+      font-family: var(--primary-font-family) !important;
+      transition: all 0.4s var(--smooth-ease);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    /* ═══ HOLOGRAPHIC FLICKER ═══ */
+    @keyframes holoFlicker {
+      0%, 100% { 
+        filter: none;
+        opacity: 1;
+      }
+      3% { 
+        filter: brightness(1.1) contrast(1.05);
+        opacity: 0.97;
+      }
+      6% { 
+        filter: none;
+        opacity: 1;
+      }
+      33% { 
+        filter: brightness(0.95) hue-rotate(2deg);
+        opacity: 0.98;
+      }
+      36% { 
+        filter: none;
+        opacity: 1;
+      }
+      78% {
+        filter: contrast(1.08);
+        opacity: 0.96;
+      }
+      81% { 
+        filter: none;
+        opacity: 1;
+      }
+    }
+    
+    ha-card {
+      animation: holoFlicker 12s infinite;
+    }
+    
+    /* Stagger animation delays */
+    ha-card:nth-child(2) { animation-delay: 1s; }
+    ha-card:nth-child(3) { animation-delay: 2s; }
+    ha-card:nth-child(4) { animation-delay: 3s; }
+    ha-card:nth-child(5) { animation-delay: 4s; }
+    
+    /* ═══ GLITCH EFFECT ═══ */
+    @keyframes glitchText {
+      0%, 90%, 100% { 
+        transform: translate(0);
+        text-shadow: none;
+      }
+      91% { 
+        transform: translate(-2px, 1px);
+        text-shadow: 2px 0 var(--magenta-glow), -2px 0 var(--cyan-glow);
+      }
+      93% { 
+        transform: translate(1px, -1px);
+        text-shadow: -1px 0 var(--cyan-glow), 1px 0 var(--magenta-glow);
+      }
+      95% { 
+        transform: translate(0);
+        text-shadow: none;
+      }
+    }
+    
+    /* Apply glitch randomly to card headers */
+    ha-card:nth-child(5n) .card-header,
+    ha-card:nth-child(7n) .card-header {
+      animation: glitchText 15s infinite;
+    }
+    
+    /* ═══ RANDOM RGB SPLIT ═══ */
+    @keyframes rgbSplit {
+      0%, 97%, 100% { 
+        filter: none;
+      }
+      98% {
+        filter: 
+          drop-shadow(2px 0 var(--magenta-glow))
+          drop-shadow(-2px 0 var(--cyan-glow));
+      }
+    }
+    
+    ha-card:nth-child(3n) {
+      animation: holoFlicker 12s infinite, rgbSplit 20s infinite;
+    }
+    
+    /* ═══ HOVER EFFECTS ═══ */
+    @media (hover: hover) {
+      ha-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 
+                    0 4px 12px rgba(0, 229, 255, 0.15);
+      }
+    }
+    
+    /* ═══ ACCENT BORDERS ═══ */
+    ha-card:nth-child(3n)::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, 
+                  transparent 0%, 
+                  var(--cyan-glow) 50%, 
+                  transparent 100%);
+      opacity: 0.6;
+    }
+    
+    ha-card:nth-child(3n+1)::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, 
+                  transparent 0%, 
+                  var(--magenta-glow) 50%, 
+                  transparent 100%);
+      opacity: 0.6;
+    }
+    
+    /* ═══ HOLOGRAPHIC SHIMMER ═══ */
+    @keyframes holoShimmer {
+      0%, 100% {
+        background-position: 0% 0%;
+        opacity: 0.03;
+      }
+      50% {
+        background-position: 100% 100%;
+        opacity: 0.05;
+      }
+    }
+    
+    ha-card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 16px;
+      background: 
+        repeating-linear-gradient(
+          45deg,
+          transparent,
+          transparent 2px,
+          rgba(0, 229, 255, 0.02) 2px,
+          rgba(0, 229, 255, 0.02) 4px
+        ),
+        radial-gradient(circle at 50% 0%, 
+          rgba(0, 229, 255, 0.03) 0%, 
+          transparent 60%);
+      background-size: 200% 200%;
+      pointer-events: none;
+      animation: holoShimmer 8s ease-in-out infinite;
+    }
+    
+    /* ═══ ICONS GLOW ═══ */
+    ha-icon, ha-state-icon {
+      filter: drop-shadow(0 0 3px currentColor);
+      transition: filter 0.3s ease;
+    }
+    
+    @media (hover: hover) {
+      ha-icon:hover, ha-state-icon:hover {
+        filter: drop-shadow(0 0 8px currentColor);
+        animation: iconGlitch 0.3s ease;
+      }
+    }
+    
+    @keyframes iconGlitch {
+      0%, 100% { transform: translate(0); }
+      25% { transform: translate(-1px, 1px); }
+      50% { transform: translate(1px, -1px); }
+      75% { transform: translate(-1px, -1px); }
+    }
+    
+    /* ═══ DISABLE ON MOBILE ═══ */
+    @media (max-width: 768px) {
+      ha-card {
+        animation: none !important;
+        transition: none !important;
+      }
+      
+      ha-card:hover {
+        transform: none !important;
+      }
+      
+      .card-header {
+        animation: none !important;
+      }
+    }
+  
+  card-mod-root-yaml: |
+    .: |
+      * {
+        font-family: var(--primary-font-family) !important;
+      }
+      
+      body {
+        position: relative;
+        background: transparent !important;
+      }
+      
+      /* ═══ SCANLINE AVEC GLITCH ALÉATOIRE ═══ */
+      @keyframes scanlineMove {
+        0% { 
+          transform: translateY(-100%);
+          opacity: 0;
+        }
+        5% { opacity: 0.7; }
+        95% { opacity: 0.7; }
+        100% { 
+          transform: translateY(100vh);
+          opacity: 0;
+        }
+      }
+      
+      @keyframes scanlineGlitch {
+        0%, 90%, 100% { 
+          filter: blur(0);
+          transform: translateX(0) scaleX(1);
+        }
+        92% { 
+          filter: blur(2px);
+          transform: translateX(5px) scaleX(1.5);
+        }
+        94% { 
+          filter: blur(0);
+          transform: translateX(-3px) scaleX(0.8);
+        }
+        96% { 
+          filter: blur(1px);
+          transform: translateX(2px) scaleX(1.2);
+        }
+      }
+      
+      body::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(to bottom,
+          transparent 0%,
+          rgba(0, 229, 255, 0.8) 50%,
+          transparent 100%);
+        box-shadow: 
+          0 0 20px rgba(0, 229, 255, 0.6),
+          0 0 40px rgba(0, 229, 255, 0.4);
+        pointer-events: none;
+        z-index: 99999;
+        animation: 
+          scanlineMove 8s linear infinite,
+          scanlineGlitch 8s step-end infinite;
+        will-change: transform;
+      }
+      
+      /* ═══ ATMOSPHÈRE ═══ */
+      body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background: 
+          radial-gradient(ellipse at 20% 30%, rgba(0, 229, 255, 0.04) 0%, transparent 40%),
+          radial-gradient(ellipse at 80% 70%, rgba(255, 0, 110, 0.03) 0%, transparent 40%);
+        pointer-events: none;
+        z-index: 0;
+      }
+      
+      /* ═══ PIXEL CORNERS ═══ */
+      @keyframes cornerPulse {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 0.6; }
+      }
+      
+      ha-panel-lovelace::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 40px;
+        height: 40px;
+        border-top: 2px solid var(--cyan-glow);
+        border-left: 2px solid var(--cyan-glow);
+        pointer-events: none;
+        z-index: 1;
+        animation: cornerPulse 4s ease-in-out infinite;
+      }
+      
+      ha-panel-lovelace::after {
+        content: "";
+        position: fixed;
+        bottom: 0;
+        right: 0;
+        width: 40px;
+        height: 40px;
+        border-bottom: 2px solid var(--magenta-glow);
+        border-right: 2px solid var(--magenta-glow);
+        pointer-events: none;
+        z-index: 1;
+        animation: cornerPulse 4s ease-in-out infinite 2s;
+      }
+      }
+      
+      /* ═══ HEADERS AVEC GLITCH SUBTIL ═══ */
+      @keyframes headerGlitch {
+        0%, 92%, 100% { 
+          text-shadow: none;
+        }
+        93% { 
+          text-shadow: 
+            2px 0 var(--magenta-glow),
+            -2px 0 var(--cyan-glow);
+        }
+        94% { 
+          text-shadow: 
+            -1px 0 var(--cyan-glow),
+            1px 0 var(--magenta-glow);
+        }
+      }
+      
+      h1, h2, h3, .card-header {
+        font-weight: 300;
+        letter-spacing: 0.5px;
+        color: #E8F4F8;
+        animation: headerGlitch 10s infinite;
+      }
+      
+      /* ═══ DÉSACTIVATION DES EFFETS SUR MOBILE ═══ */
+      @media (max-width: 768px) {
+        body::before,
+        body::after,
+        ha-panel-lovelace::before,
+        ha-panel-lovelace::after {
+          display: none !important;
+        }
+        
+        h1, h2, h3, .card-header {
+          animation: none !important;
+        }
+      }
+      
+      /* ═══ ACCESSIBILITÉ ═══ */
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+      }
+  
+  card-mod-sidebar: |
+    :host {
+      backdrop-filter: var(--glass-blur) !important;
+      background: var(--sidebar-background-color) !important;
+      border-right: 1px solid rgba(0, 229, 255, 0.1);
+      box-shadow: 2px 0 20px rgba(0, 0, 0, 0.3);
+    }
+    
+    /* Logo glow */
+    .menu ha-icon,
+    .menu ha-svg-icon {
+      filter: drop-shadow(0 0 6px var(--cyan-glow)) !important;
+      color: var(--cyan-glow) !important;
+    }
+    
+    /* Title */
+    .menu .title {
+      color: #E8F4F8 !important;
+      font-weight: 300;
+      letter-spacing: 1px;
+    }
+    
+    /* Menu items */
+    ha-md-list-item {
+      transition: all 0.3s var(--smooth-ease);
+      margin: 2px 8px;
+      border-radius: 12px;
+    }
+    
+    ha-md-list-item ha-icon,
+    ha-md-list-item ha-svg-icon {
+      color: rgba(232, 244, 248, 0.7) !important;
+      transition: all 0.3s ease;
+    }
+    
+    /* Hover */
+    @media (hover: hover) {
+      ha-md-list-item:hover {
+        background: rgba(0, 229, 255, 0.08) !important;
+      }
+      
+      ha-md-list-item:hover ha-icon,
+      ha-md-list-item:hover ha-svg-icon {
+        color: var(--cyan-glow) !important;
+        filter: drop-shadow(0 0 4px var(--cyan-glow));
+      }
+    }
+    
+    /* Selected */
+    ha-md-list-item.selected {
+      background: linear-gradient(90deg,
+                  rgba(0, 229, 255, 0.15) 0%,
+                  rgba(0, 229, 255, 0.05) 100%) !important;
+      border-left: 2px solid var(--cyan-glow);
+    }
+    
+    ha-md-list-item.selected ha-icon,
+    ha-md-list-item.selected ha-svg-icon {
+      color: var(--cyan-glow) !important;
+      filter: drop-shadow(0 0 6px var(--cyan-glow));
+    }
+    
+    ha-md-list-item.selected span {
+      color: var(--cyan-glow) !important;
+    }
+    
+    /* Divider with gradient */
+    .divider {
+      background: linear-gradient(90deg,
+                  transparent 0%,
+                  rgba(0, 229, 255, 0.3) 50%,
+                  transparent 100%);
+      height: 1px;
+      margin: 8px 16px;
+    }
+    
+    /* Disable animations on mobile */
+    @media (max-width: 768px) {
+      ha-md-list-item {
+        transition: none !important;
+      }
+    }
+    
+    /* Respect motion preferences */
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation: none !important;
+        transition: none !important;
+      }
+    }

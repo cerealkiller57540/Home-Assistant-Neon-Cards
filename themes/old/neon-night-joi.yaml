@@ -1,0 +1,424 @@
+neon-night-joi:
+  # === COULEURS DE BASE (standard HA) ===
+  primary-color: "#00D4FF"           # Bleu cyan principal
+  secondary-color: "#A030E8"         # Violet secondaire
+  accent-color: "#D946EF"            # Violet accent
+  dark-primary-color: "#FF0080"      # Hot Pink foncé
+  blacklight-color: "#8B3FD9"        # Violet blacklight
+  
+  # === VARIABLES RGB (pour rgba) ===
+  rgb-primary-color: "0, 212, 255"
+  rgb-secondary-color: "160, 48, 232"
+  rgb-accent-color: "217, 70, 239"
+  rgb-dark-primary-color: "255, 0, 128"
+  rgb-blacklight-color: "139, 63, 217"
+  
+  # === COULEUR ACTIVE (pour states, icons actifs) ===
+  state-active-color: "#FF4D94"      # Rose néon pour éléments actifs
+  rgb-state-active-color: "255, 77, 148"
+
+  # === TEXT ===
+  primary-text-color: "#E8F4F8"
+  text-primary-color: "#FFFFFF"
+  secondary-text-color: "#B8C8D0"
+  disabled-text-color: "#6B7B88"
+  label-badge-border-color: "var(--state-active-color)"
+  
+  # === SIDEBAR ===
+  sidebar-background-color: "rgba(15, 10, 30, 0.65)"
+  sidebar-text-color: "var(--primary-color)"
+  sidebar-icon-color: "var(--primary-color)"
+  sidebar-selected-background-color: "rgba(var(--rgb-state-active-color), 0.2)"
+  sidebar-selected-text-color: "var(--primary-color)"
+  
+  # === BACKGROUND ===
+  primary-background-color: "#0F0A1E"
+  secondary-background-color: "rgba(26, 20, 40, 0.6)"
+  divider-color: "rgba(var(--rgb-primary-color), 0.2)"
+  
+  # === STATES ===
+  state-icon-color: "var(--primary-color)"
+  state-icon-active-color: "var(--state-active-color)"
+  state-icon-unavailable-color: "#6B7B88"
+  state-inactive-color: "rgba(255, 255, 255, 0.3)"
+  
+  # === CARDS ===
+  card-background-color: "rgba(26, 20, 40, 0.6)"
+  ha-card-border-radius: "16px"
+  ha-card-box-shadow: "0 8px 32px rgba(0, 0, 0, 0.6), 0 0 40px rgba(var(--rgb-state-active-color), 0.25), 0 0 60px rgba(var(--rgb-primary-color), 0.15)"
+  ha-card-border-width: "1px"
+  ha-card-border-color: "rgba(var(--rgb-primary-color), 0.2)"
+  
+  # === HEADER / TOOLBAR ===
+  app-header-background-color: "rgba(15, 10, 30, 0.95)"
+  app-header-text-color: "#E8F4F8"
+  app-header-selection-bar-color: "var(--primary-color)"
+  app-header-edit-background-color: "rgba(45, 27, 78, 0.3)"
+  app-header-edit-text-color: "var(--primary-color)"
+  
+  # === SWITCHES ===
+  switch-checked-button-color: "var(--state-active-color)"
+  switch-checked-track-color: "rgba(var(--rgb-state-active-color), 0.5)"
+  switch-unchecked-button-color: "#4DD0E1"
+  switch-unchecked-track-color: "rgba(77, 208, 225, 0.3)"
+  
+  # === SLIDERS ===
+  paper-slider-knob-color: "var(--accent-color)"
+  paper-slider-knob-start-color: "var(--accent-color)"
+  paper-slider-pin-color: "var(--accent-color)"
+  paper-slider-active-color: "var(--accent-color)"
+  paper-slider-container-color: "rgba(var(--rgb-accent-color), 0.3)"
+  paper-slider-secondary-color: "var(--primary-color)"
+  
+  # === LABELS ===
+  label-badge-background-color: "rgba(26, 20, 40, 0.8)"
+  label-badge-text-color: "#E8F4F8"
+  label-badge-red: "var(--dark-primary-color)"
+  label-badge-blue: "var(--primary-color)"
+  label-badge-green: "#4DD0E1"
+  label-badge-yellow: "#FFB84D"
+  label-badge-grey: "#6B7B88"
+  
+  # === INPUTS ===
+  input-idle-line-color: "rgba(var(--rgb-primary-color), 0.3)"
+  input-hover-line-color: "var(--primary-color)"
+  input-disabled-line-color: "rgba(107, 123, 136, 0.3)"
+  input-outlined-idle-border-color: "rgba(var(--rgb-primary-color), 0.3)"
+  input-outlined-hover-border-color: "var(--primary-color)"
+  input-fill-color: "rgba(26, 20, 40, 0.5)"
+  input-ink-color: "#E8F4F8"
+  input-label-ink-color: "#B8C8D0"
+  input-disabled-ink-color: "#6B7B88"
+
+  # === Dialogs ===
+  dialog-background-color: "rgba(10,14,26,0.95)"
+  dialog-surface-position: "relative"
+  mdc-dialog-scrim-color: "rgba(0,0,0,0.9)"
+
+  # === Buttons ===
+  ha-button-neutral-color: "var(--primary-color)"
+  mdc-button-outline-color: "var(--primary-color)"
+  mdc-button-disabled-ink-color: "var(--disabled-text-color)"
+  mdc-button-disabled-outline-color: "var(--disabled-text-color)"
+  mdc-text-button-ripple-color: "rgba(var(--rgb-primary-color), 0.2)"
+  mdc-outlined-button-ripple-color: "rgba(var(--rgb-primary-color), 0.2)"
+  mdc-contained-button-ripple-color: "rgba(var(--rgb-state-active-color), 0.3)"
+  
+  # === CHIPS ===
+  chip-background-color: "rgba(var(--rgb-state-active-color), 0.2)"
+  
+  # === AUTRES ===
+  paper-card-background-color: "rgba(26, 20, 40, 0.6)"
+  paper-dialog-background-color: "rgba(26, 20, 40, 0.95)"
+  paper-item-icon-color: "var(--primary-color)"
+  paper-item-icon-active-color: "var(--state-active-color)"
+  paper-tabs-selection-bar-color: "var(--accent-color)"
+  
+  table-row-background-color: "rgba(26, 20, 40, 0.3)"
+  table-row-alternative-background-color: "rgba(45, 27, 78, 0.3)"
+
+  # === BADGES / NOTIFICATIONS ===
+  mdc-theme-primary: "var(--state-active-color)"
+  mdc-theme-secondary: "var(--accent-color)"
+  mdc-theme-on-primary: "var(--primary-color)"
+  mdc-theme-on-secondary: "var(--primary-color)"
+  
+  # === TAB BAR (MOBILE) ===
+  mdc-tab-text-label-color-default: "var(--primary-color)"
+  mdc-icon-color: "var(--primary-color)"
+  mdc-tab-color-default: "var(--primary-color)"
+  mdc-icon-button-color: "var(--primary-color)"
+  
+  # === ICONS ===
+  icon-color: "var(--primary-color)"
+  active-icon-color: "var(--state-active-color)"
+  disabled-icon-color: "#6B7B88"
+
+  markdown-code-background-color: "#464646"
+  code-editor-background-color: "#161616"
+  
+  # === CSS VARIABLES ===
+  card-mod-theme: neon-night-joi
+  card-mod-card: |
+    ha-card {
+      backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid rgba(var(--rgb-primary-color), 0.2);
+      transition: all 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    ha-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, transparent 0%, var(--accent-color) 50%, transparent 100%);
+      box-shadow: 0 0 15px var(--accent-color);
+      opacity: 0.8;
+    }
+    
+    @media (hover: hover) {
+      ha-card {
+        animation: neonPulse 4s ease-in-out infinite;
+      }
+      
+      ha-card:hover {
+        transform: translateY(-8px) scale(1.02);
+        box-shadow: 0 0 40px rgba(var(--rgb-state-active-color), 0.6), 0 0 60px rgba(var(--rgb-accent-color), 0.4), 0 0 80px rgba(var(--rgb-primary-color), 0.3) !important;
+        will-change: transform;
+        animation: containerGlitch 0.8s ease, neonPulse 4s ease-in-out infinite;
+      }
+      
+      ha-card:hover ha-icon {
+        animation: iconGlitchSpin 0.8s ease;
+        will-change: transform, filter;
+      }
+      
+      ha-card:hover .card-header {
+        animation: nameGlitch 0.8s ease;
+        will-change: transform;
+      }
+    }
+    
+    @keyframes neonPulse {
+      0%, 100% {
+        box-shadow: 
+          0 8px 32px rgba(0, 0, 0, 0.6),
+          0 0 40px rgba(var(--rgb-state-active-color), 0.25),
+          0 0 60px rgba(var(--rgb-primary-color), 0.15);
+      }
+      50% {
+        box-shadow: 
+          0 8px 32px rgba(0, 0, 0, 0.6),
+          0 0 60px rgba(var(--rgb-state-active-color), 0.4),
+          0 0 80px rgba(var(--rgb-primary-color), 0.25);
+      }
+    }
+    
+    @keyframes containerGlitch {
+      0%, 100% { transform: translateY(-8px) scale(1.02); }
+      12% { transform: translateY(-8px) scale(1.02) translate(-3px, 2px); }
+      24% { transform: translateY(-8px) scale(1.02) translate(3px, -2px); }
+      36% { transform: translateY(-8px) scale(1.02) translate(-2px, -1px); }
+      48% { transform: translateY(-8px) scale(1.02) translate(2px, 1px); }
+      60% { transform: translateY(-8px) scale(1.02) translate(-1px, 0); }
+      72% { transform: translateY(-8px) scale(1.02) translate(1px, -0.5px); }
+      84% { transform: translateY(-8px) scale(1.02) translate(-0.5px, 0.5px); }
+    }
+    
+    @keyframes iconGlitchSpin {
+      0%, 100% { transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 8px currentColor); }
+      12% { transform: scale(1.08) rotate(-10deg); filter: drop-shadow(5px 0 14px var(--state-active-color)) drop-shadow(-5px 0 14px var(--accent-color)); }
+      24% { transform: scale(1.15) rotate(10deg); filter: drop-shadow(-5px 0 14px var(--dark-primary-color)) drop-shadow(5px 0 14px var(--primary-color)); }
+      36% { transform: scale(1.12) rotate(-6deg); filter: drop-shadow(4px 4px 14px var(--accent-color)) drop-shadow(-4px -4px 14px var(--state-active-color)); }
+      48% { transform: scale(1.1) rotate(6deg); filter: drop-shadow(-3px 3px 14px var(--primary-color)) drop-shadow(3px -3px 14px var(--dark-primary-color)); }
+      60% { transform: scale(1.08) rotate(-4deg); filter: drop-shadow(0 0 16px currentColor); }
+      72% { transform: scale(1.06) rotate(4deg); filter: drop-shadow(0 0 14px currentColor); }
+      84% { transform: scale(1.03) rotate(-2deg); filter: drop-shadow(0 0 12px currentColor); }
+    }
+    
+    @keyframes nameGlitch {
+      0%, 100% { transform: translate(0); text-shadow: none; }
+      15% { transform: translate(-2px, 0); text-shadow: 2px 0 var(--state-active-color), -2px 0 var(--accent-color); }
+      30% { transform: translate(2px, 0); text-shadow: -2px 0 var(--dark-primary-color), 2px 0 var(--primary-color); }
+      45% { transform: translate(-1.5px, 0); text-shadow: 1.5px 1.5px var(--accent-color), -1.5px -1.5px var(--state-active-color); }
+      60% { transform: translate(1.5px, 0); text-shadow: -1px 1px var(--primary-color), 1px -1px var(--dark-primary-color); }
+      75% { transform: translate(-1px, 0); text-shadow: 1px 0 var(--state-active-color), -1px 0 var(--accent-color); }
+      90% { transform: translate(0.5px, 0); text-shadow: 0 0 12px var(--accent-color); }
+    }
+  
+  card-mod-view-yaml: |
+    .: |
+      hui-view {
+        background: url('/local/1072052.jpg') center/cover !important;
+        filter: contrast(1.05) saturate(1.08);
+      }
+      
+      @media (hover: hover) {
+        hui-view::before {
+          content: "";
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 4px;
+          animation: 
+            neonScan 10s linear infinite,
+            neonGlitch 10s step-end infinite;
+          box-shadow: 
+            0 0 30px currentColor, 
+            0 0 60px currentColor;
+          pointer-events: none;
+          z-index: 99999;
+          will-change: transform;
+        }
+        
+        hui-view::after {
+          content: "";
+          position: fixed;
+          inset: 0;
+          background: 
+            radial-gradient(ellipse at 15% 25%, rgba(var(--rgb-primary-color), 0.08) 0%, transparent 45%),
+            radial-gradient(ellipse at 85% 75%, rgba(var(--rgb-state-active-color), 0.08) 0%, transparent 45%),
+            radial-gradient(ellipse at 50% 50%, rgba(var(--rgb-accent-color), 0.05) 0%, transparent 60%);
+          pointer-events: none;
+          z-index: 0;
+          animation: neonAtmosphere 20s ease-in-out infinite;
+        }
+      }
+      
+      @keyframes neonScan {
+        0% { 
+          transform: translateY(-100%);
+          opacity: 0;
+          background: linear-gradient(to bottom, transparent, rgba(var(--rgb-primary-color), 0.9), transparent);
+        }
+        33% {
+          background: linear-gradient(to bottom, transparent, rgba(var(--rgb-state-active-color), 0.9), transparent);
+          opacity: 0.8;
+        }
+        66% {
+          background: linear-gradient(to bottom, transparent, rgba(var(--rgb-accent-color), 0.9), transparent);
+          opacity: 0.8;
+        }
+        100% { 
+          transform: translateY(100vh);
+          opacity: 0;
+          background: linear-gradient(to bottom, transparent, rgba(var(--rgb-primary-color), 0.9), transparent);
+        }
+      }
+      
+      @keyframes neonGlitch {
+        0%, 88%, 100% { 
+          filter: blur(0) hue-rotate(0deg);
+          transform: translateX(0) scaleX(1);
+        }
+        90% { 
+          filter: blur(3px) hue-rotate(30deg);
+          transform: translateX(8px) scaleX(1.8);
+        }
+        92% { 
+          filter: blur(1px) hue-rotate(-20deg);
+          transform: translateX(-5px) scaleX(0.6);
+        }
+        94% { 
+          filter: blur(2px) hue-rotate(15deg);
+          transform: translateX(3px) scaleX(1.4);
+        }
+      }
+      
+      @keyframes neonAtmosphere {
+        0%, 100% {
+          background-position: 0% 0%, 100% 100%, 50% 50%;
+          opacity: 1;
+        }
+        50% {
+          background-position: 100% 100%, 0% 0%, 50% 50%;
+          opacity: 0.8;
+        }
+      }
+  
+  card-mod-root-yaml: |
+    .: |
+      /* Header & Toolbar unifié */
+      app-header, 
+      ha-app-layout app-header,
+      app-toolbar, 
+      .header,
+      mwc-tab-bar {
+        background: var(--app-header-background-color) !important;
+        background-color: var(--app-header-background-color) !important;
+        backdrop-filter: blur(20px) saturate(180%);
+      }
+      
+      app-toolbar {
+        border-bottom: 2px solid rgba(var(--rgb-accent-color), 0.3);
+        box-shadow: 0 0 20px rgba(var(--rgb-accent-color), 0.2), 0 4px 12px rgba(0, 0, 0, 0.6);
+      }
+      
+      /* Tab bar mobile */
+      mwc-tab-bar {
+        border-top: 2px solid rgba(var(--rgb-primary-color), 0.3) !important;
+        box-shadow: 0 -4px 20px rgba(var(--rgb-primary-color), 0.15) !important;
+      }
+      
+      ha-icon, ha-svg-icon, ha-icon-button  {
+        color: var(--primary-color) !important;
+      }
+  
+  card-mod-sidebar: |
+    :host {
+      background: rgba(26, 20, 40, 0.60) !important;
+      backdrop-filter: blur(20px) saturate(180%) !important;
+      box-shadow: 0 0 40px rgba(var(--rgb-primary-color), 0.4) !important;
+    }
+    
+    /* Animated border pulse - BLEU/ROSE */
+    :host::before, ha-sidebar::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 3px;
+      height: 100%;
+      background: linear-gradient(180deg, 
+                  transparent 0%, 
+                  var(--primary-color) 30%,
+                  var(--state-active-color) 50%,
+                  var(--primary-color) 70%, 
+                  transparent 100%);
+      box-shadow: 0 0 20px var(--primary-color);
+      animation: sidebarPulse 3s ease-in-out infinite;
+      z-index: 10;
+    }
+
+    @keyframes sidebarPulse {
+      0%, 100% {
+        opacity: 0.6;
+        box-shadow: 0 0 20px var(--primary-color);
+      }
+      50% {
+        opacity: 1;
+        box-shadow: 0 0 40px var(--state-active-color),
+                    0 0 60px rgba(var(--rgb-state-active-color), 0.5);
+      }
+    }
+    
+    .menu .title {
+      font-weight: 400 !important;
+      letter-spacing: 0.5px !important;
+      text-transform: uppercase !important;
+      text-shadow: 0 0 8px var(--primary-color) !important;
+      background: linear-gradient(90deg, 
+                  var(--primary-color) 0%,
+                  var(--state-active-color) 50%,
+                  var(--primary-color) 100%) !important;
+      -webkit-background-clip: text !important;
+      -webkit-text-fill-color: transparent !important;
+      background-clip: text !important;
+      background-size: 200% 100% !important;
+    }
+
+    ha-md-list-item ha-icon,
+    ha-md-list-item ha-svg-icon {
+      filter: drop-shadow(0 0 4px currentColor);
+      transition: all 0.3s ease;
+    }
+    
+    @media (hover: hover) {
+      .menu .title {
+        animation: gradientShift 8s ease-in-out infinite !important;
+      }
+    }
+    
+    @keyframes gradientShift {
+      0%, 100% {
+        background-position: 0% 50%;
+      }
+      50% {
+        background-position: 100% 50%;
+      }
+    }
