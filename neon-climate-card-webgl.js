@@ -1,4 +1,4 @@
-/* ── neon-climate-card-webgl v1.1 ──────────────────────────────────────────────
+/* ── neon-climate-card-webgl v1.2 ──────────────────────────────────────────────
  * Variante WEBGL de neon-climate-card : le souffle sous la grille n'est plus une
  * animation 2D scriptée mais un vrai fluide (Navier-Stokes stable, lignée Stam /
  * PavelDoGreat) rendu par shaders. Chaque fente de la grille est un jet à part
@@ -51,7 +51,7 @@
     'DM Sans','Playfair Display','Cinzel',
   ];
 
-  const CARD_VERSION = '1.1';
+  const CARD_VERSION = '1.2';
 
   /* Défauts validés au banc (climate_flow_v2.html). Ce sont EUX la référence :
    * les valeurs "théoriques" de la v1 avaient été calibrées sur une géométrie
@@ -2578,6 +2578,12 @@
      * Rapatrié de neon-climate-card.js : cette card est AUTONOME,
      * elle n'hérite plus de l'ancienne card CSS. */
     constructor() { super(); this._config = {}; this._hass = null; this._rendered = false; }
+    /* HA appelle .setConfig() sur l'élément retourné par getConfigElement() — sans cet alias
+     * public, _setConfigBase() ne se déclenche jamais et l'éditeur reste vide (bug constaté le
+     * 24/08/26 : DOM <neon-climate-card-webgl-editor></...> sans aucun enfant, pas d'erreur
+     * console car HA ne fait qu'ignorer l'absence de la méthode). */
+    setConfig(c) { this._setConfigBase(c); }
+    disconnectedCallback() { this._disconnectedBase(); }
     _setConfigBase(c) {
       this._config = { ...(c || {}) };
       if (!this._rendered) { this._rendered = true; this._render(); }
