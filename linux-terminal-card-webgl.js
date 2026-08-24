@@ -1,4 +1,4 @@
-/* ── linux-terminal-card-webgl v1.7 ──
+/* ── linux-terminal-card-webgl v1.8 ──
  * Variante WEBGL de linux-terminal-card : vrai verre CRT bombé rendu par shader.
  *
  * Desktop : le terminal (texte + barres + GLITCH le chat) est dessiné sur un canvas 2D
@@ -56,11 +56,22 @@
  *
  * v1.7 (2026-08-24) : header canonique — mêmes réglages que neon-entities-card.js /
  *   neon-climate-card-webgl.js (police, majuscules, épaisseur, espacement, italique, dégradé,
- *   glow, flicker, couleur/taille icône). L'icône du header (header.icon) n'était même pas
- *   dessinée dans le markup malgré du CSS .hdr-icon mort depuis toujours — corrigé. Portage
- *   fait sur les DEUX chemins de rendu (_render() complet ET _applyLiveConfig(), le chemin
- *   "config live" qui évite de recréer le contexte WebGL) pour rester synchro à la frappe
- *   dans l'éditeur. Vide partout = comportement d'origine (rétro-compatible).
+ *   glow, flicker, couleur/taille icône). Portage fait sur les DEUX chemins de rendu (_render()
+ *   complet ET _applyLiveConfig(), le chemin "config live" qui évite de recréer le contexte
+ *   WebGL) pour rester synchro à la frappe dans l'éditeur. Vide partout = comportement
+ *   d'origine (rétro-compatible).
+ *
+ * v1.8 (2026-08-24) : fixes retour terrain sur le header canonique v1.7 —
+ *   (1) icône en double : un ancien mécanisme JS post-render (insertBefore d'un <ha-icon>)
+ *   coexistait avec l'icône ajoutée dans le template littéral, supprimé (le template suffit) ;
+ *   (2) swatches couleur systématiquement noirs : le picker natif <input type=color> recevait
+ *   du texte brut non-hex (placeholders type 'var(--primary-color)') dans son value= → invalide.
+ *   Ajout de _resolveColor() (sonde DOM + getComputedStyle, pattern copié de climate-webgl) pour
+ *   toujours donner au swatch un hex réel, appliqué aux 3 points d'alimentation (rendu, frappe,
+ *   _syncValues) ; (3) sélecteur de police muet : appel _select() avec label/key inversés,
+ *   écrivait dans une clé 'Police' jamais lue au lieu de 'header.font' ; (4) défauts épaisseur/
+ *   espacement pas alignés sur le goût de Chris pour cette card — fallback CSS 400→600 et
+ *   .05em→0.02em (placeholders éditeur synchronisés).
  */
 (() => {
 
@@ -676,12 +687,6 @@ class LinuxTerminalCardWebgl extends HTMLElement {
         `}
       </ha-card>`;
 
-    if (hdr.icon){
-      const ico = document.createElement('ha-icon');
-      ico.setAttribute('icon', hdr.icon); ico.className = 'hdr-icon';
-      const h = this.shadowRoot.getElementById('hdr');
-      h.insertBefore(ico, h.firstElementChild);
-    }
     this._rendered = true;
 
     if (this._webgl){
@@ -1545,7 +1550,7 @@ const STYLES = `
     background:linear-gradient(90deg, transparent, rgba(var(--ltc-uv),.55) 20%, rgba(var(--ltc-cy),.3) 50%, rgba(var(--ltc-uv),.55) 80%, transparent); }
   .hdr-icon{ --mdc-icon-size:var(--ltc-hdr-icon-size,var(--ltc-hdr-size,18px)); color:var(--ltc-hdr-icon-color,var(--ltc-hdr-color)); filter:drop-shadow(0 0 5px color-mix(in srgb, currentColor, transparent 20%)) var(--ltc-hdr-icon-glow,none); flex-shrink:0; animation:var(--ltc-hdr-flicker,none); }
   .hdr-title{ flex:1; font-family:var(--ltc-hdr-font,var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif)); font-size:var(--ltc-hdr-size,18px);
-    font-weight:var(--ltc-hdr-weight,400); font-style:var(--ltc-hdr-italic,normal); letter-spacing:var(--ltc-hdr-spacing,.05em);
+    font-weight:var(--ltc-hdr-weight,600); font-style:var(--ltc-hdr-italic,normal); letter-spacing:var(--ltc-hdr-spacing,0.02em);
     text-transform:var(--ltc-hdr-upper,uppercase); color:var(--ltc-hdr-color); text-shadow:var(--ltc-hdr-shadow,0 0 8px color-mix(in srgb, var(--ltc-hdr-color), transparent 30%));
     animation:var(--ltc-hdr-flicker,none); }
   .hdr-title.grad{ background:var(--ltc-hdr-grad); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
@@ -1718,7 +1723,7 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
       const parts = inp.dataset.key.split('.');
       const v = parts.length === 2 ? (c[parts[0]] || {})[parts[1]] : c[inp.dataset.key];
       if (inp.type === 'checkbox'){ inp.checked = (v === true || v === 'true'); return; }
-      if (inp.type === 'color'){ const hx = this._hexColor(v); if (hx) inp.value = hx; return; }
+      if (inp.type === 'color'){ const hx = this._hexColor(v) || (inp.dataset.ph ? this._resolveColor(inp.dataset.ph) : null); if (hx) inp.value = hx; return; }
       inp.value = (v != null) ? v : '';
     });
   }
@@ -1743,11 +1748,27 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
     if (!m) return '';
     return '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('');
   }
+  // Résout n'importe quelle valeur CSS couleur (var(--xxx), rgb(), nom CSS…) en hex réel via un
+  // sonde DOM + getComputedStyle — nécessaire pour que le picker natif <input type=color> (qui
+  // n'accepte QUE du #rrggbb) affiche une couleur cohérente au lieu de tomber sur noir quand la
+  // valeur/placeholder est une var CSS (ex: 'var(--primary-color)'). Pattern copié à l'identique
+  // de neon-climate-card-webgl.js.
+  _resolveColor(css){
+    try {
+      const probe = document.createElement('span');
+      probe.style.cssText = `color:${css};position:absolute;left:-9999px;top:-9999px`;
+      this.appendChild(probe);
+      const rgb = getComputedStyle(probe).color; probe.remove();
+      const m = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
+      return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+    } catch { return null; }
+  }
   _color(label, key, ph){
     const v = this._val(key);
+    const swatchHex = this._hexColor(v) || (ph ? this._resolveColor(ph) : null) || '#b482ff';
     return `<div class="field"><label>${_esc(label)}</label>
       <div class="color-row">
-        <input type="color" data-key="${_esc(key)}" value="${_esc(this._hexColor(v) || ph || '#b482ff')}" class="color-swatch"/>
+        <input type="color" data-key="${_esc(key)}" value="${_esc(swatchHex)}" data-ph="${_esc(ph || '')}" class="color-swatch"/>
         <input type="text" data-key="${_esc(key)}" value="${_esc(v)}" placeholder="${_esc(ph || '#b482ff')}" autocomplete="off" class="color-text"/>
       </div></div>`;
   }
@@ -1835,13 +1856,13 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
           ${this._icon('Icône', 'header.icon', 'mdi:laptop')}
           ${this._color('Couleur', 'header.color', '#b482ff')}
           ${this._text('Taille titre', 'header.title_size', '18px')}
-          ${this._select('header.font', 'Police', NEON_FONTS, '— thème HA —')}
+          ${this._select('Police', 'header.font', NEON_FONTS, '— thème HA —')}
           ${this._toggle('Majuscules', 'header.uppercase', true)}
         </div>
         <ha-expansion-panel outlined header="En-tête — effets avancés">
           ${this._text('Ombre titre (text-shadow)', 'header.title_shadow', '0 0 8px ...')}
           <div class="hint">Si renseignée, l'ombre remplace le glow ci-dessous.</div>
-          <div class="row2">${this._text('Épaisseur', 'header.font_weight', '400')}${this._text('Espacement', 'header.letter_spacing', '.05em')}</div>
+          <div class="row2">${this._text('Épaisseur', 'header.font_weight', '600')}${this._text('Espacement', 'header.letter_spacing', '0.02em')}</div>
           ${this._toggle('Italique', 'header.italic', false)}
           ${this._toggle('Titre en dégradé', 'header.gradient', false)}
           <div class="row2">${this._color('Dégradé — départ', 'header.gradient_from', 'var(--primary-color)')}${this._color('Dégradé — arrivée', 'header.gradient_to', 'var(--accent-color)')}</div>
@@ -1899,7 +1920,7 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
         this._set(inp.dataset.key, val);
         this.querySelectorAll(`input[data-key="${inp.dataset.key}"]`).forEach(t => {
           if (t === t.ownerDocument.activeElement || t === inp) return;
-          if (t.type === 'color'){ const hx = this._hexColor(val); if (hx) t.value = hx; }
+          if (t.type === 'color'){ const hx = this._hexColor(val) || (t.dataset.ph ? this._resolveColor(t.dataset.ph) : null); if (hx) t.value = hx; }
           else t.value = val;
         });
       }));
@@ -1945,7 +1966,7 @@ if (!window.customCards.some(c => c.type === 'linux-terminal-card-webgl')){
   });
 }
 
-console.info('%c 🐧 linux-terminal-card-webgl v1.4 %c CRT SHADER ',
+console.info('%c 🐧 linux-terminal-card-webgl v1.8 %c CRT SHADER ',
   'background:#6200EA;color:#fff;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#00e5ff;padding:2px 4px;border-radius:0 3px 3px 0;');
 
