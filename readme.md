@@ -80,6 +80,7 @@
 | Card | File | Version | Description |
 |------|------|:-------:|-------------|
 | 🌦️ Weather Neon Card | `weather-neon-card.js` | `2.11.0` | Animated outline weather icons (15 conditions), forecast, vigilance halo, GLITCH cat, air-quality & pollen pills (Atmo France), canvas FX: wind haze + rain with splashes + lightning flashes, frost crystals & parallax snow (hero-zone, low-power throttling on iPad/mobile) |
+| 🌦️🌀 Weather Neon Card (WebGL) | `weather-neon-card-webgl.js` | `3.1.1-webgl` | Same weather card, post-process shader pass on top: rain-on-glass lens with rack-focus refraction, real frost crystal growth, two-flow wind warp, fog, photo-real moon phases, GL parallax snow, heatwave shimmer/mirage, aurora borealis easter egg (moonless clear night); collapsible grouped UI editor with a "always visible (demo)" toggle per effect |
 
 ### 💡 Lighting & Switches
 
