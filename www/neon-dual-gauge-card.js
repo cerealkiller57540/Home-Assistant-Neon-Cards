@@ -397,6 +397,9 @@ function calculateBidirectionalLeds(value, min, max, ledsCount, bidirectional) {
 
   // Calculate range sizes on each side of reference
   const totalRange = max - min;
+  if (totalRange === 0) {
+    return { activeLeds: 0, direction: 'unidirectional', normalizedValue: fullRangeNormalized };
+  }
   const lowerRange = referencePoint - min;  // Size from min to reference
   const upperRange = max - referencePoint;  // Size from reference to max
 
@@ -1067,6 +1070,15 @@ function generateLedsHTML(ledsCount, radius, ledSize, prefix = '') {
   return leds.join('');
 }
 
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function generateTicksHTML(radius) {
   const out = [];
   for (let i = 0; i < 20; i++) {
@@ -1249,7 +1261,7 @@ function renderDual(context) {
   ].filter(Boolean).join(' ');
 
   // Générer le HTML du titre
-  const titleHTML = `<div class="${titleClass}">${context.config.name || ""}</div>`;
+  const titleHTML = `<div class="${titleClass}">${escapeHtml(context.config.name || "")}</div>`;
 
   // Apply effect classes on the host element for :host(...) selectors
   context.className = hostClasses;
@@ -1275,11 +1287,11 @@ function renderDual(context) {
         ${generateLedsHTML(ledsCount1, innerGaugeRadius, ledSize1, 'inner')}
         <div class="center dual-center" style="background: ${globalTheme.centerBackground}">
           ${context.config.enable_glass_center !== false ? '<div class="ndg-glass"></div>' : ''}
-          <div class="value-group ${isPrimaryInner ? '' : 'secondary'}" id="group-inner">
+          <div class="value-group ${isPrimaryInner ? '' : 'secondary'}" id="group-inner" role="button" tabindex="0" aria-label="${escapeHtml(config1.entity || '')}">
             <div class="value" id="value-inner">0</div>
             <div class="unit" id="unit-inner"></div>
           </div>
-          <div class="value-group ${isPrimaryInner ? 'secondary' : ''}" id="group-outer">
+          <div class="value-group ${isPrimaryInner ? 'secondary' : ''}" id="group-outer" role="button" tabindex="0" aria-label="${escapeHtml(config2.entity || '')}">
             <div class="value" id="value-outer">0</div>
             <div class="unit" id="unit-outer"></div>
           </div>
@@ -1496,9 +1508,29 @@ function addMarkersAndZones(context) {
         pointer-events: none;
       `;
 
-      const circle = document.createElementNS(svgNS, "path");
       const radius = innerGaugeRadius + 5;
       const centerPoint = svgSize / 2;
+
+      // Zone couvrant tout le tour (from=min, to=max) : start/end
+      // coïncident en angle (0° ou 360° selon le mode uni/bidirectionnel)
+      // et l'arc dégénère en point — dessiner un cercle plein à la place.
+      const isFullCircleZone = zone.from <= min1 && zone.to >= max1;
+
+      if (isFullCircleZone) {
+        const circle = document.createElementNS(svgNS, "circle");
+        circle.setAttribute("cx", `${centerPoint}`);
+        circle.setAttribute("cy", `${centerPoint}`);
+        circle.setAttribute("r", `${radius}`);
+        circle.setAttribute("fill", "none");
+        circle.setAttribute("stroke", zone.color || "#fff");
+        circle.setAttribute("stroke-width", "4");
+        circle.setAttribute("opacity", zone.opacity || "0.5");
+        svg.appendChild(circle);
+        fragment.appendChild(svg);
+        return;
+      }
+
+      const circle = document.createElementNS(svgNS, "path");
       const startX = centerPoint + radius * Math.cos((startAngle - 90) * Math.PI / 180);
       const startY = centerPoint + radius * Math.sin((startAngle - 90) * Math.PI / 180);
       const endX = centerPoint + radius * Math.cos((endAngle - 90) * Math.PI / 180);
@@ -1545,9 +1577,28 @@ function addMarkersAndZones(context) {
         pointer-events: none;
       `;
 
-      const circle = document.createElementNS(svgNS, "path");
       const radius = outerGaugeSize / 2 + 5;
       const centerPoint = (outerGaugeSize + 20) / 2;
+
+      // Cf. commentaire équivalent sur la gauge interne : from/to
+      // couvrant tout le range dégénère l'arc, quel que soit le mode.
+      const isFullCircleZone = zone.from <= min2 && zone.to >= max2;
+
+      if (isFullCircleZone) {
+        const circle = document.createElementNS(svgNS, "circle");
+        circle.setAttribute("cx", `${centerPoint}`);
+        circle.setAttribute("cy", `${centerPoint}`);
+        circle.setAttribute("r", `${radius}`);
+        circle.setAttribute("fill", "none");
+        circle.setAttribute("stroke", zone.color || "#fff");
+        circle.setAttribute("stroke-width", "4");
+        circle.setAttribute("opacity", zone.opacity || "0.5");
+        svg.appendChild(circle);
+        fragment.appendChild(svg);
+        return;
+      }
+
+      const circle = document.createElementNS(svgNS, "path");
       const startX = centerPoint + radius * Math.cos((startAngle - 90) * Math.PI / 180);
       const startY = centerPoint + radius * Math.sin((startAngle - 90) * Math.PI / 180);
       const endX = centerPoint + radius * Math.cos((endAngle - 90) * Math.PI / 180);
@@ -1815,12 +1866,14 @@ function updateDualGauge(context) {
   if (isUnavailable1 || isUnavailable2) {
     const naText = isFr ? 'N/D' : 'N/A';
     if (isUnavailable1) {
+      if (context.animationFrame1) { cancelAnimationFrame(context.animationFrame1); context.animationFrame1 = null; }
       const vd = context._cachedRefs?.['value-inner'] || context.shadowRoot.querySelector('#value-inner');
       const ud = context._cachedRefs?.['unit-inner'] || context.shadowRoot.querySelector('#unit-inner');
       if (vd) { vd.textContent = naText; vd.style.opacity = '0.5'; }
       if (ud) ud.textContent = '';
     }
     if (isUnavailable2) {
+      if (context.animationFrame2) { cancelAnimationFrame(context.animationFrame2); context.animationFrame2 = null; }
       const vd = context._cachedRefs?.['value-outer'] || context.shadowRoot.querySelector('#value-outer');
       const ud = context._cachedRefs?.['unit-outer'] || context.shadowRoot.querySelector('#unit-outer');
       if (vd) { vd.textContent = naText; vd.style.opacity = '0.5'; }
@@ -1994,6 +2047,7 @@ class NeonDualGaugeCard extends HTMLElement {
     this._rafPending = false;
     this._cachedRefs = null;
     this._cachedLeds = null;
+    this._lastHassKey = null;
 
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
@@ -2002,11 +2056,23 @@ class NeonDualGaugeCard extends HTMLElement {
 
     this._updateDualGauge = () => updateDualGauge(this);
 
+    // Un reconfig (ex. éditeur en direct) ne doit pas laisser la gauge
+    // affichée à "0" tant que hass ne renvoie pas un nouvel état différent.
+    // (updateDualGauge sort tôt en interne si _hass n'est pas encore défini.)
+    this._updateDualGauge();
+
     const groupInner = this.shadowRoot.getElementById("group-inner");
     if (groupInner) {
       groupInner.addEventListener("click", (e) => {
         e.stopPropagation();
         this._showEntityHistory(this.config.gauges[0].entity);
+      });
+      groupInner.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          this._showEntityHistory(this.config.gauges[0].entity);
+        }
       });
     }
 
@@ -2015,6 +2081,13 @@ class NeonDualGaugeCard extends HTMLElement {
       groupOuter.addEventListener("click", (e) => {
         e.stopPropagation();
         this._showEntityHistory(this.config.gauges[1].entity);
+      });
+      groupOuter.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          this._showEntityHistory(this.config.gauges[1].entity);
+        }
       });
     }
 
@@ -2026,6 +2099,7 @@ class NeonDualGaugeCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
 
+    if (!this.config) return;
     if (this.config.power_save_mode && !this.isVisible) return;
 
     // Early exit — skip all work if neither entity actually changed
@@ -2343,6 +2417,8 @@ class NeonDualGaugeCardEditor extends HTMLElement {
           const [k, ...vp] = line.split(':');
           const val = vp.join(':').trim().replace(/^['"]|['"]$/g, '');
           cur[k.trim()] = isNaN(val) ? val : parseFloat(val);
+        } else {
+          console.warn('Neon Dual Gauge Card: ligne YAML zones ignorée (format non reconnu):', line);
         }
       }
       if (cur) items.push(cur);
@@ -2534,7 +2610,9 @@ class NeonDualGaugeCardEditor extends HTMLElement {
   }
 }
 
-customElements.define("neon-dual-gauge-card-editor", NeonDualGaugeCardEditor);
+if (!customElements.get("neon-dual-gauge-card-editor")) {
+  customElements.define("neon-dual-gauge-card-editor", NeonDualGaugeCardEditor);
+}
 
 // ============================================================================
 // REGISTER CUSTOM ELEMENT
@@ -2546,7 +2624,9 @@ console.info(
   'color: white; font-weight: bold; background: dimgray'
 );
 
-customElements.define("neon-dual-gauge-card", NeonDualGaugeCard);
+if (!customElements.get("neon-dual-gauge-card")) {
+  customElements.define("neon-dual-gauge-card", NeonDualGaugeCard);
+}
 
 window.customCards = window.customCards || [];
 window.customCards.push({
