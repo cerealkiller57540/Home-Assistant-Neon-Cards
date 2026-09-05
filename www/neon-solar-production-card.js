@@ -1,7 +1,7 @@
 /**
  * ╔══════════════════════════════════════════════════════════════╗
  * ║  neon-solar-card  —  Solar Production Card for Home Assistant ║
- * ║  Version : 2.1.0                                             ║
+ * ║  Version : 2.1.6                                             ║
  * ║  License : MIT                                               ║
  * ╚══════════════════════════════════════════════════════════════╝
  *
@@ -22,7 +22,7 @@
  * Full config reference — see buildConfig() below.
  */
 
-const VERSION = '2.1.0';
+const VERSION = '2.1.6';
 
 // ═══════════════════════════════════════════════════════════════
 //  DEVICE DETECTION
@@ -39,6 +39,40 @@ const IS_LOW_POWER = IS_IPAD || /iPhone|iPad|iPod|Android|Mobile|HomeAssistant/i
  * @param {Object} raw - User-supplied card configuration.
  * @returns {Object} Normalised configuration with defaults applied.
  */
+/* Revue de code 2026-09-04 -- trois helpers de robustesse.
+   _finite : parseFloat rend NaN sur 'unknown'/'unavailable', et NaN !== NaN est
+             toujours vrai -> dirty-check qui ne retourne jamais, donc re-render
+             a chaque changement d etat GLOBAL de HA. On normalise en null.
+   _fnv    : empreinte de TOUS les points d une serie (FNV-1a 32 bits). L ancien
+             fingerprint ne regardait que les extremes et le milieu : une
+             variation ailleurs n etait jamais redessinee.
+   _esc    : les textes venus du YAML partent dans des template strings injectees
+             en innerHTML. */
+function _finite(v) {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function _fnv(arr) {
+  if (!arr || !arr.length) return 'nil';
+  let h = 0x811c9dc5;
+  for (let i = 0; i < arr.length; i++) {
+    const s = String(arr[i]);
+    for (let j = 0; j < s.length; j++) {
+      h ^= s.charCodeAt(j);
+      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+    }
+    h ^= 44; h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return arr.length + ':' + h.toString(36);
+}
+
+function _esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function buildConfig(raw = {}) {
   return {
     /* ── Entity sensors ────────────────────────────────────── */
@@ -91,8 +125,6 @@ function buildConfig(raw = {}) {
     neon_panel_glow:    raw.neon_panel_glow    ?? (raw.neon_glow ?? false), // panel drop-shadow
     neon_text_glow:     raw.neon_text_glow     ?? (raw.neon_glow ?? false), // value text-shadow
     neon_card_glow:     raw.neon_card_glow     ?? (raw.neon_glow ?? false), // card box-shadow
-    neon_icon_glow:     raw.neon_icon_glow     ?? (raw.neon_glow ?? false), // header icon glow
-    neon_title_glow:    raw.neon_title_glow    ?? (raw.neon_glow ?? false), // title text glow
     neon_bar_glow:      raw.neon_bar_glow      ?? (raw.neon_glow ?? false), // efficiency bar glow
     neon_badge_glow:    raw.neon_badge_glow    ?? (raw.neon_glow ?? false), // efficiency badge glow
     neon_mini_glow:     raw.neon_mini_glow     ?? (raw.neon_glow ?? false), // mini header values glow
@@ -103,7 +135,22 @@ function buildConfig(raw = {}) {
     header_font_size:   raw.header_font_size   ?? 15,        // px (anciennement small|medium|large)
     title_font_family:  raw.title_font_family  || null,     // optional header title font
     title_shadow:       raw.title_shadow       || null,     // custom text-shadow on title
+    title_font_weight:  raw.title_font_weight  || null,     // optional header title font-weight (défaut CSS 600, cf pattern nmc)
+    title_uppercase:    raw.title_uppercase    ?? false,    // UPPERCASE header title
+    title_italic:       raw.title_italic       ?? false,    // italic header title
+    title_letter_spacing: raw.title_letter_spacing || null, // e.g. '0.5px' — null = historic default
+    // Glow titre — pattern canonique nmc/entities/storey : UN toggle + sa couleur + sa taille
+    title_glow:         raw.title_glow         ?? false,
+    title_glow_color:   raw.title_glow_color   || null,     // défaut : color_neon_glow / primary
+    title_glow_size:    raw.title_glow_size    ?? 12,        // px, 4-layer canonical glow
+    // Gradient titre — pattern canonique nmc : from = couleur titre/primary, to = accent
+    title_gradient:     raw.title_gradient     ?? false,    // gradient fill on title text
+    title_gradient_from: raw.title_gradient_from || null,
+    title_gradient_to:  raw.title_gradient_to  || null,
+    title_flicker:      raw.title_flicker      ?? false,    // neon flicker animation on title
+    title_icon_color:   raw.title_icon_color   || null,     // défaut : couleur du titre
     icon_size:          raw.icon_size          ?? 22,       // header icon size (px)
+    // Glow icône : partage title_glow/title_glow_color/title_glow_size — icône+titre = même bloc header
 
     /* ── Colors (null = inherit from HA theme) ─────────────── */
     color_primary:      raw.color_primary      || null,
@@ -334,7 +381,7 @@ function buildPanelSkeleton(id, cold) {
   const cells = PANEL_CELLS.map((d, ci) => {
     const mod = Math.floor(ci / 2);
     const delay = (mod * 0.07 + (ci % 2) * 0.035).toFixed(2);
-    return `<path data-ci="${ci}" d="${d}" fill="${cold}" opacity="0.07" style="animation-delay:${delay}s"/>`;
+    return `<path data-ci="${ci}" d="${d}" fill="${cold}" opacity="0.045" style="animation-delay:${delay}s"/>`;
   }).join('\n');
 
   const [bA, bB] = [PANEL_M(FRAME_MU,1-FRAME_MV), PANEL_M(1-FRAME_MU,1-FRAME_MV)];
@@ -345,13 +392,13 @@ function buildPanelSkeleton(id, cold) {
     shape-rendering="geometricPrecision">
   <defs>
     <linearGradient id="${id}-bg" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%"   stop-color="#141a24"/>
-      <stop offset="45%"  stop-color="#080b11"/>
-      <stop offset="100%" stop-color="#030407"/>
+      <stop offset="0%"   stop-color="#080c14"/>
+      <stop offset="45%"  stop-color="#03050a"/>
+      <stop offset="100%" stop-color="#010203"/>
     </linearGradient>
     <linearGradient id="${id}-glare" x1="0%" y1="0%" x2="90%" y2="100%">
-      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.14"/>
-      <stop offset="55%" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.07"/>
+      <stop offset="32%" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
     <linearGradient id="${id}-shg" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0"   stop-color="#ffffff" stop-opacity="0"/>
@@ -567,8 +614,6 @@ const LABELS = {
   neonPanelGlow: 'Panel glow',
   neonTextGlow:  'Value text glow',
   neonCardGlow:  'Card shadow glow',
-  neonIconGlow:  'Icon glow',
-  neonTitleGlow: 'Title glow',
   neonBarGlow:   'Efficiency bar glow',
   neonBadgeGlow: 'Efficiency badge glow',
   neonMiniGlow:  'Mini values glow',
@@ -670,8 +715,8 @@ class NeonSolarCardEditor extends HTMLElement {
   }
 
   // ── Helpers de champ (signatures FIXES — ne pas réinventer) ────────
-  _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d); return d; }
-  _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; this.appendChild(d); return d; }
+  _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; (this._appendTo || this).appendChild(d); return d; }
+  _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; (this._appendTo || this).appendChild(d); return d; }
 
   _text(key, label, ph = '') {
     const row = this._row(label);
@@ -768,8 +813,23 @@ class NeonSolarCardEditor extends HTMLElement {
     const lbl = document.createElement('label');
     if (isHtml) lbl.innerHTML = labelHtml; else lbl.textContent = labelHtml;
     const wrap = document.createElement('div'); wrap.className = 'field-wrap';
-    row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
+    row.appendChild(lbl); row.appendChild(wrap); (this._appendTo || this).appendChild(row);
     return { row, wrap };
+  }
+
+  // Groupe repliable (pattern storey-battery-card-gl.js) — allège l'UI en repliant
+  // les réglages fins par défaut. buildFn() ré-ancre les helpers sur le panel via _appendTo.
+  _group(title, expanded, buildFn) {
+    const panel = document.createElement('ha-expansion-panel');
+    panel.outlined = true;
+    panel.header = title;
+    if (expanded) panel.expanded = true;
+    (this._appendTo || this).appendChild(panel);
+    const prevAppendTo = this._appendTo;
+    this._appendTo = panel;
+    buildFn();
+    this._appendTo = prevAppendTo;
+    return panel;
   }
 
   _toHex(c) {
@@ -871,16 +931,33 @@ class NeonSolarCardEditor extends HTMLElement {
     this._number('production_threshold', t.threshold, { min: 0, max: 50000, step: 50 });
     this._hint(t.thresholdHint);
     this._select('font_size', t.fontSize, [['small', t.small], ['medium', t.medium], ['large', t.large]].map(([v, l]) => ({ value: v, label: l })));
-    this._number('header_font_size', t.headerFontSize, { min: 8, max: 32, step: 1 });
-    this._select('title_font_family', t.titleFont, TITLE_FONT_OPTIONS, '— thème HA —');
-    this._text('title_shadow', 'Title shadow', '0 0 8px rgba(0,212,255,0.7)');
-    this._number('icon_size', 'Icon size (px)', { min: 12, max: 48, step: 1 });
     this._toggle('show_history', t.history, true);
     this._toggle('show_efficiency', t.efficiency, true);
-    this._toggle('glow_effect', t.glow, false);
     this._toggle('reduce_animations', t.reduceAnim, false);
 
-    this._section('Typography');
+    this._section('Header (icône + titre)');
+    this._number('header_font_size', t.headerFontSize, { min: 8, max: 32, step: 1 });
+    this._number('icon_size', 'Icon size (px)', { min: 12, max: 48, step: 1 });
+    this._select('title_font_family', t.titleFont, TITLE_FONT_OPTIONS, '— thème HA —');
+    this._group('Typo & effets avancés (12 paramètres)', false, () => {
+      this._text('title_font_weight', 'Épaisseur', '600');
+      this._text('title_letter_spacing', 'Espacement', '0.5px');
+      this._toggle('title_uppercase', 'Majuscules', false);
+      this._toggle('title_italic', 'Italique', false);
+      this._text('title_shadow', 'Text-shadow', '0 0 8px rgba(0,212,255,0.7)');
+      this._color('title_icon_color', "Couleur de l'icône", null, 'défaut : couleur du titre');
+      this._toggle('title_gradient', 'Titre en dégradé');
+      this._color('title_gradient_from', 'Dégradé — départ', 'var(--primary-color)');
+      this._color('title_gradient_to', 'Dégradé — arrivée', 'var(--accent-color)');
+      this._toggle('title_glow', 'Glow du titre');
+      this._text('title_glow_size', 'Taille du glow', '12');
+      this._color('title_glow_color', 'Couleur du glow', 'var(--primary-color)');
+      this._toggle('title_flicker', 'Scintillement du titre');
+      this._toggle('neon_mini_glow', 'Glow TODAY/SENSOR/FORECAST');
+      this._hint('Text-shadow ci-dessus, si renseigné, remplace le glow.');
+    });
+
+    this._section('Corps — Typographie');
     this._color('color_efficiency_text', t.colorEffText, '#FFD23F');
     this._color('color_mini_values_text', t.colorMiniText, '#ffffff');
     this._color('color_sparkline_stats_text', t.colorStatsText, '#888888');
@@ -888,20 +965,18 @@ class NeonSolarCardEditor extends HTMLElement {
     this._number('label_font_weight', t.labelFontWt, { min: 300, max: 900, step: 100, ph: '600' });
     this._number('text_shadow_blur', t.textShadowBlur, { min: 0, max: 20, step: 1 });
 
-    this._section('GLOW');
-    this._toggle('glow_effect', t.glow, false);
-    this._color('color_neon_glow', t.colorNeonGlow, '#00E8FF');
-
-    this._section('CYBERPUNK');
-    this._toggle('cyberpunk_mode', t.cyberpunk, false);
+    this._section('Corps — Glow');
+    this._toggle('glow_effect', 'Glow panneau solaire (cellules, animé)', false);
     this._toggle('neon_panel_glow', t.neonPanelGlow, false);
     this._toggle('neon_text_glow', t.neonTextGlow, false);
-    this._toggle('neon_card_glow', t.neonCardGlow, false);
-    this._toggle('neon_icon_glow', t.neonIconGlow, false);
-    this._toggle('neon_title_glow', t.neonTitleGlow, false);
     this._toggle('neon_bar_glow', t.neonBarGlow, false);
     this._toggle('neon_badge_glow', t.neonBadgeGlow, false);
-    this._toggle('neon_mini_glow', t.neonMiniGlow, false);
+    this._toggle('neon_card_glow', t.neonCardGlow, false);
+
+    this._section('Cyberpunk');
+    this._hint('Couleur/intensité par défaut de tous les toggles glow ci-dessus (sauf title_glow_color s\'il est renseigné, et "Glow panneau solaire" qui suit sa propre logique animée).');
+    this._toggle('cyberpunk_mode', t.cyberpunk, false);
+    this._color('color_neon_glow', t.colorNeonGlow, '#00E8FF');
     this._number('neon_saturation', t.neonSat, { min: 0, max: 100, step: 5, ph: '50' });
 
     this._section(t.colors);
@@ -911,8 +986,10 @@ class NeonSolarCardEditor extends HTMLElement {
     this._color('color_cold', t.colorCold, '#00E8FF');
     this._color('color_mid', t.colorMid, '#FFD23F');
     this._color('color_hot', t.colorHot, '#FF6B35');
-    this._color('color_icon', t.colorIcon, '#FFD23F');
-    this._color('color_badge', t.colorBadge, '#FFD23F');
+    /* color_icon / color_badge retires le 2026-09-04 : aucun chemin de rendu ne
+       les lisait. La couleur d icone suit le pattern canonique du header
+       (title_icon_color || color_title || texte) -- cf _renderHeader. Les
+       exposer donnait une option acceptee sans le moindre effet. */
   }
 }
 
@@ -1008,6 +1085,7 @@ class NeonSolarCard extends HTMLElement {
    * Normalises the raw YAML and invalidates caches.
    */
   setConfig(raw) {
+    const _prevEnt = this._config?.entity;
     this._config    = buildConfig(raw || {});
     this._colors    = null;   // force palette re-resolve
     this._rendered  = false;
@@ -1015,6 +1093,18 @@ class NeonSolarCard extends HTMLElement {
     this._lastActive  = 0;
     this._lastGlowKey = '';
     this._lastEffBand = -1;
+    /* Purger les caches de DONNEES seulement si la SOURCE a change : des valeurs
+       heritees de l ancien capteur bloqueraient le dirty-check si elles
+       coincidaient avec les nouvelles. L editeur, lui, rappelle setConfig a
+       chaque frappe (config-changed) : purger la aussi relancerait _fetchHistory
+       a chaque cran de curseur -- une rafale sur l API history pour rien. */
+    if (_prevEnt !== undefined && _prevEnt !== this._config.entity) {
+      this._lastPower = this._prevPower = null;
+      this._lastDaily = this._lastSec = this._lastLux = null;
+      this._lastWeather = this._lastForecast = null;
+      this._history = [];
+      this._histFetchTs = 0;
+    }
     if (this.shadowRoot.firstChild) this._render();
   }
 
@@ -1073,6 +1163,11 @@ class NeonSolarCard extends HTMLElement {
     const st = ps.state;
     if (st === 'unavailable' || st === 'unknown') {
       this._showUnavailable(st);
+      // Invalider le cache : sans ca, un capteur qui revient avec la MEME valeur
+      // ne declenche aucun update et l affichage reste fige sur l indisponible.
+      this._lastPower = null;
+      this._lastDaily = this._lastSec = this._lastLux = null;
+      this._lastWeather = this._lastForecast = null;
       return;
     }
     if (this._unavailable) this._clearUnavailable();
@@ -1083,11 +1178,11 @@ class NeonSolarCard extends HTMLElement {
     const power = c.input_unit === 'kW' ? rawVal * 1000 : rawVal;
 
     // Read auxiliary sensor values
-    const daily    = c.daily_entity      && hass.states[c.daily_entity]      ? parseFloat(hass.states[c.daily_entity].state)      : null;
+    const daily    = c.daily_entity      && hass.states[c.daily_entity]      ? _finite(hass.states[c.daily_entity].state)      : null;
     const sec      = c.secondary_entity  && hass.states[c.secondary_entity]  ? hass.states[c.secondary_entity].state              : null;
-    const lux      = c.luminosity_entity && hass.states[c.luminosity_entity] ? parseFloat(hass.states[c.luminosity_entity].state) : null;
+    const lux      = c.luminosity_entity && hass.states[c.luminosity_entity] ? _finite(hass.states[c.luminosity_entity].state) : null;
     const weather  = c.weather_entity    && hass.states[c.weather_entity]    ? hass.states[c.weather_entity].state                : null;
-    const forecastRaw = c.forecast_entity && hass.states[c.forecast_entity]  ? parseFloat(hass.states[c.forecast_entity].state)   : null;
+    const forecastRaw = c.forecast_entity && hass.states[c.forecast_entity]  ? _finite(hass.states[c.forecast_entity].state)   : null;
     const forecast    = forecastRaw !== null
       ? (c.forecast_unit === 'kW' ? forecastRaw * 1000 : forecastRaw)
       : null;
@@ -1099,6 +1194,13 @@ class NeonSolarCard extends HTMLElement {
     const lw = lux      !== this._lastLux;
     const ww = weather  !== this._lastWeather;
     const fw = forecast !== this._lastForecast;
+    // Le rafraichissement de l historique est TEMPOREL : il doit rester joignable
+    // meme quand rien ne bouge (nuit, plafond d onduleur), donc AVANT le return.
+    const _now = Date.now();
+    if (_now - this._histFetchTs > 5 * 60 * 1000) {
+      this._histFetchTs = _now;
+      this._fetchHistory(c.entity);
+    }
     if (!pw && !dw && !sw && !lw && !ww && !fw) return;
 
     // Store new values
@@ -1111,11 +1213,6 @@ class NeonSolarCard extends HTMLElement {
     this._lastForecast = forecast;
 
     // Refresh history every 5 minutes
-    const now = Date.now();
-    if (now - this._histFetchTs > 5 * 60 * 1000) {
-      this._histFetchTs = now;
-      this._fetchHistory(c.entity);
-    }
 
     // Schedule a single RAF for DOM updates (coalesces rapid state changes)
     this._pendingUp = { power, daily, sec, lux, weather, forecast };
@@ -1207,14 +1304,16 @@ class NeonSolarCard extends HTMLElement {
     const neonPanelGlow  = c.neon_panel_glow;
     const neonTextGlow   = c.neon_text_glow;
     const neonCardGlow   = c.neon_card_glow;
-    const neonIconGlow   = c.neon_icon_glow;
-    const neonTitleGlow  = c.neon_title_glow;
     const neonBarGlow    = c.neon_bar_glow;
     const neonBadgeGlow  = c.neon_badge_glow;
     const neonMiniGlow   = c.neon_mini_glow;
     const cyberpunk = c.cyberpunk_mode;
-    const iconCol   = c.color_icon || col.primary;
     const neonCol   = c.color_neon_glow || col.primary;
+    // Titre — pattern canonique nmc/entities/storey : couleur icône hérite de la couleur titre (2 niveaux, pas d'accent)
+    const titleColor = c.color_title || col.text;
+    const iconCol     = c.title_icon_color || titleColor;
+    const titleGlowColor = c.title_glow_color || neonCol;
+    const titleGlowSizeN = parseFloat(c.title_glow_size) || 12;
     const sat       = Math.round(Math.min(100, Math.max(0, c.neon_saturation ?? 60)));
     const satHi     = Math.round(sat * 1.33).toString(16).padStart(2, '0'); // ~hi opacity hex
     const satMd     = Math.round(sat).toString(16).padStart(2, '0');         // ~mid opacity hex
@@ -1246,6 +1345,9 @@ class NeonSolarCard extends HTMLElement {
         background: ${col.bg};
         border-radius: var(--ha-card-border-radius, 12px);
         contain: layout style paint;
+        ${neonCardGlow
+          ? `box-shadow: 0 0 ${Math.round(sat*0.15)}px ${neonCol}${satLo}, 0 0 ${Math.round(sat*0.4)}px ${neonCol}${satMd};`
+          : ''}
       }
       ha-card:hover { opacity: 0.92 }
 
@@ -1257,9 +1359,13 @@ class NeonSolarCard extends HTMLElement {
         border-image: linear-gradient(90deg, transparent, rgba(98,0,234,0.55), rgba(0,255,249,0.25), transparent) 1;
       }
       .hdr-icon {
-        width:${c.icon_size}px; height:${c.icon_size}px; color:${iconCol}; flex-shrink:0;
+        display:block; width:${c.icon_size}px; height:${c.icon_size}px; color:${iconCol}; flex-shrink:0;
         filter: ${(() => {
-          if (neonIconGlow) return `drop-shadow(0 0 6px ${neonCol}) drop-shadow(0 0 14px ${neonCol}${satMd})`;
+          if (c.title_glow) {
+            // Glow canonique 4-couches (cf ha-neon-css §3ter) : blanc + 3 couches croissantes
+            const s = titleGlowSizeN;
+            return `drop-shadow(0 0 ${Math.round(s*0.2)}px #fff) drop-shadow(0 0 ${Math.round(s*0.4)}px ${titleGlowColor}) drop-shadow(0 0 ${Math.round(s*0.8)}px ${titleGlowColor}) drop-shadow(0 0 ${s}px ${titleGlowColor})`;
+          }
           if (c.title_shadow) {
             const m = c.title_shadow.match(/rgba?\([^)]+\)|#[0-9a-fA-F]{3,8}/);
             const sc = m ? m[0] : iconCol;
@@ -1271,23 +1377,29 @@ class NeonSolarCard extends HTMLElement {
       }
       .hdr-title {
         flex:1 1 auto; 
-        font-size: clamp(14px, 1.5vw, ${hdrFs}px);
+        font-size: clamp(14px, ${hdrFs}px, ${hdrFs}px);
         font-family: ${titleFont};
-        color:${c.color_title || col.text};
+        font-weight: ${c.title_font_weight || 600};
+        font-style: ${c.title_italic ? 'italic' : 'normal'};
+        text-transform: ${c.title_uppercase ? 'uppercase' : 'none'};
+        ${c.title_gradient
+          ? `background:linear-gradient(90deg,${c.title_gradient_from || 'var(--primary-color, #00E8FF)'},${c.title_gradient_to || 'var(--accent-color, #FF50A0)'});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;`
+          : `color:${titleColor};`}
         overflow: visible;
         white-space: nowrap;
         min-width: 0;
-        letter-spacing: 0.5px;
+        letter-spacing: ${c.title_letter_spacing || '0.5px'};
 		text-shadow: ${c.title_shadow
           ? c.title_shadow
-          : neonTitleGlow
-            ? `0 1px 2px rgba(0, 0, 0, 0.8), 
-               0 0 5px #fff, 
-               0 0 10px ${neonCol}, 
-               0 0 20px ${neonCol}, 
-               0 0 40px ${neonCol}${satMd || '80'}`
+          : c.title_glow
+            ? `0 0 ${Math.round(titleGlowSizeN*0.2)}px #fff, 0 0 ${Math.round(titleGlowSizeN*0.4)}px ${titleGlowColor}, 0 0 ${Math.round(titleGlowSizeN*0.8)}px ${titleGlowColor}, 0 0 ${titleGlowSizeN}px ${titleGlowColor}`
             : '1px 1px 2px rgba(0, 0, 0, 0.2)'};
         ${reduceAnim ? '' : 'transition: text-shadow 0.4s;'}
+        ${c.title_flicker ? 'animation: nsc-title-flicker 3.2s infinite steps(1);' : ''}
+      }
+      @keyframes nsc-title-flicker {
+        0%, 91%, 93%, 96%, 100% { opacity: 1; }
+        92%, 94.5% { opacity: 0.55; }
       }
       .hdr-right {
         display:grid; grid-template-columns: auto auto;
@@ -1456,14 +1568,14 @@ class NeonSolarCard extends HTMLElement {
     </style>
 
     <ha-card id="ha-card" role="button" tabindex="0"
-      aria-label="${c.name || 'Solar Production'} card">
+      aria-label="${_esc(c.name || 'Solar Production')} card">
 
       <!-- ── Header ──────────────────────────────── -->
       <div class="hdr">
         <svg class="hdr-icon" id="hdr-icon" viewBox="0 0 24 24">
           <path fill="currentColor" id="hdr-icon-path" d="${MDI_SUN}"/>
         </svg>
-        <div class="hdr-title">${c.name || 'Production Solaire'}</div>
+        <div class="hdr-title">${_esc(c.name || 'Production Solaire')}</div>
         <div class="hdr-right">
           ${c.daily_entity ? `
           <div class="hdr-mini" id="hdr-daily" data-entity="${c.daily_entity}">
@@ -1531,9 +1643,11 @@ class NeonSolarCard extends HTMLElement {
     // Hold detection (500 ms threshold)
     card.addEventListener('pointerdown', e => {
       if (e.button !== 0) return;
+      this._holdTriggered = false;
       this._holdTimer = setTimeout(() => {
         this._holdTimer = 0;
-        this._handleAction('hold_action');
+        this._holdTriggered = true;   // le timer est deja a 0 : sans ce drapeau
+        this._handleAction('hold_action');   // le click qui suit passerait aussi
       }, 500);
     }, { passive: true });
 
@@ -1547,7 +1661,7 @@ class NeonSolarCard extends HTMLElement {
 
     // Click → single tap or double-tap detection
     card.addEventListener('click', () => {
-      if (this._holdTimer) return; // hold was triggered, ignore click
+      if (this._holdTriggered) { this._holdTriggered = false; return; } // hold deja joue
       const dblAction = this._config.double_tap_action;
       if (dblAction && dblAction.action !== 'none') {
         if (this._dblTapTimer) {
@@ -1812,12 +1926,14 @@ class NeonSolarCard extends HTMLElement {
     //  1. Weather entity state (sunny, cloudy, rainy …)
     //  2. Night → moon
     //  3. Day   → sun
+    // Couleur par défaut = pattern canonique header (icon_color hérite du titre), pas color_icon/primary
+    const headerIconCol = this._config.title_icon_color || this._config.color_title || col.text;
     let iconPath = MDI_SUN;
-    let iconColor = this._config.color_icon || col.primary;
+    let iconColor = headerIconCol;
 
     if (weather && WEATHER_ICONS[weather]) {
       iconPath  = WEATHER_ICONS[weather];
-      iconColor = this._config.color_icon || col.primary;
+      iconColor = headerIconCol;
     } else if (isNight) {
       iconPath  = MDI_MOON;
       iconColor = this._config.cyberpunk_mode ? '#00fff9' : '#9db4ff';
@@ -1855,9 +1971,9 @@ class NeonSolarCard extends HTMLElement {
     const hf = this._historyForecast;
 
     // Fingerprint to avoid redundant SVG re-renders
-    const fKey = hf.length ? `${hf.length}:${hf[0]}:${hf[hf.length - 1]}` : 'nof';
+    const fKey = _fnv(hf);
     const tKey = c.production_threshold ?? 'not';
-    const key  = `${h.length}:${h[0]}:${h[Math.floor(h.length / 2)]}:${h[h.length - 1]}|${fKey}|${tKey}`;
+    const key  = `${_fnv(h)}|${fKey}|${tKey}`;
     if (zone._key === key) return;
     zone._key = key;
 
@@ -2001,7 +2117,7 @@ if (!window.customCards.some(c => c.type === 'neon-solar-card' || c.type === 'cu
 }
 
 console.info(
-  '%c ☀️ neon-solar-production-card v2.1.0 %c Neo Tokyo ',
+  '%c ☀️ neon-solar-production-card v2.1.1 %c Neo Tokyo ',
   'background:#FFD700;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#FF6A00;padding:2px 4px;border-radius:0 3px 3px 0;'
 );

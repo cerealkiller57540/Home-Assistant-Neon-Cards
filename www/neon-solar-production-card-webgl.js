@@ -1,7 +1,7 @@
 /**
  * ╔══════════════════════════════════════════════════════════════╗
  * ║  neon-solar-card  —  Solar Production Card for Home Assistant ║
- * ║  Version : 2.1.1                                             ║
+ * ║  Version : 2.1.6                                             ║
  * ║  License : MIT                                               ║
  * ╚══════════════════════════════════════════════════════════════╝
  *
@@ -22,7 +22,7 @@
  * Full config reference — see buildConfig() below.
  */
 
-const VERSION = '2.1.1-webgl';
+const VERSION = '2.1.6-webgl';
 
 // ═══════════════════════════════════════════════════════════════
 //  DEVICE DETECTION
@@ -39,6 +39,40 @@ const IS_LOW_POWER = IS_IPAD || /iPhone|iPad|iPod|Android|Mobile|HomeAssistant/i
  * @param {Object} raw - User-supplied card configuration.
  * @returns {Object} Normalised configuration with defaults applied.
  */
+/* Revue de code 2026-09-04 -- trois helpers de robustesse.
+   _finite : parseFloat rend NaN sur 'unknown'/'unavailable', et NaN !== NaN est
+             toujours vrai -> dirty-check qui ne retourne jamais, donc re-render
+             a chaque changement d etat GLOBAL de HA. On normalise en null.
+   _fnv    : empreinte de TOUS les points d une serie (FNV-1a 32 bits). L ancien
+             fingerprint ne regardait que les extremes et le milieu : une
+             variation ailleurs n etait jamais redessinee.
+   _esc    : les textes venus du YAML partent dans des template strings injectees
+             en innerHTML. */
+function _finite(v) {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function _fnv(arr) {
+  if (!arr || !arr.length) return 'nil';
+  let h = 0x811c9dc5;
+  for (let i = 0; i < arr.length; i++) {
+    const s = String(arr[i]);
+    for (let j = 0; j < s.length; j++) {
+      h ^= s.charCodeAt(j);
+      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+    }
+    h ^= 44; h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return arr.length + ':' + h.toString(36);
+}
+
+function _esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function buildConfig(raw = {}) {
   return {
     /* ── Entity sensors ────────────────────────────────────── */
@@ -94,11 +128,12 @@ function buildConfig(raw = {}) {
     sheen_tint:            raw.sheen_tint            ?? 0.30,   // 0=color_cold, 1=color_neon_glow
     sheen_fresnel:         raw.sheen_fresnel         ?? 0.40,   // remontée du reflet au fond
     rain_lvl:              raw.rain_lvl              ?? 0.00,   // 0=sec 1=averse (piloté par la météo)
-    rain_size:             raw.rain_size             ?? 1.00,   // 1.0 = ~4 cm sur la vitre ; bas = bruine
+    rain_size:             raw.rain_size             ?? 1.77,   // 1.0 = ~4 cm sur la vitre ; bas = bruine
     rain_dens:             raw.rain_dens             ?? 0.55,   // proportion de cellules occupées
-    rain_slide:            raw.rain_slide            ?? 1.00,   // vitesse de descente sur le panneau
-    rain_spec:             raw.rain_spec             ?? 1.20,   // reflet du soleil sur la goutte
+    rain_slide:            raw.rain_slide            ?? 0.60,   // vitesse de descente sur le panneau
+    rain_spec:             raw.rain_spec             ?? 0.10,   // reflet du soleil sur la goutte
     rain_warp:             raw.rain_warp             ?? 1.00,   // la goutte tord le reflet (lentille)
+    rain_film:             raw.rain_film             ?? 0.70,   // galbe des gouttes : bord sombre, dos clair
     frost_lvl:             raw.frost_lvl             ?? 0.00,   // 0=rien 1=givre complet
     frost_coins:           raw.frost_coins           ?? 1.00,   // 1=mord depuis les bords, 0=uniforme
     frost_tile:            raw.frost_tile            ?? 70,     // taille des cristaux (haut = grain fin)
@@ -378,7 +413,7 @@ function buildPanelSkeleton(id, cold) {
   const cells = PANEL_CELLS.map((d, ci) => {
     const mod = Math.floor(ci / 2);
     const delay = (mod * 0.07 + (ci % 2) * 0.035).toFixed(2);
-    return `<path data-ci="${ci}" d="${d}" fill="${cold}" opacity="0.07" style="animation-delay:${delay}s"/>`;
+    return `<path data-ci="${ci}" d="${d}" fill="${cold}" opacity="0.045" style="animation-delay:${delay}s"/>`;
   }).join('\n');
 
   const [bA, bB] = [PANEL_M(FRAME_MU,1-FRAME_MV), PANEL_M(1-FRAME_MU,1-FRAME_MV)];
@@ -389,13 +424,13 @@ function buildPanelSkeleton(id, cold) {
     shape-rendering="geometricPrecision">
   <defs>
     <linearGradient id="${id}-bg" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%"   stop-color="#141a24"/>
-      <stop offset="45%"  stop-color="#080b11"/>
-      <stop offset="100%" stop-color="#030407"/>
+      <stop offset="0%"   stop-color="#080c14"/>
+      <stop offset="45%"  stop-color="#03050a"/>
+      <stop offset="100%" stop-color="#010203"/>
     </linearGradient>
     <linearGradient id="${id}-glare" x1="0%" y1="0%" x2="90%" y2="100%">
-      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.14"/>
-      <stop offset="55%" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.07"/>
+      <stop offset="32%" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
     <linearGradient id="${id}-shg" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0"   stop-color="#ffffff" stop-opacity="0"/>
@@ -983,8 +1018,10 @@ class NeonSolarCardWebglEditor extends HTMLElement {
     this._color('color_cold', t.colorCold, '#00E8FF');
     this._color('color_mid', t.colorMid, '#FFD23F');
     this._color('color_hot', t.colorHot, '#FF6B35');
-    this._color('color_icon', t.colorIcon, '#FFD23F');
-    this._color('color_badge', t.colorBadge, '#FFD23F');
+    /* color_icon / color_badge retires le 2026-09-04 : aucun chemin de rendu ne
+       les lisait. La couleur d icone suit le pattern canonique du header
+       (title_icon_color || color_title || texte) -- cf _renderHeader. Les
+       exposer donnait une option acceptee sans le moindre effet. */
 
     this._section('Reflet WebGL du panneau');
     this._toggle('sheen_gl', 'Couche WebGL (decocher = balayage CSS d origine)', true);
@@ -1006,21 +1043,23 @@ class NeonSolarCardWebglEditor extends HTMLElement {
       this._number('sheen_fresnel', 'Fresnel bord arrière', { min: 0, max: 1, step: 0.01, ph: '0.40' });
       this._hint('remontée du reflet au fond');
     });
-    this._group('Pluie sur le panneau (6)', false, () => {
+    this._group('Pluie sur le panneau (7)', false, () => {
       this._toggle('rain_demo', 'Toujours visible (demo)', false);
       this._hint('Affiche la pluie quelle que soit la meteo, pour le regler sans attendre. A decocher une fois regle.');
       this._number('rain_lvl', 'PLUIE — quantité', { min: 0, max: 1, step: 0.01, ph: '0.00' });
       this._hint('0=sec 1=averse (piloté par la météo)');
-      this._number('rain_size', 'Pluie — taille goutte', { min: 0.3, max: 2.5, step: 0.01, ph: '1.00' });
+      this._number('rain_size', 'Pluie — taille goutte', { min: 0.3, max: 2.5, step: 0.01, ph: '1.77' });
       this._hint('1.0 = ~4 cm sur la vitre ; bas = bruine');
       this._number('rain_dens', 'Pluie — densité', { min: 0, max: 1, step: 0.01, ph: '0.55' });
       this._hint('proportion de cellules occupées');
-      this._number('rain_slide', 'Pluie — glissement', { min: 0, max: 3, step: 0.01, ph: '1.00' });
+      this._number('rain_slide', 'Pluie — glissement', { min: 0, max: 3, step: 0.01, ph: '0.60' });
       this._hint('vitesse de descente sur le panneau');
-      this._number('rain_spec', 'Pluie — éclat', { min: 0, max: 3, step: 0.01, ph: '1.20' });
+      this._number('rain_spec', 'Pluie — éclat', { min: 0, max: 3, step: 0.01, ph: '0.10' });
       this._hint('reflet du soleil sur la goutte');
       this._number('rain_warp', 'Pluie — déviation', { min: 0, max: 3, step: 0.01, ph: '1.00' });
       this._hint('la goutte tord le reflet (lentille)');
+      this._number('rain_film', 'Pluie — relief des gouttes', { min: 0, max: 1, step: 0.01, ph: '0.70' });
+      this._hint('galbe des gouttes : bord sombre, dos clair');
     });
     this._group('Givre sur le panneau (7)', false, () => {
       this._toggle('frost_demo', 'Toujours visible (demo)', false);
@@ -1054,7 +1093,7 @@ class NeonSolarCardWebglEditor extends HTMLElement {
    correction faite dans ce fichier serait perdue au build suivant. */
 
 const GL_VERT = "attribute vec2 aPos;\nvoid main(){ gl_Position = vec4(aPos, 0.0, 1.0); }\n";
-const GL_FRAG = "precision highp float;\n\nuniform vec2  uRes;        // taille du canvas en pixels device\nuniform mat3  uInvH;       // ecran(viewBox) -> UV du panneau\nuniform vec2  uVB;         // echelle viewBox -> pixels  (400x180 -> canvas)\nuniform float uTime;\n\n// --- soleil (convention _skySun() de weather-neon-card-webgl) ---\nuniform float uSunAlt;     // sin(elevation)  : <0 = sous l'horizon\nuniform float uSunX;       // (azimut-90)/180 : 0=Est 0.5=Sud 1=Ouest\nuniform float uNight;      // 0=jour 1=nuit \u2014 rampe douce, jamais un pop\n\n// --- reglages exposes au banc ---\nuniform float uTilt;       // inclinaison du panneau (degres) \u2014 0=a plat, 90=vertical\nuniform float uGloss;      // largeur du lobe speculaire : petit=miroir dur, grand=diffus\nuniform float uInten;      // intensite du reflet\nuniform float uGrazing;    // gain supplementaire quand le soleil rase la surface\nuniform float uSpread;     // etalement de la bande le long du panneau\nuniform float uPower;      // 0..1 charge instantanee \u2014 module la vivacite du verre\nuniform float uShimmer;    // micro-ondulation du verre (lent)\nuniform vec3  uColCold;    // teinte froide (color_cold)\nuniform vec3  uColGlow;    // teinte neon (color_neon_glow)\nuniform float uTint;       // 0=cold 1=neon : melange des deux\nuniform float uFresnel;    // remontee du reflet sur le bord arriere (rasant a l'oeil)\n\n// --- meteo, transpose de weather-neon-card-webgl/fx_shader.py ---------------\n// TOUT est calcule en UV PANNEAU, jamais en espace ecran : les gouttes glissent\n// donc dans la perspective du panneau incline, gratuitement (cf uInvH). C'est\n// exactement ce que la version meteo NE peut pas faire : elle travaille sur vUv.\nuniform float uRainLvl;    // 0=sec 1=averse \u2014 pilote par l'etat meteo\nuniform float uRainSize;   // taille des gouttes\nuniform float uRainDens;   // densite (proportion de cellules occupees)\nuniform float uRainSpec;   // eclat speculaire sur la goutte\nuniform float uRainSlide;  // vitesse de glissement le long du panneau\nuniform float uRainWarp;   // deviation du reflet par la lentille de la goutte\nuniform float uFrostLvl;   // 0=rien 1=givre complet\nuniform float uFrostTile;  // finesse des dendrites\nuniform float uFrostStr;   // relief (deviation du reflet)\nuniform float uFrostSpec;  // eclat des facettes\nuniform float uFrostSpark; // paillettes\nuniform float uFrostCoins; // 0=uniforme 1=le givre mord depuis les bords\nuniform float uFrostDiff;  // diffusion : la glace etale le reflet en halo\n\nconst float PANEL_AR = 2.29;   // aspect du panneau en viewBox (~320 large / 140 haut).\n                               // /!\\ la version meteo cable uRes.x/uRes.y : c'est\n                               // l'aspect de l'ECRAN. Ici le repere est le PANNEAU,\n                               // sinon les gouttes sont des ellipses arbitraires.\n\nconst float PI = 3.14159265;\n\n/* bruit de valeur, pour la micro-irregularite du verre (pas du grain : de l'onde) */\nfloat hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\nfloat vnoise(vec2 p){\n  vec2 i = floor(p), f = fract(p);\n  vec2 u = f * f * (3.0 - 2.0 * f);\n  return mix(mix(hash(i), hash(i + vec2(1,0)), u.x),\n             mix(hash(i + vec2(0,1)), hash(i + vec2(1,1)), u.x), u.y);\n}\nfloat fbm2(vec2 p){\n  float v = 0.0, a = 0.5;\n  for (int i = 0; i < 4; i++){ v += a * vnoise(p); p *= 2.02; a *= 0.5; }\n  return v;\n}\n\n/* -- Cellules de glace ------------------------------------------------------\n   La brique qui manquait au givre v1. Un fbm fait des NAPPES : douces, rondes,\n   sans bord \u2014 d'ou les \"taches nuageuses\". La glace pousse en CRISTAUX : des\n   facettes anguleuses separees par des veines nettes. C'est un Voronoi, pas un\n   bruit fractal, et aucun reglage d'un fbm ne le rattrape.\n\n   Rend deux choses d'un coup, parce que les deux viennent du meme calcul :\n     .x  = distance au BORD de cellule (F2-F1). Proche de 0 sur une veine, grand\n           au coeur d'un cristal. C'est le dessin de la croute.\n     .yz = direction centre de cellule -> fragment. C'est la pente de la facette,\n           donc de quoi l'eclairer : sur la photo chaque cristal renvoie la\n           lumiere differemment selon son orientation. */\nvec3 iceCell(vec2 p){\n  vec2 n = floor(p), f = fract(p);\n  float f1 = 8.0, f2 = 8.0;\n  vec2  dir = vec2(0.0);\n  for (int j = -1; j <= 1; j++){\n    for (int i = -1; i <= 1; i++){\n      vec2 g = vec2(float(i), float(j));\n      // un point par cellule, place au hasard DANS la cellule : c'est ce desordre\n      // qui donne des cristaux de tailles inegales, comme du vrai givre.\n      vec2 o = vec2(hash(n + g), hash(n + g + 17.3));\n      vec2 r = g + o - f;\n      float d = dot(r, r);                   // au carre : pas de sqrt dans la boucle\n      if (d < f1){ f2 = f1; f1 = d; dir = r; }\n      else if (d < f2){ f2 = d; }\n    }\n  }\n  // F2-F1 en distances REELLES : c'est la largeur de la veine. Au carre, elle\n  // s'epaissirait au hasard selon la taille du cristal voisin.\n  return vec3(sqrt(f2) - sqrt(f1), normalize(dir + 1e-5));\n}\n\n/* \u2500\u2500 Pluie : hauteur de la nappe d'eau, en UV PANNEAU \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n   Transpose de rainH() de fx_shader.py (meteo). Deux differences, toutes deux\n   necessaires \u2014 pas cosmetiques :\n     1. l'aspect vient du PANNEAU (PANEL_AR), pas du canvas. Sinon la goutte est\n        une ellipse dont l'etirement suit la taille de la card a l'ecran.\n     2. v croit vers le HAUT du panneau (PANEL_OF : v=0 -> y=160 bas, v=1 -> y=20\n        haut). Une goutte qui descend doit donc voir v DECROITRE, ce que produit\n        deja `fract(r2 - t*...)`. Verifie sur l'homographie, pas suppose.\n   La perspective n'est pas simulee : elle est deja dans l'uv qu'on recoit. */\nfloat rainH(vec2 uv){\n  float t = uTime * uRainSlide;\n  float h = 0.0;\n  for (int L = 0; L < 2; L++){\n    // Echelle PANNEAU, pas echelle ecran : ~26 a 46 cellules sur la largeur du\n    // panneau. Une vitre fait ~1,7 m de large, donc la goutte vaut ~4 cm \u2014 la\n    // taille reelle d'une grosse goutte sur du verre. L'ancien mix(9,17) donnait\n    // des gouttes de ~15 cm : lisible, mais pas a l'echelle d'un panneau.\n    float sc = mix(26.0, 46.0, float(L)) / max(0.35, uRainSize);\n    vec2 g  = vec2(uv.x * sc * PANEL_AR, uv.y * sc);\n    vec2 id = floor(g), f = fract(g) - 0.5;\n    float r1 = hash(id + float(L) * 17.0);\n    float r2 = hash(id + vec2(3.7, 9.1) + float(L) * 17.0);\n    if (r1 > 1.0 - uRainDens * uRainLvl){\n      float sp = 0.35 + r2 * 0.65;\n      float yy = fract(r2 - t * 0.16 * sp);          // decroit = glisse vers le bas\n      vec2  c  = vec2((r2 - 0.5) * 0.55, yy - 0.5);\n      // La goutte n'occupe qu'une petite part de sa cellule : resserrer la grille\n      // sans reduire ce rayon aurait juste donne PLUS de grosses gouttes.\n      float rad = 0.075 + r1 * 0.085;\n      h += smoothstep(rad, 0.0, length((f - c) * vec2(1.0, 0.9))) * (0.65 + 0.35 * r1);\n      // la trainee que la goutte laisse DERRIERE elle, donc au-dessus (v croit en haut)\n      float above = clamp((f.y - c.y) / 0.55, 0.0, 1.0);\n      h += smoothstep(rad * 0.40, 0.0, abs(f.x - c.x)) * above * 0.35;\n    }\n  }\n  return h;\n}\n\n/* \u2500\u2500 Givre : dendrites depuis les 4 COINS du panneau \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n   Chris : \u00ab c'est plus un effet sympa qui vient des 4 coins du panneau \u00bb.\n   La meteo construit une mixmap en canvas 2D (_fxFrostMap) et l'echantillonne ;\n   ici il n'y a AUCUNE texture \u2014 le givre est donc analytique, et les coins\n   viennent d'un champ de distance aux quatre angles de la vitre. */\n/* Densite de givre + pente de la glace, en UV PANNEAU.\n   .x = epaisseur du depot [0,1] ; .yz = pente de la surface glacee.\n\n   Trois choses font la difference avec la v1 (diagnostiquees, pas supposees) :\n\n   1. CELLULES, pas fbm. Deux octaves : les grosses portent la forme des cristaux,\n      les petites le grain. Un fbm seul ne fait que des nuages.\n   2. SEUIL DUR. La v1 seuillait sur 0.36 de plage (smoothstep(0.42,0.78)) : sur un\n      fbm centre en 0.5, ca ne coupe rien, ca degrade. Ici la transition tient sur\n      ~0.06 : la croute a un bord franc, comme sur une vraie vitre.\n   3. Le givre mord depuis les BORDS vers le centre, avec un front IRREGULIER. Un\n      front lisse ferait une vignette photo ; c'est le bruit ajoute a la marge qui\n      donne la frontiere dechiquetee du vrai givre. */\nvec3 frostField(vec2 uv){\n  vec2 p = vec2(uv.x * PANEL_AR, uv.y);\n\n  // -- ou le givre a-t-il gagne ? --\n  // Marge au bord le plus proche : 0 au bord, 0.5 au centre. Le givre part des\n  // bords (les montants du cadre, la ou le froid conduit) et progresse vers le\n  // milieu \u2014 c'est ce que montre la photo : clairiere centrale, croute autour.\n  vec2  q     = abs(uv - 0.5);\n  float edge  = 0.5 - max(q.x, q.y);\n  // Front dechiquete : sans ce bruit la limite est un ovale regulier, qui lit\n  // comme une vignette de retouche et pas comme du givre.\n  float ragged = fbm2(p * 5.5 + 31.0) - 0.5;\n  float front  = edge + ragged * 0.20;\n  // uFrostLvl pousse le front : a 1 le givre atteint le centre, a 0.3 il reste une\n  // couronne au bord. C'est la variable que la meteo pilotera en production.\n  float reach  = mix(-0.05, 0.62, uFrostLvl);\n  float grow   = smoothstep(reach, reach - 0.17, front);\n  // curseur \"depuis les bords\" : a 0, couverture uniforme.\n  grow = mix(uFrostLvl, grow, uFrostCoins);\n\n  // -- la matiere --\n  // Octave 1 : les cristaux. uFrostTile monte bien plus haut qu'en v1 (le grain de\n  // la photo est millimetrique ; a 11 un \"cristal\" faisait 5 cm de panneau).\n  vec3  c1 = iceCell(p * uFrostTile);\n  // Octave 2 : le grain DANS les cristaux. Decalee et de rapport non entier (2.7),\n  // sinon les deux grilles s'alignent et on voit un damier.\n  vec3  c2 = iceCell(p * uFrostTile * 2.7 + 43.1);\n\n  // Les veines (F2-F1 petit) sont les JOINTS entre cristaux : c'est la ou la glace\n  // est la plus epaisse et la plus blanche sur la photo. On inverse donc.\n  float vein = 1.0 - smoothstep(0.0, 0.16, c1.x);\n  float fine = 1.0 - smoothstep(0.0, 0.22, c2.x);\n  float mat  = clamp(vein * 0.72 + fine * 0.46, 0.0, 1.0);\n\n  // Seuil DUR sur la MATIERE SEULE \u2014 et surtout pas sur `mat + grow`.\n  // Mesure du 2026-09-03 : `smoothstep(0.30, 0.36, mat*0.55 + grow*0.62)` saturait\n  // des que grow depassait 0.58, c'est-a-dire partout des frost_lvl=1. Le seuil\n  // etait franchi par grow tout seul, la matiere n'entrait plus dans le resultat,\n  // et le curseur de grain etait mort. Les deux variables repondent a deux\n  // questions distinctes \u2014 \u00ab a quoi ressemble la glace \u00bb et \u00ab jusqu'ou a-t-elle\n  // pousse \u00bb \u2014 elles se MULTIPLIENT, elles ne s'additionnent pas.\n  //\n  // Le seuil recule legerement quand grow monte : le bord de la zone givree reste\n  // maigre, le coeur devient dense. C'est ainsi que la croute s'amincit en\n  // avancant vers le centre, au lieu d'avoir une epaisseur uniforme.\n  float thr   = mix(0.62, 0.34, grow);\n  float crust = smoothstep(thr, thr + 0.07, mat);\n  float amt   = clamp(crust * grow, 0.0, 1.0);\n\n  // -- la pente --\n  // Les deux octaves se combinent : les grosses facettes donnent l'orientation du\n  // cristal, les petites la rugosite qui fait scintiller.\n  vec2 nrm = c1.yz * (1.0 - c1.x * 2.2) + c2.yz * (0.55 - c2.x);\n  return vec3(amt, nrm * amt);\n}\n\n/* Compat : l'ancienne signature scalaire, la ou seule l'epaisseur compte. */\nfloat frostAmt(vec2 uv){ return frostField(uv).x; }\n\nvoid main(){\n  // fragment -> coordonnees viewBox de la card (400x180)\n  vec2 frag = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uVB;\n\n  // ecran -> UV du panneau, via l'inverse de l'homographie de la card\n  vec3 h = uInvH * vec3(frag, 1.0);\n  vec2 uv = h.xy / h.z;\n\n  // hors de la vitre : rien. Le cadre et la levre ne refletent pas comme le verre.\n  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) discard;\n\n  // \u2500\u2500 Geometrie de l'eclairement \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  // elevation reelle du soleil, reconstruite depuis alt = sin(elev)\n  float elev = asin(clamp(uSunAlt, -1.0, 1.0));       // radians\n  float tilt = radians(uTilt);\n\n  // Normale du panneau : incline de `tilt` autour de l'axe est-ouest, face au sud.\n  vec3 N = vec3(0.0, sin(tilt), cos(tilt));\n\n  // Direction du soleil. uSunX : 0=Est -> 1=Ouest, on le ramene en azimut relatif.\n  float az = (uSunX - 0.5) * PI;                       // -PI/2=Est .. +PI/2=Ouest\n  vec3 L = normalize(vec3(sin(az) * cos(elev), cos(elev) * cos(az), sin(elev)));\n\n  // Oeil : on regarde la card de face, legerement en plongee (la perspective du SVG).\n  vec3 V = normalize(vec3(0.0, -0.45, 1.0));\n\n  // Reflet speculaire Blinn-Phong : le lobe suit l'angle d'incidence, donc la\n  // bande se deplace VRAIMENT quand le soleil bouge. C'est tout l'interet.\n  vec3  H = normalize(L + V);\n  float ndh = max(dot(N, H), 0.0);\n  float ndl = max(dot(N, L), 0.0);\n\n  // uGloss petit = exposant grand = miroir dur ; grand = lobe large et doux.\n  // Plage 4..48 et NON 6..220 : le panneau est plan, donc ndh est presque constant\n  // sur toute la vitre (~0.94 a midi). Avec un exposant de 134, 0.94^134 = 2e-4 :\n  // le lobe est mathematiquement mort et on ne voit plus que les termes additifs.\n  // Mesure au banc le 2026-09-03 avant correction : spec = 0.000182 a midi, 0.0 ailleurs.\n  float shin = mix(48.0, 4.0, clamp(uGloss, 0.0, 1.0));\n  // renormalise par la valeur au zenith : le lobe garde son CONTRASTE sans\n  // dependre de l'exposant choisi par le curseur.\n  float spec = pow(ndh, shin) / max(pow(0.985, shin), 1e-4);\n  spec = clamp(spec, 0.0, 1.6);\n\n  // \u2500\u2500 Position de la bande sur la vitre \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  // Le lobe seul donnerait un aplat uniforme (le panneau est plan : meme normale\n  // partout). La bande vient de la PARALLAXE : on decale le long de u selon\n  // l'azimut, et le long de v selon l'elevation. Soleil bas -> bande basse et\n  // etiree ; soleil haut -> tache haute et ramassee.\n  //\n  // uSunX vaut 0 a l'Est (az 90) et 1 a l'Ouest (az 270), mais le soleil utile\n  // ne balaie pas la vitre d'un bord a l'autre : on le recentre sur [0.14 .. 0.86],\n  // sinon le lever sort du panneau par la gauche (bandU 0.056) et le coucher par\n  // la droite (bandU 1.039) -> reflet invisible aux deux extremites de la journee.\n  float bandU = 0.5 + (clamp(uSunX, 0.0, 1.0) - 0.5) * 1.05;\n  float bandV = clamp(0.12 + 0.76 * (elev / (PI * 0.5)), 0.0, 1.0);\n\n  // Largeur de la bande. Le soleil rasant l'etire VERTICALEMENT (le reflet s'allonge\n  // sur la vitre) mais la RESSERRE horizontalement \u2014 c'est ce qui rend le suivi\n  // lisible : une bande large comme le panneau ne se voit plus bouger.\n  // Mesure au banc : avec wU constant, le deplacement tombait a 0.055 de la largeur.\n  float graze = 1.0 - clamp(elev / (PI * 0.5), 0.0, 1.0);   // 1 = rasant\n  float wU = mix(0.13, 0.34, uSpread) * (1.0 - graze * 0.30);\n  float wV = mix(0.10, 0.40, uSpread) * (1.0 + graze * 1.10);\n\n  // micro-ondulation : le verre n'est pas parfaitement plan. Lent (0.05 Hz).\n  float wob = (vnoise(uv * vec2(3.5, 2.2) + uTime * 0.05) - 0.5) * uShimmer * 0.09;\n\n  // \u2500\u2500 Meteo : la nappe d'eau et le givre DEFORMENT la surface \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  // Difference d'architecture assumee avec la meteo : le canvas solaire est en\n  // z-index 2, AU-DESSUS du panneau (cf README) \u2014 il ne peut donc pas lire ce\n  // qu'il recouvre, pas de texture2D(uSharp) possible ici. La goutte ne se rend\n  // donc pas par refraction du fond mais par sa NORMALE : elle devie la bande de\n  // reflet et accroche un eclat du soleil REEL. Sur une vitre en plein soleil\n  // c'est d'ailleurs la lecture juste \u2014 une goutte se voit a ses reflets.\n  vec2  warp  = vec2(0.0);\n  float wet   = 0.0;\n  float glint = 0.0;\n  float ice   = 0.0;\n\n  if (uRainLvl > 0.001){\n    // Pas cale sur la TAILLE de la goutte (~0.004 UV de rayon) : a 0.0035 il\n    // enjambait la goutte entiere et la normale sortait plate. Et c'est bien un\n    // pas en UV PANNEAU, pas 1.5/uRes.y qui est un pas en pixels ECRAN.\n    float e  = 0.0012;                    // (et non 1.5/uRes.y,\n                                          // qui est un pas en pixels ECRAN)\n    float h0 = rainH(uv);\n    vec2  rn = vec2(h0 - rainH(uv + vec2(e, 0.0)),\n                    h0 - rainH(uv + vec2(0.0, e))) * 40.0;\n    warp += rn * uRainWarp * 0.035;\n    wet   = clamp(h0 * 2.2, 0.0, 1.0);\n    // l'eclat vient du SOLEIL REEL (L), pas d'une lumiere fixe comme en meteo.\n    vec3 Nd = normalize(vec3(rn * 0.5, 1.0));\n    glint = pow(max(dot(Nd, normalize(L + V)), 0.0), 26.0) * uRainSpec * wet;\n  }\n\n  vec2 iceN = vec2(0.0);\n  if (uFrostLvl > 0.001){\n    // frostField rend l'epaisseur ET la pente d'un coup : plus besoin des trois\n    // evaluations de la difference finie (l'ancien code appelait frostAmt 3 fois\n    // par fragment, et sur un Voronoi a 9 cellules ca coutait cher pour rien).\n    vec3 F = frostField(uv);\n    ice   = F.x;\n    iceN  = F.yz;\n    warp += iceN * uFrostStr * 0.022;\n  }\n\n  float du = (uv.x - bandU + wob + warp.x) / wU;\n  float dv = (uv.y - bandV + wob * 0.6 + warp.y) / wV;\n  float band = exp(-(du * du + dv * dv));\n\n  // -- DIFFUSION par le givre -------------------------------------------------\n  // Le verre depoli ne DEVIE pas la lumiere, il l'ETALE : chaque point recoit un\n  // petit voisinage de directions au lieu d'une seule. C'est ce qui transforme un\n  // lampadaire ponctuel en halo laiteux sur une vitre givree.\n  //\n  // Note pour un futur passage : j'avais d'abord ecarte la diffusion en croyant\n  // que le canvas (z-index:2, au-dessus du panneau) ne pouvait pas lire ce qu'il\n  // recouvre. Vrai pour le DOM, hors sujet ici : ce que le givre recouvre, c'est\n  // cette bande-la, calculee deux lignes plus haut. On la re-evalue simplement\n  // plus loin, on ne lit rien.\n  if (ice > 0.002 && uFrostDiff > 0.001){\n    // Le decalage suit la PENTE de la glace : la lumiere bave dans le sens des\n    // veines. Un decalage isotrope donnerait un flou gaussien banal.\n    vec2 sp = normalize(iceN + vec2(1e-4, 1e-4)) * uFrostDiff * 0.055;\n    vec2 pp = vec2(-sp.y, sp.x);            // perpendiculaire : etale en 2D\n    float acc = band;\n    for (int k = 0; k < 3; k++){\n      float w = (float(k) + 1.0) / 3.0;\n      // quatre directions par anneau : la lumiere s'etale des deux cotes de la\n      // veine, pas seulement vers l'aval.\n      vec2 o1 = sp * w, o2 = pp * w * 0.7;\n      float a = (uv.x - bandU + wob + warp.x + o1.x) / wU;\n      float b = (uv.y - bandV + wob * 0.6 + warp.y + o1.y) / wV;\n      float c = (uv.x - bandU + wob + warp.x - o2.x) / wU;\n      float d = (uv.y - bandV + wob * 0.6 + warp.y - o2.y) / wV;\n      acc += exp(-(a * a + b * b)) + exp(-(c * c + d * d));\n    }\n    // /7 = 1 echantillon central + 6 satellites. On melange vers la version\n    // diffusee proportionnellement a l'epaisseur de glace : verre nu = net,\n    // croute epaisse = halo.\n    band = mix(band, acc / 7.0, clamp(ice * 1.35, 0.0, 1.0));\n  }\n\n  // \u2500\u2500 Fresnel : le bord arriere (v grand, plus rasant a l'oeil) reflete plus \u2500\n  float fres = pow(clamp(uv.y, 0.0, 1.0), 2.0) * uFresnel;\n\n  // \u2500\u2500 Composition \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  // ATTENTION \u2014 mesure au banc du 2026-09-03 (check_sliders.py) : sur un panneau\n  // PLAN, ndh ne depend que de la position du soleil, pas du fragment. A 16.8 deg\n  // d'elevation ndh vaut 0.58 et 0.58^29.5 = 1e-7 : `spec` est nul des que le\n  // soleil descend. Un `graz` qui ne multiplie QUE spec pilote donc un zero, et le\n  // curseur \"Gain rasant\" ne fait rien exactement dans le regime qu'il nomme.\n  // Le gain rasant doit porter sur la BANDE, qui elle vit a toutes les hauteurs.\n  float graz = 1.0 + graze * uGrazing * 2.0;\n  float lit  = spec * band * graz + band * (0.10 + graze * uGrazing * 0.30)\n             + fres * band * 0.7 * graz;\n\n  // le panneau qui produit a le verre plus \"vivant\" \u2014 lecture d'etat, pas deco\n  lit *= mix(0.72, 1.28, clamp(uPower, 0.0, 1.0));\n\n  // Extinction quand le soleil passe derriere le plan du panneau. On NE multiplie\n  // PAS par ndl brut : a l'aube et au couchant ndl tombe a 0 alors que c'est\n  // precisement le moment ou le verre renvoie le plus (incidence rasante). On garde\n  // donc un plancher, et on ne coupe vraiment que sous l'horizon du panneau.\n  lit *= smoothstep(-0.06, 0.22, ndl) * 0.82 + 0.18 * step(0.0, ndl);\n  lit *= uInten;\n\n  // nuit : le speculaire tombe a zero. Rampe, jamais un pop.\n  lit *= (1.0 - clamp(uNight, 0.0, 1.0));\n\n  // \u2500\u2500 Apport meteo a la luminance \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  // Les gouttes et la glace restent des elements de VERRE : ils ne s'allument\n  // que si la vitre recoit de la lumiere. On les module donc par le jour et par\n  // l'incidence, sinon on obtient des gouttes phosphorescentes en pleine nuit.\n  float daylight = (1.0 - clamp(uNight, 0.0, 1.0)) * smoothstep(-0.06, 0.25, ndl);\n\n  // l'eau assombrit legerement la vitre entre les eclats (elle absorbe), puis\n  // rend beaucoup plus fort sur le dos de la goutte : c'est ce contraste qui la\n  // fait lire comme un volume et non comme une tache claire.\n  lit *= mix(1.0, 0.82, wet * uRainLvl);\n  lit += glint * daylight * 0.9;\n\n  // la glace est un DEPOT : elle diffuse la lumiere au lieu de la reflechir.\n  float icy  = ice * daylight;\n  // L'eclat vient de la PENTE de la facette face au soleil reel, pas de la norme\n  // du warp (qui melangeait la contribution des gouttes de pluie a celle du givre\n  // \u2014 deux reliefs sans rapport, et l'eclat de la glace suivait donc la pluie).\n  vec3  iN   = normalize(vec3(iceN * 3.2, 1.0));\n  float isp  = pow(max(dot(iN, normalize(L + V)), 0.0), 14.0) * uFrostSpec * icy;\n  // Les paillettes tirent leur seuil d'un bruit BLANC, pas d'un fbm : mesure du\n  // 2026-09-03, `step(0.965, fbm2(...))` etait INERTE (amplitude relative 0.004).\n  // Un fbm a 4 octaves concentre ses valeurs autour de 0.5 \u2014 il n'atteint\n  // pratiquement jamais 0.965, donc aucune paillette n'existait, a aucun reglage.\n  // hash() est uniforme sur [0,1] : le seuil se franchit pour de vrai.\n  //\n  // STATIQUE, volontairement (Chris, 2026-09-03 : \u00ab pas besoin d'animer le givre \u00bb).\n  // Le tirage a d'abord dependu de `floor(uTime*3.0)` : les eclats se re-tiraient\n  // 3 fois par seconde. C'est faux physiquement \u2014 sur une vitre givree le\n  // scintillement vient de l'observateur qui se deplace, pas de la glace, et un\n  // panneau dans un dashboard ne bouge pas. C'etait surtout un clignotement\n  // permanent sur un ecran qui reste allume. Le givre est un DEPOT : il se pose,\n  // il reste. Ne pas re-introduire uTime ici.\n  vec2  spkC = floor(uv * vec2(PANEL_AR, 1.0) * uFrostTile * 6.0);\n  float spkR = hash(spkC * 1.37 + 11.7);\n  float spk  = step(0.94, spkR) * uFrostSpark * icy;\n  lit += icy * 0.22 + isp * 0.5 + spk;\n\n  if (lit <= 0.0015) discard;\n\n  vec3 col = mix(uColCold, uColGlow, clamp(uTint, 0.0, 1.0));\n  // le coeur du lobe blanchit : c'est ce qui fait lire \"lumiere\" et non \"calque colore\"\n  col = mix(col, vec3(1.0), clamp(lit * 0.55, 0.0, 0.75));\n\n  // la glace tire vers le blanc-bleute, l'eau vers le blanc pur des speculaires\n  col = mix(col, vec3(0.80, 0.90, 1.0), clamp(icy * 0.55, 0.0, 0.6));\n  col += vec3(0.85, 0.93, 1.0) * glint * daylight;\n\n  gl_FragColor = vec4(col * lit, clamp(lit, 0.0, 1.0));\n}\n";
+const GL_FRAG = "precision highp float;\n\nuniform vec2  uRes;        // taille du canvas en pixels device\nuniform mat3  uInvH;       // ecran(viewBox) -> UV du panneau\nuniform vec2  uVB;         // echelle viewBox -> pixels  (400x180 -> canvas)\nuniform float uTime;\n\n// --- soleil (convention _skySun() de weather-neon-card-webgl) ---\nuniform float uSunAlt;     // sin(elevation)  : <0 = sous l'horizon\nuniform float uSunX;       // (azimut-90)/180 : 0=Est 0.5=Sud 1=Ouest\nuniform float uNight;      // 0=jour 1=nuit \u2014 rampe douce, jamais un pop\n\n// --- reglages exposes au banc ---\nuniform float uTilt;       // inclinaison du panneau (degres) \u2014 0=a plat, 90=vertical\nuniform float uGloss;      // largeur du lobe speculaire : petit=miroir dur, grand=diffus\nuniform float uInten;      // intensite du reflet\nuniform float uGrazing;    // gain supplementaire quand le soleil rase la surface\nuniform float uSpread;     // etalement de la bande le long du panneau\nuniform float uPower;      // 0..1 charge instantanee \u2014 module la vivacite du verre\nuniform float uShimmer;    // micro-ondulation du verre (lent)\nuniform vec3  uColCold;    // teinte froide (color_cold)\nuniform vec3  uColGlow;    // teinte neon (color_neon_glow)\nuniform float uTint;       // 0=cold 1=neon : melange des deux\nuniform float uFresnel;    // remontee du reflet sur le bord arriere (rasant a l'oeil)\n\n// --- meteo, transpose de weather-neon-card-webgl/fx_shader.py ---------------\n// TOUT est calcule en UV PANNEAU, jamais en espace ecran : les gouttes glissent\n// donc dans la perspective du panneau incline, gratuitement (cf uInvH). C'est\n// exactement ce que la version meteo NE peut pas faire : elle travaille sur vUv.\nuniform float uRainLvl;    // 0=sec 1=averse \u2014 pilote par l'etat meteo\nuniform float uRainSize;   // taille des gouttes\nuniform float uRainDens;   // densite (proportion de cellules occupees)\nuniform float uRainSpec;   // eclat speculaire sur la goutte\nuniform float uRainSlide;  // vitesse de glissement le long du panneau\nuniform float uRainWarp;\nuniform float uRainFilm;   // deviation du reflet par la lentille de la goutte\nuniform float uFrostLvl;   // 0=rien 1=givre complet\nuniform float uFrostTile;  // finesse des dendrites\nuniform float uFrostStr;   // relief (deviation du reflet)\nuniform float uFrostSpec;  // eclat des facettes\nuniform float uFrostSpark; // paillettes\nuniform float uFrostCoins; // 0=uniforme 1=le givre mord depuis les bords\nuniform float uFrostDiff;  // diffusion : la glace etale le reflet en halo\n\nconst float PANEL_AR = 2.29;   // aspect du panneau en viewBox (~320 large / 140 haut).\n                               // /!\\ la version meteo cable uRes.x/uRes.y : c'est\n                               // l'aspect de l'ECRAN. Ici le repere est le PANNEAU,\n                               // sinon les gouttes sont des ellipses arbitraires.\n\nconst float PI = 3.14159265;\n\n/* bruit de valeur, pour la micro-irregularite du verre (pas du grain : de l'onde) */\nfloat hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\nfloat vnoise(vec2 p){\n  vec2 i = floor(p), f = fract(p);\n  vec2 u = f * f * (3.0 - 2.0 * f);\n  return mix(mix(hash(i), hash(i + vec2(1,0)), u.x),\n             mix(hash(i + vec2(0,1)), hash(i + vec2(1,1)), u.x), u.y);\n}\nfloat fbm2(vec2 p){\n  float v = 0.0, a = 0.5;\n  for (int i = 0; i < 4; i++){ v += a * vnoise(p); p *= 2.02; a *= 0.5; }\n  return v;\n}\n\n/* -- Cellules de glace ------------------------------------------------------\n   La brique qui manquait au givre v1. Un fbm fait des NAPPES : douces, rondes,\n   sans bord \u2014 d'ou les \"taches nuageuses\". La glace pousse en CRISTAUX : des\n   facettes anguleuses separees par des veines nettes. C'est un Voronoi, pas un\n   bruit fractal, et aucun reglage d'un fbm ne le rattrape.\n\n   Rend deux choses d'un coup, parce que les deux viennent du meme calcul :\n     .x  = distance au BORD de cellule (F2-F1). Proche de 0 sur une veine, grand\n           au coeur d'un cristal. C'est le dessin de la croute.\n     .yz = direction centre de cellule -> fragment. C'est la pente de la facette,\n           donc de quoi l'eclairer : sur la photo chaque cristal renvoie la\n           lumiere differemment selon son orientation. */\nvec3 iceCell(vec2 p){\n  vec2 n = floor(p), f = fract(p);\n  float f1 = 8.0, f2 = 8.0;\n  vec2  dir = vec2(0.0);\n  for (int j = -1; j <= 1; j++){\n    for (int i = -1; i <= 1; i++){\n      vec2 g = vec2(float(i), float(j));\n      // un point par cellule, place au hasard DANS la cellule : c'est ce desordre\n      // qui donne des cristaux de tailles inegales, comme du vrai givre.\n      vec2 o = vec2(hash(n + g), hash(n + g + 17.3));\n      vec2 r = g + o - f;\n      float d = dot(r, r);                   // au carre : pas de sqrt dans la boucle\n      if (d < f1){ f2 = f1; f1 = d; dir = r; }\n      else if (d < f2){ f2 = d; }\n    }\n  }\n  // F2-F1 en distances REELLES : c'est la largeur de la veine. Au carre, elle\n  // s'epaissirait au hasard selon la taille du cristal voisin.\n  return vec3(sqrt(f2) - sqrt(f1), normalize(dir + 1e-5));\n}\n\n/* \u2500\u2500 Pluie : hauteur de la nappe d'eau, en UV PANNEAU \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n   Transpose de rainH() de fx_shader.py (meteo). Deux differences, toutes deux\n   necessaires \u2014 pas cosmetiques :\n     1. l'aspect vient du PANNEAU (PANEL_AR), pas du canvas. Sinon la goutte est\n        une ellipse dont l'etirement suit la taille de la card a l'ecran.\n     2. v croit vers le HAUT du panneau (PANEL_OF : v=0 -> y=160 bas, v=1 -> y=20\n        haut). Une goutte qui descend doit donc voir v DECROITRE, ce que produit\n        deja `fract(r2 - t*...)`. Verifie sur l'homographie, pas suppose.\n   La perspective n'est pas simulee : elle est deja dans l'uv qu'on recoit. */\nfloat rainH(vec2 uv){\n  float t = uTime * uRainSlide;\n  float h = 0.0;\n  for (int L = 0; L < 2; L++){\n    // Echelle PANNEAU, pas echelle ecran : ~26 a 46 cellules sur la largeur du\n    // panneau. Une vitre fait ~1,7 m de large, donc la goutte vaut ~4 cm \u2014 la\n    // taille reelle d'une grosse goutte sur du verre. L'ancien mix(9,17) donnait\n    // des gouttes de ~15 cm : lisible, mais pas a l'echelle d'un panneau.\n    // Ancrage PIXELS : la grille est en echelle panneau, donc une goutte\n    // occupait une fraction CONSTANTE du panneau -- ~5 px au banc (720 de large)\n    // mais ~2 px sur la vraie card (355), soit invisible quel que soit le\n    // curseur. On reduit le nombre de cellules quand la card est plus etroite,\n    // pour que la goutte garde sa taille APPARENTE. 720 = largeur du banc ou\n    // les reglages ont ete valides ; borne basse pour ne pas finir avec trois\n    // gouttes geantes sur une card minuscule.\n    float pxk = clamp(uRes.x / 720.0, 0.55, 1.0);\n    float sc = mix(26.0, 46.0, float(L)) * pxk / max(0.35, uRainSize);\n    vec2 g  = vec2(uv.x * sc * PANEL_AR, uv.y * sc);\n    vec2 id = floor(g), f = fract(g) - 0.5;\n    float r1 = hash(id + float(L) * 17.0);\n    float r2 = hash(id + vec2(3.7, 9.1) + float(L) * 17.0);\n    if (r1 > 1.0 - uRainDens * uRainLvl){\n      float sp = 0.35 + r2 * 0.65;\n      float yy = fract(r2 - t * 0.16 * sp);          // decroit = glisse vers le bas\n      vec2  c  = vec2((r2 - 0.5) * 0.55, yy - 0.5);\n      // La goutte n'occupe qu'une petite part de sa cellule : resserrer la grille\n      // sans reduire ce rayon aurait juste donne PLUS de grosses gouttes.\n      float rad = 0.075 + r1 * 0.085;\n      h += smoothstep(rad, 0.0, length((f - c) * vec2(1.0, 0.9))) * (0.65 + 0.35 * r1);\n      // la trainee que la goutte laisse DERRIERE elle, donc au-dessus (v croit en haut)\n      float above = clamp((f.y - c.y) / 0.55, 0.0, 1.0);\n      h += smoothstep(rad * 0.40, 0.0, abs(f.x - c.x)) * above * 0.35;\n    }\n  }\n  return h;\n}\n\n/* \u2500\u2500 Givre : dendrites depuis les 4 COINS du panneau \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n   Chris : \u00ab c'est plus un effet sympa qui vient des 4 coins du panneau \u00bb.\n   La meteo construit une mixmap en canvas 2D (_fxFrostMap) et l'echantillonne ;\n   ici il n'y a AUCUNE texture \u2014 le givre est donc analytique, et les coins\n   viennent d'un champ de distance aux quatre angles de la vitre. */\n/* Densite de givre + pente de la glace, en UV PANNEAU.\n   .x = epaisseur du depot [0,1] ; .yz = pente de la surface glacee.\n\n   Trois choses font la difference avec la v1 (diagnostiquees, pas supposees) :\n\n   1. CELLULES, pas fbm. Deux octaves : les grosses portent la forme des cristaux,\n      les petites le grain. Un fbm seul ne fait que des nuages.\n   2. SEUIL DUR. La v1 seuillait sur 0.36 de plage (smoothstep(0.42,0.78)) : sur un\n      fbm centre en 0.5, ca ne coupe rien, ca degrade. Ici la transition tient sur\n      ~0.06 : la croute a un bord franc, comme sur une vraie vitre.\n   3. Le givre mord depuis les BORDS vers le centre, avec un front IRREGULIER. Un\n      front lisse ferait une vignette photo ; c'est le bruit ajoute a la marge qui\n      donne la frontiere dechiquetee du vrai givre. */\nvec3 frostField(vec2 uv){\n  vec2 p = vec2(uv.x * PANEL_AR, uv.y);\n\n  // -- ou le givre a-t-il gagne ? --\n  // Marge au bord le plus proche : 0 au bord, 0.5 au centre. Le givre part des\n  // bords (les montants du cadre, la ou le froid conduit) et progresse vers le\n  // milieu \u2014 c'est ce que montre la photo : clairiere centrale, croute autour.\n  vec2  q     = abs(uv - 0.5);\n  float edge  = 0.5 - max(q.x, q.y);\n  // Front dechiquete : sans ce bruit la limite est un ovale regulier, qui lit\n  // comme une vignette de retouche et pas comme du givre.\n  float ragged = fbm2(p * 5.5 + 31.0) - 0.5;\n  float front  = edge + ragged * 0.20;\n  // uFrostLvl pousse le front : a 1 le givre atteint le centre, a 0.3 il reste une\n  // couronne au bord. C'est la variable que la meteo pilotera en production.\n  float reach  = mix(-0.05, 0.62, uFrostLvl);\n  float grow   = smoothstep(reach, reach - 0.17, front);\n  // curseur \"depuis les bords\" : a 0, couverture uniforme.\n  grow = mix(uFrostLvl, grow, uFrostCoins);\n\n  // -- la matiere --\n  // Octave 1 : les cristaux. uFrostTile monte bien plus haut qu'en v1 (le grain de\n  // la photo est millimetrique ; a 11 un \"cristal\" faisait 5 cm de panneau).\n  vec3  c1 = iceCell(p * uFrostTile);\n  // Octave 2 : le grain DANS les cristaux. Decalee et de rapport non entier (2.7),\n  // sinon les deux grilles s'alignent et on voit un damier.\n  vec3  c2 = iceCell(p * uFrostTile * 2.7 + 43.1);\n\n  // Les veines (F2-F1 petit) sont les JOINTS entre cristaux : c'est la ou la glace\n  // est la plus epaisse et la plus blanche sur la photo. On inverse donc.\n  float vein = 1.0 - smoothstep(0.0, 0.16, c1.x);\n  float fine = 1.0 - smoothstep(0.0, 0.22, c2.x);\n  float mat  = clamp(vein * 0.72 + fine * 0.46, 0.0, 1.0);\n\n  // Seuil DUR sur la MATIERE SEULE \u2014 et surtout pas sur `mat + grow`.\n  // Mesure du 2026-09-03 : `smoothstep(0.30, 0.36, mat*0.55 + grow*0.62)` saturait\n  // des que grow depassait 0.58, c'est-a-dire partout des frost_lvl=1. Le seuil\n  // etait franchi par grow tout seul, la matiere n'entrait plus dans le resultat,\n  // et le curseur de grain etait mort. Les deux variables repondent a deux\n  // questions distinctes \u2014 \u00ab a quoi ressemble la glace \u00bb et \u00ab jusqu'ou a-t-elle\n  // pousse \u00bb \u2014 elles se MULTIPLIENT, elles ne s'additionnent pas.\n  //\n  // Le seuil recule legerement quand grow monte : le bord de la zone givree reste\n  // maigre, le coeur devient dense. C'est ainsi que la croute s'amincit en\n  // avancant vers le centre, au lieu d'avoir une epaisseur uniforme.\n  float thr   = mix(0.62, 0.34, grow);\n  float crust = smoothstep(thr, thr + 0.07, mat);\n  // 2026-09-04 \u2014 `grow` entrait DEUX fois : dans le seuil `thr` ci-dessus, et ici en\n  // facteur direct. Le second usage etait un variateur lineaire : loin des coins il\n  // rabotait la croute vers zero, donc seuls les pics de matiere survivaient \u2014 c'est\n  // exactement le \u00ab ciel etoile \u00bb que Chris a diagnostique. Mesure : le champ sortait\n  // a 0.165 de moyenne, trop bas pour que le modele de densite en aval ait la moindre\n  // dynamique (balayage frost_diff : p90 115.0 -> 114.7, curseur mort).\n  //\n  // `grow` repond a \u00ab jusqu'ou la glace est-elle arrivee \u00bb : c'est une frontiere, pas\n  // une intensite. Donc une PORTE, pas une rampe. Derriere le front, la croute garde\n  // l'epaisseur que lui donne la matiere ; le degrade reste porte par `thr`, qui\n  // amincit deja le bord de la zone.\n  //\n  // Le smoothstep demarre a 0.0 : a frost_lvl=0 (le defaut deploye) `grow` vaut 0,\n  // gate vaut 0, amt vaut 0 \u2014 le cas sec reste strictement intact. Verifie a la sonde.\n  float gate  = smoothstep(0.0, 0.12, grow);\n  float amt   = clamp(crust * gate, 0.0, 1.0);\n\n  // -- la pente --\n  // Les deux octaves se combinent : les grosses facettes donnent l'orientation du\n  // cristal, les petites la rugosite qui fait scintiller.\n  vec2 nrm = c1.yz * (1.0 - c1.x * 2.2) + c2.yz * (0.55 - c2.x);\n  return vec3(amt, nrm * amt);\n}\n\n/* Compat : l'ancienne signature scalaire, la ou seule l'epaisseur compte. */\nfloat frostAmt(vec2 uv){ return frostField(uv).x; }\n\nvoid main(){\n  // fragment -> coordonnees viewBox de la card (400x180)\n  vec2 frag = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uVB;\n\n  // ecran -> UV du panneau, via l'inverse de l'homographie de la card\n  vec3 h = uInvH * vec3(frag, 1.0);\n  vec2 uv = h.xy / h.z;\n\n  // hors de la vitre : rien. Le cadre et la levre ne refletent pas comme le verre.\n  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) discard;\n\n  // \u2500\u2500 Geometrie de l'eclairement \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  // elevation reelle du soleil, reconstruite depuis alt = sin(elev)\n  float elev = asin(clamp(uSunAlt, -1.0, 1.0));       // radians\n  float tilt = radians(uTilt);\n\n  // Normale du panneau : incline de `tilt` autour de l'axe est-ouest, face au sud.\n  vec3 N = vec3(0.0, sin(tilt), cos(tilt));\n\n  // Direction du soleil. uSunX : 0=Est -> 1=Ouest, on le ramene en azimut relatif.\n  float az = (uSunX - 0.5) * PI;                       // -PI/2=Est .. +PI/2=Ouest\n  vec3 L = normalize(vec3(sin(az) * cos(elev), cos(elev) * cos(az), sin(elev)));\n\n  // Oeil : on regarde la card de face, legerement en plongee (la perspective du SVG).\n  vec3 V = normalize(vec3(0.0, -0.45, 1.0));\n\n  // Reflet speculaire Blinn-Phong : le lobe suit l'angle d'incidence, donc la\n  // bande se deplace VRAIMENT quand le soleil bouge. C'est tout l'interet.\n  vec3  H = normalize(L + V);\n  float ndh = max(dot(N, H), 0.0);\n  float ndl = max(dot(N, L), 0.0);\n\n  // uGloss petit = exposant grand = miroir dur ; grand = lobe large et doux.\n  // Plage 4..48 et NON 6..220 : le panneau est plan, donc ndh est presque constant\n  // sur toute la vitre (~0.94 a midi). Avec un exposant de 134, 0.94^134 = 2e-4 :\n  // le lobe est mathematiquement mort et on ne voit plus que les termes additifs.\n  // Mesure au banc le 2026-09-03 avant correction : spec = 0.000182 a midi, 0.0 ailleurs.\n  float shin = mix(48.0, 4.0, clamp(uGloss, 0.0, 1.0));\n  // renormalise par la valeur au zenith : le lobe garde son CONTRASTE sans\n  // dependre de l'exposant choisi par le curseur.\n  float spec = pow(ndh, shin) / max(pow(0.985, shin), 1e-4);\n  spec = clamp(spec, 0.0, 1.6);\n\n  // \u2500\u2500 Position de la bande sur la vitre \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  // Le lobe seul donnerait un aplat uniforme (le panneau est plan : meme normale\n  // partout). La bande vient de la PARALLAXE : on decale le long de u selon\n  // l'azimut, et le long de v selon l'elevation. Soleil bas -> bande basse et\n  // etiree ; soleil haut -> tache haute et ramassee.\n  //\n  // uSunX vaut 0 a l'Est (az 90) et 1 a l'Ouest (az 270), mais le soleil utile\n  // ne balaie pas la vitre d'un bord a l'autre : on le recentre sur [0.14 .. 0.86],\n  // sinon le lever sort du panneau par la gauche (bandU 0.056) et le coucher par\n  // la droite (bandU 1.039) -> reflet invisible aux deux extremites de la journee.\n  float bandU = 0.5 + (clamp(uSunX, 0.0, 1.0) - 0.5) * 1.05;\n  float bandV = clamp(0.12 + 0.76 * (elev / (PI * 0.5)), 0.0, 1.0);\n\n  // Largeur de la bande. Le soleil rasant l'etire VERTICALEMENT (le reflet s'allonge\n  // sur la vitre) mais la RESSERRE horizontalement \u2014 c'est ce qui rend le suivi\n  // lisible : une bande large comme le panneau ne se voit plus bouger.\n  // Mesure au banc : avec wU constant, le deplacement tombait a 0.055 de la largeur.\n  float graze = 1.0 - clamp(elev / (PI * 0.5), 0.0, 1.0);   // 1 = rasant\n  float wU = mix(0.13, 0.34, uSpread) * (1.0 - graze * 0.30);\n  float wV = mix(0.10, 0.40, uSpread) * (1.0 + graze * 1.10);\n\n  // micro-ondulation : le verre n'est pas parfaitement plan. Lent (0.05 Hz).\n  float wob = (vnoise(uv * vec2(3.5, 2.2) + uTime * 0.05) - 0.5) * uShimmer * 0.09;\n\n  // \u2500\u2500 Meteo : la nappe d'eau et le givre DEFORMENT la surface \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  // Difference d'architecture assumee avec la meteo : le canvas solaire est en\n  // z-index 2, AU-DESSUS du panneau (cf README) \u2014 il ne peut donc pas lire ce\n  // qu'il recouvre, pas de texture2D(uSharp) possible ici. La goutte ne se rend\n  // donc pas par refraction du fond mais par sa NORMALE : elle devie la bande de\n  // reflet et accroche un eclat du soleil REEL. Sur une vitre en plein soleil\n  // c'est d'ailleurs la lecture juste \u2014 une goutte se voit a ses reflets.\n  vec2  warp  = vec2(0.0);\n  float wet   = 0.0;\n  float glint = 0.0;\n  float ice   = 0.0;\n  // `rn` (pente de la goutte) est hissee ici, au meme niveau que `wet` et\n  // `glint` : le bloc RELIEF la relit bien plus bas, hors du if(uRainLvl).\n  // Laissee locale au if, elle donnait un shader qui ne compile pas -> pas de\n  // contexte GL -> sonde muette sur les SIX temoins, `sec` compris. Un temoin\n  // non concerne qui casse, c'est une erreur globale, pas une regression locale.\n  vec2  rn    = vec2(0.0);\n\n  // Lumiere qui eclaire la METEO (\u2260 celle qui eclaire le reflet solaire).\n  // De jour c'est le soleil ; de nuit c'est une source fixe haut-avant --\n  // l'eclairage ambiant, la card elle-meme etant un objet lumineux. Sans ce\n  // melange, `dot(Nd, L+V)` devient negatif des que le soleil passe sous le\n  // panneau, l'exposant 26 ecrase le reste, et gouttes comme paillettes\n  // disparaissent completement (Chris, 2026-09-04). Une goutte d'eau sur une\n  // vitre ne s'eteint pas parce que le soleil s'est couche.\n  vec3 Lamb = normalize(vec3(-0.25, 0.65, 0.72));\n  vec3 Lw   = normalize(mix(L, Lamb, clamp(uNight, 0.0, 1.0)));\n\n  if (uRainLvl > 0.001){\n    // Pas cale sur la TAILLE de la goutte (~0.004 UV de rayon) : a 0.0035 il\n    // enjambait la goutte entiere et la normale sortait plate. Et c'est bien un\n    // pas en UV PANNEAU, pas 1.5/uRes.y qui est un pas en pixels ECRAN.\n    float e  = 0.0012;                    // (et non 1.5/uRes.y,\n                                          // qui est un pas en pixels ECRAN)\n    float h0 = rainH(uv);\n    rn = vec2(h0 - rainH(uv + vec2(e, 0.0)),\n              h0 - rainH(uv + vec2(0.0, e))) * 40.0;\n    warp += rn * uRainWarp * 0.035;\n    wet   = clamp(h0 * 2.2, 0.0, 1.0);\n    // L'eclat vient du soleil de jour, de l'ambiant la nuit (cf Lw plus haut).\n    // L'exposant baisse avec la nuit : un lampadaire est une source LARGE, son\n    // reflet sur une goutte est un point plus etale et plus doux qu'un reflet\n    // solaire. Garder 26 la nuit donnerait des eclats ponctuels invisibles.\n    vec3  Nd  = normalize(vec3(rn * 0.5, 1.0));\n    float sh  = mix(26.0, 9.0, clamp(uNight, 0.0, 1.0));\n    glint = pow(max(dot(Nd, normalize(Lw + V)), 0.0), sh) * uRainSpec * wet;\n  }\n\n  vec2 iceN = vec2(0.0);\n  if (uFrostLvl > 0.001){\n    // frostField rend l'epaisseur ET la pente d'un coup : plus besoin des trois\n    // evaluations de la difference finie (l'ancien code appelait frostAmt 3 fois\n    // par fragment, et sur un Voronoi a 9 cellules ca coutait cher pour rien).\n    vec3 F = frostField(uv);\n    ice   = F.x;\n    iceN  = F.yz;\n    warp += iceN * uFrostStr * 0.022;\n  }\n\n  float du = (uv.x - bandU + wob + warp.x) / wU;\n  float dv = (uv.y - bandV + wob * 0.6 + warp.y) / wV;\n  float band = exp(-(du * du + dv * dv));\n\n  // -- DIFFUSION par le givre -------------------------------------------------\n  // Le verre depoli ne DEVIE pas la lumiere, il l'ETALE : chaque point recoit un\n  // petit voisinage de directions au lieu d'une seule. C'est ce qui transforme un\n  // lampadaire ponctuel en halo laiteux sur une vitre givree.\n  //\n  // Note pour un futur passage : j'avais d'abord ecarte la diffusion en croyant\n  // que le canvas (z-index:2, au-dessus du panneau) ne pouvait pas lire ce qu'il\n  // recouvre. Vrai pour le DOM, hors sujet ici : ce que le givre recouvre, c'est\n  // cette bande-la, calculee deux lignes plus haut. On la re-evalue simplement\n  // plus loin, on ne lit rien.\n  if (ice > 0.002 && uFrostDiff > 0.001){\n    // Le decalage suit la PENTE de la glace : la lumiere bave dans le sens des\n    // veines. Un decalage isotrope donnerait un flou gaussien banal.\n    vec2 sp = normalize(iceN + vec2(1e-4, 1e-4)) * uFrostDiff * 0.055;\n    vec2 pp = vec2(-sp.y, sp.x);            // perpendiculaire : etale en 2D\n    float acc = band;\n    for (int k = 0; k < 3; k++){\n      float w = (float(k) + 1.0) / 3.0;\n      // quatre directions par anneau : la lumiere s'etale des deux cotes de la\n      // veine, pas seulement vers l'aval.\n      vec2 o1 = sp * w, o2 = pp * w * 0.7;\n      float a = (uv.x - bandU + wob + warp.x + o1.x) / wU;\n      float b = (uv.y - bandV + wob * 0.6 + warp.y + o1.y) / wV;\n      float c = (uv.x - bandU + wob + warp.x - o2.x) / wU;\n      float d = (uv.y - bandV + wob * 0.6 + warp.y - o2.y) / wV;\n      acc += exp(-(a * a + b * b)) + exp(-(c * c + d * d));\n    }\n    // /7 = 1 echantillon central + 6 satellites. On melange vers la version\n    // diffusee proportionnellement a l'epaisseur de glace : verre nu = net,\n    // croute epaisse = halo.\n    band = mix(band, acc / 7.0, clamp(ice * 1.35, 0.0, 1.0));\n  }\n\n  // \u2500\u2500 Fresnel : le bord arriere (v grand, plus rasant a l'oeil) reflete plus \u2500\n  float fres = pow(clamp(uv.y, 0.0, 1.0), 2.0) * uFresnel;\n\n  // \u2500\u2500 Composition \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  // ATTENTION \u2014 mesure au banc du 2026-09-03 (check_sliders.py) : sur un panneau\n  // PLAN, ndh ne depend que de la position du soleil, pas du fragment. A 16.8 deg\n  // d'elevation ndh vaut 0.58 et 0.58^29.5 = 1e-7 : `spec` est nul des que le\n  // soleil descend. Un `graz` qui ne multiplie QUE spec pilote donc un zero, et le\n  // curseur \"Gain rasant\" ne fait rien exactement dans le regime qu'il nomme.\n  // Le gain rasant doit porter sur la BANDE, qui elle vit a toutes les hauteurs.\n  float graz = 1.0 + graze * uGrazing * 2.0;\n  // Le plancher `band * 0.10` posait un voile gris UNIFORME sur toute la vitre :\n  // il remontait le noir et ecrasait le contraste des gouttes. Chris (2026-09-04)\n  // : \u00ab la partie sombre du panneau gagnerait a etre vraiment noire/brillante \u00bb.\n  // On abaisse donc ce plancher et on reporte le gain sur le speculaire, qui est\n  // DIRECTIONNEL -- verre plus noir la ou rien ne se reflete, plus brillant la ou\n  // ca se reflete. C'est le comportement d'un vrai verre de panneau PV, et c'est\n  // ce qui fait ressortir les gouttes.\n  // Le plancher `band * 0.10` posait un voile gris UNIFORME sur la vitre : il\n  // remontait le noir et ecrasait le contraste des gouttes (Chris : \u00ab la partie\n  // sombre gagnerait a etre vraiment noire/brillante \u00bb). On abaisse ce plancher.\n  // En revanche PAS de gain sur le speculaire : un x1.22 essaye le 2026-09-04\n  // elargissait le halo au point de manger le chiffre de production. Le contraste\n  // doit venir du noir plus noir, pas du blanc plus blanc.\n  float lit  = spec * band * graz + band * (0.045 + graze * uGrazing * 0.30)\n             + fres * band * 0.85 * graz;\n\n  // le panneau qui produit a le verre plus \"vivant\" \u2014 lecture d'etat, pas deco\n  lit *= mix(0.72, 1.28, clamp(uPower, 0.0, 1.0));\n\n  // Extinction quand le soleil passe derriere le plan du panneau. On NE multiplie\n  // PAS par ndl brut : a l'aube et au couchant ndl tombe a 0 alors que c'est\n  // precisement le moment ou le verre renvoie le plus (incidence rasante). On garde\n  // donc un plancher, et on ne coupe vraiment que sous l'horizon du panneau.\n  lit *= smoothstep(-0.06, 0.22, ndl) * 0.82 + 0.18 * step(0.0, ndl);\n  lit *= uInten;\n\n  // Nuit : le speculaire s'effondre, mais PAS jusqu'a zero. Un facteur nul,\n  // combine au `discard` plus bas (lit <= 0.0015), jetait TOUS les fragments du\n  // calque verre des la nuit tombee : pluie et givre disparaissaient purement et\n  // simplement (Chris, 2026-09-04, constate sur planche avant/apres). Le plancher\n  // represente l'eclairage ambiant -- la card est elle-meme un objet lumineux, et\n  // une vitre mouillee sous un lampadaire se voit tres bien. Rampe, jamais un pop.\n  lit *= mix(0.16, 1.0, 1.0 - clamp(uNight, 0.0, 1.0));\n\n  // \u2500\u2500 Apport meteo a la luminance \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  // Les gouttes et la glace restent des elements de VERRE : ils ne s'allument\n  // que si la vitre recoit de la lumiere. On les module donc par le jour et par\n  // l'incidence, sinon on obtient des gouttes phosphorescentes en pleine nuit.\n  // ... mais PAS jusqu'a zero. La vitre n'est pas dans le noir : la card est\n  // elle-meme un objet lumineux (neon, halo), et une vitre mouillee sous un\n  // lampadaire se voit parfaitement. Un facteur nul faisait disparaitre pluie ET\n  // givre des la nuit tombee (Chris, 2026-09-04) alors que c'est le moment ou le\n  // panneau est le plus sombre -- donc le meilleur fond pour les voir.\n  // Le plancher represente l'eclairage artificiel, pas un reste de soleil.\n  // DECISION Chris, 2026-09-04 : \u00ab c'est pour faire joli c'est pas pour faire\n  // vrai \u00bb, puis \u00ab le soleil c'est un plus sympa mais base pas tout sur ca \u00bb.\n  // Donc : un SOCLE constant (1.0) qui garantit que pluie et givre rendent la\n  // nuit exactement comme en journee, plus un BONUS solaire par-dessus. Le\n  // soleil enrichit, il n'allume pas \u2014 retirer le soleil ne doit jamais faire\n  // disparaitre un effet, seulement le rendre un peu moins vif.\n  // Ne JAMAIS ramener le socle en dessous de 1.0 : c'est ce qui avait fait\n  // disparaitre la pluie des la nuit tombee.\n  float sunbonus = (1.0 - clamp(uNight, 0.0, 1.0)) * smoothstep(-0.06, 0.25, ndl);\n  float daylight = 1.0 + sunbonus * 0.35;\n\n  // l'eau assombrit legerement la vitre entre les eclats (elle absorbe), puis\n  // rend beaucoup plus fort sur le dos de la goutte : c'est ce contraste qui la\n  // fait lire comme un volume et non comme une tache claire.\n  lit *= mix(1.0, 0.82, wet * uRainLvl);\n\n  // \u2500\u2500 Canal METEO, hors de la chaine solaire \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  // Pluie et givre ne sont PAS des reflets du soleil : ils ne doivent pas subir\n  // l'extinction par ndl / uNight qui s'applique a `lit` juste au-dessus. On les\n  // accumule a part et on ne les reinjecte qu'avant le discard. Sans cette\n  // separation, les trois attenuateurs empiles les faisaient disparaitre des la\n  // nuit tombee (Chris, 2026-09-04 : \u00ab pluie et givre ne fonctionnent pas la nuit \u00bb).\n  // La goutte a le meme terme de PRESENCE que le givre (`icy * 0.22` plus bas) :\n  // elle se voit parce qu'elle est la, pas parce qu'elle reflete quelque chose.\n  // `glint` seul etait un pur speculaire a ~0.0006 \u2014 invisible des que le panneau\n  // sous elle n'etait plus eclaire. Les deux termes sont CONSTANTS : aucune\n  // ponderation par l'heure (cf `daylight` ci-dessus).\n  float wetlvl = wet * uRainLvl;\n  float meteo  = min(glint * daylight * 26.0, 0.85) + wetlvl * 0.20;\n\n  // -- Le RELIEF de la goutte ------------------------------------------------\n  // Chris, 2026-09-05 : \u00ab vaut mieux se focaliser sur le relief des goutes que\n  // la lumiere je pense \u00bb. La version precedente peignait un film de verre\n  // mouille sur TOUT le quad : mesure a 147 428 px couverts pour un panneau qui\n  // n'en fait que ~86 000, soit ~61 400 px de debordement hors panneau. Le film\n  // est supprime, pas repare : il n'avait aucun equivalent du durcissement qui\n  // borne naturellement le givre (mix(0.72,1.0,...) ne descend jamais sous 0.72).\n  //\n  // La goutte se rend donc comme la glace se rend : par sa NORMALE eclairee par\n  // une source RADIALE en espace ecran (cf `lsrc` du bloc de glace plus bas), qui\n  // donne le galbe rond. Cette source ne depend ni du soleil ni de uNight : c'est\n  // exactement ce que Chris demande depuis le debut - \u00ab tu te bases trop sur la\n  // lumiere du soleil, fais du joli \u00bb.\n  //\n  // `rn` est deja la pente de rainH, mise a l'echelle plus haut (pas e=0.0012\n  // cale sur le rayon de goutte, gain *40). On la REUTILISE : la redemander ici\n  // avec un pas different redonnerait la normale plate du bug du 2026-09-04.\n  // uRainFilm garde son nom d'uniforme (les 3 generateurs ne bougent pas) mais\n  // pilote desormais l'AMPLITUDE DU GALBE, pas un lustre.\n  vec3  Ndrop = normalize(vec3(rn * 2.6 * uRainFilm, 1.0));\n  vec3  ldrop = normalize(vec3(uv * 2.0 - 1.0, 1.0));\n  float dlit  = clamp(dot(Ndrop, ldrop), 0.0, 1.0);\n  // Le lisere : la ou la pente est forte, le bord de la goutte s'assombrit puis\n  // rattrape en creme. C'est ce contraste bord/centre qui fait lire un VOLUME,\n  // la ou un point uniformement blanc ne lisait qu'une etoile.\n  float rim   = clamp(length(rn) * 0.9 * uRainFilm, 0.0, 1.0);\n  // teinte verre mouille, relevee par le jour sans en dependre : de nuit la\n  // goutte garde son galbe (\u00ab la nuit tu mets du givre comme en journee \u00bb).\n  vec3  dropcol = mix(vec3(0.16, 0.21, 0.30),          // le creux, sombre\n                      vec3(0.72, 0.82, 0.96), dlit)    // le dos, clair\n                * mix(1.00, 1.20, sunbonus);\n  dropcol = mix(dropcol, vec3(0.86, 0.92, 1.0), rim * 0.45);\n\n  // Durcissement facon Riccardi, transpose du givre : `wet^3` efface la pellicule\n  // mince entre les gouttes et garde le corps de la goutte. C'est CE terme qui\n  // borne la couverture a l'eau reelle - exactement ce qui manquait au film.\n  float w3    = wet * wet * wet;\n  float kdrop = clamp(w3 * 2.4 * clamp(uRainLvl, 0.0, 1.0), 0.0, 0.92);\n  // la glace est un DEPOT : elle diffuse la lumiere au lieu de la reflechir.\n  float icy  = ice * daylight;\n  // L'eclat vient de la PENTE de la facette face au soleil reel, pas de la norme\n  // du warp (qui melangeait la contribution des gouttes de pluie a celle du givre\n  // \u2014 deux reliefs sans rapport, et l'eclat de la glace suivait donc la pluie).\n  vec3  iN   = normalize(vec3(iceN * 3.2, 1.0));\n  float isp  = pow(max(dot(iN, normalize(Lw + V)), 0.0),\n                   mix(14.0, 6.0, clamp(uNight, 0.0, 1.0))) * uFrostSpec * icy;\n  // Les paillettes tirent leur seuil d'un bruit BLANC, pas d'un fbm : mesure du\n  // 2026-09-03, `step(0.965, fbm2(...))` etait INERTE (amplitude relative 0.004).\n  // Un fbm a 4 octaves concentre ses valeurs autour de 0.5 \u2014 il n'atteint\n  // pratiquement jamais 0.965, donc aucune paillette n'existait, a aucun reglage.\n  // hash() est uniforme sur [0,1] : le seuil se franchit pour de vrai.\n  //\n  // STATIQUE, volontairement (Chris, 2026-09-03 : \u00ab pas besoin d'animer le givre \u00bb).\n  // Le tirage a d'abord dependu de `floor(uTime*3.0)` : les eclats se re-tiraient\n  // 3 fois par seconde. C'est faux physiquement \u2014 sur une vitre givree le\n  // scintillement vient de l'observateur qui se deplace, pas de la glace, et un\n  // panneau dans un dashboard ne bouge pas. C'etait surtout un clignotement\n  // permanent sur un ecran qui reste allume. Le givre est un DEPOT : il se pose,\n  // il reste. Ne pas re-introduire uTime ici.\n  vec2  spkC = floor(uv * vec2(PANEL_AR, 1.0) * uFrostTile * 6.0);\n  float spkR = hash(spkC * 1.37 + 11.7);\n  float spk  = step(0.94, spkR) * uFrostSpark * icy;\n  // Chris, 2026-09-04 : \u00ab quand ca givre le panneau est RECOUVERT (...) faut pas\n  // tout miser sur la brillance, les effets finaux ca ressemble a une\n  // constellation qui clignote \u00bb. Le diagnostic est dans les nombres : le depot\n  // valait `icy * 0.22` face a uFrostSpec=1.10 et uFrostSpark=0.60 \u2014 le brillant\n  // ecrasait la matiere d'un facteur 5, donc on ne voyait QUE les points brillants.\n  // Le givre est d'abord une COUCHE OPAQUE qui recouvre ; les facettes et les\n  // paillettes sont des accents POSES DESSUS, pas l'effet lui-meme.\n  // Ordre de grandeur a preserver : depot >> eclat > paillettes.\n  // Chris, 2026-09-04 : \u00ab c'est un ciel etoile pas du givre \u00bb, puis \u00ab l'effet\n  // frost de la card meteo tu l'as zappe ? \u00bb. Il avait raison sur les deux points,\n  // et le second explique le premier. Ecart ARCHITECTURAL avec la meteo :\n  //\n  //   meteo   : col = mix(col, thick, k);  <- REMPLACE la couleur par de la glace\n  //   solaire : lit += meteo;              <- AJOUTE de la lumiere\n  //\n  // Un canal purement additif ne peut produire que des points lumineux sur fond\n  // noir : c'est la definition d'un ciel etoile. Aucun reglage ne franchit cet\n  // ecart \u2014 balayage de frost_tile 18/28/40/70 le 2026-09-04 : luma 39.06 a 39.39,\n  // soit 0.8% d'ecart sur un facteur 4 de grain. Le grain n'etait pas le sujet.\n  //\n  // On garde ici les seuls accents (facettes + paillettes) ; la COUCHE, elle, est\n  // appliquee plus bas en substitution sur `col`, avec son propre alpha.\n  meteo += isp * 0.22 + spk * 0.35;\n\n  // Reinjection : `lit` porte desormais reflet + meteo. Le discard teste la\n  // somme, donc un fragment qui ne porte QUE de la pluie survit.\n  lit += meteo;\n\n  // Seuil abaisse : avec le plancher de nuit (C1), les gouttes vivent dans des\n  // valeurs de `lit` bien plus basses qu'en plein jour. A 0.0015 elles etaient\n  // jetees ici meme. On garde un discard (il evite de composer un calque vide sur\n  // toute la card, ce qui coute cher) mais assez bas pour ne pas censurer la nuit.\n  // Le discard doit tester la GLACE aussi, pas seulement la lumiere : un fragment\n  // couvert de givre sur un panneau eteint a lit~0 et serait jete ici meme.\n  float kcut = max(clamp(ice * 1.35, 0.0, 0.94), kdrop);\n  if (max(lit, kcut) <= 0.0002) discard;\n\n  vec3 col = mix(uColCold, uColGlow, clamp(uTint, 0.0, 1.0));\n  // le coeur du lobe blanchit : c'est ce qui fait lire \"lumiere\" et non \"calque colore\"\n  col = mix(col, vec3(1.0), clamp(lit * 0.55, 0.0, 0.75));\n\n  // la glace tire vers le blanc-bleute, l'eau vers le blanc pur des speculaires\n  // \u2500\u2500 LA COUCHE DE GLACE, transposee de fx_shader.py (FX_FROST) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  // Modele d'eclairage de Riccardi : la lumiere depend de la POSITION ECRAN,\n  // c'est elle qui donne son galbe rond a la plaque. Une direction fixe rend la\n  // surface plate \u2014 c'est exactement l'ecart que Chris voyait avec l'artifact.\n  vec3  lsrc  = normalize(vec3(uv * 2.0 - 1.0, 1.0));\n  float NdotL = clamp(dot(vec3(iceN * 3.2, 1.0), lsrc), 0.0, 1.0);\n  vec3  col3  = mix(vec3(0.80, 0.82, 0.90), vec3(0.55, 0.78, 1.0), 0.35);\n  // Le speculaire est DANS la glace epaisse, pas ajoute par-dessus : sinon il\n  // brille aussi la ou il n'y a pas de givre.\n  vec3  thick = col3 * NdotL + col3 * isp * 0.6 + col3 * 0.05;\n  // `k` est l'opacite du depot. C'est la ligne qui fait la difference entre une\n  // constellation et une vitre givree : la glace REMPLACE la couleur.\n  // Modele de THICKNESS du shader original de Riccardi (FreezePostProcess.shader,\n  // depot a-riccardi/shader-toy, source donnee par Chris le 2026-09-04) :\n  //   density = lerp(density^5, density, _ThicknessF);\n  //   density = remap(density, [0,1] -> [0, lerp(3.0, 0.75, _ThicknessF)]);\n  //\n  // Ce n'est PAS un terme d'eclairage \u2014 c'est une redistribution de la MATIERE, et\n  // c'est la difference avec le SSS de l'article de blog que j'avais transpose\n  // d'abord (pow(NdotL, p), qui ne fait qu'ajouter de la lumiere). Deux effets :\n  //   - `d*d*d*d*d` durcit le seuil : la glace mince s'efface, l'epaisse reste,\n  //     au lieu d'un voile uniforme sur toute la plaque ;\n  //   - le remap monte au-dessus de 1.0, donc les zones epaisses saturent en\n  //     opacite franche. C'est ce qui fait une vitre givree et pas un calque gris.\n  // uFrostDiff joue le role de _ThicknessF (0 = glace dure et contrastee,\n  // 1 = depot doux et etale).\n  float thF  = clamp(uFrostDiff, 0.0, 1.0);\n  float d5   = icy * icy * icy * icy * icy;\n  float dens = mix(d5, icy, thF) * mix(3.0, 0.75, thF);\n  float k    = clamp(dens, 0.0, 0.94);\n\n  // L'eau AVANT la glace : quand il gele sur une vitre mouillee, c'est la glace\n  // qui recouvre l'eau. Meme geste que la couche de givre : on REMPLACE la\n  // couleur, on ne l'additionne pas.\n  col = mix(col, dropcol, kdrop);\n\n  col = mix(col, thick, k);\n  // Le glint n'est plus le porteur de l'effet (c'etait lui, les \u00ab points\n  // blancs \u00bb) : le relief porte, il ne fait plus qu'accrocher un eclat.\n  col += vec3(0.85, 0.93, 1.0) * glint * daylight * 0.45;\n\n  // La glace est du DEPOT : elle couvre meme la ou le panneau n'est pas eclaire.\n  // `alpha = max(alpha, k)` est la ligne correspondante de la meteo. Sans elle,\n  // la couche calculee juste au-dessus resterait invisible de nuit \u2014 le bug qu'on\n  // vient de corriger reviendrait par la porte de l'alpha.\n  // L'eau aussi est un DEPOT : elle couvre la ou le panneau n'est pas eclaire.\n  // `kdrop` entre dans les DEUX max \u2014 dans outA (sinon la couche est invisible)\n  // et dans le multiplicateur de col (sinon elle est calculee puis eteinte par\n  // lit~0 des la nuit tombee). Et comme `kdrop` derive de wet^3, il ne couvre\n  // QUE l'eau reelle : c'est ce qui empeche l'alpha de deborder du panneau.\n  float kall = max(max(lit, k), kdrop);\n  float outA = clamp(kall, 0.0, 1.0);\n  gl_FragColor = vec4(col * kall, outA);\n}\n";
 
 /* Le panneau de la card est deja un plan analytique : PANEL_OF / _homography
    ci-dessus projettent le carre unite sur le quadrilatere du panneau. On passe
@@ -1089,11 +1128,60 @@ const GL_INV_H = (function () {
   return new Float32Array([ m[0],m[3],m[6], m[1],m[4],m[7], m[2],m[5],m[8] ]);
 })();
 
-function _hex2rgb(hx) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(String(hx || '').trim());
-  if (!m) return [1, 1, 1];
-  const v = parseInt(m[1], 16);
-  return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];
+/* Le shader veut trois flottants ; l editeur accepte tout ce que CSS accepte --
+   #RGB, #RRGGBB, rgb(), et surtout var(--primary-color), qui est la valeur par
+   defaut de plusieurs couleurs de la card. Ne lire que #RRGGBB rendait ces
+   couleurs BLANCHES dans le reflet alors qu elles s affichaient correctement
+   partout ailleurs. On delegue la resolution au navigateur (une seule fois par
+   valeur, le resultat est memoise : appele a chaque frame). */
+const _COLCACHE = new Map();
+
+function _hex2rgb(hx, el) {
+  const key = String(hx == null ? '' : hx).trim();
+  if (!key) return [1, 1, 1];
+  const hit = _COLCACHE.get(key);
+  if (hit) return hit;
+
+  let out = null, m6cached = false;
+  const m6 = /^#([0-9a-f]{6})$/i.exec(key);
+  if (m6) {
+    const v = parseInt(m6[1], 16);
+    out = [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];
+    m6cached = true;
+  }
+  if (!out) {
+    const m3 = /^#([0-9a-f]{3})$/i.exec(key);
+    if (m3) {
+      const s = m3[1];
+      out = [parseInt(s[0] + s[0], 16) / 255,
+             parseInt(s[1] + s[1], 16) / 255,
+             parseInt(s[2] + s[2], 16) / 255];
+      m6cached = true;
+    }
+  }
+  if (!out) {
+    /* var(...), rgb(...), hsl(...), nom CSS : on laisse le navigateur resoudre.
+       Une var() ne se resout que dans un element de l arbre ou elle est definie,
+       d ou le `el` -- le wrap de la card, pas un div detache. */
+    try {
+      const host = el || document.body;
+      const probe = document.createElement('span');
+      probe.style.cssText = 'position:absolute;width:0;height:0;visibility:hidden';
+      probe.style.color = key;
+      host.appendChild(probe);
+      const got = getComputedStyle(probe).color;
+      probe.remove();
+      const mm = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i.exec(got || '');
+      if (mm) out = [mm[1] / 255, mm[2] / 255, mm[3] / 255];
+    } catch (e) { /* pas de DOM (harnais headless) : on retombe sur le blanc */ }
+  }
+
+  /* Ne memoiser QUE les valeurs intrinseques (hex) : une var(--...) resolue
+     par getComputedStyle depend du theme courant, et la figer ici garderait la
+     couleur du premier theme vu dans le reflet GL alors que le DOM, lui, suit
+     le changement de theme. */
+  if (out && m6cached) _COLCACHE.set(key, out);
+  return out || [1, 1, 1];
 }
 
 function _glCompile(gl, type, srcTxt) {
@@ -1110,7 +1198,7 @@ function _glCompile(gl, type, srcTxt) {
   return s;
 }
 
-const GL_UNIFORMS = ['uRes', 'uInvH', 'uVB', 'uTime', 'uSunAlt', 'uSunX', 'uNight', 'uTilt', 'uGloss', 'uInten', 'uGrazing', 'uSpread', 'uPower', 'uShimmer', 'uColCold', 'uColGlow', 'uTint', 'uFresnel', 'uRainLvl', 'uRainSize', 'uRainDens', 'uRainSpec', 'uRainSlide', 'uRainWarp', 'uFrostLvl', 'uFrostTile', 'uFrostStr', 'uFrostSpec', 'uFrostSpark', 'uFrostCoins', 'uFrostDiff'];
+const GL_UNIFORMS = ['uRes', 'uInvH', 'uVB', 'uTime', 'uSunAlt', 'uSunX', 'uNight', 'uTilt', 'uGloss', 'uInten', 'uGrazing', 'uSpread', 'uPower', 'uShimmer', 'uColCold', 'uColGlow', 'uTint', 'uFresnel', 'uRainLvl', 'uRainSize', 'uRainDens', 'uRainSpec', 'uRainSlide', 'uRainWarp', 'uRainFilm', 'uFrostLvl', 'uFrostTile', 'uFrostStr', 'uFrostSpec', 'uFrostSpark', 'uFrostCoins', 'uFrostDiff'];
 
 class NeonSolarCardWebgl extends HTMLElement {
 
@@ -1145,9 +1233,22 @@ class NeonSolarCardWebgl extends HTMLElement {
     this._rafId        = 0;
     this._gl           = null;   // couche WebGL du reflet (variante webgl)
     this._glRaf        = 0;      // /!\ distinct de _rafId : celui-ci coalesce le DOM
+    this._glVisible    = true;   // pilote par l IntersectionObserver
     this._glTick       = (t) => {
-      this._glRaf = this._gl ? requestAnimationFrame(this._glTick) : 0;
+      /* La boucle s auto-annule des qu elle cesse d etre utile : contexte perdu,
+         card hors ecran, ou plus aucune animation a jouer. Rallumee par
+         _glSync(). */
+      if (!this._gl || !this._glVisible || !this._glAnimated()) { this._glRaf = 0; return; }
+      this._glRaf = requestAnimationFrame(this._glTick);
       this._glFrame(t);
+    };
+    /* Repeindre UNE frame hors boucle : c est ce qui garde le reflet juste quand
+       la boucle est eteinte (reduce_animations, ou aucun effet anime actif).
+       Sans ca, un `reduce_animations: true` figerait le reflet sur sa premiere
+       frame et il cesserait de suivre la production. */
+    this._glPaint      = () => {
+      this._glPaintReq = 0;
+      if (this._gl) this._glFrame(performance.now());
     };
     this._pendingUp    = null;
 
@@ -1208,6 +1309,7 @@ class NeonSolarCardWebgl extends HTMLElement {
    * Normalises the raw YAML and invalidates caches.
    */
   setConfig(raw) {
+    const _prevEnt = this._config?.entity;
     this._config    = buildConfig(raw || {});
     this._colors    = null;   // force palette re-resolve
     this._rendered  = false;
@@ -1215,6 +1317,18 @@ class NeonSolarCardWebgl extends HTMLElement {
     this._lastActive  = 0;
     this._lastGlowKey = '';
     this._lastEffBand = -1;
+    /* Purger les caches de DONNEES seulement si la SOURCE a change : des valeurs
+       heritees de l ancien capteur bloqueraient le dirty-check si elles
+       coincidaient avec les nouvelles. L editeur, lui, rappelle setConfig a
+       chaque frappe (config-changed) : purger la aussi relancerait _fetchHistory
+       a chaque cran de curseur -- une rafale sur l API history pour rien. */
+    if (_prevEnt !== undefined && _prevEnt !== this._config.entity) {
+      this._lastPower = this._prevPower = null;
+      this._lastDaily = this._lastSec = this._lastLux = null;
+      this._lastWeather = this._lastForecast = null;
+      this._history = [];
+      this._histFetchTs = 0;
+    }
     if (this.shadowRoot.firstChild) this._render();
   }
 
@@ -1273,6 +1387,11 @@ class NeonSolarCardWebgl extends HTMLElement {
     const st = ps.state;
     if (st === 'unavailable' || st === 'unknown') {
       this._showUnavailable(st);
+      // Invalider le cache : sans ca, un capteur qui revient avec la MEME valeur
+      // ne declenche aucun update et l affichage reste fige sur l indisponible.
+      this._lastPower = null;
+      this._lastDaily = this._lastSec = this._lastLux = null;
+      this._lastWeather = this._lastForecast = null;
       return;
     }
     if (this._unavailable) this._clearUnavailable();
@@ -1283,11 +1402,11 @@ class NeonSolarCardWebgl extends HTMLElement {
     const power = c.input_unit === 'kW' ? rawVal * 1000 : rawVal;
 
     // Read auxiliary sensor values
-    const daily    = c.daily_entity      && hass.states[c.daily_entity]      ? parseFloat(hass.states[c.daily_entity].state)      : null;
+    const daily    = c.daily_entity      && hass.states[c.daily_entity]      ? _finite(hass.states[c.daily_entity].state)      : null;
     const sec      = c.secondary_entity  && hass.states[c.secondary_entity]  ? hass.states[c.secondary_entity].state              : null;
-    const lux      = c.luminosity_entity && hass.states[c.luminosity_entity] ? parseFloat(hass.states[c.luminosity_entity].state) : null;
+    const lux      = c.luminosity_entity && hass.states[c.luminosity_entity] ? _finite(hass.states[c.luminosity_entity].state) : null;
     const weather  = c.weather_entity    && hass.states[c.weather_entity]    ? hass.states[c.weather_entity].state                : null;
-    const forecastRaw = c.forecast_entity && hass.states[c.forecast_entity]  ? parseFloat(hass.states[c.forecast_entity].state)   : null;
+    const forecastRaw = c.forecast_entity && hass.states[c.forecast_entity]  ? _finite(hass.states[c.forecast_entity].state)   : null;
     const forecast    = forecastRaw !== null
       ? (c.forecast_unit === 'kW' ? forecastRaw * 1000 : forecastRaw)
       : null;
@@ -1299,6 +1418,13 @@ class NeonSolarCardWebgl extends HTMLElement {
     const lw = lux      !== this._lastLux;
     const ww = weather  !== this._lastWeather;
     const fw = forecast !== this._lastForecast;
+    // Le rafraichissement de l historique est TEMPOREL : il doit rester joignable
+    // meme quand rien ne bouge (nuit, plafond d onduleur), donc AVANT le return.
+    const _now = Date.now();
+    if (_now - this._histFetchTs > 5 * 60 * 1000) {
+      this._histFetchTs = _now;
+      this._fetchHistory(c.entity);
+    }
     if (!pw && !dw && !sw && !lw && !ww && !fw) return;
 
     // Store new values
@@ -1311,11 +1437,6 @@ class NeonSolarCardWebgl extends HTMLElement {
     this._lastForecast = forecast;
 
     // Refresh history every 5 minutes
-    const now = Date.now();
-    if (now - this._histFetchTs > 5 * 60 * 1000) {
-      this._histFetchTs = now;
-      this._fetchHistory(c.entity);
-    }
 
     // Schedule a single RAF for DOM updates (coalesces rapid state changes)
     this._pendingUp = { power, daily, sec, lux, weather, forecast };
@@ -1671,14 +1792,14 @@ class NeonSolarCardWebgl extends HTMLElement {
     </style>
 
     <ha-card id="ha-card" role="button" tabindex="0"
-      aria-label="${c.name || 'Solar Production'} card">
+      aria-label="${_esc(c.name || 'Solar Production')} card">
 
       <!-- ── Header ──────────────────────────────── -->
       <div class="hdr">
         <svg class="hdr-icon" id="hdr-icon" viewBox="0 0 24 24">
           <path fill="currentColor" id="hdr-icon-path" d="${MDI_SUN}"/>
         </svg>
-        <div class="hdr-title">${c.name || 'Production Solaire'}</div>
+        <div class="hdr-title">${_esc(c.name || 'Production Solaire')}</div>
         <div class="hdr-right">
           ${c.daily_entity ? `
           <div class="hdr-mini" id="hdr-daily" data-entity="${c.daily_entity}">
@@ -1746,9 +1867,11 @@ class NeonSolarCardWebgl extends HTMLElement {
     // Hold detection (500 ms threshold)
     card.addEventListener('pointerdown', e => {
       if (e.button !== 0) return;
+      this._holdTriggered = false;
       this._holdTimer = setTimeout(() => {
         this._holdTimer = 0;
-        this._handleAction('hold_action');
+        this._holdTriggered = true;   // le timer est deja a 0 : sans ce drapeau
+        this._handleAction('hold_action');   // le click qui suit passerait aussi
       }, 500);
     }, { passive: true });
 
@@ -1762,7 +1885,7 @@ class NeonSolarCardWebgl extends HTMLElement {
 
     // Click → single tap or double-tap detection
     card.addEventListener('click', () => {
-      if (this._holdTimer) return; // hold was triggered, ignore click
+      if (this._holdTriggered) { this._holdTriggered = false; return; } // hold deja joue
       const dblAction = this._config.double_tap_action;
       if (dblAction && dblAction.action !== 'none') {
         if (this._dblTapTimer) {
@@ -1877,13 +2000,19 @@ class NeonSolarCardWebgl extends HTMLElement {
     GL_UNIFORMS.forEach((n) => { U[n] = gl.getUniformLocation(p, n); });
 
     this._gl = { cv, gl, U, prog: p, wrap, w: 0, h: 0, t0: performance.now() };
+    /* Frame initiale TOUJOURS peinte, avant tout observer : cf _glObserve(). */
     this._glFrame(0);
-    if (!this._glRaf) this._glRaf = requestAnimationFrame(this._glTick);
+    this._glObserve();
+    this._glSync();
   }
 
   /** Libere le contexte GL. Un canvas orphelin par re-render = fuite GPU. */
   _glTeardown() {
     if (this._glRaf) { cancelAnimationFrame(this._glRaf); this._glRaf = 0; }
+    if (this._glPaintReq) { cancelAnimationFrame(this._glPaintReq); this._glPaintReq = 0; }
+    if (this._glIO) { try { this._glIO.disconnect(); } catch (e) {} this._glIO = null; }
+    if (this._glRO) { try { this._glRO.disconnect(); } catch (e) {} this._glRO = null; }
+    this._glVisible = true;
     if (!this._gl) return;
     const { gl, cv } = this._gl;
     const ext = gl && gl.getExtension('WEBGL_lose_context');
@@ -1917,6 +2046,94 @@ class NeonSolarCardWebgl extends HTMLElement {
     return { elev, az: az === null ? 180 : az };
   }
 
+  /**
+   * Niveau de pluie effectif : la METEO decide, pas un curseur.
+   * Meme mapping que weather-neon-card-webgl (l.1775) pour que les deux cards
+   * mouillent en meme temps. rain_lvl reste dispo comme forcage manuel : s il
+   * est configure a > 0 il gagne, sinon on lit weather_entity.
+   * Sans weather_entity : panneau sec, sauf rain_lvl force ou toggle demo.
+   */
+  _rainLevel() {
+    const c = this._config || {};
+    const manual = c.rain_lvl ?? 0;
+    if (manual > 0.001) return manual;
+    const st = c.weather_entity && this._hass
+      ? this._hass.states[c.weather_entity] : null;
+    if (!st) return 0;
+    const cond = st.state;
+    if (cond === 'pouring') return 1;
+    if (cond === 'rainy' || cond === 'lightning-rainy') return 0.6;
+    if (cond === 'snowy-rainy') return 0.4;
+    return 0;
+  }
+
+  /**
+   * Y a-t-il quelque chose a ANIMER ? Deux curseurs seulement bougent dans le
+   * temps : le shimmer du reflet et le glissement des gouttes. Tout le reste du
+   * shader est statique -- le rejouer 60 fois par seconde peint 60 fois la meme
+   * image. Et sous reduce_animations, uTime est fige a 0 : la boucle est alors
+   * du pur gaspillage.
+   */
+  _glAnimated() {
+    const c = this._config || {};
+    if (c.reduce_animations ?? IS_LOW_POWER) return false;
+    const shimmer = c.sheen_shimmer ?? 0;
+    const rain    = this._rainLevel() || (c.rain_demo ? 1 : 0);
+    const slide   = c.rain_slide ?? 0;
+    return shimmer > 0.001 || (rain > 0.001 && slide > 0.001);
+  }
+
+  /** Demande une frame unique (coalescee), sans demarrer la boucle. */
+  _glRepaint() {
+    if (!this._gl || this._glRaf || this._glPaintReq) return;
+    this._glPaintReq = requestAnimationFrame(this._glPaint);
+  }
+
+  /**
+   * Aligne l etat de la boucle sur la realite : elle tourne si la card est
+   * visible ET qu il y a quelque chose a animer, sinon une frame suffit.
+   * Appelee a la greffe, a chaque mise a jour de donnees, au resize, au
+   * changement de config et quand la visibilite bascule.
+   */
+  _glSync() {
+    if (!this._gl) return;
+    if (this._glVisible && this._glAnimated()) {
+      if (!this._glRaf) this._glRaf = requestAnimationFrame(this._glTick);
+    } else {
+      if (this._glRaf) { cancelAnimationFrame(this._glRaf); this._glRaf = 0; }
+      if (this._glVisible) this._glRepaint();
+    }
+  }
+
+  /**
+   * IntersectionObserver + ResizeObserver.
+   * /!\ La premiere frame est peinte inconditionnellement a la greffe, AVANT
+   * que l observer ne se prononce : sous un harnais headless (probe.py) ou dans
+   * un onglet de dashboard non visible, l observer ne declenche jamais et une
+   * card qui n aurait attendu que lui resterait vide.
+   */
+  _glObserve() {
+    const R = this._gl;
+    if (!R || typeof IntersectionObserver === 'undefined') return;
+    try {
+      this._glIO = new IntersectionObserver((ents) => {
+        const vis = ents.some((e) => e.isIntersecting);
+        if (vis === this._glVisible) return;
+        this._glVisible = vis;
+        this._glSync();
+      }, { threshold: 0 });
+      this._glIO.observe(R.wrap);
+    } catch (e) { /* pas d IO : on garde la boucle telle quelle */ }
+
+    if (typeof ResizeObserver === 'undefined') return;
+    try {
+      /* getBoundingClientRect() par frame etait le second cout de la boucle.
+         Le resize est un evenement : on le traite comme tel. */
+      this._glRO = new ResizeObserver(() => this._glRepaint());
+      this._glRO.observe(R.wrap);
+    } catch (e) { /* idem */ }
+  }
+
   /** Une frame de la couche GL. */
   _glFrame(t) {
     const R = this._gl;
@@ -1939,8 +2156,8 @@ class NeonSolarCardWebgl extends HTMLElement {
 
     const reduce = c.reduce_animations ?? IS_LOW_POWER;
     const col = this._resolveColors();
-    const cold = _hex2rgb(col.cold);
-    const glow = _hex2rgb(c.color_neon_glow || col.primary);
+    const cold = _hex2rgb(col.cold, R.wrap);
+    const glow = _hex2rgb(c.color_neon_glow || col.primary, R.wrap);
 
     const sun = this._glSun();
     const alt = Math.sin(sun.elev * Math.PI / 180);
@@ -1973,12 +2190,13 @@ class NeonSolarCardWebgl extends HTMLElement {
     gl.uniform1f(U.uShimmer, reduce ? 0 : c.sheen_shimmer);
     gl.uniform1f(U.uTint, c.sheen_tint);
     gl.uniform1f(U.uFresnel, c.sheen_fresnel);
-    gl.uniform1f(U.uRainLvl,  c.rain_demo  ? Math.max(0.45, c.rain_lvl)  : c.rain_lvl);
+    gl.uniform1f(U.uRainLvl,  c.rain_demo  ? Math.max(0.45, this._rainLevel())  : this._rainLevel());
     gl.uniform1f(U.uRainSize, c.rain_size);
     gl.uniform1f(U.uRainDens, c.rain_dens);
     gl.uniform1f(U.uRainSlide, reduce ? 0 : c.rain_slide);
     gl.uniform1f(U.uRainSpec, c.rain_spec);
     gl.uniform1f(U.uRainWarp, c.rain_warp);
+    gl.uniform1f(U.uRainFilm, c.rain_film);
     gl.uniform1f(U.uFrostLvl, c.frost_demo ? Math.max(0.45, c.frost_lvl) : c.frost_lvl);
     gl.uniform1f(U.uFrostCoins, c.frost_coins);
     gl.uniform1f(U.uFrostTile, c.frost_tile);
@@ -2130,6 +2348,10 @@ class NeonSolarCardWebgl extends HTMLElement {
 
     /* ── Sparkline ────────────────────────────── */
     this._updateSparkline();
+
+    /* Le reflet GL suit la production, le theme et l heure. La boucle RAF
+       pouvant etre eteinte, on lui demande explicitement une frame ici. */
+    this._glSync();
   }
 
   /* ── Patch individual panel cells ────────────────────── */
@@ -2261,9 +2483,9 @@ class NeonSolarCardWebgl extends HTMLElement {
     const hf = this._historyForecast;
 
     // Fingerprint to avoid redundant SVG re-renders
-    const fKey = hf.length ? `${hf.length}:${hf[0]}:${hf[hf.length - 1]}` : 'nof';
+    const fKey = _fnv(hf);
     const tKey = c.production_threshold ?? 'not';
-    const key  = `${h.length}:${h[0]}:${h[Math.floor(h.length / 2)]}:${h[h.length - 1]}|${fKey}|${tKey}`;
+    const key  = `${_fnv(h)}|${fKey}|${tKey}`;
     if (zone._key === key) return;
     zone._key = key;
 
