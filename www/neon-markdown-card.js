@@ -174,6 +174,19 @@ const NMC_MACRO_RESERVED = new Set([
 let _nmcCtx = null;
 let _nmcErrs = null;
 
+// Une macro definie dans un {% for %} / une macro appelante ne doit pas mourir avec le
+// scope enfant : Jinja2 la rend visible apres la boucle. On remonte la chaine de
+// prototypes (posee par Object.create) jusqu'au scope racine pour l'y stocker.
+function nmcMacroScope(vars) {
+  let root = vars;
+  for (let i = 0; i < NMC_MAX_TEMPLATE_DEPTH; i++) {
+    const proto = Object.getPrototypeOf(root);
+    if (!proto || proto === Object.prototype) break;
+    root = proto;
+  }
+  return root;
+}
+
 function nmcCompile(text) {
   text = text.replace(/\{#[\s\S]*?#\}/g, ""); // commentaires Jinja {# ... #}
   _nmcTagRe.lastIndex = 0;
@@ -319,7 +332,7 @@ function nmcRenderNodes(nodes, hass, vars, errs, ctx) {
         if (NMC_MACRO_RESERVED.has(n.name) || nmcMathFns[n.name]) {
           warn(`macro ${n.name} → nom reserve, definition ignoree`);
         } else {
-          vars[NMC_MACRO_PREFIX + n.name] = { params: n.params, body: n.body };
+          nmcMacroScope(vars)[NMC_MACRO_PREFIX + n.name] = { params: n.params, body: n.body };
         }
         continue;
       }
