@@ -16,7 +16,11 @@
  *   {% set x = expr %}                variables
  *   {% if C %}…{% elif C %}…{% else %}…{% endif %}
  *   {% for x in LISTE %}…{% endfor %} LISTE = littéral [..], objets [{..},{..}],
- *                                      ou state_attr(...) renvoyant un array
+ *                                      range(...) ou state_attr(...) renvoyant un array
+ *   {% macro nom(a, b='def') %}…{% endmacro %}  puis {{ nom(x) }} — v4.8
+ *                                      positionnels + valeurs par défaut ; le HTML rendu
+ *                                      est sanitisé comme le reste ; récursion coupée à 32
+ *                                      (pas de {% call %}, pas de kwargs)
  *   x.champ / x.0.champ               notation pointée (objets/index)
  *   loop.index / index0 / first / last / length
  *   {{ expr }}                        + - * / ( ), == != > < >= <=, and/or/not, in,
@@ -35,7 +39,8 @@
  *                     javascript:/data:/vbscript:/http nu/protocol-relative.
  *   style : conic/linear/radial-gradient, box-shadow, filter, clip-path, mask,
  *           mix-blend-mode, animation, clamp/calc, cqi, container-type… OK.
- *           Interdit : url() @import expression() javascript: behavior binding.
+ *           url() local (/local, /api, /www, /media, /brand) autorise ;
+ *           URLs externes, @import, expression(), javascript:, behavior, binding interdits.
  *
  * Keyframes réutilisables (via animation: inline) :
  *   nmc-flicker nmc-scan-scroll nmc-scan-flicker nmc-card-glitch nmc-icon-glitch
@@ -48,7 +53,8 @@
  *
  * ── v4.0 ──
  *   <style> COMPLET dans le body (classes, @container, @media) — scopé au shadow DOM.
- *     Rejeté (fallback @keyframes only) si url()/@import/@font-face détecté.
+ *     Ressources CSS locales autorisées ; fallback @keyframes only si URL externe,
+ *     @import ou @font-face détecté.
  *   data-entity="sensor.x" sur tout élément HTML/SVG → tap = popup more-info (historique natif).
  *   debug: true (top-level) → les erreurs de template s'affichent sous le body.
  *   history: [{entity, hours}] (top-level) → var `hist['sensor.x']` = {pts,min,max,first,last,n}
@@ -69,10 +75,24 @@
  *   Cycle de vie : reconnexion robuste et invalidation des reponses history
  *     devenues obsoletes apres un changement de configuration.
  *   Securite : sources IMG limitees a /local, /api, /www, /media et /brand.
+ *
+ * ── v4.3 ──
+ *   Template : now().hour/minute/second, range() et else dans les boucles for.
+ *   Sanitizer : declarations CSS filtrees individuellement et url() locales autorisees.
+ *     Balises HTML inconnues deballees pour conserver leurs enfants autorises.
+ *
+ * ── v4.4 ──
+ *   Expressions Home Assistant : acces states.domain.entity.attribut et as_timestamp().
+ *
+ * ── v4.5 ──
+ *   Correctif sanitizer : les proprietes CSS inline standard sont conservees.
+ *
+ * ── v4.6 ──
+ *   Polish : validation des noms de proprietes CSS et garde-fous media responsifs.
  *   Tests : suite navigateur dans neon-markdown-card.test.html.
  */
 
-const NMC_VERSION = "4.2";
+const NMC_VERSION = "4.8";
 const NMC_MAX_TEMPLATE_OUTPUT = 100000;
 const NMC_MAX_TEMPLATE_ITERATIONS = 1000;
 const NMC_MAX_TEMPLATE_DEPTH = 32;
@@ -145,6 +165,15 @@ function nmcToStr(v) {
 
 const _nmcTagRe = /\{\{\s*([\s\S]+?)\s*\}\}|\{\%\s*([\s\S]+?)\s*\%\}/g;
 
+// --- macros {% macro %} : etat de rendu courant, pour que l'appel depuis nmcAtom()
+// --- reste soumis aux memes garde-fous (profondeur / iterations / taille) que le reste.
+const NMC_MACRO_PREFIX = "__nmc_macro_";
+const NMC_MACRO_RESERVED = new Set([
+  "range", "states", "is_state", "state_attr", "as_timestamp", "now", "loop",
+]);
+let _nmcCtx = null;
+let _nmcErrs = null;
+
 function nmcCompile(text) {
   text = text.replace(/\{#[\s\S]*?#\}/g, ""); // commentaires Jinja {# ... #}
   _nmcTagRe.lastIndex = 0;
@@ -178,9 +207,33 @@ function nmcCompile(text) {
       } else if (kw === "for") {
         const mm = tk.s.match(/^for\s+([a-zA-Z_]\w*)\s+in\s+([\s\S]+)$/);
         i++;
-        const body = parseSeq(["endfor"]);
+        const body = parseSeq(["else", "endfor"]);
+        let elseBody = [];
+        if (i < tokens.length && tokens[i].t === "tag" && tokens[i].s.startsWith("else")) {
+          i++;
+          elseBody = parseSeq(["endfor"]);
+        }
         if (i < tokens.length && tokens[i].t === "tag" && tokens[i].s.startsWith("endfor")) i++;
-        if (mm) nodes.push({ t: "for", name: mm[1], s: mm[2].trim(), body });
+        if (mm) nodes.push({ t: "for", name: mm[1], s: mm[2].trim(), body, elseBody });
+      } else if (kw === "macro") {
+        // {% macro nom(a, b=defaut) %} ... {% endmacro %}
+        const mm = tk.s.match(/^macro\s+([a-zA-Z_]\w*)\s*\(([\s\S]*)\)\s*$/);
+        i++;
+        const body = parseSeq(["endmacro"]);
+        if (i < tokens.length && tokens[i].t === "tag" && tokens[i].s.startsWith("endmacro")) i++;
+        if (mm) {
+          const params = nmcSplitTop(mm[2], ",")
+            .map((raw) => {
+              const seg = raw.trim();
+              if (!seg) return null;
+              const eq = nmcSplitTop(seg, "=");
+              return eq.length > 1
+                ? { name: eq[0].trim(), def: eq.slice(1).join("=").trim() }
+                : { name: seg, def: null };
+            })
+            .filter((param) => param && /^[a-zA-Z_]\w*$/.test(param.name));
+          nodes.push({ t: "macro", name: mm[1], params, body });
+        }
       } else if (kw === "if") {
         i++;
         const branches = [
@@ -221,6 +274,10 @@ function nmcRenderNodes(nodes, hass, vars, errs, ctx) {
     return "";
   }
   ctx.depth++;
+  const _prevCtx = _nmcCtx,
+    _prevErrs = _nmcErrs;
+  _nmcCtx = ctx;
+  _nmcErrs = errs;
   let out = "";
   const append = (value) => {
     if (ctx.truncated) return;
@@ -257,6 +314,15 @@ function nmcRenderNodes(nodes, hass, vars, errs, ctx) {
         }
         continue;
       }
+      if (n.t === "macro") {
+        // definition seule : on stocke, on n'emet RIEN (sinon le corps sort inline)
+        if (NMC_MACRO_RESERVED.has(n.name) || nmcMathFns[n.name]) {
+          warn(`macro ${n.name} → nom reserve, definition ignoree`);
+        } else {
+          vars[NMC_MACRO_PREFIX + n.name] = { params: n.params, body: n.body };
+        }
+        continue;
+      }
       if (n.t === "set") {
         try {
           const { expr, filters } = nmcSplitFilters(n.s);
@@ -284,6 +350,10 @@ function nmcRenderNodes(nodes, hass, vars, errs, ctx) {
         }
         if (!Array.isArray(list)) {
           if (errs) errs.push(`for ${n.name} in ${String(n.s).slice(0, 70)} → pas une liste (${typeof list})`);
+          continue;
+        }
+        if (list.length === 0 && n.elseBody && n.elseBody.length) {
+          out += nmcRenderNodes(n.elseBody, hass, vars, errs, ctx);
           continue;
         }
         const len = Math.min(list.length, NMC_MAX_TEMPLATE_ITERATIONS - ctx.iterations);
@@ -319,6 +389,8 @@ function nmcRenderNodes(nodes, hass, vars, errs, ctx) {
     }
   } finally {
     ctx.depth--;
+    _nmcCtx = _prevCtx;
+    _nmcErrs = _prevErrs;
   }
   return out;
 }
@@ -414,6 +486,26 @@ function nmcEval(expr, hass, vars) {
       }
     }
     return obj;
+  }
+  // Littéral tuple (a, b, c, ...) : distinct des parenthèses de regroupement (a+b)*(c+d).
+  // Condition : commence par "(", cette parenthèse ferme bien en tout dernier caractère
+  // (sinon c'est ex. "(a)+(b)"), ET il y a au moins une virgule top-level à l'intérieur
+  // (sinon "(a)" reste un simple regroupement scalaire, géré par nmcAtom).
+  if (expr[0] === "(" && expr[expr.length - 1] === ")") {
+    let depth = 0, closesAtEnd = false;
+    for (let i = 0; i < expr.length; i++) {
+      const c = expr[i];
+      if (c === "(" || c === "[" || c === "{") depth++;
+      else if (c === ")" || c === "]" || c === "}") {
+        depth--;
+        if (depth === 0) { closesAtEnd = i === expr.length - 1; break; }
+      }
+    }
+    if (closesAtEnd) {
+      const inner = expr.slice(1, -1).trim();
+      const parts = nmcSplitTop(inner, ",").filter((e) => e.trim() !== "");
+      if (parts.length > 1) return parts.map((e) => nmcEval(e.trim(), hass, vars));
+    }
   }
   const tern = nmcSplitTernary(expr);
   if (tern)
@@ -570,6 +662,40 @@ function nmcAtom(s, hass, vars) {
   if (/^(none|null)$/i.test(s)) return null;
   if (/^-?\d+(\.\d+)?$/.test(s)) return parseFloat(s);
   if (/^['"][\s\S]*['"]$/.test(s)) return s.slice(1, -1);
+  const nowPart = s.match(/^now\(\)\.(hour|minute|second)$/);
+  if (nowPart) {
+    const current = new Date();
+    return nowPart[1] === "hour"
+      ? current.getHours()
+      : nowPart[1] === "minute"
+        ? current.getMinutes()
+        : current.getSeconds();
+  }
+  if (s === "now()") return new Date();
+  const rangeMatch = s.match(/^range\(([^()]*)\)$/);
+  if (rangeMatch) {
+    const args = nmcSplitTop(rangeMatch[1], ",").map((arg) => Number(nmcEval(arg.trim(), hass, vars)));
+    if (args.length < 1 || args.length > 3 || args.some((arg) => !Number.isFinite(arg))) return [];
+    const start = args.length === 1 ? 0 : args[0];
+    const end = args.length === 1 ? args[0] : args[1];
+    const step = args.length === 3 ? args[2] : 1;
+    if (step === 0) return [];
+    const values = [];
+    for (let value = start; step > 0 ? value < end : value > end; value += step) {
+      values.push(value);
+      if (values.length >= NMC_MAX_TEMPLATE_ITERATIONS) break;
+    }
+    return values;
+  }
+  const timestampMatch = s.match(/^as_timestamp\((.*)\)$/);
+  if (timestampMatch) {
+    const args = nmcSplitTop(timestampMatch[1], ",");
+    const value = nmcEval(args[0]?.trim() || "", hass, vars);
+    const fallback = args.length > 1 ? Number(nmcEval(args[1].trim(), hass, vars)) : 0;
+    if (value instanceof Date) return value.getTime() / 1000;
+    const timestamp = Date.parse(String(value));
+    return Number.isFinite(timestamp) ? timestamp / 1000 : Number.isFinite(fallback) ? fallback : 0;
+  }
   let m = s.match(/^states\(\s*['"](.+?)['"]\s*\)$/);
   if (m) {
     const st = hass.states[m[1]];
@@ -639,10 +765,35 @@ function nmcAtom(s, hass, vars) {
     }
   }
   if (/^[a-zA-Z_]\w*(\.[a-zA-Z_0-9]\w*)+$/.test(s)) {
+    const statePath = s.match(/^states\.([a-z_]+\.[a-zA-Z0-9_]+)(?:\.(state|[a-zA-Z_][a-zA-Z0-9_]*))?$/);
+    if (statePath) {
+      const state = hass.states[statePath[1]];
+      if (!state) return "";
+      return statePath[2] ? state[statePath[2]] ?? "" : state;
+    }
     const path = s.split(".");
     let cur = path[0] in vars ? vars[path[0]] : undefined;
     for (let i = 1; i < path.length && cur != null; i++) cur = cur[path[i]];
     return cur == null ? "" : cur;
+  }
+  // appel de macro : nom(args...) defini par {% macro %}
+  {
+    const mc = s.match(/^([a-zA-Z_]\w*)\s*\(([\s\S]*)\)$/);
+    if (mc && vars[NMC_MACRO_PREFIX + mc[1]]) {
+      const def = vars[NMC_MACRO_PREFIX + mc[1]];
+      const args = nmcSplitTop(mc[2], ",")
+        .map((a) => a.trim())
+        .filter((a) => a !== "");
+      const child = Object.create(vars);
+      for (let i = 0; i < def.params.length; i++) {
+        const param = def.params[i];
+        if (i < args.length) child[param.name] = nmcEval(args[i], hass, vars);
+        else child[param.name] = param.def != null ? nmcEval(param.def, hass, vars) : "";
+      }
+      // on reutilise le ctx du rendu en cours : la recursion est coupee par
+      // NMC_MAX_TEMPLATE_DEPTH au lieu de figer le navigateur.
+      return nmcRenderNodes(def.body, hass, child, _nmcErrs, _nmcCtx);
+    }
   }
   if (s in vars) return vars[s];
   if (s[0] === "(") {
@@ -827,7 +978,8 @@ function nmcEvalArith(expr, hass, vars) {
   if (!toks) return undefined;
   const out = [],
     ops = [],
-    prec = { "+": 1, "-": 1, "*": 2, "/": 2 };
+    prec = { "+": 1, "-": 1, "*": 2, "/": 2, "%": 2, "**": 3 },
+    rightAssoc = { "**": true };
   for (const t of toks) {
     if (typeof t === "number") out.push(t);
     else if (t === "(") ops.push(t);
@@ -835,7 +987,11 @@ function nmcEvalArith(expr, hass, vars) {
       while (ops.length && ops[ops.length - 1] !== "(") out.push(ops.pop());
       ops.pop();
     } else {
-      while (ops.length && prec[ops[ops.length - 1]] >= prec[t]) out.push(ops.pop());
+      while (
+        ops.length &&
+        (rightAssoc[t] ? prec[ops[ops.length - 1]] > prec[t] : prec[ops[ops.length - 1]] >= prec[t])
+      )
+        out.push(ops.pop());
       ops.push(t);
     }
   }
@@ -846,7 +1002,14 @@ function nmcEvalArith(expr, hass, vars) {
     else {
       const b = st.pop(),
         a = st.pop();
-      st.push(t === "+" ? a + b : t === "-" ? a - b : t === "*" ? a * b : b === 0 ? 0 : a / b);
+      let r;
+      if (t === "+") r = a + b;
+      else if (t === "-") r = a - b;
+      else if (t === "*") r = a * b;
+      else if (t === "**") r = Math.pow(a, b);
+      else if (t === "%") r = b === 0 ? 0 : a % b;
+      else r = b === 0 ? 0 : a / b;
+      st.push(isFinite(r) ? r : 0);
     }
   }
   return st.length === 1 ? st[0] : undefined;
@@ -878,14 +1041,14 @@ const nmcMathFns = {
 function nmcTokenize(expr, hass, vars) {
   const toks = [];
   const re =
-    /\s*(states\([^)]*\)|is_state\([^)]*\)|state_attr\([^)]*\)|(?:log10|log2|log|ln|exp|sqrt|abs|floor|ceil|round|sin|cos|tan|pow|atan2|hypot|min|max)\([^()]*\)|[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*|-?\d+\.?\d*|[()+\-*/])/g;
+    /\s*(states\([^)]*\)|is_state\([^)]*\)|state_attr\([^)]*\)|as_timestamp\((?:[^()]|\([^()]*\))*\)|(?:log10|log2|log|ln|exp|sqrt|abs|floor|ceil|round|sin|cos|tan|pow|atan2|hypot|min|max)\((?:[^()]|\([^()]*\))*\)|[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*|-?\d+\.?\d*|\*\*|[()+\-*/%])/g;
   let m,
     last = 0;
   while ((m = re.exec(expr)) !== null) {
     if (m.index !== last && expr.slice(last, m.index).trim() !== "") return null;
     last = re.lastIndex;
     const tk = m[1];
-    if (tk === "(" || tk === ")" || tk === "+" || tk === "*" || tk === "/") toks.push(tk);
+    if (tk === "(" || tk === ")" || tk === "+" || tk === "*" || tk === "/" || tk === "**" || tk === "%") toks.push(tk);
     else if (tk === "-") {
       const prev = toks[toks.length - 1];
       if (
@@ -894,14 +1057,25 @@ function nmcTokenize(expr, hass, vars) {
         prev === "+" ||
         prev === "-" ||
         prev === "*" ||
-        prev === "/"
+        prev === "/" ||
+        prev === "**" ||
+        prev === "%"
       )
         toks.push(0, "-");
       else toks.push("-");
-    } else if (/^[a-zA-Z_]\w*\(/.test(tk) && nmcMathFns[tk.slice(0, tk.indexOf("("))]) {
+    } else if (/^[a-zA-Z_]\w*\(/.test(tk) && (nmcMathFns[tk.slice(0, tk.indexOf("("))] || tk.startsWith("as_timestamp("))) {
       const fn = tk.slice(0, tk.indexOf("("));
       const inner = tk.slice(tk.indexOf("(") + 1, tk.lastIndexOf(")"));
+      if (fn === "as_timestamp") {
+        const value = nmcAtom(tk, hass, vars);
+        toks.push(Number.isFinite(Number(value)) ? Number(value) : 0);
+        continue;
+      }
       const args = inner.trim() === "" ? [] : nmcSplitTop(inner, ",").map((a) => {
+        // un argument peut lui-meme etre un appel (sqrt(pow(3,2))) : l'arithmetique
+        // sait les evaluer, nmcEvalF non -> on tente l'arithmetique d'abord.
+        const viaArith = nmcEvalArith(a, hass, vars);
+        if (typeof viaArith === "number" && isFinite(viaArith)) return viaArith;
         const x = parseFloat(nmcEvalF(a, hass, vars));
         return isNaN(x) ? 0 : x;
       });
@@ -1491,16 +1665,44 @@ const NMC_ALLOWED_SVG_ATTRS = new Set([
 const NMC_SAFE_SVG_HREF_RE = /^\/(local|www|api)\//i;
 const NMC_UNSAFE_STYLE_RE =
   /expression\s*\(|javascript\s*:|url\s*\(|@import|behavior\s*:|binding\s*:|moz-binding/i;
+const NMC_SAFE_CSS_URL_RE = /url\(\s*(['"]?)\/(local|api|www|media|brand)\/[^)'"\s]+\1\s*\)/gi;
+
+function nmcHasUnsafeStyle(styleStr) {
+  return NMC_UNSAFE_STYLE_RE.test(styleStr.replace(NMC_SAFE_CSS_URL_RE, ""));
+}
 
 function nmcSanitizeStyle(styleStr) {
   if (!styleStr) return null;
   const clean = styleStr.replace(/\/\*[\s\S]*?\*\//g, "");
-  if (NMC_UNSAFE_STYLE_RE.test(clean)) return null;
-  return clean;
+  const safeDeclarations = [];
+  let start = 0,
+    depth = 0,
+    quote = "";
+  const keep = (declaration) => {
+    const colon = declaration.indexOf(":");
+    if (colon < 1) return;
+    const property = declaration.slice(0, colon).trim();
+    const value = declaration.slice(colon + 1).trim();
+    if (!/^(?:--[a-zA-Z_][\w-]*|[a-zA-Z][\w-]*)$/.test(property) || !value || nmcHasUnsafeStyle(value)) return;
+    safeDeclarations.push(`${property}:${value}`);
+  };
+  for (let i = 0; i <= clean.length; i++) {
+    const c = clean[i] || ";";
+    if (quote) {
+      if (c === quote && clean[i - 1] !== "\\") quote = "";
+    } else if (c === "'" || c === '"') quote = c;
+    else if (c === "(") depth++;
+    else if (c === ")") depth = Math.max(0, depth - 1);
+    else if (c === ";" && depth === 0) {
+      keep(clean.slice(start, i));
+      start = i + 1;
+    }
+  }
+  return safeDeclarations.join(";");
 }
 
 // <style> dans le body : on NE garde QUE les @keyframes sûrs (aucun sélecteur normal
-// → impossible de restyler l'app ; blocs avec url()/js/@import/expression rejetés).
+// → impossible de restyler l'app ; URLs externes, js/@import/expression rejetés).
 // Permet de déclarer des animations custom directement dans le body, sans toucher au .js.
 function nmcExtractKeyframes(css) {
   if (!css) return "";
@@ -1509,7 +1711,7 @@ function nmcExtractKeyframes(css) {
   const out = [];
   let m;
   while ((m = re.exec(clean)) !== null) {
-    if (!NMC_UNSAFE_STYLE_RE.test(m[0])) out.push(m[0]);
+    if (!nmcHasUnsafeStyle(m[0])) out.push(m[0]);
   }
   return out.join("\n");
 }
@@ -1569,7 +1771,7 @@ function nmcSanitizeBody(raw) {
       // card le scope. Fallback keyframes-only si motif dangereux détecté.
       const css = el.textContent || "";
       const clean = css.replace(/\/\*[\s\S]*?\*\//g, "");
-      if (NMC_UNSAFE_STYLE_RE.test(clean) || /@import|@font-face|@namespace|@charset|<\//i.test(clean)) {
+      if (nmcHasUnsafeStyle(clean) || /@import|@font-face|@namespace|@charset|<\//i.test(clean)) {
         const kf = nmcExtractKeyframes(css);
         if (kf) el.textContent = kf;
         else el.remove();
@@ -1578,7 +1780,11 @@ function nmcSanitizeBody(raw) {
     }
     const isSvg = NMC_ALLOWED_SVG_TAGS.has(tnLower);
     if (!NMC_ALLOWED_TAGS.has(tn) && !isSvg) {
-      el.replaceWith(document.createTextNode(el.textContent || ""));
+      const parent = el.parentNode;
+      if (parent) {
+        while (el.firstChild) parent.insertBefore(el.firstChild, el);
+        parent.removeChild(el);
+      }
       return;
     }
     if (tn === "HA-ICON") {
@@ -2471,14 +2677,15 @@ class NeonMarkdownCard extends HTMLElement {
         .nmc-body table { border-collapse:collapse; width:100%; }
         .nmc-body td,.nmc-body th { padding:3px 7px; border-bottom:1px solid var(--divider-color); text-align:left; }
         .nmc-body blockquote { margin:.3em 0; padding-left:.8em; border-left:2px solid var(--primary-color); opacity:.85; }
-        .nmc-body img { max-width:100%; }
+        .nmc-body { min-width:0; overflow-wrap:anywhere; }
+        .nmc-body img,.nmc-body svg { max-width:100%; }
         .nmc-wrap,.nmc-wrap *,.nmc-icon-wrap,.nmc-text-wrap,.nmc-title,.nmc-body { box-sizing:border-box; }
         ${t.scanline ? `.nmc-scanlines{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:2;border-radius:inherit;} .nmc-scanlines::before{content:' ';display:block;position:absolute;left:0;right:0;top:-100%;height:200%;background:linear-gradient(rgba(18,16,16,0) 50%,rgba(0,0,0,0.15) 50%),linear-gradient(90deg,rgba(255,0,0,0.05),rgba(0,255,0,0.02),rgba(0,0,255,0.05));background-size:100% 3px,3px 100%;animation:nmc-scan-scroll ${(this._scanDur * 1.5).toFixed(1)}s linear infinite;will-change:transform;transform:translateZ(0);} .nmc-scanlines::after{content:' ';display:block;position:absolute;inset:0;background:rgba(18,16,16,0.08);opacity:0;animation:nmc-scan-flicker 4s step-end infinite;}` : ""}
         ${t.hover_glitch ? `ha-card.nmc-card:hover{transform:translateY(-8px) scale(1.02) translateZ(0);animation:nmc-card-glitch 0.4s cubic-bezier(0.4,0,0.2,1);} ha-card.nmc-card:hover .nmc-title{animation:nmc-text-glitch 0.4s cubic-bezier(0.4,0,0.2,1);} ha-card.nmc-card:hover .nmc-icon-wrap ha-icon{animation:nmc-icon-glitch 0.4s cubic-bezier(0.4,0,0.2,1);}` : ""}
         .nmc-wrap {
           ${bothGrid ? `display:grid; grid-template-columns:auto 1fr; align-items:center; column-gap:10px;` : `display:flex; flex-direction:${flexDir}; align-items:${alignV}; justify-content:${alignH}; gap:${iconTop ? "6px" : "10px"};`}
           padding:${sh.padding}; ${mode === "both" ? "padding-bottom:12px;" : ""} position:relative; overflow:visible; }
-        ${bothGrid ? `.nmc-wrap>.nmc-icon-wrap{grid-column:1;grid-row:1;} .nmc-wrap>.nmc-text-wrap{display:contents;} .nmc-text-wrap>.nmc-title{grid-column:2;grid-row:1;align-self:center;} .nmc-text-wrap>.nmc-body{grid-column:1 / -1;grid-row:2;width:100%;margin-top:8px;padding-top:10px;position:relative;} .nmc-text-wrap>.nmc-body::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background-color:var(--entities-divider-color,var(--divider-color));} ${t.scanline ? `.nmc-wrap>.nmc-scanlines{grid-column:1 / -1;grid-row:1;inset:auto;position:absolute;top:0;left:0;right:0;bottom:auto;height:100%;pointer-events:none;z-index:2;}` : ""}` : ""}
+        ${bothGrid ? `.nmc-wrap>.nmc-icon-wrap{grid-column:1;grid-row:1;} .nmc-wrap>.nmc-text-wrap{display:contents;} .nmc-text-wrap>.nmc-title{grid-column:2;grid-row:1;align-self:center;} .nmc-text-wrap>.nmc-body{grid-column:1 / -1;grid-row:2;width:100%;padding-top:10px;margin-top:8px;border-top:1px solid;border-image:linear-gradient(90deg, transparent, rgba(98,0,234,0.55), rgba(0,255,249,0.25), transparent) 1;} ${t.scanline ? `.nmc-wrap>.nmc-scanlines{grid-column:1 / -1;grid-row:1;inset:auto;position:absolute;top:0;left:0;right:0;bottom:auto;height:100%;pointer-events:none;z-index:2;}` : ""}` : mode === "both" ? `.nmc-title{padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid;border-image:linear-gradient(90deg, transparent, rgba(98,0,234,0.55), rgba(0,255,249,0.25), transparent) 1;}` : ""}
         .nmc-icon-wrap { display:${hasIcon ? "flex" : "none"}; align-items:center; justify-content:center; flex-shrink:0; overflow:visible; }
         .nmc-icon-wrap ha-icon { --mdc-icon-size:${tIconSize}; color:${tIconColor}; overflow:visible; ${t.glow ? `filter:drop-shadow(0 0 ${Math.round(tGlowSize * 0.2)}px #fff) drop-shadow(0 0 ${Math.round(tGlowSize * 0.4)}px ${tGlowColor}) drop-shadow(0 0 ${Math.round(tGlowSize * 0.8)}px ${tGlowColor}) drop-shadow(0 0 ${tGlowSize}px ${tGlowColor});` : ""} ${t.flicker && !t.hover_glitch ? tFlickAnim : ""} }
         .nmc-text-wrap { display:flex; flex-direction:column; gap:3px; text-align:${textAlign}; ${iconTop ? "align-items:center;" : ""} ${sh.align_h !== "center" ? "flex:1;" : ""} min-width:0; overflow:visible; }
