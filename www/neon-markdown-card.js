@@ -414,7 +414,8 @@ function nmcParseTemplate(hass, text, vars, errs) {
 
   const d = new Date();
   vars = vars || {};
-  // On utilise des variables plates car le parseur de la carte gère mal les objets dans les {% set %}
+  // now_hour / now_minute : exposés à plat, gardés pour les cards qui les utilisent.
+  // (Les dicts dans un {% set %} sont supportés depuis la v4.8 — ce n'est plus un contournement.)
   vars["now_hour"] = d.getHours();
   vars["now_minute"] = d.getMinutes();
 
