@@ -110,6 +110,26 @@
  *   argument filtre chaine (ex. "rd, round(0), int") n'etait jamais applique. 15 cas
  *   mesures sur harnais node (le caractere pipe reste NON supporte dans une expression
  *   arithmetique composee : utiliser floor() plutot que le filtre int dans ce contexte).
+ *
+ * ── v4.9.2 (08/09/2026) ──
+ *   Macro partagee hp_style() : bloc <style> commun aux 12 cards de la vue Heat Plant
+ *   (8 regles CSS identiques). Verifie au harnais node qu'un <style> emis par une macro
+ *   traverse nmcSanitizeBody intact, et que deux <style> dans un meme body (ce bloc +
+ *   un @keyframes local, cas BIAS_SOLVER) coexistent sans conflit.
+ *
+ * ── v4.9.3 (08/09/2026) ──
+ *   Macro partagee tuile(l, v, u, c, e) : motif de tuile (label/valeur/unite/couleur/
+ *   entite) identique octet-pour-octet dans 6 cards Heat Plant. Verifie au harnais node :
+ *   appel simple hors boucle, appel dans un {% for %} sur une liste de dicts, coexistence
+ *   avec hp_style().
+ *
+ * ── v4.9.4 (08/09/2026) ──
+ *   Macro partagee spark(hh, ent, label, hex, rgba) : motif de sparkline 24h (legende
+ *   min/max/n pts + <svg> a 2 <polyline>) identique octet-pour-octet dans 4 cards Heat
+ *   Plant (BIAS_SOLVER, INNER_GRID, MESURES_LIVE, SOLAR_FARM). hh = l'objet deja construit
+ *   par la card (hist['entity_id'], expose .min/.max/.n/.pts) : pas eclate en 4 parametres
+ *   separes, deja disponible tel quel dans chaque template appelant. Troisieme et derniere
+ *   macro du lot Heat Plant.
  */
 
 const NMC_VERSION = "4.9.4";
