@@ -112,7 +112,7 @@
  *   arithmetique composee : utiliser floor() plutot que le filtre int dans ce contexte).
  */
 
-const NMC_VERSION = "4.9.1";
+const NMC_VERSION = "4.9.2";
 const NMC_MAX_TEMPLATE_OUTPUT = 100000;
 const NMC_MAX_TEMPLATE_ITERATIONS = 1000;
 const NMC_MAX_TEMPLATE_DEPTH = 32;
@@ -128,8 +128,14 @@ const NMC_MAX_TEMPLATE_DEPTH = 32;
 // Le routage vers cet evaluateur pour un "%" isole (regex de garde ~ligne 682) a ete
 // corrige le 08/09/2026 pour reconnaitre aussi "%" seul, donc pas de "+ 0" de
 // contournement necessaire ici. Formule mesuree OK (harnais node, 08/09/2026, 15 cas).
+// hp_style : bloc <style> commun aux 12 cards de la vue Heat Plant (8 regles CSS
+// identiques : .tb .hz .tb-l .sec .tile .lbl .tv .tu). Verifie au harnais node (08/09/2026)
+// qu'un <style> emis par une macro traverse nmcSanitizeBody intact, et que deux <style>
+// dans un meme body (ce bloc + un @keyframes local, cas BIAS_SOLVER) coexistent sans
+// conflit. Zero parametre, pure emission de texte, zero risque arithmetique.
 const NMC_SHARED_MACROS_SRC = `
 {% macro fmt_eta(base_min, minutes) %}{% set total = base_min + minutes %}{% set h = floor(total / 60) % 24 %}{% set m = total % 60 %}{{ h|zfill(2) }}:{{ m|zfill(2) }}{% endmacro %}
+{% macro hp_style() %}<style>.tb{display:flex;align-items:center;gap:8px;margin:2px 0 10px;}.hz{height:7px;flex:0 0 44px;background:repeating-linear-gradient(-45deg,rgba(255,179,0,.8) 0 6px,transparent 6px 12px);}.tb-l{font-size:10px;letter-spacing:2.5px;color:rgba(184,197,214,.66);}.sec{font-size:10px;letter-spacing:2px;color:rgba(184,197,214,.66);margin:0 0 5px;}.tile{background:rgba(13,18,30,.55);border:1px solid rgba(140,170,200,.16);padding:7px 4px;text-align:center;}.lbl{font-size:10px;letter-spacing:1px;color:rgba(184,197,214,.66);white-space:nowrap;overflow:hidden;}.tv{font-size:16px;font-weight:700;font-family:Consolas,monospace;color:#fff;}.tu{font-size:11px;color:rgba(184,197,214,.66);}</style>{% endmacro %}
 `;
 
 // ── Device detection ─────────────────────────────────────────────
