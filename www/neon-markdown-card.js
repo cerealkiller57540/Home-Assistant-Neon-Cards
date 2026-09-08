@@ -90,12 +90,32 @@
  * ── v4.6 ──
  *   Polish : validation des noms de proprietes CSS et garde-fous media responsifs.
  *   Tests : suite navigateur dans neon-markdown-card.test.html.
+ *
+ * ── v4.9 ──
+ *   Macros PARTAGEES entre cards (NMC_SHARED_MACROS_SRC, pres des constantes en tete de
+ *   fichier) : disponibles dans le body/title de TOUTES les cards sans redefinition locale.
+ *   Fusionnees en own-properties de vars (pas de chaine de prototypes) -> une macro locale
+ *   de meme nom l'ecrase sans impacter les autres cards ; aucune fuite inverse possible.
+ *   Ajouter une macro partagee = editer NMC_SHARED_MACROS_SRC dans le moteur (pas la config
+ *   JSON du dashboard) + bumper NMC_VERSION + pousser un hacstag.
+ *   Audit des 20 cards du dashboard (2026-09-08) : aucun autre manque moteur reel (is
+ *   defined/none/number/string, zfill, etc. deja supportes) — pas d'ajout speculatif.
  */
 
-const NMC_VERSION = "4.8";
+const NMC_VERSION = "4.9";
 const NMC_MAX_TEMPLATE_OUTPUT = 100000;
 const NMC_MAX_TEMPLATE_ITERATIONS = 1000;
 const NMC_MAX_TEMPLATE_DEPTH = 32;
+
+// ── Macros partagees entre cards (v4.9) ──────────────────────────
+// Bibliotheque de {% macro %} disponibles dans TOUTES les cards, sans avoir a les
+// redefinir dans chaque body/title. Definie ici (code du moteur), pas dans la config
+// JSON du dashboard, sinon on retombe sur "dupliquer le texte dans chaque card".
+// Ajouter une macro partagee = editer NMC_SHARED_MACROS_SRC + bumper NMC_VERSION +
+// pousser un hacstag (edition du .js, pas juste de la config).
+const NMC_SHARED_MACROS_SRC = `
+{% macro fmt_eta(base_min, minutes) %}{% set total = base_min + minutes %}{% set h = ((total / 60)|int) % 24 %}{% set m = total % 60 %}{{ h|zfill(2) }}:{{ m|zfill(2) }}{% endmacro %}
+`;
 
 // ── Device detection ─────────────────────────────────────────────
 const NMC_IS_IPAD =
@@ -274,6 +294,25 @@ function nmcCompile(text) {
   return parseSeq(null);
 }
 
+// Registre des macros partagees (NMC_SHARED_MACROS_SRC) : { nom_prefixe: {params, body} }.
+// Rempli une seule fois par nmcInitSharedMacros(), a partir de l'AST compile (nmcCompile
+// n'a besoin d'aucun hass). Volontairement PAS de rendu ni de chaine de prototypes ici :
+// fusionner ces defs par Object.assign dans un vars-litteral garde nmcMacroScope() correct
+// (son proto reste Object.prototype -> la macro-scope racine reste la card, jamais la lib
+// partagee) — une chaine Object.create(sharedRoot) ferait remonter root jusqu'a la lib et
+// ferait fuiter les macros LOCALES d'une card vers toutes les autres.
+const NMC_SHARED_MACRO_DEFS = {};
+let _nmcSharedMacrosInit = false;
+function nmcInitSharedMacros() {
+  if (_nmcSharedMacrosInit) return;
+  _nmcSharedMacrosInit = true;
+  for (const n of nmcCompile(NMC_SHARED_MACROS_SRC)) {
+    if (n.t !== "macro") continue;
+    if (NMC_MACRO_RESERVED.has(n.name) || nmcMathFns[n.name]) continue; // meme garde-fou qu'au rendu
+    NMC_SHARED_MACRO_DEFS[NMC_MACRO_PREFIX + n.name] = { params: n.params, body: n.body };
+  }
+}
+
 function nmcRenderNodes(nodes, hass, vars, errs, ctx) {
   ctx = ctx || { chars: 0, iterations: 0, depth: 0, truncated: false, warned: new Set() };
   const warn = (message) => {
@@ -418,6 +457,11 @@ function nmcParseTemplate(hass, text, vars, errs) {
   // (Les dicts dans un {% set %} sont supportés depuis la v4.8 — ce n'est plus un contournement.)
   vars["now_hour"] = d.getHours();
   vars["now_minute"] = d.getMinutes();
+  // Macros partagees (v4.9) : fusionnees en own-properties de ce vars-litteral, pas via
+  // Object.create — une macro locale du meme nom definie dans `text` l'ecrasera sans
+  // affecter les autres cards (cf commentaire sur nmcInitSharedMacros()).
+  nmcInitSharedMacros();
+  Object.assign(vars, NMC_SHARED_MACRO_DEFS);
 
   let nodes = _nmcCache.get(text);
   if (!nodes) {
