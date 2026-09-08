@@ -104,12 +104,12 @@
  * ── v4.9.1 (patch, 08/09/2026) ──
  *   fmt_eta (premiere macro partagee, deployee sans test sur le vrai moteur) rendait du
  *   texte litteral en prod. Deux vrais manques moteur corriges : (1) le routage vers
- *   nmcEvalArith exigeait un +/-/*// dans l'expression, un "%" isole (ex. "x % 24") ne
- *   passait jamais l'evaluateur arithmetique ; (2) l'appel de macro evaluait ses arguments
- *   via nmcEval au lieu de nmcEvalF, donc un argument filtre chaine (ex. "rd|round(0)|int")
- *   n'etait jamais applique. 15 cas mesures sur harnais node (le pipe reste NON supporte
- *   dans une expression arithmetique composee : utiliser floor() plutot que "|int" dans
- *   ce contexte precis).
+ *   nmcEvalArith exigeait un operateur binaire (plus, moins, fois ou division) dans
+ *   l'expression, un "%" isole (ex. "x % 24") ne passait jamais l'evaluateur arithmetique ;
+ *   (2) l'appel de macro evaluait ses arguments via nmcEval au lieu de nmcEvalF, donc un
+ *   argument filtre chaine (ex. "rd, round(0), int") n'etait jamais applique. 15 cas
+ *   mesures sur harnais node (le caractere pipe reste NON supporte dans une expression
+ *   arithmetique composee : utiliser floor() plutot que le filtre int dans ce contexte).
  */
 
 const NMC_VERSION = "4.9.1";
