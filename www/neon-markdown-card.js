@@ -112,7 +112,7 @@
  *   arithmetique composee : utiliser floor() plutot que le filtre int dans ce contexte).
  */
 
-const NMC_VERSION = "4.9.3";
+const NMC_VERSION = "4.9.4";
 const NMC_MAX_TEMPLATE_OUTPUT = 100000;
 const NMC_MAX_TEMPLATE_ITERATIONS = 1000;
 const NMC_MAX_TEMPLATE_DEPTH = 32;
@@ -138,6 +138,20 @@ const NMC_MAX_TEMPLATE_DEPTH = 32;
 // ecriture). 5 parametres positionnels, pure emission de texte, verifie au harnais node
 // (08/09/2026) : appel simple hors boucle (match exact au motif fige), appel dans un
 // {% for %} sur une liste de dicts (t.l/t.v/t.u/t.c/t.e), coexistence avec hp_style().
+// spark(hh, ent, label, hex, rgba) : motif de sparkline 24h (legende min/max/n pts +
+// <svg> a 2 <polyline>, aire + trait) identique octet-pour-octet dans 4 cards Heat Plant
+// (BIAS_SOLVER, INNER_GRID, MESURES_LIVE, SOLAR_FARM ; verifie par grep ligne a ligne des
+// .jinja avant ecriture). hh = l'objet hist['entity_id'] deja construit par la card
+// (expose .min/.max/.n/.pts) : PAS eclate en 4 parametres separes (min, max, n, pts)
+// comme envisage initialement, cet objet est deja disponible tel quel dans chaque
+// template appelant (via {% set hh = hist['x'] %}) donc l'eclater aurait ete une
+// redondance pure. hex et rgba restent deux parametres distincts : le moteur n'expose
+// aucune conversion hex->rgb native (verifie), donc rgba doit etre fourni separement.
+// Appelant TOUJOURS a l'interieur d'un {% if hist['x'] is defined %} (jamais appelee si
+// l'historique n'est pas encore charge) -- verifie au harnais node (08/09/2026) : appel
+// avec hh simule (comparaison exacte au motif fige), motif reel complet ({% if %} +
+// {% set hh %}), hist non defini (bloc saute sans erreur, spark() jamais invoquee),
+// coexistence avec hp_style()/tuile() dans un meme rendu.
 const NMC_SHARED_MACROS_SRC = `
 {% macro fmt_eta(base_min, minutes) %}{% set total = base_min + minutes %}{% set h = floor(total / 60) % 24 %}{% set m = total % 60 %}{{ h|zfill(2) }}:{{ m|zfill(2) }}{% endmacro %}
 {% macro hp_style() %}<style>.tb{display:flex;align-items:center;gap:8px;margin:2px 0 10px;}.hz{height:7px;flex:0 0 44px;background:repeating-linear-gradient(-45deg,rgba(255,179,0,.8) 0 6px,transparent 6px 12px);}.tb-l{font-size:10px;letter-spacing:2.5px;color:rgba(184,197,214,.66);}.sec{font-size:10px;letter-spacing:2px;color:rgba(184,197,214,.66);margin:0 0 5px;}.tile{background:rgba(13,18,30,.55);border:1px solid rgba(140,170,200,.16);padding:7px 4px;text-align:center;}.lbl{font-size:10px;letter-spacing:1px;color:rgba(184,197,214,.66);white-space:nowrap;overflow:hidden;}.tv{font-size:16px;font-weight:700;font-family:Consolas,monospace;color:#fff;}.tu{font-size:11px;color:rgba(184,197,214,.66);}</style>{% endmacro %}
@@ -146,6 +160,11 @@ const NMC_SHARED_MACROS_SRC = `
       <div class="tv" style="text-shadow:0 0 6px {{ c }};">{{ v }}</div>
       <div class="tu">{{ u }}</div>
     </div>{% endmacro %}
+{% macro spark(hh, ent, label, hex, rgba) %}<div class="sec" style="margin-top:12px;">{{ label }} — 24H — min {{ hh.min|round(1) }} · max {{ hh.max|round(1) }} · {{ hh.n }} pts</div>
+  <svg viewBox="0 0 100 30" preserveAspectRatio="none" style="width:100%;height:36px;display:block;" data-entity="{{ ent }}">
+    <polyline points="0,30 {{ hh.pts }} 100,30" fill="rgba({{ rgba }},.09)" stroke="none"/>
+    <polyline points="{{ hh.pts }}" fill="none" stroke="{{ hex }}" stroke-width="1" vector-effect="non-scaling-stroke" style="filter:drop-shadow(0 0 3px {{ hex }});"/>
+  </svg>{% endmacro %}
 `;
 
 // ── Device detection ─────────────────────────────────────────────
