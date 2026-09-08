@@ -100,9 +100,19 @@
  *   JSON du dashboard) + bumper NMC_VERSION + pousser un hacstag.
  *   Audit des 20 cards du dashboard (2026-09-08) : aucun autre manque moteur reel (is
  *   defined/none/number/string, zfill, etc. deja supportes) — pas d'ajout speculatif.
+ *
+ * ── v4.9.1 (patch, 08/09/2026) ──
+ *   fmt_eta (premiere macro partagee, deployee sans test sur le vrai moteur) rendait du
+ *   texte litteral en prod. Deux vrais manques moteur corriges : (1) le routage vers
+ *   nmcEvalArith exigeait un +/-/*// dans l'expression, un "%" isole (ex. "x % 24") ne
+ *   passait jamais l'evaluateur arithmetique ; (2) l'appel de macro evaluait ses arguments
+ *   via nmcEval au lieu de nmcEvalF, donc un argument filtre chaine (ex. "rd|round(0)|int")
+ *   n'etait jamais applique. 15 cas mesures sur harnais node (le pipe reste NON supporte
+ *   dans une expression arithmetique composee : utiliser floor() plutot que "|int" dans
+ *   ce contexte precis).
  */
 
-const NMC_VERSION = "4.9";
+const NMC_VERSION = "4.9.1";
 const NMC_MAX_TEMPLATE_OUTPUT = 100000;
 const NMC_MAX_TEMPLATE_ITERATIONS = 1000;
 const NMC_MAX_TEMPLATE_DEPTH = 32;
@@ -113,8 +123,13 @@ const NMC_MAX_TEMPLATE_DEPTH = 32;
 // JSON du dashboard, sinon on retombe sur "dupliquer le texte dans chaque card".
 // Ajouter une macro partagee = editer NMC_SHARED_MACROS_SRC + bumper NMC_VERSION +
 // pousser un hacstag (edition du .js, pas juste de la config).
+// fmt_eta : PAS de "|int" dans le corps — le mini-evaluateur arithmetique du moteur
+// (nmcEvalArith/nmcTokenize) ne connait pas le pipe ; floor() (nmcMathFns) le remplace.
+// Le routage vers cet evaluateur pour un "%" isole (regex de garde ~ligne 682) a ete
+// corrige le 08/09/2026 pour reconnaitre aussi "%" seul, donc pas de "+ 0" de
+// contournement necessaire ici. Formule mesuree OK (harnais node, 08/09/2026, 15 cas).
 const NMC_SHARED_MACROS_SRC = `
-{% macro fmt_eta(base_min, minutes) %}{% set total = base_min + minutes %}{% set h = ((total / 60)|int) % 24 %}{% set m = total % 60 %}{{ h|zfill(2) }}:{{ m|zfill(2) }}{% endmacro %}
+{% macro fmt_eta(base_min, minutes) %}{% set total = base_min + minutes %}{% set h = floor(total / 60) % 24 %}{% set m = total % 60 %}{{ h|zfill(2) }}:{{ m|zfill(2) }}{% endmacro %}
 `;
 
 // ── Device detection ─────────────────────────────────────────────
@@ -679,7 +694,7 @@ function nmcEval(expr, hass, vars) {
     const masked = expr
       .replace(/(states|is_state|state_attr)\([^)]*\)/g, "0")
       .replace(/['"][^'"]*['"]/g, "0");
-    if (/[+\-*/]/.test(masked) || /\([^)]*[+\-*/]/.test(expr)) {
+    if (/[+\-*/%]/.test(masked) || /\([^)]*[+\-*/%]/.test(expr)) {
       const r = nmcEvalArith(expr, hass, vars);
       if (r !== undefined) return r;
     }
@@ -845,8 +860,10 @@ function nmcAtom(s, hass, vars) {
       const child = Object.create(vars);
       for (let i = 0; i < def.params.length; i++) {
         const param = def.params[i];
-        if (i < args.length) child[param.name] = nmcEval(args[i], hass, vars);
-        else child[param.name] = param.def != null ? nmcEval(param.def, hass, vars) : "";
+        // nmcEvalF (pas nmcEval) : un argument d'appel peut porter des filtres chaines
+        // (ex. tuile(rd|round(0)|int)) — nmcEval seul ignore tout ce qui suit un "|".
+        if (i < args.length) child[param.name] = nmcEvalF(args[i], hass, vars);
+        else child[param.name] = param.def != null ? nmcEvalF(param.def, hass, vars) : "";
       }
       // on reutilise le ctx du rendu en cours : la recursion est coupee par
       // NMC_MAX_TEMPLATE_DEPTH au lieu de figer le navigateur.
