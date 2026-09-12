@@ -103,6 +103,20 @@ ERROR_PARSE_STALE_TOKEN = -32700
 # accept them. Not a transport or pairing problem: retrying after switching
 # picture mode succeeds.
 ERROR_SERVER = -32002
+# Methods whose -32002 genuinely means "the current picture mode forbids this
+# write". Reads (notably getTVStates) return the same code for unrelated
+# reasons, so the picture-mode advice must not be attached to them.
+PICTURE_WRITE_METHODS = frozenset(
+    {
+        "backlightControl",
+        "brightnessControl",
+        "colorControl",
+        "colorToneControl",
+        "contrastControl",
+        "sharpnessControl",
+        "tintControl",
+    }
+)
 # JSON-RPC "Method not found". AMBIGUOUS on Frames: the SAME code is returned
 # both when a method genuinely doesn't exist on the model AND when it exists but
 # isn't available in the current TV state — notably the picture controls while
@@ -184,6 +198,11 @@ class SamsungIPControl:
         # Consecutive (artModeControl says on / pictureMode says not-art)
         # disagreements, for the desync guard in async_get_art_mode.
         self._art_desync_count = 0
+
+    @property
+    def port(self) -> int:
+        """Return the port this client talks to (1516, or 1515 on pre-2020 TVs)."""
+        return self._port
 
     @property
     def token(self) -> str | None:
@@ -469,14 +488,76 @@ class SamsungIPControl:
             raise SamsungIPControlError(f"unexpected mute response: {result!r}")
         return value == "muteOn"
 
-    async def async_volume_up(self) -> None:
-        """Step the volume up by one (relative — no absolute level over IP Control).
+    async def async_get_volume(self) -> int:
+        """Return the absolute volume (0-100) when supported.
 
-        ``volumeUpDnControl`` is the only volume setter that works via IP
-        Control on a Frame 2024/2025 — ``directVolumeControl`` (absolute
-        volume) returns ``-32601 "Method not found"``. There is no getter:
-        the call is fire-and-forget, matching the WebSocket ``KEY_VOLUP``
-        semantics it replaces.
+        0-100 is the protocol range, measured: the QN55LS03FAFXZA firmware
+        declares ``volume`` int ``0..100`` and accepts the full range, and a
+        2013 UE27F6000 accepted 50/60/80/100. The 0-50 in the Savant 2017
+        profile is that driver's own slider bound, not a TV constraint.
+
+        Raises ``SamsungIPControlUnsupportedError`` (-32601) on a TV that
+        does not implement the method — but note that the same error is
+        raised in art/ambient mode by a TV that does, so callers must not
+        treat one -32601 as a permanent verdict.
+        """
+        result = await self._async_request("directVolumeControl")
+        value = result.get("volume")
+
+        try:
+            volume = int(value)
+        except (TypeError, ValueError) as ex:
+            raise SamsungIPControlError(
+                f"invalid directVolumeControl response: {result!r}"
+            ) from ex
+
+        if not 0 <= volume <= 100:
+            raise SamsungIPControlError(
+                f"volume out of range in directVolumeControl response: {result!r}"
+            )
+
+        return volume
+
+    async def async_set_volume(self, value: int) -> int:
+        """Set and return the absolute volume (0-100) when supported."""
+        volume = int(value)
+
+        if not 0 <= volume <= 100:
+            raise SamsungIPControlError("volume must be between 0 and 100")
+
+        result = await self._async_request(
+            "directVolumeControl",
+            {"volume": volume},
+        )
+        response_value = result.get("volume", volume)
+
+        try:
+            response_volume = int(response_value)
+        except (TypeError, ValueError) as ex:
+            raise SamsungIPControlError(
+                f"invalid directVolumeControl response: {result!r}"
+            ) from ex
+
+        if not 0 <= response_volume <= 100:
+            raise SamsungIPControlError(
+                f"volume out of range in directVolumeControl response: {result!r}"
+            )
+
+        return response_volume
+
+    async def async_volume_up(self) -> None:
+        """Step the volume up by one using relative IP Control.
+
+        There is no getter: the call is fire-and-forget, matching the
+        WebSocket ``KEY_VOLUP`` semantics it replaces.
+
+        This is the volume setter that works everywhere. For an absolute
+        level use :meth:`async_set_volume` when the TV implements it —
+        which is probed per device, not inferred from the model: the
+        earlier claim here that ``directVolumeControl`` is absent on Frames
+        came from a ``-32601`` whose display mode was never recorded, and
+        that method is dispatched from a table that is inactive in
+        art/ambient mode. See ``IP_Control_Protocol_Reference.md``.
         """
         await self._async_request("volumeUpDnControl", {"control": "volumeUp"})
 
@@ -498,17 +579,38 @@ class SamsungIPControl:
             "serialNumber": str(result.get("serialNumber", "")),
         }
 
+    async def async_set_input_source(self, value: str) -> str:
+        """Select an input source via local IP Control."""
+        result = await self._async_request(
+            "inputSourceControl",
+            {"inputSource": value},
+        )
+        response_value = result.get("inputSource", value)
+        if not isinstance(response_value, str) or not response_value:
+            raise SamsungIPControlError(f"invalid inputSource response: {result!r}")
+        return response_value
+
     async def async_get_tv_states(self) -> dict[str, Any]:
         """Return the TV's general state snapshot (read-only).
 
-        ``getTVStates`` reports, on a Frame 2024/2025:
+        ``getTVStates`` reports, on recent Samsung TVs:
         ``speakerSelect, volume, mute, pictureSize, pictureMode, soundMode,
-        inputSource``. These are all read-only over IP Control on consumer
-        Frames (the matching setters return ``-32601 "Method not found"``), so
-        this is exposed only as diagnostic sensors. Setting these values must
-        go through SmartThings / the WebSocket.
+        inputSource``. Availability of matching setters is model-dependent.
+        Some TVs may reject setters such as ``inputSourceControl`` with
+        ``-32601``, while others support direct local control. Setting values
+        without a supported local setter must go through SmartThings /
+        the WebSocket.
         """
         return await self._async_request("getTVStates")
+
+    async def async_get_channel(self) -> dict[str, Any]:
+        """Return the current tuner channel state, when supported.
+
+        Some tuner-equipped Samsung TVs expose ``atvDtv``, ``airCable`` and
+        ``channelNum`` through ``directChannelControl``. Models without this
+        capability may return ``-32601``.
+        """
+        return await self._async_request("directChannelControl")
 
     async def async_get_video_states(self) -> dict[str, Any]:
         """Return the TV's picture-level snapshot (read-only).
@@ -520,6 +622,19 @@ class SamsungIPControl:
         ``-32002``. This bulk getter stays available for diagnostics.
         """
         return await self._async_request("getVideoStates")
+
+    async def async_open_browser(self, url: str) -> None:
+        """Open a URL in the Samsung web browser using IP Control."""
+        if not url:
+            raise SamsungIPControlError("browser URL must not be empty")
+
+        await self._async_request(
+            "directAccessControl",
+            {
+                "applicationName": "webBrowser",
+                "url": url,
+            },
+        )
 
     # -- transport -----------------------------------------------------------
 
@@ -628,11 +743,20 @@ class SamsungIPControl:
                     f"token rejected (code {code}): {message} — re-pair required"
                 )
             if code == ERROR_SERVER:
+                # The picture-mode explanation only applies to the expert
+                # picture WRITES it was written for. getTVStates also returns
+                # -32002 occasionally, and telling someone to change picture
+                # mode to fix a state READ sends them nowhere.
+                if method in PICTURE_WRITE_METHODS:
+                    raise SamsungIPControlModeLockedError(
+                        f"{method} returned error {code}: {message} — the "
+                        "current picture mode likely blocks this control (e.g. "
+                        "Dynamic/HDR-dynamic); switch to Standard/Movie/"
+                        "Filmmaker and retry"
+                    )
                 raise SamsungIPControlModeLockedError(
-                    f"TV returned error {code}: {message} — the current "
-                    "picture mode likely blocks this control (e.g. "
-                    "Dynamic/HDR-dynamic); switch to Standard/Movie/"
-                    "Filmmaker and retry"
+                    f"{method} returned error {code}: {message} — the TV "
+                    "refused it in its current state; usually transient"
                 )
             if code == ERROR_METHOD_NOT_FOUND:
                 raise SamsungIPControlUnsupportedError(

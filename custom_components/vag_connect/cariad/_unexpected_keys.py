@@ -338,6 +338,9 @@ EXPECTED_KEYS: dict[str, dict[str, set[str]]] = {
             # for "car is being driven" / "12V critical" automations.
             "ignitionOn",
             "batteryProtectionLimitOn",
+            # #1333 — readiness software-update lifecycle (Scout, Elroq); now mapped
+            # to readiness_software_update_status, so stop re-flagging it.
+            "softwareUpdateStatus",
         },
         # v1.20.0 (Bundle 2 Phase A) — myskoda PR #557 widget endpoint
         # for lightweight per-tick polling. Schema verified against
@@ -932,6 +935,13 @@ EXPECTED_KEYS: dict[str, dict[str, set[str]]] = {
             # v2.18.0 — Scout #799: now CONSUMED into charging_profiles_pending
             # (vw_eu.py). 3-seg path, not covered by automation.chargingProfiles.*
             "automation.chargingProfiles.requests",
+            # Scout #1030/#1237 (@arcticMariner, audi): the SINGULAR
+            # "climatisationTimer" audi variant is CONSUMED into
+            # climatisation_timers_pending (vw_eu.py), mirroring the
+            # chargingProfiles.requests sibling above. 3-seg path, not covered
+            # by the 2-seg climatisationTimers.* wildcard — so it re-leaked to
+            # Scout despite its value already being parsed.
+            "automation.climatisationTimer.requests",
             # v2.18.0 — Scout #801: now CONSUMED into climatisation_timers_pending.
             # 3-seg path, not covered by the 2-seg climatisationTimers.* wildcard.
             "climatisationTimers.climatisationTimersStatus.requests",

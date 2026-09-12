@@ -79,6 +79,16 @@
           "mfa_code": "6-siffrig kod — giltig i några minuter."
         }
       },
+      "porsche_captcha": {
+        "title": "Captcha krävs",
+        "description": "Porsche kräver att du löser en captcha för att fortsätta inloggningen.\n\n{captcha_img}\n\nLös den en gång med din bästa gissning — upprepade misslyckade försök har fått Porsche att låsa konton på grund av misstänkt aktivitet.\n\nDitt svar skickas endast till Porsches inloggningstjänst, aldrig till tredje part eller till detta projekt. Om bilden inte laddas eller du fortsätter få fel kan du rapportera det: {report_url}",
+        "data": {
+          "captcha_code": "Captcha-kod"
+        },
+        "data_description": {
+          "captcha_code": "Ange tecknen som visas i bilden ovan."
+        }
+      },
       "email_password": {
         "title": "Logga in med e-post + lösenord (äldre metod)",
         "description": "Anslut ditt fordon till Home Assistant.\n\nVälj ditt märke och ange inloggningsuppgifterna från tillverkarens app.",
@@ -144,14 +154,31 @@
           "vin": "VIN (bilen som appen visar)",
           "spin": "S-PIN (valfritt)",
           "companion_use_addon": "Anslut via tillägget ADB Bridge",
-          "companion_addon_token": "Tilläggets token"
+          "companion_addon_token": "Tilläggets token",
+          "companion_use_relay": "Använd companion-agentappen (telefonen ringer upp Home Assistant)",
+          "companion_agent_token": "Agent-token"
         },
         "data_description": {
           "adb_host": "Telefonens adress i ditt nätverk, t.ex. 192.168.1.42.",
           "adb_port": "Vanligtvis 5555 för ADB över Wi-Fi.",
           "vin": "Det 17 tecken långa VIN-numret för bilen som visas i appen.",
           "companion_use_addon": "Kryssa i detta för en telefon med Android 11 eller nyare, som bara erbjuder trådlös felsökning. Ange sedan TILLÄGGETS adress ovan istället för telefonens.",
-          "companion_addon_token": "Behövs bara om du har angett api_token i tillägget."
+          "companion_addon_token": "Behövs bara om du har angett api_token i tillägget.",
+          "companion_use_relay": "Kryssa i detta om telefonen kör companion-agentappen. Telefonen ringer då upp Home Assistant, så varken ADB, trådlös felsökning eller fast IP behövs — lämna adressfältet tomt.",
+          "companion_agent_token": "Den slumpmässiga token som agentappen skapade. Minst 32 tecken, och en egen för varje fordon."
+        }
+      },
+      "audi_mbb_fallback": {
+        "title": "Audi — se till att fjärrkommandon fortsätter fungera (reservanslutning)",
+        "description": "Det här lägger till en reservanslutning så att din Audis fjärrkommandon — lås/lås upp, klimat och laddning — fortsätter fungera även om Audi någon gång ändrar hur appen loggar in. I vardagen ändras ingenting: din Audi använder sin vanliga anslutning, och reserven träder bara in om den vanliga slutar ta emot kommandon. Att ställa in det tar en snabb bekräftelse i webbläsaren (inget lösenord lagras). Välj den Audi du redan lagt till med QR-/app-inloggningen. Det fungerar på de flesta bensin-, diesel- och laddhybrid-Audi; några av de allra nyaste helelektriska modellerna stöds inte och avvisas automatiskt.",
+        "data": {
+          "entry_id": "Vilken Audi",
+          "mbb_vins": "Fordons-ID (VIN) — lämna oftast tomt",
+          "spin": "S-PIN (behövs bara för lås/lås upp)"
+        },
+        "data_description": {
+          "mbb_vins": "Lämna det här tomt om inte inställningen ber om det.",
+          "spin": "Din Audi-S-PIN — koden du använder för att låsa/låsa upp på distans."
         }
       }
     },
@@ -167,19 +194,32 @@
       "portal_interaction_required": "EU Data Act-portalen kräver en engångsåtgärd i din webbläsare eller varumärkesapp (t.ex. godkänna villkor, bekräfta samtycke, slutföra onboarding/regionval) innan huvudlös åtkomst fungerar. Detta är INTE ett lösenordsproblem — öppna portalen en gång i en webbläsare, slutför uppmaningen och försök igen.",
       "upstream_unavailable": "VW backend tillfälligt otillgänglig. Detta är ett serverproblem hos VW, INTE ett autentiseringsfel. Vänta 5–15 minuter och försök igen. Konfigurera INTE om integrationen.",
       "na_signin_attestation": "Din e-postadress och ditt lösenord är korrekta — Volkswagen North America blockerar nu den här inloggningen bakom en enhetsattesteringskontroll från Google (Play Integrity) som bara den officiella appen på en äkta telefon kan passera. Att ange lösenordet igen hjälper inte; det här är en serverspärr hos VW, inte ett problem med inloggningsuppgifterna. (Spåras: #1165.)",
+      "porsche_login_wall": "Din e-post och ditt lösenord är korrekta — inloggningen tog sig förbi lösenordssteget, men hamnade sedan på en Porsche captcha-/samtyckesskärm (sedd på vissa konton på my.porsche.com) som en headless inloggning inte kan ta sig förbi. Att ange lösenordet igen hjälper inte; det här är en spärr på Porsches sida, inte ett problem med inloggningsuppgifterna. Försök högst en gång — upprepade försök har låst Porsche-konton. (Spåras: #1337.)",
       "brand_not_dag_eligible": "Det valda märket stöder inte webbläsarinloggning. Använd flödet för e-post + lösenord i stället.",
       "skoda_qr_retired": "Škodas lösenordsfria inloggning (QR) inaktiverades av Volkswagen och fungerar inte längre. Gå tillbaka och välj ”E-post + lösenord (äldre metod)”, välj sedan Škoda där och logga in med din MyŠkoda-e-post och ditt lösenord.",
+      "device_grant_retired": "Appens enhetsinloggning för det här märket har stängts av av tillverkaren och kan inte längre slutföras automatiskt — den kräver nu app-verifiering på enheten. Audi: gå tillbaka och välj ”E-post + lösenord”, och konfigurera sedan den skrivskyddade EU Data Act-portalen, som fortfarande fungerar. Porsche: det finns ännu ingen skrivskyddad reservlösning (spåras i #1337).",
       "still_waiting_browser": "Väntar fortfarande på godkännande i webbläsaren. Öppna URL:en ovan, logga in, bekräfta koden och klicka sedan på Skicka igen.",
       "companion_cannot_connect": "Det gick inte att nå telefonen via ADB. Kontrollera att den är ansluten till nätverket, att ADB över Wi-Fi är på och att du har godkänt felsökningsförfrågan.",
       "companion_needs_addon": "Det här ser ut som en telefon med Android 11 eller nyare som använder trådlös felsökning, vilket den direkta anslutningen här inte klarar (den bygger på TLS och parkoppling). Installera tillägget 'VW Group App ADB Bridge' (github.com/its-me-prash/vwgroup-app-adb-bridge) och peka companion-anslutningen mot tillägget. Äldre telefoner (Android 10 eller tidigare) ansluter direkt här.",
       "companion_app_not_found": "Anslöt till telefonen, men märkesappen är inte installerad på den.",
-      "companion_unknown_brand": "Det märket har ännu ingen förinställning för extra telefon."
+      "companion_unknown_brand": "Det märket har ännu ingen förinställning för extra telefon.",
+      "companion_agent_token_too_short": "Agent-token är för kort. Klistra in den slumpmässiga token som agentappen skapade (minst 32 tecken).",
+      "companion_host_required": "Ange telefonens IP-adress — eller kryssa i agentalternativet om telefonen ringer upp Home Assistant.",
+      "missing_captcha": "Skriv in tecknen som visas i bilden ovan.",
+      "captcha_retry": "Lös den captcha som visas ovan för att fortsätta."
     },
     "abort": {
       "already_configured": "Det här kontot är redan konfigurerat.",
       "reauth_successful": "Omautentisering lyckades.",
       "reconfigure_successful": "Konfigurationen uppdaterades.",
-      "mbb_not_eligible": "Ditt fordon är inte behörigt för den varaktiga MBB-inloggningen — backend returnerade \"Unknown user\". Det är en nyare ID-/MEB-modell (ID.3/4/5, e-up osv.) som aldrig registrerades i det gamla Car-Net/MBB-systemet, så den varaktiga inloggningen och fjärrkommandona når den inte. Använd EU Data Act-portalkanalen (eller e-post + lösenord-inloggningen) för sådana fordon. MBB-inloggningen är för äldre Car-Net-bilar (de flesta laddhybrid-/förbränningsmodeller)."
+      "mbb_not_eligible": "Ditt fordon är inte behörigt för den varaktiga MBB-inloggningen — backend returnerade \"Unknown user\". Det är en nyare ID-/MEB-modell (ID.3/4/5, e-up osv.) som aldrig registrerades i det gamla Car-Net/MBB-systemet, så den varaktiga inloggningen och fjärrkommandona når den inte. Använd EU Data Act-portalkanalen (eller e-post + lösenord-inloggningen) för sådana fordon. MBB-inloggningen är för äldre Car-Net-bilar (de flesta laddhybrid-/förbränningsmodeller).",
+      "mbb_fallback_armed": "Reservanslutningen är inställd. Om din Audis vanliga anslutning någon gång slutar ta emot fjärrkommandon växlar lås/lås upp, klimat och laddning automatiskt till reserven. Ingenting ändras i vardagen.",
+      "no_devicegrant_audi": "Ingen matchande Audi hittades. Den här reserven gäller bara en Audi som du lagt till med QR-/app-inloggningen och som inte redan har den. Lägg till din Audi på det sättet först och kom sedan tillbaka hit.",
+      "porsche_login_wall": "Dina inloggningsuppgifter är korrekta — inloggningen tog sig förbi lösenordssteget, men stannade vid en Porsche captcha-/samtyckesskärm som den inte kan slutföra automatiskt (sedd på my.porsche.com). Det här är en spärr på Porsches sida, spårad i #1337, inte ett fel lösenord. Försök inte igen i en loop — upprepade försök har låst Porsche-konton. Om du kan, rapportera det gärna så att vi kan åtgärda det (bifoga diagnostik): {report_url}",
+      "porsche_captcha_failed": "Captchan kunde inte verifieras och är nu förbrukad. Stäng den här dialogen och starta om Porsche-inloggningen för att få en ny. Om du kan, rapportera det gärna så att vi kan åtgärda det (bifoga diagnostik): {report_url}",
+      "porsche_captcha_cooldown": "För många captcha-försök. Upprepade försök kan göra att Porsche tillfälligt låser kontot eller flaggar ditt nätverk, så detta stoppades för att skydda ditt konto. Vänta några minuter innan du försöker igen. Om du kan, rapportera det gärna så att vi kan åtgärda det (bifoga diagnostik): {report_url}",
+      "reconfigure_failed": "Omkonfigurationen misslyckades: konfigurationsposten kunde inte hittas. Försök igen.",
+      "reauth_failed": "Omautentiseringen misslyckades: konfigurationsposten kunde inte hittas. Försök igen."
     },
     "progress": {
       "awaiting_browser_login": "Öppna {verification_uri} i valfri webbläsare, logga in med ditt Brand ID-konto och bekräfta koden {user_code}.",
@@ -194,6 +234,7 @@
           "scan_interval": "Uppdateringsintervall",
           "spin": "S-PIN",
           "battery_nominal_kwh": "Batteriets märkkapacitet (kWh, för hälsotillstånd)",
+          "fuel_tank_capacity": "Tankvolym (liter, för bränsle-%)",
           "enable_reverse_geocoding": "Omvänd geokodning (parkeringsadress)",
           "read_only_mode": "Skrivskyddat läge",
           "companion_read_charge_detail": "Companion: läs laddningsmål (navigerar i appen)",
@@ -204,20 +245,27 @@
           "enable_push_audi_vw": "Audi/VW push updates (Cariad FCM, EXPERIMENTAL)",
           "client_id_override": "OAuth client_id-åsidosättning (avancerade användare)",
           "eu_data_act_auto_kickoff": "EU Data Act: starta automatiskt Custom Data Request",
-          "supplementary_authproxy": "Lägg till en Volkswagen.de-läskanal (slå samman data)",
+          "supplementary_authproxy": "Lägg till eller uppdatera en Volkswagen.de-läskanal (slå samman data)",
           "hide_empty_entities": "Dölj entiteter utan data",
-          "supplementary_eu_portal": "Lägg till en EU Data Act-portalläskanal",
+          "supplementary_eu_portal": "Lägg till eller uppdatera en EU Data Act-portalläskanal",
           "remove_supplementary_authproxy": "Ta bort vw.de-läskanalen",
           "remove_supplementary_eu_portal": "Ta bort EU Data Act-portalläskanalen",
-          "supplementary_tibber": "Lägg till en Tibber-läskanal (laddningsdata för elbil)",
+          "supplementary_tibber": "Lägg till eller uppdatera en Tibber-läskanal (laddningsdata för elbil)",
           "remove_supplementary_tibber": "Ta bort Tibber-läskanalen",
           "abrp_enable": "Aktivera ABRP-telemetri",
           "abrp_api_key": "ABRP-api_key (utvecklarnyckel)",
           "abrp_user_token": "ABRP-token (per fordon)",
           "keep_raw_datasets": "Behåll rå EU Data Act-datauppsättningar (diagnostik)",
+          "auto_utility_meters": "Skapa månadsmätare automatiskt (laddad energi, körsträcka)",
           "test_cohort": "Hjälp till att förbättra VW Group Connect (frivillig testgrupp)",
           "vweu_device_grant": "Lägg till VW EU Two-Way — kommandon + live-avläsningar (BETA)",
-          "remove_vweu_twoway": "Ta bort VW EU Two-Way (\u00e5terg\u00e5 till f\u00f6reg\u00e5ende kanal)"
+          "remove_vweu_twoway": "Ta bort VW EU Two-Way (återgå till föregående kanal)",
+          "companion_read_vehicle_health": "Companion: läs mätarställning och service från fordonsstatus (navigerar i appen)",
+          "companion_read_climate_detail": "Companion: läs börtemperatur och utetemperatur (navigerar i appen)",
+          "companion_read_parking_position": "Companion: läs parkeringsposition från appens delningslänk (navigerar i appen)",
+          "skoda_official_api_key": "Officiell Škoda API-nyckel — lägger till tillverkarens officiella API som live-datakälla (och failover)",
+          "clear_skoda_official_key": "Rensa den lagrade officiella Škoda API-nyckeln (en ny skapas automatiskt om din inloggning stöder det)",
+          "skoda_official_mode": "Škoda officiell API-källäge"
         },
         "data_description": {
           "scan_interval": "Hur ofta data hämtas (minuter). Minimum: 3.",
@@ -236,6 +284,7 @@
           "abrp_api_key": "En utvecklar-/partnernyckel som du registrerar hos iternio (vi levererar ingen). Identifierar integrationen. Loggas aldrig.",
           "abrp_user_token": "'Generic'-token från ABRP-appen: Inställningar -> din bil -> Live Data. Loggas aldrig.",
           "keep_raw_datasets": "Endast användbart på EU Data Act-portalkanalen. När det är på sparas de senaste råa dataset-ZIP-filerna som portalen levererar på disken (under .storage, per fordon och med en storleksgräns), så att ett felaktigt eller saknat värde kan återskapas från exakt de byte som din bil skickade. Dessa filer innehåller din GPS-position, VIN och telemetri, så det är avstängt som standard – slå bara på det vid felsökning.",
+          "auto_utility_meters": "Av som standard. När det är på skapar integrationen Home Assistant utility_meter-hjälpare som summerar din laddade energi och körsträcka per kalendermånad, en per fordon. Reglaget visas bara när en matchande källsensor redan finns. Det här är permanenta hjälpare: att stänga av det igen stoppar att nya skapas men tar inte bort de som redan skapats – ta bort dem under Inställningar → Enheter och tjänster → Hjälpare.",
           "test_cohort": "Avstängt som standard. Slå på det här så får integrationen prova experimentella avläsningar från din bil — till exempel det pågående försöket att få fram GPS-position för Volkswagen-bilar i EU — och då och då visa en avisering, som du enkelt kan stänga, där du ombeds dela en diagnostikfil så att en ny funktion kan bekräftas för just din modell. Allt som delas rensas automatiskt innan det lämnar ditt system: inget VIN, ingen GPS, inga tokens och ingen e-post skickas någonsin med. Det är så nya funktioner låses upp — för din bil och för alla andra som kör samma modell — och du kan stänga av det igen när du vill.",
           "vweu_device_grant": "Endast Volkswagen, BETA. Lägger till tvåvägsstyrning (lås/lås upp, klimat, laddning) och live-CARIAD-avläsningar genom att du loggar in med ditt Volkswagen ID. Volkswagen utfärdar bara en 1-timmestoken här, så ditt lösenord lagras för att förnya den automatiskt — det skickas endast till Volkswagens egen inloggningsserver och skrivs aldrig till loggar eller diagnostik. Om du hellre inte vill lagra ett lösenord, använd de skrivskyddade kanalerna istället. Om du kryssar i detta öppnas inloggningssteget."
         }
@@ -288,27 +337,28 @@
         }
       },
       "add_vweu_twoway": {
-        "title": "VW EU Two-Way (kommandon + live-avl\u00e4sningar, BETA)",
+        "title": "VW EU Two-Way (kommandon + live-avläsningar, BETA)",
         "description": "**Experimentell, frivillig — endast Volkswagen.** Lägger till tvåvägsstyrning (lås/lås upp, klimat, laddning) och live-CARIAD-avläsningar genom att du loggar in med ditt Volkswagen ID. Eftersom Volkswagen bara utfärdar en 1-timmestoken på den här vägen **lagras** ditt lösenord så att integrationen kan förnya den automatiskt. Det skickas endast till Volkswagens egen inloggningsserver och skrivs aldrig till loggar eller diagnostik. Vill du hellre inte lagra ett lösenord? Använd de skrivskyddade kanalerna istället. **Krav:** ditt Volkswagen ID måste vara fordonets huvudanvändare.",
         "data": {
-          "username": "Email Address",
-          "password": "Password"
+          "username": "E-postadress",
+          "password": "Lösenord"
         },
         "data_description": {
-          "username": "E-postadressen f\u00f6r ditt Volkswagen ID-/myVolkswagen-konto.",
-          "password": "Ditt Volkswagen ID-l\u00f6senord. Anv\u00e4nds endast f\u00f6r att f\u00f6rnya 1-timmes-\u00e5tkomsttoken mot Volkswagens inloggningsserver; loggas aldrig och rensas bort fr\u00e5n diagnostik."
+          "username": "E-postadressen för ditt Volkswagen ID-/myVolkswagen-konto.",
+          "password": "Ditt Volkswagen ID-lösenord. Används endast för att förnya 1-timmes-åtkomsttoken mot Volkswagens inloggningsserver; loggas aldrig och rensas bort från diagnostik."
         }
       }
     },
     "error": {
       "abrp_credentials_required": "För att aktivera ABRP måste du ange både api_key och fordonstoken.",
-      "invalid_auth": "Inloggningen misslyckades. Kontrollera din Volkswagen ID-e-post och ditt l\u00f6senord.",
-      "cannot_connect": "Kunde inte n\u00e5 Volkswagen. F\u00f6rs\u00f6k igen.",
-      "vweu_mfa_unsupported": "Det h\u00e4r kontot kr\u00e4ver en e-post- eller autentiseringskod, som VW EU Two-Way inte kan hantera \u00e4nnu. Anv\u00e4nd de skrivskyddade kanalerna ist\u00e4llet.",
-      "vweu_no_bff_data": "Inloggningen lyckades, men Volkswagen har \u00e4nnu inte returnerat n\u00e5gra live-data f\u00f6r den h\u00e4r bilen p\u00e5 det moderna backendet, s\u00e5 VW EU Two-Way aktiverades inte och din nuvarande kanal \u00e4r of\u00f6r\u00e4ndrad. F\u00f6rs\u00f6k igen senare, eller dela en diagnostikfil s\u00e5 att vi kan titta p\u00e5 det."
+      "invalid_auth": "Inloggningen misslyckades. Kontrollera din Volkswagen ID-e-post och ditt lösenord.",
+      "cannot_connect": "Kunde inte nå Volkswagen. Försök igen.",
+      "vweu_mfa_unsupported": "Det här kontot kräver en e-post- eller autentiseringskod, som VW EU Two-Way inte kan hantera ännu. Använd de skrivskyddade kanalerna istället.",
+      "vweu_no_bff_data": "Inloggningen lyckades, men Volkswagen har ännu inte returnerat några live-data för den här bilen på det moderna backendet, så VW EU Two-Way aktiverades inte och din nuvarande kanal är oförändrad. Försök igen senare, eller dela en diagnostikfil så att vi kan titta på det.",
+      "terms_and_conditions": "Användarvillkor måste accepteras. Logga in i appen."
     },
     "abort": {
-      "not_volkswagen": "Den h\u00e4r kanalen \u00e4r endast tillg\u00e4nglig f\u00f6r Volkswagen.",
+      "not_volkswagen": "Den här kanalen är endast tillgänglig för Volkswagen.",
       "vweu_twoway_vw_disabled": "Volkswagen inaktiverade den inloggning som den här kanalen använde den 2026-08-18, så den kan inte längre konfigureras. Live-avläsningar fungerar fortfarande via EU Data Act-portalen, och en varaktig kommandokanal via det klassiska Car-Net-backendet är i beta — se issue #584."
     }
   },
@@ -339,7 +389,33 @@
         "name": "Laddstatus"
       },
       "plug_state": {
-        "name": "Laddkontakt"
+        "name": "Laddkontakt",
+        "state": {
+          "connected": "Ansluten",
+          "disconnected": "Frånkopplad"
+        }
+      },
+      "portal_health": {
+        "name": "Portalflödets status",
+        "state": {
+          "ok": "Live",
+          "waiting_for_portal_data": "Väntar på portaldata",
+          "empty_snapshots": "Tomma ögonblicksbilder",
+          "delivery_not_ready": "Leverans inte klar",
+          "portal_error": "Portalfel",
+          "stale": "Föråldrad"
+        }
+      },
+      "minutes_since_last_snapshot": {
+        "name": "Minuter sedan senaste ögonblicksbild"
+      },
+      "historical_export_state": {
+        "name": "Historisk export",
+        "state": {
+          "pending": "Begärd — förbereds",
+          "done": "Levererad",
+          "timed_out": "Tidsgräns överskreds"
+        }
       },
       "target_soc": {
         "name": "Laddningsmål"
@@ -415,6 +491,9 @@
       },
       "last_trip_avg_speed_kmh": {
         "name": "Senaste Resa — Medel-Hastighet"
+      },
+      "last_trip_duration_min": {
+        "name": "Senaste Resa — Restid"
       },
       "last_trip_avg_fuel_consumption_l_100km": {
         "name": "Senaste Resa — Medel-Bränsleförbrukning"
@@ -526,6 +605,9 @@
       },
       "fuel_tank_capacity_liters": {
         "name": "Tankvolym"
+      },
+      "fuel_level_liters": {
+        "name": "Bränslenivå (liter)"
       },
       "climate_running_requests_count": {
         "name": "Väntande klimatförfrågningar"
@@ -1273,6 +1355,118 @@
       },
       "reminder_tyre_repair_kit": {
         "name": "Påminnelse om däckreparationssats"
+      },
+      "exterior_color": {
+        "name": "Utvändig färg"
+      },
+      "engine_power": {
+        "name": "Motoreffekt"
+      },
+      "engine_torque_nm": {
+        "name": "Vridmoment"
+      },
+      "engine_cylinders": {
+        "name": "Cylindrar"
+      },
+      "engine_displacement_ccm": {
+        "name": "Slagvolym"
+      },
+      "engine_code": {
+        "name": "Motorkod"
+      },
+      "fuel_type": {
+        "name": "Bränsletyp"
+      },
+      "data_captured_at": {
+        "name": "Datastatus"
+      },
+      "window_position_front_left": {
+        "name": "Fönsterposition fram vänster"
+      },
+      "window_position_front_right": {
+        "name": "Fönsterposition fram höger"
+      },
+      "window_position_rear_left": {
+        "name": "Fönsterposition bak vänster"
+      },
+      "window_position_rear_right": {
+        "name": "Fönsterposition bak höger"
+      },
+      "transmission": {
+        "name": "Växellåda"
+      },
+      "interior_color": {
+        "name": "Interiörfärg"
+      },
+      "drive_train": {
+        "name": "Drivlina"
+      },
+      "csid": {
+        "name": "Kundtjänst-ID"
+      },
+      "parked_since": {
+        "name": "Parkerad sedan"
+      },
+      "last_trip_eco_score": {
+        "name": "Eco-poäng senaste resa"
+      },
+      "last_trip_intake_air_temp_c": {
+        "name": "Insugslufttemperatur senaste resa"
+      },
+      "trip_count": {
+        "name": "Loggade resor"
+      },
+      "score_points_total": {
+        "name": "Förarpoäng"
+      },
+      "last_refuel_liters_added": {
+        "name": "Tankad mängd"
+      },
+      "last_refuel_tank_before_l": {
+        "name": "Tank före tankning"
+      },
+      "last_refuel_tank_after_l": {
+        "name": "Tank efter tankning"
+      },
+      "last_refuel_odometer_km": {
+        "name": "Vägmätare vid tankning"
+      },
+      "data_request_created_at": {
+        "name": "Databegäran skapad"
+      },
+      "last_snapshot_at": {
+        "name": "Senaste ögonblicksbild mottagen"
+      },
+      "last_no_data_at": {
+        "name": "Senaste förfrågan utan data"
+      },
+      "no_data_count": {
+        "name": "Förfrågningar utan data"
+      },
+      "tpms_status": {
+        "name": "Däcktrycksövervakning",
+        "state": {
+          "measured": "Uppmätt (per hjul)",
+          "indirect": "Indirekt (inga tryckvärden)"
+        }
+      },
+      "readiness_software_update_status": {
+        "name": "Status för programuppdatering"
+      },
+      "short_term_avg_electric_consumption_kwh_100km": {
+        "name": "Kortsiktig genomsnittlig elförbrukning"
+      },
+      "engine_starts_count": {
+        "name": "Motorstarter"
+      },
+      "short_term_avg_fuel_consumption_l_100km": {
+        "name": "Genomsnittlig bränsleförbrukning (kort sikt)"
+      },
+      "battery_soc_charge_report": {
+        "name": "Batterinivå (senaste laddrapport)"
+      },
+      "alarm_reason": {
+        "name": "Larmorsak"
       }
     },
     "binary_sensor": {
@@ -1578,6 +1772,15 @@
       },
       "marketing_consent_given": {
         "name": "Marknadsföringssamtycke givet"
+      },
+      "data_source": {
+        "name": "Källa: {source}"
+      },
+      "data_stale": {
+        "name": "Data föråldrad"
+      },
+      "connect_contract_active": {
+        "name": "Connect-avtal aktivt"
       }
     },
     "switch": {
@@ -1666,6 +1869,9 @@
       "data_act_request_button": {
         "name": "Skapa EU Data Act-databegäran"
       },
+      "historical_export_button": {
+        "name": "Begär historisk export"
+      },
       "companion_reset_button": {
         "name": "Återställ companion-anslutning"
       }
@@ -1713,28 +1919,28 @@
     },
     "image": {
       "render_icon": {
-        "name": "3/4 vy ikon"
+        "name": "3/4-vy (ikon)"
       },
       "render_small": {
-        "name": "3/4 vy liten"
+        "name": "3/4-vy (liten)"
       },
       "render_medium": {
-        "name": "3/4 vy medium"
+        "name": "3/4-vy (mellan)"
       },
       "render_side_sm": {
-        "name": "Sidoprofil liten"
+        "name": "Sidovy (liten)"
       },
       "render_side_lg": {
-        "name": "Sidoprofil stor"
+        "name": "Sidovy (stor)"
       },
       "render_angle_hd": {
-        "name": "3/4 vy HD"
+        "name": "3/4-vy (HD)"
       },
       "render_angle_lg": {
-        "name": "3/4 vy stor"
+        "name": "3/4-vy (stor)"
       },
       "vehicle_render": {
-        "name": "Fordonsrendering"
+        "name": "Fordonsbild"
       }
     },
     "lock": {
@@ -1777,9 +1983,34 @@
     }
   },
   "issues": {
+    "skoda_official_manual_key": {
+      "title": "Škodas officiella API — lägg till din API-nyckel",
+      "fix_flow": {
+        "step": {
+          "enter_key": {
+            "title": "Lägg till en MyŠkoda API-nyckel",
+            "description": "Home Assistant kunde inte automatiskt skapa en officiell Škoda API-nyckel för den här bilen. Skapa en i MyŠkoda-appen, välj sedan fordonet och klistra in nyckeln här. Den automatiska skapelsen fortsätter att försöka i bakgrunden — det här är bara det manuella alternativet.",
+            "data": {
+              "vin": "Fordon",
+              "api_key": "MyŠkoda API-nyckel (börjar med msk_)"
+            }
+          }
+        },
+        "error": {
+          "key_required": "Klistra in din MyŠkoda API-nyckel."
+        },
+        "abort": {
+          "entry_gone": "Den integrationsposten finns inte längre."
+        }
+      }
+    },
+    "invalid_credentials": {
+      "title": "Inloggning misslyckades — {brand}",
+      "description": "Home Assistant kunde inte logga in på ditt {brand}-konto — vanligtvis fel eller ändrat lösenord, men en tillfällig spärr kan se likadan ut.\n\nInställningar → Enheter och tjänster → VW Group Connect → ⋮ → Konfigurera om för att ange dina inloggningsuppgifter igen."
+    },
     "vweu_twoway_disabled": {
       "title": "VW EU Two-Way: inaktiverad av Volkswagen",
-      "description": "Den 2026-08-18 inaktiverade Volkswagen den inloggning som kanalen VW EU Two-Way (moderna CARIAD-backendet) anv\u00e4nde, s\u00e5 dess 1-timmestoken kan inte l\u00e4ngre f\u00f6rnyas och tv\u00e5v\u00e4gskommandon via den kanalen har slutat fungera. Detta \u00e4r en \u00e4ndring p\u00e5 Volkswagens sida \u2014 inget \u00e4r felkonfigurerat hos dig, och ditt konto \u00e4r inte i fara (felet intr\u00e4ffar innan n\u00e5got l\u00f6senord skickas).\n\n**Dina live-avl\u00e4sningar fungerar fortfarande** via EU Data Act-portalen, s\u00e5 dina sensorer p\u00e5verkas inte.\n\n**F\u00f6r tv\u00e5v\u00e4gskommandon (l\u00e5s/l\u00e5s upp, klimat, laddning):** en varaktig ers\u00e4ttning via det klassiska Car-Net-backendet (MBB) \u2014 som Volkswagen INTE har inaktiverat \u2014 \u00e4r nu i beta. Se issue #584 f\u00f6r hur du aktiverar och testar den.\n\nDu kan ta bort den nu inaktiva kanalen n\u00e4r som helst under integrationens inst\u00e4llningar (VW EU Two-Way \u2192 ta bort). Det h\u00e4r meddelandet \u00e4r endast informativt; integrationen forts\u00e4tter att k\u00f6ras p\u00e5 dina l\u00e4skanaler.\n\n**Tips:** aktivera bara EN tv\u00e5v\u00e4gsintegration f\u00f6r en och samma bil \u00e5t g\u00e5ngen. VW har hastighetsbegr\u00e4nsningar och kan tillf\u00e4lligt l\u00e5sa ett konto som flera appar hamrar p\u00e5 samtidigt \u2014 n\u00e4r det h\u00e4nder kan inte ens den officiella VW-appen styra bilen, vilket \u00e4r tecknet p\u00e5 att det \u00e4r en kontosp\u00e4rr, inte den h\u00e4r integrationen."
+      "description": "Den 2026-08-18 inaktiverade Volkswagen den inloggning som kanalen VW EU Two-Way (moderna CARIAD-backendet) använde, så dess 1-timmestoken kan inte längre förnyas och tvåvägskommandon via den kanalen har slutat fungera. Detta är en ändring på Volkswagens sida — inget är felkonfigurerat hos dig, och ditt konto är inte i fara (felet inträffar innan något lösenord skickas).\n\n**Dina live-avläsningar fungerar fortfarande** via EU Data Act-portalen, så dina sensorer påverkas inte.\n\n**För tvåvägskommandon (lås/lås upp, klimat, laddning):** en varaktig ersättning via det klassiska Car-Net-backendet (MBB) — som Volkswagen INTE har inaktiverat — är nu i beta. Se issue #584 för hur du aktiverar och testar den.\n\nDu kan ta bort den nu inaktiva kanalen när som helst under integrationens inställningar (VW EU Two-Way → ta bort). Det här meddelandet är endast informativt; integrationen fortsätter att köras på dina läskanaler.\n\n**Tips:** aktivera bara EN tvåvägsintegration för en och samma bil åt gången. VW har hastighetsbegränsningar och kan tillfälligt låsa ett konto som flera appar hamrar på samtidigt — när det händer kan inte ens den officiella VW-appen styra bilen, vilket är tecknet på att det är en kontospärr, inte den här integrationen."
     },
     "two_factor_required": {
       "title": "Tvåfaktorsautentisering krävs — {brand}",
@@ -1827,7 +2058,7 @@
     },
     "data_act_no_data": {
       "title": "EU Data Act-portalen: ingen fordonsdata ännu ({brand})",
-      "description": "EU Data Act-portalen loggade in för {brand} men returnerar ännu ingen fordonsdata.\n\nIntegrationen skapar den kontinuerliga databegäran åt dig automatiskt, så de vanliga orsakerna till ett tomt flöde är:\n\n1. **Datadelningssamtycke inte beviljat för den här bilen.** På portalen beviljar du EU Data Act-datadelningssamtycket per fordon, en gång. Tills du gör det skapas begäran men förblir tom — det här är den vanligaste orsaken.\n2. **Bilen har inte skickat något nytt ännu.** En ny datamängd publiceras först efter att bilen har körts, laddats eller låsts/låsts upp, så en helt ny begäran kan ta 15–60 minuter (eller en kort körtur) innan den börjar fyllas.\n3. **Ett avbrott på VW:s sida.** VW rapporterade ett varumärkesövergripande avbrott i EU Data Act-portalen från slutet av maj 2026; så länge det pågår returnerar portalen tom data för alla verktyg och återhämtar sig märke för märke.\n\n**Snabbaste kollen:** öppna `eu-data-act.drivesomethinggreater.com`, logga in och bekräfta (a) att datadelningssamtycket är beviljat för den här bilen och (b) att det finns en aktiv kontinuerlig (15-minuters) databegäran med alla kluster ikryssade. Om du inte ser någon data där heller ligger felet hos VW — integrationen kan inte göra något förrän VW återställer det.\n\nDet här är den skrivskyddade portal-betan — varningen försvinner av sig själv när data kommer in."
+      "description": "EU Data Act-portalen loggade in för {brand} men returnerar ännu inga fordonsdata.\n\nIntegrationen försöker skapa den kontinuerliga dataförfrågan åt dig automatiskt, men på vissa konton håller portalen webbläsarsessionen anonym — och då kan den automatiska förfrågan (och knappen \"Skapa dataförfrågan enligt EU:s dataakt\" i appen) inte slutföras, så du måste skapa förfrågan själv i portalen. De vanliga orsakerna till ett tomt flöde:\n\n1. **Ägarskap/nyttjanderätt är inte bekräftat för den här bilen.** Portalen måste visa ditt fordons ägarskap (eller nyttjanderätt) som bekräftat. Om det inte gör det, bekräfta det där först — nödvändigt, men inte alltid tillräckligt i sig.\n2. **Samtycke till datadelning är inte beviljat för den här bilen.** Du beviljar samtycket till datadelning enligt EU:s dataakt per fordon, en gång. Tills du gör det förblir förfrågan tom.\n3. **Ingen kontinuerlig förfrågan finns ännu.** Om den automatiska skapelsen inte gick igenom, skapa den själv: lägg till en anpassad dataförfrågan (Custom Data Request) i portalen med alla kluster ikryssade och en frekvens på 15 minuter. **Ta först bort alla äldre förfrågningar för just den här bilen** — portalen tillåter bara en aktiv förfrågan per fordon, så en äldre (till exempel en månatlig) förfrågan för den här bilen blockerar den nya. Ta inte bort en annan bils förfrågan: på ett blandat konto med person- och nyttofordon behåller varje bil sin egen förfrågan under sitt eget område (personbilar under Volkswagen Personenkraftwagen, skåpbilar under Volkswagen Nutzfahrzeuge). Integrationen plockar upp den vid nästa avläsning — ingen omstart behövs.\n4. **Bilen har inte skickat något nytt ännu.** En ny datamängd publiceras först efter att bilen har körts, laddats eller låsts/låsts upp, så en ny förfrågan kan ta 15–60 minuter (eller en kort körtur) innan den börjar fyllas.\n5. **Ett avbrott på VW:s sida.** VW rapporterade ett avbrott i EU Data Act-portalen för alla varumärken från slutet av maj 2026; så länge det pågår returnerar portalen tomma data för alla verktyg och återhämtar sig varumärke för varumärke.\n6. **Eller lägg till läskanalen för webbplatsen volkswagen.de.** I integrationens inställningar kan du lägga till den skrivskyddade webbplatskanalen volkswagen.de som en alternativ källa: den loggar in på webbplatsen volkswagen.de (inte app-backenden som blockerar den huvudlösa inloggningen), och returnerar för vissa bilar fält som portalflödet inte gör. Det kräver att ditt Volkswagen ID är fordonets bekräftade primära användare.\n\n**Snabbaste kontrollen:** öppna `eu-data-act.drivesomethinggreater.com`, logga in och bekräfta (a) att ägarskap/nyttjanderätt är bekräftat, (b) att samtycket till datadelning är beviljat för den här bilen, och (c) att det finns en aktiv kontinuerlig dataförfrågan (15 minuter) med alla kluster ikryssade — skapa den själv om ingen finns. Om du inte ser några data där heller är det VW:s sida — inget den här integrationen kan göra förrän VW återställer den.\n\nDetta är den skrivskyddade portal-betan — varningen försvinner av sig själv när data kommer in."
     },
     "data_act_browser_missing": {
       "description": "Du aktiverade headless-webbläsar-fallbacken för EU Data Act-portalen, men Python-paketet `playwright` är inte installerat i din Home Assistant-container.\n\n**För att installera:** öppna HA-containerns skal (Tillägg → Terminal & SSH, eller `docker exec` för en manuell installation) och kör:\n\n```\npip install playwright\nplaywright install chromium\n```\n\nChromium-nedladdningen är stor (runt 100 MB), därför är detta beroende valfritt i stället för inbyggt i integrationen. Starta om Home Assistant efter installationen.\n\nAlternativt kan du stänga av reglaget under Inställningar → Enheter & tjänster → VW Group Connect → Konfigurera → 'EU Data Act-portalen: headless-webbläsar-fallback'.",
@@ -1867,11 +2098,27 @@
     },
     "test_cohort_share_request": {
       "title": "Hjälp till att bekräfta en ny funktion — vill du dela ditt testresultat?",
-      "description": "Tack för att du gick med i den frivilliga testgruppen. Din bil ingår i ett eller flera experiment — till exempel att återställa GPS-position eller batteriets hälsa (State-of-Health) för VW:s EU-bilar via volkswagen.de-kanalen, eller att fånga exakt hur bilens backend svarar på ett kommando. För att kunna bekräfta resultatet på olika modeller och plattformar vore det till verklig hjälp om du delade en diagnostikfil: gå till Settings → Devices & Services → VW Group Connect → trepunktsmenyn → Ladda ner diagnostik, och bifoga sedan filen till det aktuella testar-ärendet på GitHub.\n\nExporten rensas automatiskt innan du laddar ner den — inget VIN, ingen GPS, inga tokens eller e-postadresser ingår — så den är trygg att dela offentligt. Du ser det här bara för att du valde att delta; du kan avfärda meddelandet, och om du stänger av testgruppen igen i integrationens inställningar upphör de här aviseringarna helt. Tack för att du hjälper till att låsa upp funktioner för alla som kör din modell."
+      "description": "Tack för att du gick med i den frivilliga testgruppen. Din bil ingår i ett eller flera experiment — till exempel att återställa GPS-position eller batteriets hälsa (State-of-Health) för VW:s EU-bilar via volkswagen.de-kanalen, eller att fånga exakt hur bilens backend svarar på ett kommando. För att kunna bekräfta resultatet på olika modeller och plattformar vore det till verklig hjälp om du delade en diagnostikfil: öppna bilens EGEN enhet (Settings → Devices & Services → VW Group Connect → enheten som är döpt efter din bil — inte \"VW Group Connect Settings\", som bara innehåller konfiguration och ingen fordonsdata) → trepunktsmenyn → Ladda ner diagnostik, och bifoga sedan den filen till det aktuella testar-ärendet som länkas nedan (#923).\n\nExporten rensas automatiskt innan du laddar ner den — inget VIN, ingen GPS, inga tokens eller e-postadresser ingår — så den är trygg att dela offentligt. Du ser det här bara för att du valde att delta; du kan avfärda meddelandet, och om du stänger av testgruppen igen i integrationens inställningar upphör de här aviseringarna helt. Tack för att du hjälper till att låsa upp funktioner för alla som kör din modell."
     },
     "stale_data": {
       "title": "{vin}: fordonsdata har inte uppdaterats på {age} h",
       "description": "De senaste uppgifterna som din bil rapporterade samlades in för **ungefär {age} timmar sedan**, trots att integrationen fortfarande hämtar data utan problem. Det kan bero på två saker: bilen kan helt enkelt stå parkerad i viloläge (helt normalt — inget att göra), eller så kan dess dataflöde enligt EU Data Act ha upphört och slutat leverera färska värden.\n\nVärdena du ser just nu är de senast kända, inte realtidsvärden. Om bilen har körts eller laddats sedan dess och den här varningen ändå står kvar, har dataflödet med största sannolikhet gått ut: öppna volkswagen.de → bilens datainställningar och förnya/begär datadelningen på nytt, eller lägg till kanalen igen.\n\nVarningen försvinner automatiskt så snart ett färskare värde kommer in."
+    },
+    "historical_timeout": {
+      "title": "{vin}: engångsexporten av historik slutfördes inte",
+      "description": "Engångsexporten av historik som begärdes för den här bilen skapade ingen fil inom tidsgränsen. VW-portalen ger den här begäran inget slutläge, så den kan ha försvunnit tyst. Begäran har rensats — du kan begära den igen eller titta direkt i portalen."
+    },
+    "skoda_official_enrolled": {
+      "title": "Škodas officiella API – du är nu automatiskt ansluten",
+      "description": "Goda nyheter: vi använde din befintliga Škoda-inloggning för att skapa en officiell Škoda API-nyckel för din bil, så att Home Assistant nu kan läsa den via Škodas nya officiella, varaktiga kanal — som en automatisk reserv om den vanliga anslutningen någon gång krånglar. Eftersom den här officiella kanalen har en hastighetsgräns (bara ett litet antal förfrågningar per timme) står den i beredskap och läser bara när din huvudanslutning inte kan — så den saktar inte ner något. Du behöver inte göra något; det här är bara till din kännedom, och du kan avfärda det."
+    },
+    "skoda_official_quota_full": {
+      "title": "Škodas officiella API – nyckelgränsen är nådd",
+      "description": "Vi försökte ställa in Škodas officiella API för din bil automatiskt, men ditt konto har redan det maximala antalet på 5 API-nycklar för det här fordonet. För att kunna använda det, frigör en plats i MyŠkoda-appen (Inställningar → API-nycklar → ta bort en oanvänd) och ladda om integrationen, eller klistra in en befintlig nyckel manuellt i integrationens alternativ. Allt annat fungerar som vanligt."
+    },
+    "skoda_official_multi_integration": {
+      "title": "Škodas officiella API — en annan integration använder det också",
+      "description": "Vi hittade fler officiella API-nycklar på ditt Škoda-konto än den här integrationen skapade — oftast ett tecken på att en andra integration eller app också läser Škodas officiella API. Det är helt okej att köra, men de delar samma lilla förfrågningsbudget per bil, så den sammanlagda trafiken kan nå Škodas hastighetsgräns snabbare och i värsta fall få kontot tillfälligt — eller till slut permanent — blockerat. Om du inte behöver båda, ta bort den officiella API-nyckel du inte använder i MyŠkoda-appen (Inställningar → API-nycklar). Du kan avfärda det här meddelandet."
     }
   },
   "services": {
@@ -2088,6 +2335,12 @@
     },
     "historical_portal_not_ready": {
       "message": "EU Data Act-portalen är inte redo ännu. Vänta tills integrationen har hämtat data en gång efter installationen och försök sedan med den historiska exporten igen."
+    },
+    "historical_disabled": {
+      "message": "Engångsexporten av historik är för närvarande avstängd."
+    },
+    "historical_wedge_blocked": {
+      "message": "En engångsexport av historiken pågår redan för den här bilen. Portalen hanterar bara en sådan begäran i taget, så vänta tills den pågående är klar (eller når tidsgränsen) innan du begär en ny."
     }
   },
   "selector": {
@@ -2108,6 +2361,81 @@
         "start_ventilation": "Starta ventilation",
         "stop_ventilation": "Stoppa ventilation"
       }
+    },
+    "skoda_official_mode": {
+      "options": {
+        "auto": "Automatiskt (båda källor, officiell föredras)",
+        "prefer_official": "Föredra det officiella API:et",
+        "failover": "Officiellt API endast som reserv",
+        "official_only": "Endast officiellt API",
+        "mysmob_only": "Endast standardkanal"
+      }
+    },
+    "read_priority": {
+      "options": {
+        "auto": "Automatiskt (rekommenderas)",
+        "prefer_website_authproxy": "Föredra livedata från vw.de"
+      }
+    }
+  },
+  "triggers": {
+    "started_charging": {
+      "name": "Fordonet började ladda",
+      "description": "Utlöses när ett fordon börjar ladda."
+    },
+    "stopped_charging": {
+      "name": "Fordonet slutade ladda",
+      "description": "Utlöses när ett fordon slutar ladda."
+    },
+    "plugged_in": {
+      "name": "Fordon anslutet",
+      "description": "Utlöses när ett fordons laddkabel ansluts."
+    },
+    "unplugged": {
+      "name": "Fordon frånkopplat",
+      "description": "Utlöses när ett fordons laddkabel kopplas från."
+    },
+    "locked": {
+      "name": "Fordon låst",
+      "description": "Utlöses när ett fordon låses."
+    },
+    "unlocked": {
+      "name": "Fordon upplåst",
+      "description": "Utlöses när ett fordon låses upp."
+    },
+    "started_preconditioning": {
+      "name": "Fordonet startade förkonditionering",
+      "description": "Utlöses när ett fordon startar klimatförkonditionering."
+    },
+    "stopped_preconditioning": {
+      "name": "Fordonet stoppade förkonditionering",
+      "description": "Utlöses när ett fordon stoppar klimatförkonditionering."
+    },
+    "charge_target_reached": {
+      "name": "Fordonet nådde sitt laddmål",
+      "description": "Utlöses när ett fordons laddnivå når sitt mål."
+    }
+  },
+  "conditions": {
+    "is_charging": {
+      "name": "Ett fordon laddar",
+      "description": "Testar om något fordon laddar just nu."
+    },
+    "is_plugged_in": {
+      "name": "Ett fordon är anslutet",
+      "description": "Testar om något fordons laddkabel är ansluten."
+    },
+    "is_locked": {
+      "name": "Ett fordon är låst",
+      "description": "Testar om något fordon är låst."
+    },
+    "is_preconditioning": {
+      "name": "Ett fordon förkonditionerar",
+      "description": "Testar om något fordon kör klimatförkonditionering."
+    },
+    "is_charge_target_reached": {
+      "name": "Ett fordon nådde sitt laddmål",
+      "description": "Testar om något fordons laddnivå är på eller över sitt mål."
     }
   }
 }

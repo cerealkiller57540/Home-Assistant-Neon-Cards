@@ -11,9 +11,16 @@ from .netgear_entities import (
     NetgearBinarySensorEntityDescription,
     NetgearLedSwitchEntity,
     NetgearPOESwitchEntity,
+    NetgearPortAdminSwitchEntity,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Ports dont la coupure casserait l'infra : pas d'interrupteur cree du tout.
+# Le port 3 porte le bond du NAS ; le couper depuis HA rendrait le NAS
+# injoignable, y compris le partage \\.60\config dont HA lui-meme depend.
+# Surchargeable par l'option "protected_ports" de l'entree.
+DEFAULT_PROTECTED_PORTS = [3]
 
 
 async def async_setup_entry(
@@ -46,6 +53,36 @@ async def async_setup_entry(
             )
 
             entities.append(switch_entity)
+
+    # Activation administrative des ports (SNMP RW). L'entite n'est creee que si
+    # la cle admin_status existe, c'est-a-dire uniquement par le chemin SNMP.
+    data = coordinator_switch_infos.data or {}
+    protected = set(
+        config_entry.options.get("protected_ports", DEFAULT_PROTECTED_PORTS)
+    )
+    if gs_switch.api:
+        for port_nr in range(1, gs_switch.api.ports + 1):
+            key = f"port_{port_nr}_admin_status"
+            if key not in data:
+                continue
+            if port_nr in protected:
+                _LOGGER.info(
+                    "[switch.async_setup_entry] port %s protege, pas d'interrupteur",
+                    port_nr,
+                )
+                continue
+            entities.append(
+                NetgearPortAdminSwitchEntity(
+                    coordinator=coordinator_switch_infos,
+                    hub=gs_switch,
+                    entity_description=NetgearBinarySensorEntityDescription(
+                        key=key,
+                        name=f"Port {port_nr} Enabled",
+                        device_class=SwitchDeviceClass.SWITCH,
+                    ),
+                    port_nr=port_nr,
+                )
+            )
 
     if gs_switch.api and gs_switch.api.switch_model.has_led_switch():  # type: ignore call-issue
         _LOGGER.info(

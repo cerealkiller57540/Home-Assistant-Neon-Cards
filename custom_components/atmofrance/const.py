@@ -1,13 +1,26 @@
 """ Les constantes pour l'intégration Atmo France """
 from dataclasses import dataclass
 from enum import Enum
-from homeassistant.const import Platform, UnitOfDensity
+from homeassistant.const import Platform
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntityDescription,
     SensorStateClass,
 
 )
+
+from homeassistant.const import MAJOR_VERSION, MINOR_VERSION
+
+if (MAJOR_VERSION, MINOR_VERSION) >= (2026, 8):
+    # UnitOfDensity.MICROGRAMS_PER_CUBIC_METER n'existe qu'à partir de HA 2026.8
+    from homeassistant.const import UnitOfDensity
+
+    MICROGRAMS_PER_CUBIC_METER = UnitOfDensity.MICROGRAMS_PER_CUBIC_METER
+else:
+    # CONCENTRATION_MICROGRAMS_PER_CUBIC_METER est dépréciée et sera supprimée en HA 2027.8
+    from homeassistant.const import CONCENTRATION_MICROGRAMS_PER_CUBIC_METER
+
+    MICROGRAMS_PER_CUBIC_METER = CONCENTRATION_MICROGRAMS_PER_CUBIC_METER
 
 
 DOMAIN = "atmofrance"
@@ -189,7 +202,7 @@ POLLEN_CONC_SENSORS: tuple[AtmoFranceSensorEntityDescription, ...] = (
         name="Concentration Ambroisie",
         device_class=SensorDeviceClass.VOLATILE_ORGANIC_COMPOUNDS,
         icon="mdi:tree",
-        native_unit_of_measurement=UnitOfDensity.MICROGRAMS_PER_CUBIC_METER,
+        native_unit_of_measurement=MICROGRAMS_PER_CUBIC_METER,
         state_class=SensorStateClass.MEASUREMENT,
         json_key="conc_ambr",),
     AtmoFranceSensorEntityDescription(
@@ -197,7 +210,7 @@ POLLEN_CONC_SENSORS: tuple[AtmoFranceSensorEntityDescription, ...] = (
         name="Concentration Armoise",
         device_class=SensorDeviceClass.VOLATILE_ORGANIC_COMPOUNDS,
         icon="mdi:tree",
-        native_unit_of_measurement=UnitOfDensity.MICROGRAMS_PER_CUBIC_METER,
+        native_unit_of_measurement=MICROGRAMS_PER_CUBIC_METER,
         state_class=SensorStateClass.MEASUREMENT,
         json_key="conc_arm",),
     AtmoFranceSensorEntityDescription(
@@ -205,7 +218,7 @@ POLLEN_CONC_SENSORS: tuple[AtmoFranceSensorEntityDescription, ...] = (
         name="Concentration Aulne",
         device_class=SensorDeviceClass.VOLATILE_ORGANIC_COMPOUNDS,
         icon="mdi:tree",
-        native_unit_of_measurement=UnitOfDensity.MICROGRAMS_PER_CUBIC_METER,
+        native_unit_of_measurement=MICROGRAMS_PER_CUBIC_METER,
         state_class=SensorStateClass.MEASUREMENT,
         json_key="conc_aul",),
     AtmoFranceSensorEntityDescription(
@@ -213,13 +226,13 @@ POLLEN_CONC_SENSORS: tuple[AtmoFranceSensorEntityDescription, ...] = (
         name="Concentration Graminé",
         device_class=SensorDeviceClass.VOLATILE_ORGANIC_COMPOUNDS,
         icon="mdi:grass",
-        native_unit_of_measurement=UnitOfDensity.MICROGRAMS_PER_CUBIC_METER,
+        native_unit_of_measurement=MICROGRAMS_PER_CUBIC_METER,
         state_class=SensorStateClass.MEASUREMENT,
         json_key="conc_gram",),
     AtmoFranceSensorEntityDescription(
         key="conc_boul",
         name="Concentration Bouleau",
-        native_unit_of_measurement=UnitOfDensity.MICROGRAMS_PER_CUBIC_METER,
+        native_unit_of_measurement=MICROGRAMS_PER_CUBIC_METER,
         device_class=SensorDeviceClass.VOLATILE_ORGANIC_COMPOUNDS,
         icon="mdi:tree",
         state_class=SensorStateClass.MEASUREMENT,
@@ -229,7 +242,7 @@ POLLEN_CONC_SENSORS: tuple[AtmoFranceSensorEntityDescription, ...] = (
         name="Concentration Olivier",
         device_class=SensorDeviceClass.VOLATILE_ORGANIC_COMPOUNDS,
         icon="mdi:tree",
-        native_unit_of_measurement=UnitOfDensity.MICROGRAMS_PER_CUBIC_METER,
+        native_unit_of_measurement=MICROGRAMS_PER_CUBIC_METER,
         state_class=SensorStateClass.MEASUREMENT,
         json_key="conc_oliv",),
 )

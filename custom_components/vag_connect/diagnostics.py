@@ -39,6 +39,7 @@ from .const import (
     CONF_ABRP_USER_TOKEN,
     CONF_BRAND,
     CONF_DATA_ACT_IDENTIFIERS,
+    CONF_DATA_ACT_KICKOFF_TS,
     CONF_ENABLE_REVERSE_GEOCODING,
     CONF_PASSWORD,
     CONF_SPIN,
@@ -72,8 +73,24 @@ _REDACT_KEYS = frozenset({
     "vin",
     "address",
     "parking_address",
+    # b7 (grounded audit P0-2a) — parking_address is redacted but its sibling
+    # parking_city carried a CLEARTEXT city name straight into the diagnostics
+    # download (the file owners attach to public GitHub issues). A plain city hits
+    # only the generic string branch, which masks e-mail/VIN/latitude=&longitude=
+    # but nothing matches a bare city name. myskoda treats the whole address block
+    # as one PII unit for exactly this reason (their #477 was this leak class).
+    # Redact it by key so it can't fall through regardless of the value form.
+    "parking_city",
     "user_id",
     "account_id",
+    # D#1231 — the volkswagen.de profile block is personal: the number plate
+    # identifies the car, the owner-chosen nickname is personal, and the render
+    # image URLs encode the exact model/colour/config. A tester rightly had to
+    # hand-mask these before attaching a diagnostics file, so redact them by
+    # default. (Empty ones stay visibly empty via the _is_empty_value guard.)
+    "license_plate",
+    "vehicle_nickname",
+    "image_urls",
     # v1.13.0 (#62) — explicit token field names. Defensive registration:
     # today these only live in coordinator's in-memory cache, but if a
     # future change adds them to entry.data they'll automatically
@@ -101,7 +118,35 @@ _REDACT_KEYS = frozenset({
     CONF_VWEU_TWOWAY_EMAIL,
     CONF_VWEU_TWOWAY_TOKENS,
     CONF_VWEU_TWOWAY_COOKIES,
+    # Companion agent/add-on tokens. The agent token is the ENTIRE binding for
+    # the open relay endpoint — anyone holding it can bind a phone to the car's
+    # app — and the add-on token authenticates the ADB-bridge add-on. Both live
+    # in entry.data, so without this they land in the diagnostics download users
+    # attach to GitHub issues. Raw string keys (not the CONF_* constants) so the
+    # redaction is independent of the companion module's own const import order.
+    "companion_agent_token",
+    "companion_addon_token",
+    # #1286 — the Škoda official public-API key IS a credential: it grants read
+    # (and charge-control) access to the car's official API. The single manual key
+    # (CONF_SKODA_OFFICIAL_API_KEY) leaked in PLAINTEXT in the diagnostics download
+    # users attach to GitHub issues — a real ``msk_…`` key was exposed publicly.
+    # Mask it here. The auto-enrolled per-VIN map (CONF_SKODA_OFFICIAL_KEYS) is a
+    # ``{VIN: {key, id, validUntil}}`` dict and is routed through
+    # _redact_identifier_map below (keeps the enrolment count, masks each record).
+    "skoda_official_api_key",
 })
+
+
+def _is_empty_value(v: Any) -> bool:
+    """#923 — True for a value that carries no information worth masking.
+
+    Redacting an empty field to ``**REDACTED**`` hides the fact that it was
+    empty, so a reporter can't distinguish "no data" from "present but hidden".
+    We treat ``None``, empty string and empty container as empty; ``0``/``False``
+    are real values and are left to the normal redaction path.
+    """
+    return v is None or v == "" or v == [] or v == {}
+
 
 # v1.13.0 (#62) — email partial-mask. Keeps domain TLD shape (e.g.
 # ``.com``/``.de``) for debug context but redacts the local-part and
@@ -257,7 +302,13 @@ def _scrub(value: Any, *, gps_round: bool = False) -> Any:
                 # without leaking the real ID. Pattern from myskoda.
                 scrubbed[sk] = f"sha256:{_stable_hash(v)}" if v else "**REDACTED**"
             elif k in _REDACT_KEYS:
-                scrubbed[sk] = "**REDACTED**"
+                # #923 (@naked-head) — only mask when there is actually a value
+                # to hide. Masking an empty field as "**REDACTED**" makes it
+                # indistinguishable from a redacted *real* value, which misleads
+                # triage: a reporter (or I) cannot tell "no position / no address"
+                # from "present but hidden". Preserve empties so the diagnostic
+                # stays truthful; ``field_sources`` then remains the honest signal.
+                scrubbed[sk] = "**REDACTED**" if not _is_empty_value(v) else v
             elif k == "email" and isinstance(v, str):
                 # Partial mask preserves debug context.
                 scrubbed[sk] = _mask_email(v)
@@ -265,13 +316,24 @@ def _scrub(value: Any, *, gps_round: bool = False) -> Any:
                 # Privacy-by-default: full removal. Opt-in 1-decimal
                 # rounding when user already opted into reverse-geocoding
                 # (signals comfort with GPS processing).
-                if gps_round and isinstance(v, (int, float)):
+                # #923 — an empty coordinate stays visibly empty, never a fake
+                # redaction (see the _REDACT_KEYS note above).
+                if _is_empty_value(v):
+                    scrubbed[sk] = v
+                elif gps_round and isinstance(v, (int, float)):
                     scrubbed[sk] = round(float(v), 1)
                 else:
                     scrubbed[sk] = "**REDACTED**"
-            elif k == CONF_DATA_ACT_IDENTIFIERS:
+            elif k in (
+                CONF_DATA_ACT_IDENTIFIERS,
+                CONF_DATA_ACT_KICKOFF_TS,
+                "skoda_official_keys",
+            ):
                 # #923/#1222 — mask the {VIN: portal-identifier} values, which
                 # the string branch below would otherwise pass through.
+                # #1286 — same shape for the Škoda official per-VIN key map
+                # ({VIN: {key, id, validUntil}}): mask each record (the ``key`` is a
+                # live credential) while keeping the masked-VIN count for triage.
                 scrubbed[sk] = _redact_identifier_map(v)
             else:
                 scrubbed[sk] = _scrub(v, gps_round=gps_round)
@@ -284,6 +346,14 @@ def _scrub(value: Any, *, gps_round: bool = False) -> Any:
         # mysmob ``/v1/maps/positions?latitude=...&longitude=...`` URLs
         # that surface in error traces).
         masked = _mask_email(value)
+        # #1310 (indigomejor) — a VIN can hide inside a string VALUE: the Škoda
+        # widget ``render_url`` is ``.../widget-renders/<VIN>.png``. This branch
+        # masked only email + GPS, so the full VIN leaked in
+        # ``vehicles.<key>.render_url`` while the sibling ``vin`` field and the
+        # raw camelCase ``renderUrl`` (via _scrub_raw) were both masked. Mask the
+        # VIN here too so every string value matches (VIN only — UUIDs stay as
+        # structural grounding data, see _mask_key).
+        masked = _VIN_RE.sub(lambda m: mask_vin(m.group(0)), masked)
         return _mask_location_qs(masked, gps_round=gps_round)
     return value
 
@@ -331,7 +401,7 @@ def _scrub_raw(value: Any) -> Any:
                 out[sk] = "**REDACTED**"
             elif k in _HASH_KEYS and isinstance(v, str):
                 out[sk] = f"sha256:{_stable_hash(v)}" if v else "**REDACTED**"
-            elif k == CONF_DATA_ACT_IDENTIFIERS:
+            elif k in (CONF_DATA_ACT_IDENTIFIERS, CONF_DATA_ACT_KICKOFF_TS):
                 out[sk] = _redact_identifier_map(v)
             else:
                 out[sk] = _scrub_raw(v)
@@ -381,7 +451,24 @@ async def async_get_config_entry_diagnostics(
     surfaces 1-decimal-rounded coords (~11 km bucket — useful for
     debug, still privacy-safe). Otherwise full removal.
     """
-    coordinator: VagConnectCoordinator = entry.runtime_data
+    # b12 (#1340 @cyrano330) — on setup_error the entry never reached LOADED, so
+    # entry.runtime_data is still None. Every coordinator.* deref below (first:
+    # coordinator.vehicles.items()) would AttributeError → the diagnostics HTTP
+    # view turns that into a 500, exactly when the download is most useful for
+    # triaging a failed setup. Return the redacted config + a note instead.
+    coordinator: VagConnectCoordinator | None = getattr(entry, "runtime_data", None)
+    if coordinator is None:
+        return {
+            "note": (
+                "Setup did not complete for this config entry: the coordinator "
+                "(entry.runtime_data) is unavailable, so only the redacted config "
+                "and options are included. See Settings > Devices & Services for "
+                "the exact setup error / reauth prompt."
+            ),
+            "entry_state": str(getattr(entry, "state", "unknown")),
+            "config": _scrub(dict(entry.data), gps_round=False),
+            "options": _scrub(dict(entry.options), gps_round=False),
+        }
 
     # GPS-rounding opt-in — same signal as the reverse-geocoding toggle.
     gps_round = bool(
@@ -451,7 +538,9 @@ async def async_get_config_entry_diagnostics(
         try:
             capabilities = capabilities_fn()
         except Exception as err:  # noqa: BLE001
-            capabilities = {"error": f"{type(err).__name__}: {err}"}
+            # class only — str(err) can carry a VIN/internal value; matches the
+            # sibling raw_responses/command error handlers below.
+            capabilities = {"error": type(err).__name__}
 
     # v3.0.0 — the RAW brand API responses (aggressively redacted). The Scout
     # already surfaces the unmapped field NAMES; this adds the surrounding
@@ -477,13 +566,34 @@ async def async_get_config_entry_diagnostics(
             except Exception as err:  # noqa: BLE001
                 raw_responses[f"command:{k}"] = {"error": f"{type(err).__name__}"}
 
+    # v4.4.0b3 — opt-in SEAT/CUPRA en_GB locale A/B capture (default vs en_GB
+    # localized strings from mycar). Values are already VIN/email-masked at
+    # capture; route through the same scrub for defense-in-depth.
+    olc = getattr(client, "ola_locale_captures", None) if client is not None else None
+    if isinstance(olc, dict):
+        for vin_key, payload in olc.items():
+            try:
+                raw_responses[f"ola_locale:{str(vin_key)[-6:]}"] = _scrub_raw(payload)
+            except Exception as err:  # noqa: BLE001
+                raw_responses[f"ola_locale:{str(vin_key)[-6:]}"] = {"error": f"{type(err).__name__}"}
+
     # #923/#1157 — surface the experimental vw.de probe outcomes so the test
     # cohort can see WHY a probe yielded nothing (a 403/404/412 refusal vs an
     # empty 200 vs a never-fired probe). Bare status labels only — no PII.
+    # #584 — the fetched-role leapfrog probe runs on WHICHEVER VWEUClient hit the
+    # operationList; on the read-only-primary shape that is the ``_mbb_command``
+    # sub-connector, not the parent (same reason mbb_no_legacy is unioned below).
+    # Union the parent with both sub-connectors so the cohort's probe outcomes
+    # reach the export regardless of which instance recorded them.
     probe_outcomes: dict[str, str] = {}
-    _po = getattr(client, "probe_outcomes", None) if client is not None else None
-    if isinstance(_po, dict):
-        probe_outcomes = {str(k): str(v) for k, v in _po.items()}
+    for _obj in (
+        client,
+        getattr(client, "_mbb_command", None) if client is not None else None,
+        getattr(client, "_mbb_fallback", None) if client is not None else None,
+    ):
+        _po = getattr(_obj, "probe_outcomes", None) if _obj is not None else None
+        if isinstance(_po, dict):
+            probe_outcomes.update({str(k): str(v) for k, v in _po.items()})
 
     # #584 — surface the durable "no legacy MBB enrolment" verdict. These VINs
     # got the definitive ``gw.error.authentication`` reject on the MBB
@@ -491,12 +601,40 @@ async def async_get_config_entry_diagnostics(
     # commands are unavailable — so a #584-class report is triageable straight
     # from the diagnostics instead of asking the reporter for a debug log.
     mbb_no_legacy: list[str] = []
-    _nl = getattr(client, "mbb_no_legacy_vins", None) if client is not None else None
-    if _nl:
+    # #1150 — the verdict is recorded on WHICHEVER VWEUClient ran the operationList.
+    # On the #584 read-only-primary shape (VW-EU portal/vw.de primary + an armed MBB
+    # command channel) it lands on the ``_mbb_command`` sub-connector, not the
+    # parent — so reading only the parent exported an empty list even several polls
+    # after the verdict was set. Union the parent with both sub-connectors so the
+    # export reflects the real state regardless of which instance recorded it.
+    _nl_union: set[str] = set()
+    for _obj in (
+        client,
+        getattr(client, "_mbb_command", None) if client is not None else None,
+        getattr(client, "_mbb_fallback", None) if client is not None else None,
+    ):
+        _s = getattr(_obj, "mbb_no_legacy_vins", None) if _obj is not None else None
+        if _s:
+            _nl_union.update(_s)
+    if _nl_union:
         try:
-            mbb_no_legacy = sorted(mask_vin(v) for v in _nl)
+            mbb_no_legacy = sorted(mask_vin(v) for v in _nl_union)
         except Exception:  # noqa: BLE001
             mbb_no_legacy = []
+
+    # Pre-flight durable-MBB eligibility from the guest-readable vw.de relations
+    # read (carnetIndicator / platform / role → eligible / not_provisioned /
+    # not_mbb / unknown). The UP-FRONT companion to mbb_no_legacy (which is the
+    # post-hoc operationList verdict): it lets a #584-class triage tell whether
+    # arming the durable MBB channel is even worth it for a car before any MBB
+    # login. Observability only — nothing in the poll/command path consumes it.
+    mbb_elig: dict[str, str] = {}
+    _me = getattr(client, "mbb_eligibility", None) if client is not None else None
+    if isinstance(_me, dict):
+        try:
+            mbb_elig = {mask_vin(str(k)): str(v) for k, v in _me.items()}
+        except Exception:  # noqa: BLE001
+            mbb_elig = {}
 
     return {
         "config": config_diag,
@@ -516,6 +654,7 @@ async def async_get_config_entry_diagnostics(
         "parser_stats": parser_stats_diag,
         "capabilities": capabilities,
         "mbb_no_legacy": mbb_no_legacy,
+        "mbb_eligibility": mbb_elig,
     }
 
 
@@ -548,6 +687,7 @@ async def async_get_device_diagnostics(
     masked = mask_vin(vin)  # the per-VIN diag sections are keyed by the masked VIN
     veh = full.get("vehicles", {})
     unexpected = full.get("unexpected_findings", {})
+    elig = full.get("mbb_eligibility", {}) or {}
     return {
         "device_vin_masked": masked,
         "config": full.get("config"),
@@ -560,6 +700,12 @@ async def async_get_device_diagnostics(
         "mbb_no_legacy": (
             [masked] if masked in full.get("mbb_no_legacy", []) else []
         ),
+        # v4.7.9 (#584/#923) — the cohort probe outcomes carry no VIN dimension
+        # (status codes keyed by host/brand/country) and are the one datapoint a
+        # no-legacy reporter's file is asked for: keep them. mbb_eligibility is
+        # VIN-keyed, so it is sliced like the other per-VIN sections.
+        "probe_outcomes": full.get("probe_outcomes", {}) or {},
+        "mbb_eligibility": {masked: elig[masked]} if masked in elig else {},
         "last_update_success": full.get("last_update_success"),
         "cloud_push_active": full.get("cloud_push_active"),
         "push_states": full.get("push_states"),

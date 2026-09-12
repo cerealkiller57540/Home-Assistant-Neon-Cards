@@ -4,6 +4,7 @@ from datetime import timedelta, date
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -55,6 +56,33 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry):
     return True
 
 
+async def _async_resolve_source(entry: ConfigEntry, api, url_code: URL_CODE) -> str | None:
+    """Find which zone code actually returns data for the given indicator.
+
+    Returns CONF_INSEE_CODE (city), CONF_INSEE_EPCI (fallback) or None when
+    neither answers. Must be called once per indicator: a city may be covered
+    for pollution but not for pollen, and vice versa.
+    """
+    databycity = await api.get_data(entry.data[CONF_INSEE_CODE], url_code)
+    if databycity is not None and len(databycity) > 0:
+        # data exist for city, use it
+        _LOGGER.info("Use City code: %s as source", entry.data[CONF_INSEE_CODE])
+        return CONF_INSEE_CODE
+
+    # Get data for EPCI (communauté de communes)
+    databyepci = await api.get_data(entry.data[CONF_INSEE_EPCI], url_code)
+    if databyepci is not None and len(databyepci) > 0:
+        _LOGGER.info("Use EPCI code: %s as source", entry.data[CONF_INSEE_EPCI])
+        return CONF_INSEE_EPCI
+
+    _LOGGER.error(
+        "Impossible de récupérer les données pour la ville %s ou l'EPCI %s",
+        entry.data[CONF_INSEE_CODE],
+        entry.data[CONF_INSEE_EPCI],
+    )
+    return None
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Initialisation from a config entry."""
     _LOGGER.info(
@@ -67,62 +95,39 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     if entry.entry_id not in hass.data[DOMAIN]:
         hass.data[DOMAIN][entry.entry_id] = {}
-        source = None
-        if entry.options[CONF_INCLUDE_POLLUTION] or entry.options[CONF_INCLUDE_POLLUTION_FORECAST]:
-            pollutionapi = AtmoFranceDataApi(entry.data, hass=hass)
-            # Get pollution data for city
-            _LOGGER.info("Getting Pollution data")
-            databycity = await pollutionapi.get_data(entry.data[CONF_INSEE_CODE], URL_CODE.POLLUTION)
-            if (
-                databycity is not None and len(databycity) > 0
-            ):  # data exist for city, use it
-                _LOGGER.info("Use City code: %s as  source",
-                             entry.data[CONF_INSEE_CODE])
-                source = CONF_INSEE_CODE
-            else:  # Get data for EPCI (communauté de commune)
-                databyepci = await pollutionapi.get_data(entry.data[CONF_INSEE_EPCI], URL_CODE.POLLUTION)
-                if databyepci is not None and len(databyepci) > 0:
-                    source = CONF_INSEE_EPCI
-                    _LOGGER.info("Use EPCI code: %s as source",
-                                 entry.data[CONF_INSEE_EPCI])
-                else:
-                    _LOGGER.error(
-                        "Impossible de récupérer les données pour la ville %s ou l'EPCI %s",
-                        entry.data[CONF_INSEE_CODE],
-                        entry.data[CONF_INSEE_EPCI],
+        try:
+            if entry.options[CONF_INCLUDE_POLLUTION] or entry.options[CONF_INCLUDE_POLLUTION_FORECAST]:
+                pollutionapi = AtmoFranceDataApi(entry.data, hass=hass)
+                # Get pollution data for city
+                _LOGGER.info("Getting Pollution data")
+                source = await _async_resolve_source(entry, pollutionapi, URL_CODE.POLLUTION)
+                if source is None:
+                    raise ConfigEntryNotReady(
+                        f"No pollution data available for city {entry.data[CONF_INSEE_CODE]} "
+                        f"nor EPCI {entry.data[CONF_INSEE_EPCI]}"
                     )
-            if not (source is None):
                 hass.data[DOMAIN][entry.entry_id][
                     CONF_POLLUTION_COORDINATOR
                 ] = AtmoFrancePollutionApiCoordinator(hass=hass, config=entry, api=pollutionapi, source=source)
 
-        if entry.options[CONF_INCLUDE_POLLEN] or entry.options[CONF_INCLUDE_POLLEN_FORECAST]:
-            _LOGGER.info("Getting Pollen data")
-            pollenapi = AtmoFranceDataApi(entry.data, hass=hass)
-
-            databycity = await pollenapi.get_data(entry.data[CONF_INSEE_CODE], URL_CODE.POLLEN)
-            if (
-                databycity is not None and len(databycity) > 0
-            ):  # data exist for city, use it
-                _LOGGER.info("Use City code: %s as  source",
-                             entry.data[CONF_INSEE_CODE])
-                source = CONF_INSEE_CODE
-            else:  # Get data for EPCI (communauté de commune)
-                databyepci = await pollenapi.get_data(entry.data[CONF_INSEE_EPCI], URL_CODE.POLLEN)
-                if databyepci is not None and len(databyepci) > 0:
-                    source = CONF_INSEE_EPCI
-                    _LOGGER.info("Use EPCI code: %s as source",
-                                 entry.data[CONF_INSEE_EPCI])
-                else:
-                    _LOGGER.error(
-                        "Impossible de récupérer les données pour la ville %s ou l'EPCI %s",
-                        entry.data[CONF_INSEE_CODE],
-                        entry.data[CONF_INSEE_EPCI],
+            if entry.options[CONF_INCLUDE_POLLEN] or entry.options[CONF_INCLUDE_POLLEN_FORECAST]:
+                _LOGGER.info("Getting Pollen data")
+                pollenapi = AtmoFranceDataApi(entry.data, hass=hass)
+                # `source` is resolved again for pollen: pollution and pollen
+                # zones are independent and must never be inherited.
+                source = await _async_resolve_source(entry, pollenapi, URL_CODE.POLLEN)
+                if source is None:
+                    raise ConfigEntryNotReady(
+                        f"No pollen data available for city {entry.data[CONF_INSEE_CODE]} "
+                        f"nor EPCI {entry.data[CONF_INSEE_EPCI]}"
                     )
-            if not (source is None):
                 hass.data[DOMAIN][entry.entry_id][
                     CONF_POLLEN_COORDINATOR
                 ] = AtmoFrancePollenApiCoordinator(hass=hass, config=entry, api=pollenapi, source=source)
+        except ConfigEntryNotReady:
+            # Drop the partially built entry so the automatic retry rebuilds it
+            hass.data[DOMAIN].pop(entry.entry_id, None)
+            raise
 
     await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR])
 

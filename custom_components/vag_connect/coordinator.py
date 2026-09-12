@@ -12,6 +12,7 @@ Thread safety:
 """
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import logging
@@ -31,8 +32,10 @@ from .const import (
     CONF_ENABLE_REVERSE_GEOCODING,
     CONF_FORCE_PPE_CLIMATE,
     CONF_BATTERY_NOMINAL_KWH,
+    CONF_FUEL_TANK_CAPACITY,
     CONF_KEEP_RAW_DATASETS,
     CONF_MBB_COMMAND_CHANNEL,
+    CONF_MBB_COMMAND_FALLBACK,
     CONF_MEB_COMMANDS_UNAVAILABLE,
     CONF_PASSWORD,
     CONF_READ_ONLY,
@@ -83,6 +86,94 @@ def _capture_age_s(data: dict[str, Any]) -> float | None:
     return (datetime.now(tz=timezone.utc) - ts).total_seconds()
 
 
+# Stage-0 EU-DA observability — map the portal connector's ``last_no_data_reason``
+# to the user-facing portal-health enum. The reasons are set in
+# ``_eu_data_act.py`` (no_request / no_content / empty); "" means data flowed.
+_PORTAL_HEALTH_BY_REASON: dict[str, str] = {
+    "no_request": "waiting_for_portal_data",  # no customised data request set up yet
+    "no_content": "empty_snapshots",          # car asleep → only *_no_content_found.zip
+    "empty": "delivery_not_ready",            # listing/metadata empty or not yet ready
+    "portal_error": "portal_error",           # VW-side portal outage/throttle (5xx/429)
+}
+PORTAL_HEALTH_STATES = (
+    "ok", "waiting_for_portal_data", "empty_snapshots", "delivery_not_ready",
+    "portal_error", "stale",
+)
+
+
+def _portal_health(
+    data: dict[str, Any], reason: str, age_s: float | None, stale_threshold_s: float | None,
+) -> str:
+    """Classify the EU Data Act portal feed's health for one vehicle.
+
+    ``ok`` when data flowed and is within the staleness floor; ``stale`` when the
+    poll succeeds but the car's own capture time has frozen past the floor (a
+    lapsed feed presenting old data as live); otherwise the specific no-data
+    reason from the connector. Distinguishes "the portal is stale/empty" from
+    "the integration is broken", which is the whole point of the sensor.
+    """
+    # The portal connector's own ``last_no_data_reason`` is authoritative. When
+    # EU-DA is a SUPPLEMENTARY channel the merged ``data`` comes from the primary
+    # (BFF / vw.de) and carries no ``no_data`` flag, so gating the reason behind
+    # ``data["no_data"]`` mis-read a portal that had never delivered as ``ok``
+    # (#1273 @riteman: source_channel=website_authproxy, no snapshot ever received,
+    # yet the health sensor said ``ok``). Honour the reason directly.
+    if reason in _PORTAL_HEALTH_BY_REASON:
+        return _PORTAL_HEALTH_BY_REASON[reason]
+    if data.get("no_data"):
+        return _PORTAL_HEALTH_BY_REASON.get(reason, "waiting_for_portal_data")
+    if (
+        age_s is not None
+        and stale_threshold_s is not None
+        and age_s >= stale_threshold_s
+    ):
+        return "stale"
+    return "ok"
+# Drop-anchored poll scheduling for EU Data Act portal entries. The portal
+# delivers on its own ~15-min cadence; anchoring the next poll to the newest
+# snapshot's capture time (+ a short delivery buffer) instead of a fixed offset
+# from the last poll catches each drop shortly after it lands and retries fast
+# when one is overdue — bounded so it can never poll faster than the floor or
+# slower than the user's configured interval.
+_DROP_BUFFER_S = 60
+_DROP_RETRY_S = 60
+
+
+def _drop_anchored_sleep_s(
+    interval_s: int, newest_capture_at: datetime | None, now: datetime, floor_s: int,
+) -> float:
+    """Seconds to sleep until the next expected portal drop.
+
+    Anchored to ``newest_capture_at + interval + buffer``; a drop already overdue
+    (``<= now``) collapses to a short retry. The result is clamped to
+    ``[floor_s, interval_s]`` so alignment can never poll faster than the floor
+    nor slower than the configured interval. With no capture time it is a no-op
+    (returns ``interval_s``)."""
+    if newest_capture_at is None:
+        return float(interval_s)
+    target = newest_capture_at + timedelta(seconds=interval_s + _DROP_BUFFER_S)
+    remaining = (target - now).total_seconds()
+    if remaining <= 0:
+        remaining = float(_DROP_RETRY_S)  # drop overdue → poll again soon
+    return max(float(floor_s), min(remaining, float(interval_s)))
+
+
+_PORTAL_5XX_BACKOFF_S = (300, 900, 1800)  # 5 / 15 / 30 min
+
+
+def _portal_5xx_backoff_s(streak: int) -> float:
+    """Escalating minimum sleep during a sustained EU-DA portal 5xx outage.
+
+    ``streak`` 0 → 0.0 (no floor raised). 1→5 min, 2→15 min, 3+→30 min (saturates).
+    Layered ON TOP of the drop-anchored scheduler: without it, a stale capture
+    anchor collapses the sleep to ``_DROP_RETRY_S`` (~60 s) and we poll VW's portal
+    every minute for hours during its own 5xx outage. This adopts TommiG1's
+    5/15/30 min spacing, which also cuts our 429-throttle risk while VW is down."""
+    if streak <= 0:
+        return 0.0
+    return float(_PORTAL_5XX_BACKOFF_S[min(streak, len(_PORTAL_5XX_BACKOFF_S)) - 1])
+
+
 def _is_selfhealing_poll_error(err: object) -> bool:
     """True for a poll error that must NOT be escalated to the public Error
     Reporter, because it self-heals and is not our bug:
@@ -101,9 +192,16 @@ def _is_selfhealing_poll_error(err: object) -> bool:
 
     Auth-interaction errors are de-escalated separately (they trigger reauth).
     """
-    from .cariad.exceptions import APIError, UpstreamUnavailableError  # noqa: PLC0415
+    from .cariad.exceptions import (  # noqa: PLC0415
+        APIError,
+        TokenRefreshRetryError,
+        UpstreamUnavailableError,
+    )
 
-    if isinstance(err, UpstreamUnavailableError):
+    # A transiently-rejected token refresh (invalid_client / server_error / 5xx /
+    # network) is a backend hiccup that self-heals on the next poll, not our bug —
+    # de-escalate it from the public Error Reporter like a 5xx.
+    if isinstance(err, (UpstreamUnavailableError, TokenRefreshRetryError)):
         return True
     if isinstance(err, APIError):
         status = getattr(err, "status", 0)
@@ -113,6 +211,15 @@ def _is_selfhealing_poll_error(err: object) -> bool:
         if status == 0 and isinstance(body, str) and body.lstrip().startswith(
             "transient:"
         ):
+            return True
+        # A transient GATEWAY 404 on the main BFF read (#1233/#1242/#1244): the
+        # emea.bff.cariad.digital edge intermittently returns the generic router
+        # "404 page not found" for a selectivestatus call — a routing/deploy blip
+        # that clears on the next poll (three Audi owners hit it inside the same
+        # 16-second window on 2026-08-25), not a per-vehicle not-found. Same class
+        # as a 5xx, so don't escalate it to the public Error Reporter. A STRUCTURED
+        # 404 (a real "vehicle not found") has a different body and still reports.
+        if status == 404 and isinstance(body, str) and "404 page not found" in body:
             return True
     return False
 
@@ -334,6 +441,14 @@ def _mbb_command_capability(
     cmd = _mbb_command_channel_client(coord)
     if cmd is None:
         return None
+    # #584/#1150 — this VIN's operationList returned the definitive
+    # ``gw.error.authentication`` verdict (no legacy Car-Net enrolment), so the MBB
+    # command channel can never work for it. Hide the control (False) instead of
+    # leaving it visible to fail on every press. NOT triggered by a VSR 403
+    # XID_APP_VW — that is the HEALTHY durable-MBB state (commands work, only the
+    # data-read plane is closed) and is deliberately never added to the set.
+    if vin in getattr(cmd, "mbb_no_legacy_vins", ()):
+        return False
     if command_id not in _MBB_COMMAND_SERVICE:
         # A command we don't route via MBB — leave it to the BFF gate rather
         # than risk hiding a legitimate non-MBB control.
@@ -557,17 +672,35 @@ def _parse_charging_history(resp: Any) -> dict[str, Any]:
     return out
 
 
-def _parse_fueling(resp: Any) -> dict[str, Any]:
+def _parse_fueling(resp: Any, *, now: datetime | None = None) -> dict[str, Any]:
     """v2.31.0 (8.15.0 APK) — pure parser for the latest MyŠkoda pay-at-pump
     fill-up (READ-ONLY consumption data). ``FuelingSessionDto`` → flat
     ``vehicles[vin]`` fields. The masked ``formattedCardName`` is deliberately
     NOT surfaced. Empty/garbage → ``{}`` so no sensor spawns.
+
+    #1310 (indigomejor) — this endpoint is ACCOUNT-level (no VIN), so on a new car
+    (or a multi-car account) its "latest" fill-up can be an old session from a
+    previous vehicle: he took delivery of a 2026 car and saw a 2024-10-25 fill-up at
+    a station he never used. A latest fill-up more than a year old is implausible for
+    a car we're actively polling, so treat it as stale → surface nothing rather than
+    a misleading placeholder.
     """
     if not isinstance(resp, dict) or not resp:
         return {}
     out: dict[str, Any] = {}
     dt = resp.get("dateTime")
     if isinstance(dt, str) and dt:
+        parsed: datetime | None
+        try:
+            parsed = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        except ValueError:
+            parsed = None
+        if parsed is not None:
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            ref = now or datetime.now(tz=timezone.utc)
+            if (ref - parsed).days > 365:
+                return {}  # stale account-level session, not this car's fill-up
         out["last_refuel_at"] = dt
     fuel = resp.get("fuelName")
     if isinstance(fuel, str) and fuel:
@@ -664,7 +797,12 @@ def _parse_predictive_maintenance(resp: Any) -> dict[str, Any]:
             due if isinstance(due, str) and due
             else (status if isinstance(status, str) and status else None)
         )
-        if val:
+        # #1310 (indigomejor) — a reminder the owner never configured comes back
+        # with status "NOT_SET" and no dueDate. Surfacing that raw sentinel as the
+        # sensor state is misleading (it's a truthy string, so automations doing
+        # `states(...) not in ['unknown','unavailable']` treat it as a real
+        # reading). Drop it → the field stays absent → the sensor reads unknown.
+        if val and val != "NOT_SET":
             out[key] = val
     return out
 
@@ -890,6 +1028,11 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         # Per-VIN poll success tracking — entities use this for availability
         # so a single failing vehicle doesn't blank out the others.
         self.vehicle_success: dict[str, bool] = {}
+        # Drop-anchored scheduling — the freshest snapshot capture time seen so
+        # far, used to align the next portal poll to the ~15-min drop cadence.
+        self._newest_capture_at: datetime | None = None
+        # Consecutive EU-DA portal 5xx outages → escalating poll backoff (5/15/30m).
+        self._consecutive_portal_5xx = 0
 
         # Per-VIN consecutive-failure counter (v1.8.7). Reset to 0 on every
         # successful poll. Used by ``is_vehicle_available`` to apply
@@ -948,6 +1091,13 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         # and the diagnostics export size stay predictable.
         self.error_buffer: ErrorRingBuffer = ErrorRingBuffer()
 
+        # b14 (experimental) — state-transition detector feeding the named-trigger
+        # platform (trigger.py). No-op until a trigger subscribes; fed ONLY on the
+        # real data push (async_set_updated_data(data), not the optimistic echoes).
+        from .trigger_detect import VehicleTransitionDetector  # noqa: PLC0415
+
+        self._transition_detector = VehicleTransitionDetector()
+
         # update_interval=None: no HA-level polling
         # Updates arrive reactively via _on_cc_update → async_set_updated_data
         super().__init__(
@@ -958,6 +1108,16 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             update_interval=None,
         )
 
+    def register_transition_listener(
+        self,
+        event_key: str,
+        vin: str | None,
+        callback: Callable[[dict[str, Any]], None],
+    ) -> Callable[[], None]:
+        """b14 (experimental) — subscribe to a vehicle state-transition event
+        (e.g. ``started_charging``), optionally scoped to one VIN. Used by the
+        named-trigger platform; returns an unsubscribe callable."""
+        return self._transition_detector.register(event_key, vin, callback)
 
     async def async_setup(self) -> bool:
         """Authenticate and fetch initial vehicle data via own CARIAD client."""
@@ -967,6 +1127,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             AuthenticationError,
             EmailTwoFactorRequiredError,
             PortalInteractionRequiredError,
+            PortalSessionExpiredError,
             TermsAndConditionsError,
             MarketingConsentError,
             TwoFactorRequiredError,
@@ -1021,10 +1182,47 @@ class VagConnectCoordinator(DataUpdateCoordinator):
 
             from .const import (  # noqa: PLC0415
                 CONF_COMPANION_ADDON_TOKEN,
+                CONF_COMPANION_AGENT_TOKEN,
                 CONF_COMPANION_READ_CHARGE_DETAIL,
+                CONF_COMPANION_READ_CLIMATE_DETAIL,
+                CONF_COMPANION_READ_PARKING_POSITION,
+                CONF_COMPANION_READ_VEHICLE_HEALTH,
                 CONF_COMPANION_USE_ADDON,
+                CONF_COMPANION_USE_RELAY,
                 CONF_COMPANION_WAKE_SLEEP,
             )
+
+            def _companion_opt(key: str) -> bool:
+                """Companion opt-ins are set at setup and editable in options."""
+                return bool(
+                    self.entry.options.get(key, self.entry.data.get(key, False))
+                )
+
+            # v4.4.0 (#968) — each deeper nav path carries its own opt-in, so a
+            # user who wants the odometer does not silently also get a walk
+            # through the navigation screens for the parking position.
+            _nav_opt_ins = {
+                name
+                for name, key in (
+                    ("charge_detail", CONF_COMPANION_READ_CHARGE_DETAIL),
+                    ("vehicle_health", CONF_COMPANION_READ_VEHICLE_HEALTH),
+                    ("climate_detail", CONF_COMPANION_READ_CLIMATE_DETAIL),
+                    ("parking_position", CONF_COMPANION_READ_PARKING_POSITION),
+                )
+                if _companion_opt(key)
+            }
+            # v4.4.0 (#968) — relay mode: the phone's agent app calls US. Build
+            # its broker before the client so the endpoint is live by the time
+            # the first poll waits for the agent to check in.
+            _relay_broker = None
+            if bool(self.entry.data.get(CONF_COMPANION_USE_RELAY, False)):
+                from .companion.relay import register_relay  # noqa: PLC0415
+
+                _relay_broker = register_relay(
+                    self.hass,
+                    self.entry.entry_id,
+                    str(self.entry.data.get(CONF_COMPANION_AGENT_TOKEN, "") or ""),
+                )
             self._cariad_client = CompanionClient(
                 brand=brand,
                 vin=self.entry.data[CONF_VIN],
@@ -1032,12 +1230,13 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 port=self.entry.data.get(CONF_ADB_PORT, DEFAULT_ADB_PORT),
                 adbkey_path=self.hass.config.path(".storage", "vag_connect_adbkey"),
                 time_fn=time.monotonic,
-                read_charge_detail=bool(
-                    self.entry.data.get(CONF_COMPANION_READ_CHARGE_DETAIL, False)
-                ),
-                wake_sleep=bool(
-                    self.entry.data.get(CONF_COMPANION_WAKE_SLEEP, False)
-                ),
+                # v4.4.0 — options THEN data (the convention elsewhere in this
+                # file). The Options flow writes to entry.options, so reading
+                # only entry.data left both companion toggles inert unless they
+                # had been set during initial setup — a user who ticked "read
+                # charge detail" afterwards saw nothing happen (#968).
+                read_charge_detail=_companion_opt(CONF_COMPANION_READ_CHARGE_DETAIL),
+                wake_sleep=_companion_opt(CONF_COMPANION_WAKE_SLEEP),
                 # #968 — when set, host/port above address the ADB Bridge
                 # add-on rather than the phone (Android 11+ wireless debugging
                 # needs the real adb binary, which the add-on bundles).
@@ -1047,6 +1246,8 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 addon_token=str(
                     self.entry.data.get(CONF_COMPANION_ADDON_TOKEN, "") or ""
                 ),
+                relay_broker=_relay_broker,
+                nav_opt_ins=_nav_opt_ins,
             )
             # v2.26.0 (ckomma #21) — re-apply a rate-limit backoff persisted
             # before a restart, so an account lockout is not cleared just by
@@ -1203,6 +1404,47 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 # Save immediately so the entry.data copy can be cleaned
                 # up on a subsequent config_flow update.
                 await self._token_storage.save(persisted)
+
+            # v4.7.7 (#1337) — Porsche: the config flow already solved the
+            # captcha and got a token; it stashed it in entry.data so the FIRST
+            # coordinator setup reuses it (via the never-captcha-gated
+            # /oauth/token refresh) instead of running a SECOND interactive login
+            # — another captcha — right after setup. Promote it into the
+            # persistent store; from then on it's a normal cached-token restart.
+            porsche_initial = self.entry.data.get("porsche_initial_tokens")
+            # v4.7.8 — only a token WITH a refresh_token is worth bridging: the
+            # client silently ignores a refresh-less one while this code would
+            # still skip authenticate(), leaving the entry with no token at all.
+            if (
+                persisted is None
+                and porsche_initial
+                and porsche_initial.get("refresh_token")
+            ):
+                from .cariad.models import TokenSet  # noqa: PLC0415
+                persisted = TokenSet(
+                    access_token=str(porsche_initial.get("access_token", "")),
+                    refresh_token=str(porsche_initial.get("refresh_token", "")),
+                    id_token=str(porsche_initial.get("id_token", "")),
+                    expires_at=float(porsche_initial.get("expires_at", 0.0) or 0.0),
+                    strategy=str(porsche_initial.get("strategy", "") or "porsche"),
+                )
+                _LOGGER.debug(
+                    "VW Group Connect: bootstrapping Porsche with the config-flow "
+                    "login token for %s — skipping a second interactive login",
+                    brand,
+                )
+                await self._token_storage.save(persisted)
+            # v4.7.8 — promoted or not (a reauth/reconfigure writes the store
+            # directly AND stashes a copy here), the entry.data copy is never
+            # the source of truth: strip it so no plaintext token lingers in
+            # core.config_entries and no stale copy can be re-promoted later
+            # (storage-version bump, corrupted file, .storage restore).
+            if "porsche_initial_tokens" in self.entry.data:
+                _cleaned = {
+                    k: v for k, v in self.entry.data.items()
+                    if k != "porsche_initial_tokens"
+                }
+                self.hass.config_entries.async_update_entry(self.entry, data=_cleaned)
 
         # VW EU Two-Way (650d46ca): when armed, the modern-BFF device-grant token
         # is the PRIMARY. Activate it from entry.data on the config_flow reload
@@ -1375,6 +1617,14 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 try:
                     if persisted is None or persisted_is_portal:
                         raise
+                    # v4.7.8 (#1337) — Porsche's client already falls back to a
+                    # fresh interactive login inside its own refresh path, so
+                    # reaching here means that login ALREADY failed (captcha or
+                    # dead credentials). A second identical attempt would only
+                    # submit the same credentials twice per restart — the exact
+                    # retry pressure that has locked Porsche accounts. Re-raise.
+                    if brand == "porsche":
+                        raise
                     _LOGGER.info(
                         "VW Group Connect: persisted tokens for %s no longer "
                         "refresh (VW attestation wall) — falling back to a fresh "
@@ -1388,6 +1638,14 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                     vins = await self._enumerate_via_eu_data_act_fallback()
                     if not vins:
                         raise
+            # Restart resilience: enumeration still empty (e.g. an acpp / read-only
+            # silo whose first post-restart read 401'd, or a transient enumeration
+            # failure) — fall back to the VINs already restored from the
+            # last-known-good cache instead of tearing the entry down. get_status
+            # then decides per-VIN (a raise keeps the restored snapshot via the
+            # keep-loop), so entities show last-known-good rather than unavailable.
+            if not vins:
+                vins = [v for v in self.vehicles if not str(v).startswith("_")]
             if not vins:
                 return False
 
@@ -1397,14 +1655,27 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             # both arm paths; idempotent, fail-soft.
             try:
                 await self._apply_test_cohort()
-            except Exception:  # noqa: BLE001
-                _LOGGER.debug("test-cohort apply skipped", exc_info=True)
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.debug("test-cohort apply skipped (%s)", type(exc).__name__)
 
             # Skip vehicles the user has disabled in HA so a deactivated car
             # stops consuming the daily request budget. Reassigning here means
             # both the gather and the zip below use the filtered list.
             vins = self._active_vins(vins)
+            # Škoda auto-enrollment to the official public API — mint a per-VIN
+            # X-API-Key from the user's existing mysmob login so an already-logged-in
+            # owner gets the durable official channel with zero effort, and new users
+            # get it painlessly. Idempotent + fail-soft (never sinks the poll).
+            try:
+                await self._auto_enroll_skoda_official(vins)
+            except Exception as exc:  # noqa: BLE001
+                # class-only — the enroll path mints/handles the X-API-Key and hits
+                # the VIN-path official API; a raw error can carry either.
+                _LOGGER.debug(
+                    "Škoda official auto-enroll skipped (%s)", type(exc).__name__
+                )
             # Fetch status for all vehicles
+            self._push_official_mode()  # #1286 — official_only routing before read
             results = await asyncio.gather(
                 *[self._cariad_client.get_status(vin) for vin in vins],
                 return_exceptions=True,
@@ -1424,7 +1695,14 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             prepared: list[tuple[str, dict[str, Any] | None, bool, bool]] = []
             for vin, result in zip(vins, results):
                 if isinstance(result, Exception):
-                    _LOGGER.warning("Could not fetch status for %s: %s", mask_vin(vin), result)
+                    # class + plain status only — a raw aiohttp error's str()
+                    # carries the VIN-path URL; APIError is already redacted.
+                    _rstatus = getattr(result, "status", None)
+                    _LOGGER.warning(
+                        "Could not fetch status for %s: %s%s",
+                        mask_vin(vin), type(result).__name__,
+                        f" (HTTP {_rstatus})" if _rstatus else "",
+                    )
                     prepared.append((vin, None, True, False))
                     continue
                 if isinstance(result, VehicleData):
@@ -1514,13 +1792,18 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                     # strategies only, default ON; session-expiry surfaces a repair)
                     try:
                         await self._ensure_data_act_custom_request_kickoff()
-                    except Exception:  # noqa: BLE001
+                    except Exception as exc:  # noqa: BLE001
                         _LOGGER.debug(
-                            "Data Act kickoff helper raised - non-fatal, continuing",
-                            exc_info=True,
+                            "Data Act kickoff helper raised - non-fatal, continuing"
+                            " (%s)", type(exc).__name__,
                         )
-                except Exception:  # noqa: BLE001 - a background task must not die silently
-                    _LOGGER.exception("VW Group Connect: background setup finish failed")
+                except Exception as exc:  # noqa: BLE001 - a background task must not die silently
+                    # class-only, not .exception() — this wraps the auth-arm + read
+                    # kickoffs; a raw aiohttp error's str() carries the VIN-path URL.
+                    _LOGGER.error(
+                        "VW Group Connect: background setup finish failed (%s)",
+                        type(exc).__name__,
+                    )
                 # Start background polling — after the prefetches, as it was inline.
                 self.hass.async_create_background_task(
                     self._poll_loop(), f"{DOMAIN}_poll"
@@ -1551,6 +1834,26 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         # get told to fix their password.
         except PortalInteractionRequiredError as err:
             raise ValueError("portal_interaction_required") from err
+        except PortalSessionExpiredError as err:
+            # b12 (#1340 @cyrano330) — login succeeded but the portal returned 401
+            # on enumeration even after a re-login: the password is fine, so raise
+            # the brand-aware session-expired repair (re-login via OptionsFlow),
+            # the same one the runtime poll paths use, instead of the credential
+            # catch-all. Raise ConfigEntryNotReady DIRECTLY (soft, retrying — the
+            # portal session may recover) rather than ValueError: routing via
+            # ValueError would ALSO fire __init__.raise_issue_auth_required, which
+            # has no mapping for this reason and would register a SECOND, generic
+            # "auth_failed" repair with a mirrored id — the user then sees the
+            # repair twice (b12b, spotted by @cyrano330).
+            from homeassistant.exceptions import (  # noqa: PLC0415
+                ConfigEntryNotReady,
+            )
+
+            self._raise_data_act_session_expired_repair()
+            raise ConfigEntryNotReady(
+                "The EU Data Act portal signed you in but then refused the "
+                "vehicle list (session not authorised) — see the repair notice."
+            ) from err
         except AuthenticationError as err:
             raise ValueError("invalid_credentials") from err
         except Exception as err:  # noqa: BLE001
@@ -1566,8 +1869,34 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 "(message redacted, see DEBUG for details)",
                 type(err).__name__,
             )
-            _LOGGER.debug("VW Group Connect setup failed details: %s", err)
+            # NB: NOT the raw err — the comment above is the reason (its str()
+            # carries code=<JWT> → the user's email + a live token). The class
+            # name is already logged at ERROR; nothing more is safe here. (#1355)
+            _LOGGER.debug(
+                "VW Group Connect setup failed details withheld (%s) — the"
+                " exception message can carry an OAuth code/token",
+                type(err).__name__,
+            )
             return False
+
+    def _porsche_auth_dead(self, vins: list[str], results: list[Any]) -> bool:
+        """v4.7.8 (#1337) — True when EVERY Porsche car read failed
+        authentication on two consecutive polls. One poll is not enough: a
+        token-endpoint hiccup surfaces as APIError (not auth) since 4.7.8, but
+        a single all-auth-fail poll can still be a blip; two in a row means the
+        refresh token is really dead and re-authentication is the only way out.
+        Brand-gated on purpose: other brands have their own auth paths.
+        """
+        from .cariad.exceptions import AuthenticationError  # noqa: PLC0415
+
+        if not vins or self.entry.data.get(CONF_BRAND) != "porsche":
+            return False
+        if results and all(isinstance(r, AuthenticationError) for r in results):
+            n = getattr(self, "_porsche_auth_fail_polls", 0) + 1
+            self._porsche_auth_fail_polls = n
+            return n >= 2
+        self._porsche_auth_fail_polls = 0
+        return False
 
     def _trigger_reauth(self, reason: str) -> None:
         """Stop the poll loop and ask HA to start the reauth flow.
@@ -1773,6 +2102,19 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         )
         new_map = dict(existing_map)
         changed = False
+        # b9 (#1273) — sibling {vin: iso} map of the last kickoff attempt, so we can
+        # back off re-POSTing (see the guard below). Same options-then-data read as
+        # the identifier map (the update-listener folds options into data).
+        from .const import (  # noqa: PLC0415
+            CONF_DATA_ACT_KICKOFF_TS,
+            KICKOFF_REVERIFY_S,
+        )
+        kickoff_ts = dict(
+            self.entry.options.get(CONF_DATA_ACT_KICKOFF_TS)
+            or self.entry.data.get(CONF_DATA_ACT_KICKOFF_TS)
+            or {}
+        )
+        new_ts = dict(kickoff_ts)
 
         for vin in list(self.vehicles):
             try:
@@ -1788,7 +2130,36 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                             mask_vin(vin), active[:8],
                         )
                     continue
-                # No active request - kick one off.
+                # b9 (#1273) — the anonymous-AEM probe above false-negatives, and the
+                # portal 500s on a 2nd active request per VIN (one-active-request rule),
+                # so a blind re-POST storms on every restart/reload. When we already
+                # hold a cached Identifier that was re-verified within
+                # KICKOFF_REVERIFY_S, trust it and skip the POST; past that window
+                # re-verify once (the portal silently drops a request ~24-36h, so we
+                # can't trust the cache forever).
+                cached = existing_map.get(vin)
+                if cached:
+                    ts_raw = kickoff_ts.get(vin)
+                    kicked_at = None
+                    if isinstance(ts_raw, str):
+                        try:
+                            kicked_at = datetime.fromisoformat(ts_raw)
+                        except ValueError:
+                            kicked_at = None
+                    if kicked_at is not None:
+                        if kicked_at.tzinfo is None:
+                            kicked_at = kicked_at.replace(tzinfo=timezone.utc)
+                        age_s = (
+                            datetime.now(tz=timezone.utc) - kicked_at
+                        ).total_seconds()
+                        if age_s < KICKOFF_REVERIFY_S:
+                            new_map[vin] = cached
+                            continue
+                # No fresh cached request — kick one off. Stamp the attempt FIRST
+                # (and mark changed) so the backoff holds even if this POST fails,
+                # persisted below — an unpersisted stamp wouldn't survive a restart.
+                new_ts[vin] = datetime.now(tz=timezone.utc).isoformat()
+                changed = True
                 new_id = await scraper.kickoff_custom_data_request(vin)
                 if new_id:
                     new_map[vin] = new_id
@@ -1805,13 +2176,17 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             except Exception as exc:  # noqa: BLE001
                 _LOGGER.debug(
                     "Data Act kickoff: VIN %s probe failed (%s) - skipping",
-                    mask_vin(vin), exc,
+                    mask_vin(vin), type(exc).__name__,
                 )
 
         if changed:
             self.hass.config_entries.async_update_entry(
                 self.entry,
-                options={**self.entry.options, CONF_DATA_ACT_IDENTIFIERS: new_map},
+                options={
+                    **self.entry.options,
+                    CONF_DATA_ACT_IDENTIFIERS: new_map,
+                    CONF_DATA_ACT_KICKOFF_TS: new_ts,
+                },
             )
 
     def _notify_data_act_kickoff(self, vin: str) -> None:
@@ -1853,13 +2228,39 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             DataActSessionExpiredError,
         )
 
+        from .const import ONETIME_EXPORT_DISABLED  # noqa: PLC0415
+
+        if ONETIME_EXPORT_DISABLED:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="historical_disabled",
+            )
         session = async_get_clientsession(self.hass)
         scraper = DataActScraper(session, brand_name=self.entry.data[CONF_BRAND])
         try:
-            return await scraper.kickoff_historical_export(vin)
+            # Wedge-guard (#923, @naked-head — field-corrected). The portal
+            # enforces one PENDING request at a time, NOT one request total: a
+            # one-time export submits fine alongside an active 15-min continuous
+            # feed, and the feed keeps publishing (@naked-head confirmed this twice
+            # from HA feed timestamps). The earlier guard checked the CONTINUOUS
+            # request's identifier — which is active for essentially everyone via
+            # auto-kickoff — so it refused every attempt and made the button
+            # unreachable. Guard on OUR OWN pending one-time export instead, so we
+            # never double-submit while one is in flight; a genuine duplicate is
+            # rejected by the portal itself and surfaced from there.
+            if self.historical_export_state(vin) == "pending":
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="historical_wedge_blocked",
+                )
+            ok = await scraper.kickoff_historical_export(vin)
         except DataActSessionExpiredError:
             self._raise_data_act_session_expired_repair()
             return False
+        if ok:
+            # The portal gives this request no terminal state (it can silently
+            # vanish ~24-36h later), so start our own client-side deadline clock.
+            self._record_historical_pending(vin)
+        return ok
 
     async def async_import_historical_export(self, vin: str) -> bool:
         """Phase C — fetch a READY one-time export for *vin* and merge its config
@@ -1872,7 +2273,13 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         live PHEV to electric. Returns True if anything merged, False if the ZIP
         isn't ready yet (the portal generates it asynchronously).
         """
-        portal = getattr(self._cariad_client, "_eu_portal", None)
+        # #923 — a supplementary portal (merged onto a command primary) exposes
+        # the same ``get_vehicle_data``; without this a merged setup could
+        # request the export but never import it (``_eu_portal`` is None there).
+        portal = (
+            getattr(self._cariad_client, "_eu_portal", None)
+            or getattr(self._cariad_client, "_supplementary_eu_portal", None)
+        )
         if portal is None or not hasattr(portal, "get_vehicle_data"):
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
@@ -1932,6 +2339,120 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             )
         return merged_any
 
+    # ── Stage-1 one-time export lifecycle (deadline + status) ────────────────
+    def _historical_state(self) -> dict[str, Any]:
+        """Per-VIN one-time-export lifecycle state, loaded once from entry.data."""
+        st = getattr(self, "_historical_export_state", None)
+        if st is None:
+            from .const import CONF_HISTORICAL_EXPORT_STATE  # noqa: PLC0415
+            raw = self.entry.data.get(CONF_HISTORICAL_EXPORT_STATE)
+            st = dict(raw) if isinstance(raw, dict) else {}
+            self._historical_export_state = st
+        return st
+
+    def _persist_historical_state(self) -> None:
+        from .const import CONF_HISTORICAL_EXPORT_STATE  # noqa: PLC0415
+        try:
+            self.hass.config_entries.async_update_entry(
+                self.entry,
+                data={
+                    **self.entry.data,
+                    CONF_HISTORICAL_EXPORT_STATE: dict(self._historical_state()),
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug(
+                "historical-export state persist skipped (%s)", type(exc).__name__
+            )
+
+    def _record_historical_pending(self, vin: str) -> None:
+        self._historical_state()[vin] = {
+            "state": "pending",
+            "submitted_at": datetime.now(tz=timezone.utc).isoformat(),
+        }
+        self._persist_historical_state()
+
+    def historical_export_state(self, vin: str) -> str:
+        """The lifecycle state for *vin*: idle / pending / done / timed_out."""
+        s = self._historical_state().get(vin)
+        return s.get("state", "idle") if isinstance(s, dict) else "idle"
+
+    async def async_cancel_historical_export(self, vin: str) -> bool:
+        """#1273 — user off-switch for a pending one-time historical export.
+
+        Clears the pending state for *vin* so the poll loop stops re-attempting the
+        import (which otherwise retries ~every 30 min until the deadline) and clears
+        the paired timeout repair. A live *continuous* data request is untouched
+        (different state). Returns True if a pending export existed.
+        """
+        st = self._historical_state()
+        existed = st.pop(vin, None) is not None
+        if existed:
+            self._persist_historical_state()
+            from .repairs import clear_issue_historical_timeout  # noqa: PLC0415
+            clear_issue_historical_timeout(self.hass, self.entry.entry_id, vin)
+            _LOGGER.info(
+                "Historical export for %s cancelled by user request.", mask_vin(vin)
+            )
+        return existed
+
+    async def _advance_historical_exports(self) -> None:
+        """Poll-loop step: import a READY one-time export or time out a stuck one.
+
+        Runs on the poll cadence but does real work rarely — only for a VIN with a
+        pending export, and its import attempt is throttled to ~30 min. A ready
+        export imports (→ done); one still pending past the client deadline is
+        declared timed-out (Repair raised, pending cleared) so a silently-dropped
+        export can never wedge a future attempt. Fail-soft — never breaks a poll.
+        """
+        from .const import HISTORICAL_EXPORT_DEADLINE_S  # noqa: PLC0415
+
+        st = self._historical_state()
+        pending = [
+            v for v, s in st.items()
+            if isinstance(s, dict) and s.get("state") == "pending"
+        ]
+        if not pending:
+            return
+        now = datetime.now(tz=timezone.utc)
+        changed = False
+        for vin in pending:
+            def _parse(key: str) -> datetime:
+                try:
+                    d = datetime.fromisoformat(str(st[vin].get(key)))
+                    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+                except (TypeError, ValueError):
+                    return now
+            if (now - _parse("submitted_at")).total_seconds() >= HISTORICAL_EXPORT_DEADLINE_S:
+                st[vin] = {"state": "timed_out",
+                           "submitted_at": st[vin].get("submitted_at")}
+                changed = True
+                try:
+                    from .repairs import raise_issue_historical_timeout  # noqa: PLC0415
+                    raise_issue_historical_timeout(
+                        self.hass, self.entry.entry_id, vin, masked_vin=mask_vin(vin),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    _LOGGER.debug(
+                        "historical timeout repair skipped (%s)", type(exc).__name__
+                    )
+                continue
+            if st[vin].get("checked_at") and (now - _parse("checked_at")).total_seconds() < 1800:
+                continue  # throttle import attempts to ~30 min
+            st[vin]["checked_at"] = now.isoformat()
+            changed = True
+            try:
+                if await self.async_import_historical_export(vin):
+                    st[vin] = {"state": "done",
+                               "submitted_at": st[vin].get("submitted_at")}
+            except Exception as exc:  # noqa: BLE001 — not-ready-yet is not fatal
+                # class-only — the import fetches the VIN-path export ZIP; a raw
+                # aiohttp error's str() carries that URL.
+                _LOGGER.debug("historical import retry for %s deferred (%s)",
+                              vin[-6:], type(exc).__name__)
+        if changed:
+            self._persist_historical_state()
+
     async def async_import_export_file(self, vin: str, file_path: str) -> bool:
         """Phase C (local) — import a EU Data Act export ZIP the user downloaded
         from the portal by hand, instead of fetching it through the portal
@@ -1982,7 +2503,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         except Exception as err:  # noqa: BLE001 - a hand-supplied file may be anything
             _LOGGER.warning(
                 "EU Data Act: could not parse local export %s: %s",
-                os.path.basename(path), err,
+                os.path.basename(path), type(err).__name__,
             )
             parsed = None
         if parsed is None or getattr(parsed, "no_data", True):
@@ -2040,9 +2561,10 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         self._last_runtime_kickoff = now
         try:
             await self._ensure_data_act_custom_request_kickoff()
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             _LOGGER.debug(
-                "Data Act runtime kickoff raised — non-fatal", exc_info=True,
+                "Data Act runtime kickoff raised — non-fatal (%s)",
+                type(exc).__name__,
             )
 
     async def async_create_data_act_request(self) -> None:
@@ -2063,6 +2585,11 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         """
         from homeassistant.helpers import issue_registry as ir  # noqa: PLC0415
 
+        # v4.7.8 — remember that we raised it, so the per-poll repair refresh
+        # can clear it again once the portal session is demonstrably alive
+        # (data flowed). Before this the Repair was never deleted at all: a
+        # user who re-logged in kept seeing "session expired" forever.
+        self._data_act_session_expired_pending = True
         ir.async_create_issue(
             self.hass,
             DOMAIN,
@@ -2191,6 +2718,21 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             self._portal_interaction_reason = ""
         issue_id = f"data_act_no_data_{self.entry.entry_id}"
         reason = getattr(portal, "last_no_data_reason", "") if portal else ""
+        # v4.7.8 — the "portal session expired" Repair (raised by setup, the
+        # kickoff and the historical export) was never cleared, so it outlived
+        # the re-login it asked for. Data flowing through the portal this poll
+        # is proof the session is alive again → clear it. Deliberately NOT
+        # cleared on a no-data poll: the kickoff can raise it mid-cycle and the
+        # same cycle's empty dataset must not immediately erase it.
+        if (
+            portal is not None
+            and not reason
+            and getattr(self, "_data_act_session_expired_pending", False)
+        ):
+            ir.async_delete_issue(
+                self.hass, DOMAIN, f"data_act_session_expired_{entry_id}"
+            )
+            self._data_act_session_expired_pending = False
         if portal is None or not reason:
             ir.async_delete_issue(self.hass, DOMAIN, issue_id)
             return
@@ -2247,6 +2789,8 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 conn.probe_position = cohort
                 if hasattr(conn, "probe_soh"):
                     conn.probe_soh = cohort  # 4.3.2 SoH probe, same opt-in
+                if hasattr(conn, "probe_measurements"):
+                    conn.probe_measurements = cohort  # #1357 range probe, same opt-in
                 has_web = True
 
         # #912 — the BFF/Audi primary client captures a command's pendingrequests
@@ -2257,10 +2801,460 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         if has_bff:
             client._test_cohort = cohort
 
-        if cohort and (has_web or has_bff):
+        # v4.4.0b3 — SEAT/CUPRA en_GB locale A/B probe. The OLA client captures a
+        # localized-string sample (default vs en_GB) once per VIN when opted in;
+        # count it toward the share prompt so a SEAT/CUPRA reporter (no vw.de / BFF
+        # channel) is still asked to share the capture, or it never reaches us.
+        has_ola = client is not None and hasattr(client, "ola_locale_captures")
+        if has_ola:
+            client._test_cohort = cohort
+
+        # v4.7.9 (#584/#923) — the MBB command connector is created by
+        # _arm_supplementary_channels BEFORE this runs and copies a still-False
+        # flag at creation; nothing ever pushed the real value down. So the
+        # fetched-role cohort probe could never fire for an MBB_ODP reporter —
+        # the exact car the cohort exists for (@Testius007's diagnostics exposed
+        # it). Push the flag into both MBB sub-connectors and, when opting in,
+        # fire the (one-shot, fail-soft) probe for cars whose operationList
+        # verdict is already cached as no-legacy — otherwise the 12 h deny cache
+        # hides the verdict branch (where the probe normally runs) until restart.
+        for attr in ("_mbb_command", "_mbb_fallback"):
+            sub = getattr(client, attr, None) if client is not None else None
+            if sub is None:
+                continue
+            sub._test_cohort = cohort
+            probe = getattr(sub, "_probe_fetched_role_cohort", None)
+            if cohort and callable(probe):
+                for _vin in sorted(getattr(sub, "mbb_no_legacy_vins", None) or ()):
+                    try:
+                        await probe(_vin)
+                    except Exception:  # noqa: BLE001 — probe is fail-soft by contract
+                        pass
+
+        if cohort and (has_web or has_bff or has_ola):
             raise_issue_test_cohort_share(self.hass, self.entry.entry_id)
         else:
             clear_issue_test_cohort_share(self.hass, self.entry.entry_id)
+
+    def _skoda_official_mode(self) -> str:
+        """The configured Škoda official-API source mode (#1286). Options-then-data
+        precedence like every other option; unknown/absent → the ``auto`` default."""
+        from .const import (  # noqa: PLC0415
+            CONF_SKODA_OFFICIAL_MODE,
+            SKODA_OFFICIAL_MODE_DEFAULT,
+            SKODA_OFFICIAL_MODES,
+        )
+        entry = getattr(self, "entry", None)
+        if entry is None:
+            return SKODA_OFFICIAL_MODE_DEFAULT
+        mode = str(
+            entry.options.get(
+                CONF_SKODA_OFFICIAL_MODE,
+                entry.data.get(
+                    CONF_SKODA_OFFICIAL_MODE, SKODA_OFFICIAL_MODE_DEFAULT
+                ),
+            )
+        )
+        return mode if mode in SKODA_OFFICIAL_MODES else SKODA_OFFICIAL_MODE_DEFAULT
+
+    def _read_priority_channel(self, vin: str) -> str | None:
+        """#1357 — the preferred READ channel for ``vin`` (per-VIN), or None for
+        the ``auto`` default. Reads the ``{VIN: mode}`` map options-then-data
+        (never options-only — the update listener folds options into data and
+        blanks options, so an options-only read would lose a saved map). Returns
+        the channel name the merge should sort to the front (``website_authproxy``
+        for ``prefer_website_authproxy``), else None so ``gather_and_merge`` keeps
+        today's primary-first order untouched."""
+        from .const import (  # noqa: PLC0415
+            CONF_READ_PRIORITY,
+            READ_PRIORITY_DEFAULT,
+            READ_PRIORITY_MODES,
+        )
+        entry = getattr(self, "entry", None)
+        if entry is None or not vin:
+            return None
+        raw = entry.options.get(
+            CONF_READ_PRIORITY, entry.data.get(CONF_READ_PRIORITY)
+        )
+        if not isinstance(raw, dict):
+            return None
+        mode = str(
+            raw.get(vin) or raw.get(str(vin).upper()) or READ_PRIORITY_DEFAULT
+        )
+        if mode not in READ_PRIORITY_MODES:
+            mode = READ_PRIORITY_DEFAULT
+        return "website_authproxy" if mode == "prefer_website_authproxy" else None
+
+    def _push_official_mode(self, client: Any = None) -> None:
+        """Push the configured source mode onto the Škoda client so its primary-read
+        routing (``official_only``) reflects a live options change. Must run before
+        each status gather; a no-op for non-Škoda clients (no ``set_official_mode``).
+        Accepts an explicit ``client`` so the #584 captured-client path stays race-safe."""
+        setter = getattr(
+            client if client is not None else self._cariad_client,
+            "set_official_mode", None,
+        )
+        if setter is not None:
+            setter(self._skoda_official_mode())
+
+    def _arm_official_from_map(self, keys_map: dict[str, Any]) -> None:
+        """Arm the Škoda official failover channel from a persisted per-VIN key map
+        ({vin: {key, id, validUntil}})."""
+        arm = getattr(self._cariad_client, "arm_supplementary_official", None)
+        if arm is None:
+            return
+        by_vin = {
+            str(vin).upper(): (rec.get("key") or "")
+            for vin, rec in (keys_map or {}).items()
+            if isinstance(rec, dict) and rec.get("key")
+        }
+        if by_vin:
+            try:
+                arm(keys_by_vin=by_vin)
+            except Exception as exc:  # noqa: BLE001
+                # class-only — by_vin holds the per-VIN X-API-Key; a validation
+                # error could echo the key value.
+                _LOGGER.debug(
+                    "Škoda official arm-from-map failed (%s)", type(exc).__name__
+                )
+
+    def _armed_data_channels(self, vin: str) -> list[str]:
+        """Tokens of the read channels armed for this vehicle (data sources) —
+        primary + supplementary + the Škoda official channel — enumerated WITHOUT
+        creating reader coroutines. Order-stable, de-duplicated. Brand-agnostic."""
+        client = self._cariad_client
+        tokens: list[str] = [self._primary_channel_name()]
+        for attr, token in (
+            ("_supplementary_authproxy", "website_authproxy"),
+            ("_supplementary_eu_portal", "eu_data_act"),
+            ("_supplementary_tibber", "tibber"),
+            ("_supplementary_official", "skoda_official"),
+        ):
+            if getattr(client, attr, None) is not None:
+                tokens.append(token)
+        seen: set[str] = set()
+        out: list[str] = []
+        for t in tokens:
+            if t and t not in seen:
+                seen.add(t)
+                out.append(t)
+        return out
+
+    def _compute_channel_status(
+        self, vin: str, data: dict[str, Any]
+    ) -> dict[str, dict[str, Any]]:
+        """Per-source connectivity status for the connectivity binary_sensors: for
+        each armed data channel, whether it is currently contributing values
+        (active) vs armed-but-idle (standby), how many readings it owns of the total,
+        and when it last contributed. The Škoda official channel is now BOTH an
+        active live source (it contributes on healthy cycles, tagged skoda_official)
+        AND the hard-failure failover, so it is reported with its live count and
+        failover:True."""
+        field_sources = data.get("field_sources")
+        if not isinstance(field_sources, dict):
+            field_sources = {}
+        total = len(field_sources)
+        now_iso = datetime.now(tz=timezone.utc).isoformat()
+        last = getattr(self, "_channel_last_active", None)
+        if not isinstance(last, dict):
+            last = {}
+            self._channel_last_active = last
+        vin_last: dict[str, str] = last.setdefault(vin, {})
+        status: dict[str, dict[str, Any]] = {}
+        for token in self._armed_data_channels(vin):
+            if token == "skoda_official":
+                # Active live source now: count the fields it actually contributed
+                # this cycle. Still failover:True — it also serves on hard failure.
+                n = sum(1 for t in field_sources.values() if t == token)
+                active = n > 0
+                if active:
+                    vin_last[token] = now_iso
+                status[token] = {
+                    "armed": True, "failover": True, "active": active,
+                    "active_values": n, "total_values": total,
+                    "last_active": vin_last.get(token),
+                }
+                continue
+            n = sum(1 for t in field_sources.values() if t == token)
+            active = n > 0
+            if active:
+                vin_last[token] = now_iso
+            entry: dict[str, Any] = {
+                "armed": True, "failover": False, "active": active,
+                "active_values": n, "total_values": total,
+                "last_active": vin_last.get(token),
+            }
+            if token == "eu_data_act":
+                entry["portal_health"] = data.get("portal_health")
+                entry["minutes_since_last_snapshot"] = data.get(
+                    "minutes_since_last_snapshot"
+                )
+            status[token] = entry
+        return status
+
+    def _reconcile_connectivity_entities(self) -> None:
+        """Prune stale per-source connectivity binary_sensors from the registry.
+
+        The connectivity sensors are created dynamically, one per armed read channel
+        (unique_id ``{vin}_connectivity_{token}`` — see ``VagSourceConnectivity
+        Sensor``). When an account's channel set changes across versions or a
+        reconfigure — e.g. an EU-Data-Act *token*-path primary whose channel label
+        differs from an earlier build's ``eu_data_act`` — the old sensor is never
+        re-created and lingers in the registry forever as a permanent
+        ``unknown``/``unavailable`` leftover the user has to delete by hand (#1340,
+        cyrano330). This removes any ``{vin}_connectivity_{token}`` entity whose
+        ``token`` is not in the vehicle's CURRENT ``channel_status`` (the exact keys
+        the sensors are built from). Conservative + fail-soft: a VIN with no
+        channel_status yet (its poll hasn't produced one) is skipped, so a sensor
+        whose validity we cannot determine is never removed. Scoped to THIS config
+        entry, so it can never touch another integration or a second VAG entry.
+        """
+        try:
+            from homeassistant.helpers import (  # noqa: PLC0415
+                entity_registry as er,
+            )
+
+            registry = er.async_get(self.hass)
+            entries = er.async_entries_for_config_entry(
+                registry, self.entry.entry_id
+            )
+            for vin, vdata in list((self.vehicles or {}).items()):
+                cs = (
+                    vdata.get("channel_status") if isinstance(vdata, dict) else None
+                )
+                if not isinstance(cs, dict) or not cs:
+                    continue  # valid set unknown for this VIN → prune nothing
+                valid = {f"connectivity_{token}" for token in cs}
+                prefix = f"{vin}_connectivity_"
+                for entry in entries:
+                    uid = entry.unique_id or ""
+                    if not uid.startswith(prefix):
+                        continue
+                    key = uid[len(vin) + 1:]  # "{vin}_" → "connectivity_{token}"
+                    if key in valid:
+                        continue
+                    _LOGGER.info(
+                        "VW Group Connect: removing orphaned connectivity entity "
+                        "%s (that read channel is no longer armed for this "
+                        "account)", entry.entity_id,
+                    )
+                    try:
+                        registry.async_remove(entry.entity_id)
+                    except Exception:  # noqa: BLE001 — keep pruning the rest
+                        pass
+        except Exception:  # noqa: BLE001 — housekeeping must never break the poll
+            return
+
+    def _note_portal_outage(self, portal_outage: bool) -> None:
+        """Advance or reset the consecutive EU-DA portal 5xx-outage streak.
+
+        Called once per poll cycle with whether the portal's last read was a
+        transient outage (``last_no_data_reason == "portal_error"``). The streak
+        drives ``_portal_5xx_backoff_s`` (5/15/30 min). Saturates at the interval
+        count so it never overflows; any non-outage poll (fresh data, an ``empty``
+        no-content drop, or a non-portal entry) resets it to 0."""
+        if portal_outage:
+            self._consecutive_portal_5xx = min(
+                getattr(self, "_consecutive_portal_5xx", 0) + 1,
+                len(_PORTAL_5XX_BACKOFF_S),
+            )
+        else:
+            self._consecutive_portal_5xx = 0
+
+    def _skoda_probe(self, key: str, label: str) -> None:
+        """Write a PII-free outcome label into the client's ``probe_outcomes`` so the
+        integration diagnostics surface it. No-op if the client has no such sink.
+        Used to report what the (RE'd-but-live-untested) official key-mint route did,
+        so real-world outcomes come back as diagnostics probes."""
+        po = getattr(self._cariad_client, "probe_outcomes", None)
+        if isinstance(po, dict):
+            po[key] = label
+
+    def _check_skoda_multi_integration(
+        self, listing: Any, stored: dict[str, Any], our_vins: list[str]
+    ) -> None:
+        """From the official-API key listing, detect keys we did NOT create — a
+        second integration/app reading the same official Škoda API on THIS car — and
+        raise the ban-risk Repair. ``keysRemaining`` + account ``maxKeys`` gives
+        keys-in-use; more than the keys WE hold for a VIN means someone else minted
+        one too. PII-free, idempotent. Only VINs this integration actually manages
+        are checked — a second, unmanaged Škoda on the same account legitimately has
+        its own app key and must not trip the warning. A manually-pasted fallback key
+        (the user's own) counts as ours so it never trips it either."""
+        if not isinstance(listing, dict):
+            return
+        raw_max = listing.get("maxKeys")
+        if not isinstance(raw_max, (int, str)):
+            return
+        try:
+            max_keys = int(raw_max)
+        except ValueError:
+            return
+        from .const import CONF_SKODA_OFFICIAL_API_KEY  # noqa: PLC0415
+        has_manual_key = bool(self.entry.data.get(CONF_SKODA_OFFICIAL_API_KEY))
+        stored_upper = {str(k).upper() for k in (stored or {})}
+        managed = {str(v).upper() for v in (our_vins or [])} | stored_upper
+        for vk in listing.get("vehicleKeys") or []:
+            if not isinstance(vk, dict) or vk.get("vin") is None:
+                continue
+            vin_u = str(vk["vin"]).upper()
+            if vin_u not in managed:
+                continue  # a car we don't manage — its app key is not our concern
+            try:
+                remaining = int(vk.get("keysRemaining", max_keys))
+            except (TypeError, ValueError):
+                continue
+            ours = (1 if vin_u in stored_upper else 0) + (1 if has_manual_key else 0)
+            if (max_keys - remaining) > ours:
+                from . import repairs  # noqa: PLC0415
+                repairs.raise_issue_skoda_official_multi_integration(
+                    self.hass, self.entry.entry_id
+                )
+                return
+
+    async def _auto_enroll_skoda_official(self, vins: list[str]) -> None:
+        """Auto-enroll a logged-in Škoda user in the official public API: mint a
+        per-VIN X-API-Key from the EXISTING mysmob login, persist it, arm the
+        official failover channel, and raise a one-time HA repair informing the
+        user. Idempotent (mints only for VINs without a stored key, honours the
+        5-keys/VIN quota) and fail-soft (never sinks the poll). Gated on a native
+        mysmob login inside can_mint_official_key."""
+        from . import repairs  # noqa: PLC0415
+        from .const import CONF_BRAND, CONF_SKODA_OFFICIAL_KEYS  # noqa: PLC0415
+        client = self._cariad_client
+        if str(self.entry.data.get(CONF_BRAND, "")) != "skoda":
+            return
+        mode = self._skoda_official_mode()
+        if mode == "mysmob_only":
+            # Official channel switched off by the user → don't mint or arm it.
+            self._skoda_probe(
+                "skoda_official", "disabled by source mode (mysmob_only)"
+            )
+            return
+        if not getattr(client, "can_mint_official_key", False):
+            # Record WHY the official channel can't auto-enrol (portal-fallback or a
+            # non-native login) so diagnostics explain its absence. PII-free.
+            self._skoda_probe("skoda_official", "gate: not a native mysmob login")
+            # Can't auto-mint (no native mysmob login) → offer the manual key+VIN repair.
+            self._reconcile_skoda_manual_key_repair(vins)
+            return
+        # Feed the client the HA instance locale so the app-identity keygen headers
+        # (X-DEVICE-LANGUAGE / X-DEVICE-COUNTRY) carry the user's real HA setting in
+        # the ISO form the app sends, instead of a hardcoded default. Fail-soft.
+        try:
+            setattr(client, "_ha_language", self.hass.config.language or "")
+            setattr(client, "_ha_country", self.hass.config.country or "")
+        except Exception:  # noqa: BLE001
+            pass
+        mint = getattr(client, "mint_api_key", None)
+        list_keys = getattr(client, "list_api_keys", None)
+        if mint is None or list_keys is None:
+            return
+        # Mint each VIN at most once per HA session: a stored key means it already
+        # succeeded; a VIN we already tried this session (and that failed) must not be
+        # re-hammered every poll — its failure is captured in the keygen probe and it
+        # gets a fresh attempt on the next restart.
+        attempted = getattr(self, "_skoda_official_attempted", None)
+        if not isinstance(attempted, set):
+            attempted = set()
+            self._skoda_official_attempted = attempted
+        stored: dict[str, Any] = dict(self.entry.data.get(CONF_SKODA_OFFICIAL_KEYS) or {})
+        stored_upper = {str(k).upper() for k in stored}
+        to_mint = [
+            v for v in vins
+            if str(v).upper() not in stored_upper and str(v).upper() not in attempted
+        ]
+        if not to_mint:
+            # Every VIN already has a key → nothing to mint; clear any manual-key repair.
+            self._reconcile_skoda_manual_key_repair(vins)
+            if stored:
+                self._arm_official_from_map(stored)
+                # Once per session: is ANOTHER integration/app using the same
+                # official API on this account? (shared per-car budget → faster
+                # rate-limit/ban). Only checked for already-enrolled users here —
+                # the mint path below checks its own listing.
+                if not getattr(self, "_skoda_multi_int_checked", False):
+                    self._skoda_multi_int_checked = True
+                    try:
+                        self._check_skoda_multi_integration(await list_keys(), stored, vins)
+                    except Exception as exc:  # noqa: BLE001
+                        # class-only — list_keys() hits the official API and returns
+                        # key material; a raw error can carry the URL or a key.
+                        _LOGGER.debug(
+                            "Škoda multi-integration check skipped (%s)",
+                            type(exc).__name__,
+                        )
+            return
+        # Quota check (maxKeys 5 per VIN) — one GET before minting.
+        remaining: dict[str, int] = {}
+        listing = await list_keys()
+        self._check_skoda_multi_integration(listing, stored, vins)
+        if isinstance(listing, dict):
+            for vk in listing.get("vehicleKeys") or []:
+                if isinstance(vk, dict) and vk.get("vin") is not None:
+                    try:
+                        remaining[str(vk["vin"]).upper()] = int(vk.get("keysRemaining", 0))
+                    except (TypeError, ValueError):
+                        pass
+        newly: dict[str, Any] = {}
+        quota_full = False
+        for vin in to_mint:
+            attempted.add(str(vin).upper())  # tried this session — don't re-hammer
+            if remaining.get(str(vin).upper(), 1) <= 0:
+                quota_full = True  # user already holds 5 keys for this VIN in the app
+                continue
+            minted = await mint(vin)
+            if isinstance(minted, dict) and minted.get("key"):
+                newly[str(vin).upper()] = {
+                    "key": minted["key"],
+                    "id": minted.get("id", ""),
+                    "validUntil": minted.get("validUntil", ""),
+                }
+        if not newly:
+            # Nothing minted this run (route rejected / quota full). Keep any stored
+            # keys armed; if the only blocker was a full key quota, guide the user.
+            if stored:
+                self._arm_official_from_map(stored)
+            self._skoda_probe(
+                "skoda_official",
+                "quota-full (5 keys/VIN in app)" if quota_full
+                else "no key minted (see skoda_official_keygen probe)",
+            )
+            if quota_full:
+                repairs.raise_issue_skoda_official_quota(self.hass, self.entry.entry_id)
+            # Auto-mint produced no key (keygen rejected / quota) → manual key+VIN fallback.
+            self._reconcile_skoda_manual_key_repair(to_mint)
+            return
+        full = {**stored, **newly}
+        self._arm_official_from_map(full)
+        # Persist for the next restart so we never re-mint (idempotent: a second run
+        # sees the same data and async_update_entry is a no-op → no reload loop).
+        self.hass.config_entries.async_update_entry(
+            self.entry, data={**self.entry.data, CONF_SKODA_OFFICIAL_KEYS: full})
+        repairs.raise_issue_skoda_official_enrolled(self.hass, self.entry.entry_id)
+        # Keys minted → the manual key+VIN fallback is no longer needed.
+        repairs.clear_issue_skoda_official_manual_key(self.hass, self.entry.entry_id)
+        self._skoda_probe("skoda_official", f"enrolled ({len(newly)} new key(s))")
+
+    def _reconcile_skoda_manual_key_repair(self, vins: list[str]) -> None:
+        """Auto-mint stays the primary path; when it can't produce a key for a VIN
+        (non-native login, or the keygen rejects it) this surfaces the interactive
+        'paste your MyŠkoda API key + VIN' repair for the still-uncovered VINs — and
+        clears it once every VIN has a key (minted OR manually supplied). #1286."""
+        from . import repairs  # noqa: PLC0415
+        from .const import CONF_SKODA_OFFICIAL_KEYS  # noqa: PLC0415
+        stored = {
+            str(k).upper() for k in (self.entry.data.get(CONF_SKODA_OFFICIAL_KEYS) or {})
+        }
+        missing = [str(v).upper() for v in vins if str(v).upper() not in stored]
+        if missing:
+            repairs.raise_issue_skoda_official_manual_key(
+                self.hass, self.entry.entry_id, missing
+            )
+        else:
+            repairs.clear_issue_skoda_official_manual_key(
+                self.hass, self.entry.entry_id
+            )
 
     async def _arm_supplementary_channels(self) -> None:
         """v2.15.0b1 (C1) — arm configured supplementary read channels on the
@@ -2347,6 +3341,32 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                     " — primary channel unaffected.", type(err).__name__,
                 )
 
+        # ── Škoda OFFICIAL public API — FAILOVER-ONLY (opt-in) ──────────────
+        # Rate-limited (20 req/hour/key), so it is NOT a continuous-merge
+        # supplementary channel: it is read ONLY when the primary mysmob channel
+        # hard-fails (see _revive_after_hard_failure). Arming just hands the
+        # client the key; get_status(vin) is called per-VIN on failover.
+        from .const import (  # noqa: PLC0415
+            CONF_SKODA_OFFICIAL_API_KEY,
+            CONF_SKODA_OFFICIAL_KEYS,
+        )
+        arm_official = getattr(client, "arm_supplementary_official", None)
+        single_key = data.get(CONF_SKODA_OFFICIAL_API_KEY) or ""
+        key_map = data.get(CONF_SKODA_OFFICIAL_KEYS) or {}
+        by_vin = {
+            str(vin).upper(): (rec.get("key") or "")
+            for vin, rec in key_map.items()
+            if isinstance(rec, dict) and rec.get("key")
+        }
+        if (single_key or by_vin) and arm_official is not None:
+            try:
+                arm_official(api_key=single_key, keys_by_vin=by_vin or None)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.warning(
+                    "VW Group Connect: Škoda official-API failover arming failed"
+                    " (%s) — primary channel unaffected.", type(err).__name__,
+                )
+
         # ── b12: MBB COMMAND channel (commands on a read-only primary) ──────
         arm_cmd = getattr(client, "arm_mbb_command_channel", None)
         if data.get(CONF_MBB_COMMAND_CHANNEL) and arm_cmd is not None:
@@ -2394,6 +3414,55 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 _LOGGER.warning(
                     "VW Group Connect: MBB command channel arming failed (%s)"
                     " — reads unaffected.", type(err).__name__,
+                )
+
+        # ── b15: MBB COMMAND FALLBACK (two-way device-grant primary, e.g. Audi) ─
+        # Same durable-MBB bearer + storage as the channel above, but armed as a
+        # FALLBACK (fallback_only=True → _mbb_fallback slot): the BFF stays the
+        # command primary and MBB is used ONLY by the _cariad_cmd BFF-refusal
+        # retry. Keeps a two-way Audi commandable if VW ever revokes its
+        # device-grant (Škoda precedent 2026-08). No operationList warm-up here on
+        # purpose — the fallback must NOT change command-entity visibility (that
+        # stays on the BFF capability gate); the retry gates itself.
+        if data.get(CONF_MBB_COMMAND_FALLBACK) and arm_cmd is not None:
+            from .cariad.models import TokenSet  # noqa: PLC0415
+            from .const import (  # noqa: PLC0415
+                CONF_MBB_COMMAND_CLIENT_ID,
+                CONF_MBB_COMMAND_TOKENS,
+                CONF_MBB_VINS,
+            )
+            tok = data.get(CONF_MBB_COMMAND_TOKENS) or {}
+            fb_tokens = TokenSet(
+                access_token=str(tok.get("access_token", "")),
+                refresh_token=str(tok.get("refresh_token", "")),
+                id_token=str(tok.get("id_token", "")),
+                expires_at=float(tok.get("expires_at", 0.0) or 0.0),
+                strategy="mbb",
+            )
+            vins = data.get(CONF_MBB_VINS) or []
+            if isinstance(vins, str):
+                vins = [
+                    v.strip().upper()
+                    for v in vins.replace(",", " ").split() if v.strip()
+                ]
+            try:
+                armed = bool(await arm_cmd(
+                    fb_tokens,
+                    data.get(CONF_MBB_COMMAND_CLIENT_ID, ""),
+                    list(vins),
+                    self._spin_from_entry(),
+                    fallback_only=True,
+                ))
+                if armed:
+                    # persist the rotated MBB bearer (durable refresh survives
+                    # restarts) — shares the command-token slot with the channel.
+                    fb = getattr(client, "_mbb_fallback", None)
+                    if fb is not None:
+                        fb.on_tokens_changed = self._persist_mbb_command_tokens
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.warning(
+                    "VW Group Connect: MBB command fallback arming failed (%s)"
+                    " — BFF commands unaffected.", type(err).__name__,
                 )
 
     async def _persist_mbb_command_tokens(self, tokens: Any) -> None:
@@ -2464,11 +3533,12 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         try:
             merged = await gather_and_merge(
                 self._primary_channel_name(), primary, suppliers,
+                preferred=self._read_priority_channel(vin),
             )
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug(
                 "C1 supplementary merge failed for %s — keeping primary: %s",
-                mask_vin(vin), err,
+                mask_vin(vin), type(err).__name__,
             )
             # Still attribute what we did get — losing provenance exactly when
             # a channel misbehaves is when it's most worth having.
@@ -2515,7 +3585,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug(
                 "GAP-2.1 supplementary revive failed for %s: %s",
-                mask_vin(vin), err,
+                mask_vin(vin), type(err).__name__,
             )
             return None
         # A supplementary channel contributed IFF the merge added a
@@ -2561,7 +3631,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         try:
             vins = await portal.list_vehicle_vins()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("#1222 EU Data Act enumeration fallback failed: %s", err)
+            _LOGGER.debug("#1222 EU Data Act enumeration fallback failed: %s", type(err).__name__)
             return []
         if vins:
             _LOGGER.warning(
@@ -2588,17 +3658,129 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         last-known-good exactly as before.
         """
         client = self._cariad_client
+        # 1) read-only supplementary channels (EU Data Act / vw.de), if any armed.
         readers = getattr(client, "supplementary_readers", None)
-        if readers is None or not readers(vin):
-            return None
+        if readers is not None and readers(vin):
+            try:
+                revived = await self._revive_from_supplementary(
+                    vin, VehicleData(vin=vin)
+                )
+                if revived is not None:
+                    return revived
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug(
+                    "hard-failure supplementary revive failed for %s: %s",
+                    mask_vin(vin), type(err).__name__,
+                )
+        # 2) Škoda OFFICIAL public API — a FAILOVER-ONLY source (rate-limited to
+        # 20 req/hour/key, so never read on a healthy cycle; only here, on a hard
+        # primary failure). Brand-isolated: the method exists only on the Škoda
+        # client, so getattr → None for every other brand.
+        official = getattr(client, "official_failover_read", None)
+        if official is not None and self._skoda_official_mode() != "mysmob_only":
+            try:
+                off_data: VehicleData | None = await official(vin)
+                if off_data is not None:
+                    _LOGGER.info(
+                        "VW Group Connect: %s — primary read failed, served from "
+                        "the official Škoda API (failover).", mask_vin(vin),
+                    )
+                    return off_data
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug(
+                    "official-API failover read failed for %s: %s",
+                    mask_vin(vin), type(err).__name__,
+                )
+        return None
+
+    async def _merge_official_live(
+        self, vin: str, enriched: dict[str, Any]
+    ) -> None:
+        """ACTIVE Škoda-official live read on a HEALTHY cycle: query the official
+        manufacturer public API and merge its readings into the just-built primary
+        payload as an authoritative live source (not merely a failover). Runs before
+        _compute_channel_status so the connectivity map reflects the contribution.
+
+        - Brand-isolated: official_live_read exists only on the Škoda client, so this
+          is a no-op for every other brand (getattr → None).
+        - Rate-safe: the 20/hour/key budget guard lives inside official_live_read,
+          which self-skips at quota; fail-soft, so an official hiccup never sinks the
+          poll.
+        - Official wins for the fields it actually populated. asdict() emits every
+          declared field including untouched False/0/"" defaults, which would clobber
+          a real primary value — so a field is merged only when it differs from a
+          fresh VehicleData baseline (i.e. the official parse genuinely set it).
+        - last_seen_at is gap-filled only, never overwritten, so the vehicle's
+          "last seen" can't jump backwards to an older official capture timestamp.
+        """
+        client = self._cariad_client
+        read = getattr(client, "official_live_read", None)
+        if read is None:
+            return
         try:
-            return await self._revive_from_supplementary(vin, VehicleData(vin=vin))
-        except Exception as err:  # noqa: BLE001
+            off = await read(vin)
+        except Exception as exc:  # noqa: BLE001
+            # class-only — official_live_read hits the VIN-path API with the
+            # X-API-Key; a raw aiohttp error re-leaks the VIN-URL the mask hides.
             _LOGGER.debug(
-                "hard-failure supplementary revive failed for %s: %s",
-                mask_vin(vin), err,
+                "official live-read raised for %s (%s)",
+                mask_vin(vin), type(exc).__name__,
             )
-            return None
+            return
+        if off is None:
+            return
+        try:
+            od = off.to_dict()
+            base = VehicleData(vin=vin).to_dict()
+        except Exception:  # noqa: BLE001
+            return
+        if not isinstance(od, dict) or not isinstance(base, dict):
+            return
+        field_sources = enriched.get("field_sources")
+        if not isinstance(field_sources, dict):
+            field_sources = {}
+            enriched["field_sources"] = field_sources
+        # b7 (grounded audit P1-4) — the official read is rate-limited/cached (20/h),
+        # so it can carry a STALER value than the just-reconciled primary. The primary
+        # poll was already monotonic-guarded by reconcile(), but this overlay runs
+        # AFTER reconcile and raw-overwrote every differing field — so a lower cached
+        # odometer jumped the km sensor backwards and persisted. Never let the official
+        # overlay regress a physically-monotonic field; reuse the same field set the
+        # rest of the pipeline enforces (reconcile / _channel_merge exclusion).
+        from .cariad.vehicle_cache import (  # noqa: PLC0415
+            MONOTONIC_INCREASING_FIELDS,
+        )
+        merged = 0
+        for key, val in od.items():
+            if key in ("vin", "field_sources", "source_channel"):
+                continue
+            if val is None or val == base.get(key):
+                continue
+            if isinstance(val, (str, list, dict)) and not val:
+                continue
+            if key == "last_seen_at":
+                # advance-only: skip if the primary already carries a timestamp.
+                if enriched.get(key):
+                    continue
+            if key in MONOTONIC_INCREASING_FIELDS:
+                # never regress a monotonic field (e.g. odometer_km): a staler cached
+                # official reading must not overwrite a fresher, higher primary value.
+                # Gap-fill (existing None) and advance (>=) are fine; a decrease is not.
+                existing = enriched.get(key)
+                if (
+                    isinstance(existing, (int, float))
+                    and isinstance(val, (int, float))
+                    and val < existing
+                ):
+                    continue
+            enriched[key] = val
+            field_sources[key] = "skoda_official"
+            merged += 1
+        if merged:
+            _LOGGER.debug(
+                "official live-source merged %d field(s) for %s",
+                merged, mask_vin(vin),
+            )
 
     async def _poll_loop(self) -> None:
         """Background polling loop — runs independently of HA scheduler.
@@ -2623,10 +3805,48 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             )
             # Nightly reduction: double interval between 22:00 and 05:00
             hour = datetime.now().hour
-            if hour >= 22 or hour < 5:
+            nightly = hour >= 22 or hour < 5
+            if nightly:
                 interval_s = interval_s * 2
                 _LOGGER.debug("Nightly reduction active — interval doubled to %ds", interval_s)
-            await asyncio.sleep(interval_s)
+            # Drop-anchored scheduling for EU-DA portal entries (daytime only, so
+            # the nightly power-saving cadence is untouched): align the next poll
+            # to when the portal's next ~15-min snapshot should land, and retry
+            # fast when one is overdue. Bounded to [floor, interval]; a non-portal
+            # entry (no connector) or a car we've never captured falls straight
+            # through to the fixed interval.
+            _portal = getattr(self._cariad_client, "_eu_portal", None) or getattr(
+                self._cariad_client, "_supplementary_eu_portal", None
+            )
+            _cap_anchor = getattr(self, "_newest_capture_at", None)
+            if not nightly and _portal is not None and _cap_anchor is not None:
+                sleep_s: float = _drop_anchored_sleep_s(
+                    interval_s,
+                    _cap_anchor,
+                    datetime.now(tz=timezone.utc),
+                    _CC_MIN_INTERVAL_S,
+                )
+            else:
+                sleep_s = float(interval_s)
+            # Escalating backoff during a SUSTAINED portal 5xx outage. The previous
+            # poll's ``last_no_data_reason`` is the signal: on ``portal_error``
+            # (5xx/429/timeout) widen the sleep 5→15→30 min, replacing the ~60 s
+            # drop-retry collapse that otherwise hammers VW's portal every minute
+            # for hours during its own outage; any other outcome (fresh data, an
+            # ``empty`` no-content drop, or a non-portal entry) resets the streak.
+            # Adopted from TommiG1's SERVER_ERROR_BACKOFF_INTERVALS.
+            _portal_outage = _portal is not None and getattr(
+                _portal, "last_no_data_reason", ""
+            ) == "portal_error"
+            self._note_portal_outage(_portal_outage)
+            _boff = _portal_5xx_backoff_s(self._consecutive_portal_5xx)
+            if _boff > sleep_s:
+                sleep_s = _boff
+                _LOGGER.debug(
+                    "EU Data Act portal 5xx streak %d → backing off, next poll "
+                    "in %.0fs", self._consecutive_portal_5xx, sleep_s,
+                )
+            await asyncio.sleep(sleep_s)
             if not self._started:
                 break
             # v2.8.0 — pre-flight watchdog. If we are on the
@@ -2655,10 +3875,34 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 # until a restart. update_interval is None here, so this loop —
                 # not _async_update_data — is the periodic path. No-op non-MBB.
                 await self._refresh_mbb_command_capabilities()
+                # #584 — capture the client up front. A Reconfigure unload nulls
+                # self._cariad_client, and any await above (sleep / watchdog /
+                # capability refresh) yields long enough for that to land mid-cycle;
+                # the gather below would then raise "'NoneType' object has no
+                # attribute 'get_status'". _async_update_data already guards this
+                # way; the background poll loop needs the same. Skip this cycle
+                # cleanly if the client is gone — the next cycle re-reads it, or the
+                # loop exits on _started=False.
+                _client = self._cariad_client
+                if _client is None:
+                    continue
+                self._push_official_mode(_client)  # #1286 — official_only routing
                 results = await asyncio.gather(
-                    *[self._cariad_client.get_status(vin) for vin in vins],
+                    *[_client.get_status(vin) for vin in vins],
                     return_exceptions=True,
                 )
+                # v4.7.8 (#1337) — Porsche: when EVERY car's read failed with an
+                # auth error, the refresh token is dead and the client's own
+                # fallback (a full interactive login) is failing on captcha /
+                # changed credentials. Before this the per-VIN failures were only
+                # counted, so the entry re-ran that interactive login up to 3x per
+                # hour indefinitely with no reauth prompt. Escalate to reauth.
+                # Brand-gated on purpose: other brands have their own auth paths.
+                if self._porsche_auth_dead(vins, list(results)):
+                    self._trigger_reauth(
+                        "every vehicle read failed authentication on two "
+                        "consecutive polls (refresh token dead)"
+                    )
                 fresh: dict[str, Any] = {}
                 any_success = False
                 # Lazy-initialise v1.8.7 tracking dicts so tests that bypass
@@ -2682,7 +3926,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                         if _revived is not None:
                             result = _revived
                     if isinstance(result, Exception):
-                        _LOGGER.debug("Poll failed for %s: %s", mask_vin(vin), result)
+                        _LOGGER.debug("Poll failed for %s: %s", mask_vin(vin), type(result).__name__)
                         old = self.vehicles.get(vin, {})
                         old["_poll_failed"] = True
                         fresh[vin] = old
@@ -2816,7 +4060,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                             _LOGGER.warning(
                                 "VW Group Connect: post-parse failure for %s — "
                                 "keeping previous data: %s",
-                                mask_vin(vin), parse_err,
+                                mask_vin(vin), type(parse_err).__name__,
                             )
                             old = self.vehicles.get(vin, {})
                             old["_poll_failed"] = True
@@ -2860,6 +4104,34 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                         # the raw backend snapshot straight over a just-issued
                         # command's optimistic value (e.g. lock → doors_locked
                         # snaps back to the stale poll reading for ~150 s).
+                        # Škoda official public API as an ACTIVE live source: on a
+                        # healthy cycle, merge the manufacturer API's readings into
+                        # the primary payload (rate-safe, brand-isolated, fail-soft).
+                        # Must run BEFORE _compute_channel_status so the connectivity
+                        # map counts the official contribution. #1286 — only in the
+                        # merge modes; "failover"/"official_only"/"mysmob_only" don't
+                        # overlay official onto a healthy primary cycle.
+                        if self._skoda_official_mode() in ("auto", "prefer_official"):
+                            try:
+                                await self._merge_official_live(vin, enriched)
+                            except Exception as exc:  # noqa: BLE001
+                                _LOGGER.debug(
+                                    "official live-source merge skipped for %s (%s)",
+                                    mask_vin(vin), type(exc).__name__,
+                                )
+                        # Per-source connectivity map for the connectivity
+                        # binary_sensors (which sources this car is connected to,
+                        # active vs standby, how many readings each provides). Fail-
+                        # soft — a compute hiccup must never sink the poll.
+                        try:
+                            enriched["channel_status"] = self._compute_channel_status(
+                                vin, enriched
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            _LOGGER.debug(
+                                "channel-status compute skipped (%s)",
+                                type(exc).__name__,
+                            )
                         fresh[vin] = self._apply_optimistic_hold(vin, enriched)
                         any_success = True
                         self.vehicle_success[vin] = True
@@ -2893,12 +4165,61 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                         )
                 with self._vehicles_lock:
                     self.vehicles.update(fresh)
+                    # Drop-anchored scheduling — remember the freshest snapshot
+                    # capture time across all cars, so the next sleep aligns to
+                    # the portal's ~15-min cadence. Reconstructed from the same
+                    # capture-age helper the staleness watchdog uses.
+                    _now_cap = datetime.now(tz=timezone.utc)
+                    _newest_cap: datetime | None = None
+                    for _vd in self.vehicles.values():
+                        _cap_age = _capture_age_s(_vd)
+                        if _cap_age is not None and _cap_age >= 0:
+                            _cap_ts = _now_cap - timedelta(seconds=_cap_age)
+                            if _newest_cap is None or _cap_ts > _newest_cap:
+                                _newest_cap = _cap_ts
+                    if _newest_cap is not None:
+                        self._newest_capture_at = _newest_cap
                 # b13 — Portal-safety: persist the merged snapshot (debounced)
                 # so the recorded values survive a HA restart. Best-effort.
                 try:
                     self._save_vehicle_cache()
                 except Exception:  # noqa: BLE001
                     pass
+                # #1340 — one-time registry cleanup: now that the first poll has
+                # settled channel_status (all channels armed, incl. the in-poll
+                # Škoda-official arm), prune connectivity sensors for channels this
+                # account no longer arms (cyrano330's orphaned connectivity_eu_data_
+                # act). Runs once per session; fail-soft, never blocks the poll.
+                if not getattr(self, "_connectivity_reconciled", False):
+                    self._connectivity_reconciled = True
+                    self._reconcile_connectivity_entities()
+                # Opt-in (default OFF): auto-provision monthly utility_meter helpers
+                # for this account's cars. Runs once per session AFTER the first
+                # poll (so the TOTAL_INCREASING source sensors exist in the
+                # registry), only when the user enabled it, and as a background task
+                # so it never blocks the poll (the helper is fully guarded).
+                if not getattr(self, "_utility_meters_ensured", False):
+                    self._utility_meters_ensured = True
+                    from .const import CONF_AUTO_UTILITY_METERS  # noqa: PLC0415
+                    if self.entry.data.get(CONF_AUTO_UTILITY_METERS):
+                        from .utility_meter import (  # noqa: PLC0415
+                            async_ensure_utility_meters,
+                        )
+                        self.hass.async_create_background_task(
+                            async_ensure_utility_meters(
+                                self.hass, self.entry, list(self.vehicles.keys())
+                            ),
+                            f"{DOMAIN}_utility_meters",
+                        )
+                # Stage-1 — advance any pending one-time historical export
+                # (import when ready, time out when stuck). Real work only for a
+                # VIN with a pending export; never breaks the poll.
+                try:
+                    await self._advance_historical_exports()
+                except Exception as exc:  # noqa: BLE001
+                    _LOGGER.debug(
+                        "historical-export advance skipped (%s)", type(exc).__name__
+                    )
                 # v2.25.0 (#966/#632) — the per-VIN _merge_supplementary above
                 # may have refreshed the vw.de session on a mid-poll 401,
                 # rotating its cookie jar. Persist the rotated cookies here (once
@@ -2992,26 +4313,11 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                     pass
                 await self._async_push_update(fresh, success=any_success)
 
-                # v2.4.1 (#281+#282) — OLA defense-in-depth Layer 4:
-                # check if the SEAT/CUPRA client has flagged itself for
-                # a Repair issue (persistent 403s after all fallbacks).
-                # Cheap attribute check — no-op for non-OLA brands.
-                try:
-                    ola_flag = getattr(self._cariad_client, "ola_headers_repair_needed", False)
-                    consecutive_403 = getattr(self._cariad_client, "_ola_consecutive_403", 0)
-                    if ola_flag and consecutive_403 > 0:
-                        from .repairs import raise_issue_ola_headers_outdated  # noqa: PLC0415
-                        raise_issue_ola_headers_outdated(
-                            self.hass, self.entry.entry_id,
-                            self.entry.data.get(CONF_BRAND, "unknown"),
-                            consecutive_403,
-                        )
-                    elif not ola_flag and consecutive_403 == 0:
-                        # Successful response cleared the flag — clear the issue too.
-                        from .repairs import clear_ola_headers_issue  # noqa: PLC0415
-                        clear_ola_headers_issue(self.hass, self.entry.entry_id)
-                except Exception:  # noqa: BLE001
-                    pass
+                # v2.4.1 (#281+#282) — OLA defense-in-depth Layer 4 + #1301
+                # portal-mode auto-resolve. Cheap attr checks; no-op for non-OLA
+                # brands. Extracted to a helper so the raise/clear/portal-guard
+                # logic is unit-testable without driving a whole poll.
+                self._reconcile_ola_repair()
 
                 # v2.15.4 (#503) — VW NA read-path entitlement surfacing.
                 # login + garage succeed but per-vehicle reads 403; the client
@@ -3044,7 +4350,34 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 # fallback means the credentials are stale. Trigger HA reauth.
                 from .cariad.exceptions import (  # noqa: PLC0415
                     AuthenticationError,
+                    PortalInteractionRequiredError,
                 )
+                # #1234 (@eddieari) — a non-credential portal interaction (a
+                # transient IDP block such as browserFeaturesMissingError, or an
+                # interstitial that needs a one-off browser action) is NOT stale
+                # credentials. It subclasses AuthenticationError, so without this
+                # guard it tore the whole entry into reauth and took every working
+                # vehicle on the same account offline with it. Treat it as a
+                # transient poll failure: keep the working vehicles up via the
+                # failure-tolerance window and retry on the next poll, instead of
+                # clobbering the shared account session for all VINs at once.
+                if isinstance(err, PortalInteractionRequiredError):
+                    _LOGGER.warning(
+                        "VW Group Connect: portal needs interaction (not stale "
+                        "credentials) — keeping working vehicles up, retrying: %s",
+                        err,
+                    )
+                    if not hasattr(self, "vehicle_success"):
+                        self.vehicle_success = {}
+                    if not hasattr(self, "vehicle_failure_count"):
+                        self.vehicle_failure_count = {}
+                    for vin in list(self.vehicles.keys()):
+                        self.vehicle_success[vin] = False
+                        self.vehicle_failure_count[vin] = (
+                            self.vehicle_failure_count.get(vin, 0) + 1
+                        )
+                    await self._async_push_update({}, success=False)
+                    return
                 if isinstance(err, AuthenticationError):
                     self._trigger_reauth(str(err) or type(err).__name__)
                     await self._async_push_update({}, success=False)
@@ -3060,11 +4393,19 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 # Reporter; see _is_selfhealing_poll_error.
                 is_transient_upstream = _is_selfhealing_poll_error(err)
                 if is_transient_upstream:
+                    # class + status only — a status-0 transient network error is
+                    # a raw aiohttp exception whose str() carries the request URL.
                     _LOGGER.warning(
-                        "VW Group Connect: VW backend temporarily unavailable — %s", err
+                        "VW Group Connect: VW backend temporarily unavailable —"
+                        " %s (status=%s)",
+                        type(err).__name__, getattr(err, "status", None),
                     )
                 else:
-                    _LOGGER.error("VW Group Connect poll error: %s", err)
+                    # class + status only — raw err str() can carry a VIN-path URL.
+                    _LOGGER.error(
+                        "VW Group Connect poll error: %s (status=%s)",
+                        type(err).__name__, getattr(err, "status", None),
+                    )
                     # v1.9.0 — Error Reporter: outer poll-loop crash gets a
                     # buffer entry too. Critical because these are the kind of
                     # errors users hit and never know about (silent except).
@@ -3118,6 +4459,15 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 await close()
             except Exception:  # noqa: BLE001
                 pass
+        # v4.4.0 (#968) — drop this entry's agent relay broker, so a reload does
+        # not leave a stale one holding the token (two brokers on one token
+        # resolve to neither, and the phone would stop binding).
+        try:
+            from .companion.relay import unregister_relay  # noqa: PLC0415
+
+            unregister_relay(self.hass, self.entry.entry_id)
+        except Exception:  # noqa: BLE001 - shutdown must not raise
+            pass
         self._cariad_client = None
         _LOGGER.debug("VW Group Connect: shutdown complete")
 
@@ -3205,12 +4555,18 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                         "raw_payload": event.raw_payload,
                     },
                 )
-            except Exception:  # noqa: BLE001
-                _LOGGER.exception("VAG push: bus emission failed")
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.error(
+                    "VAG push: bus emission failed (%s)", type(exc).__name__
+                )
             try:
                 await self.async_request_refresh()
-            except Exception:  # noqa: BLE001
-                _LOGGER.exception("VAG push: refresh after event failed")
+            except Exception as exc:  # noqa: BLE001
+                # class-only, not .exception() — the refresh drives VIN-path reads;
+                # a raw aiohttp error's str()/traceback carries the URL.
+                _LOGGER.error(
+                    "VAG push: refresh after event failed (%s)", type(exc).__name__
+                )
 
         token_provider = getattr(client, "async_get_access_token", None)
         if token_provider is None:
@@ -3471,8 +4827,25 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         # Truly unavailable — past tolerance and stale-cache window.
         return False
 
+    def _lookup_own_device(
+        self, registry: dr.DeviceRegistry, vin: str
+    ) -> dr.DeviceEntry | None:
+        """Look up our own vehicle device by VIN, entry-scoped.
+
+        b13 — ``device_registry.async_get_device(identifiers=...)`` is deprecated
+        (HA 2026.9, breaks 2027.8) because identifiers are no longer unique across
+        config entries. ``async_get_device_by_identifier((domain, vin), entry_id)``
+        (HA 2026.8+) scopes to THIS entry — strictly correct for our own device.
+        getattr-guarded so pre-2026.8 cores fall back to the old method.
+        """
+        getter = getattr(registry, "async_get_device_by_identifier", None)
+        if getter is not None:
+            found: dr.DeviceEntry | None = getter((DOMAIN, vin), self.entry.entry_id)
+            return found
+        return registry.async_get_device(identifiers={(DOMAIN, vin)})
+
     def _active_vins(self, vins: list[str]) -> list[str]:
-        """Drop VINs whose HA device the user has disabled, so a deactivated
+        """Drop VINs whose HA device *the user* disabled, so a deactivated
         vehicle stops being polled and stops consuming the daily request budget.
 
         Reported by Marco Schmidt via the Home Assistant Tipps und Tricks
@@ -3480,6 +4853,13 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         disabling a device removes its entities without stopping the coordinator
         from polling the VIN. A vehicle with no device yet (first run) is always
         polled; polling resumes automatically when the device is re-enabled.
+
+        Only a *user*-disabled device is skipped (``DeviceEntryDisabler.USER``).
+        A device HA disabled for its OWN reasons (``CONFIG_ENTRY`` / ``INTEGRATION``
+        — e.g. a transient registry state during a reload) must keep polling, or
+        a car could silently fall out of rotation without the owner ever touching
+        it and never come back short of clearing the state by hand (#1234 — one
+        VIN on a multi-car account going quiet while its sibling kept updating).
         """
         try:
             registry = dr.async_get(self.hass)
@@ -3488,8 +4868,8 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         active = [
             vin
             for vin in vins
-            if (dev := registry.async_get_device(identifiers={(DOMAIN, vin)})) is None
-            or not isinstance(dev.disabled_by, dr.DeviceEntryDisabler)
+            if (dev := self._lookup_own_device(registry, vin)) is None
+            or dev.disabled_by != dr.DeviceEntryDisabler.USER
         ]
         if len(active) != len(vins):
             _LOGGER.debug(
@@ -3831,6 +5211,12 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         for vin in vins:
             if not vin:
                 continue
+            # #584/#1150 — a VIN with the definitive no-legacy verdict can never use
+            # the MBB command channel, so stop re-hitting the gateway warm-up for it
+            # every poll. (The 12h per-VIN cache already suppresses the HTTP call
+            # within a session; this makes the skip explicit and covers a cache reset.)
+            if vin in getattr(cmd, "mbb_no_legacy_vins", ()):
+                continue
             try:
                 await getter(vin, for_command=True)
             except Exception:  # noqa: BLE001
@@ -4125,7 +5511,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             _LOGGER.debug(
                 "Capabilities fetch failed for %s: %s",
                 mask_vin(vin),
-                err,
+                type(err).__name__,
             )
             return
         if not isinstance(data, dict):
@@ -4175,7 +5561,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             data = await client.get_vehicle_static_info(vin)
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug(
-                "Static info fetch failed for %s: %s", mask_vin(vin), err,
+                "Static info fetch failed for %s: %s", mask_vin(vin), type(err).__name__,
             )
             return
         if not isinstance(data, dict):
@@ -4274,7 +5660,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             )
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug(
-                "Trip stats fetch failed for %s: %s", mask_vin(vin), err
+                "Trip stats fetch failed for %s: %s", mask_vin(vin), type(err).__name__
             )
             return
         # ``return_exceptions=True`` — drop exceptions to None so the parser
@@ -4337,7 +5723,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             resp = await client.get_charging_history(vin)
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug(
-                "Charging-history fetch failed for %s: %s", mask_vin(vin), err
+                "Charging-history fetch failed for %s: %s", mask_vin(vin), type(err).__name__
             )
             return
         parsed = _parse_charging_history(resp)
@@ -4389,7 +5775,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         try:
             resp = await client.get_latest_fueling()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("Fueling fetch failed for %s: %s", mask_vin(vin), err)
+            _LOGGER.debug("Fueling fetch failed for %s: %s", mask_vin(vin), type(err).__name__)
             return
         # Stamp even on empty so a non-enrolled account isn't re-hammered.
         self._fueling_fetched_at[vin] = datetime.now(tz=timezone.utc)
@@ -4428,7 +5814,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         try:
             resp = await client.get_my_parking()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("Parking fetch failed for %s: %s", mask_vin(vin), err)
+            _LOGGER.debug("Parking fetch failed for %s: %s", mask_vin(vin), type(err).__name__)
             return
         self._parking_fetched_at[vin] = datetime.now(tz=timezone.utc)
         parsed = _parse_parking(resp)
@@ -4474,7 +5860,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         try:
             resp = await (fn(vin) if takes_vin else fn())
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("%s failed for %s: %s", method, mask_vin(vin), err)
+            _LOGGER.debug("%s failed for %s: %s", method, mask_vin(vin), type(err).__name__)
             return
         store[vin] = datetime.now(tz=timezone.utc)
         parsed = parse(resp)
@@ -4558,7 +5944,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             )
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug(
-                "Battery-care fetch failed for %s: %s", mask_vin(vin), err
+                "Battery-care fetch failed for %s: %s", mask_vin(vin), type(err).__name__
             )
             return
         # ``return_exceptions=True`` — drop exceptions to None so we
@@ -4629,7 +6015,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             _LOGGER.debug(
                 "Charging-profiles fetch failed for %s: %s",
                 mask_vin(vin),
-                err,
+                type(err).__name__,
             )
             return
         parsed = _parse_charging_profiles(resp)
@@ -4664,6 +6050,16 @@ class VagConnectCoordinator(DataUpdateCoordinator):
 
             # Remove devices for VINs no longer present in the account
             await self._async_remove_stale_devices(set(data.keys()))
+
+            # b14 (experimental) — feed the state-transition detector ONLY here,
+            # on a real data push. The 5 optimistic-echo async_set_updated_data(
+            # dict(self.vehicles)) calls must NOT feed it (they'd fire phantom
+            # transitions on a command echo). No-op unless a trigger subscribed.
+            # getattr-guarded: the hook is purely additive, so a coordinator built
+            # without __init__ (test __new__ path) simply skips it.
+            _detector = getattr(self, "_transition_detector", None)
+            if _detector is not None:
+                _detector.feed(data)
 
             self.async_set_updated_data(data)
             _LOGGER.debug("VW Group Connect: pushed %d vehicle(s) to HA", len(data))
@@ -4701,9 +6097,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         previous_vins = set(self.data.keys()) - {"_meta"}
 
         for stale_vin in previous_vins - current_vins:
-            device_entry = device_reg.async_get_device(
-                identifiers={(DOMAIN, stale_vin)}
-            )
+            device_entry = self._lookup_own_device(device_reg, stale_vin)
             if device_entry is not None:
                 _LOGGER.warning(
                     "VW Group Connect: vehicle %s removed from account — "
@@ -4721,7 +6115,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                         message=(
                             f"Das Fahrzeug **{mask_vin(stale_vin)}** ist "
                             f"nicht mehr in deinem VAG-Konto verfügbar "
-                            f"({self.entry.data.get(CONF_USERNAME, 'unbekannt')}). "
+                            f"({mask_email(self.entry.data.get(CONF_USERNAME, 'unbekannt'))}). "
                             f"Mögliche Ursachen:\n\n"
                             f"- Verkauft / Eigentümerwechsel\n"
                             f"- Connect-Subscription ist abgelaufen\n"
@@ -4752,6 +6146,31 @@ class VagConnectCoordinator(DataUpdateCoordinator):
 
         # Always stamp when we fetched
         data["last_updated_at"] = datetime.now(tz=timezone.utc)
+
+        # #1055 (@ChristophCaina) — normalize the plug-connection text state so the
+        # enum sensor can localize it. Brands emit different casings (Škoda
+        # CONNECTED, VW/SEAT connected) and VW/CARIAD occasionally sends an
+        # 'invalid'/'unsupported' sentinel. Lowercase it and keep only the two
+        # real values; anything else → None (unavailable) rather than an
+        # untranslatable raw string. plug_connected (the boolean) is unaffected.
+        _plug_state = data.get("plug_state")
+        if isinstance(_plug_state, str):
+            _psl = _plug_state.strip().lower()
+            data["plug_state"] = _psl if _psl in ("connected", "disconnected") else None
+
+        # Fuel-level % from a user-configured tank capacity + the litres reading.
+        # acpp plug&play reports litres, not a %, and the tank size isn't in the
+        # feed — so the user supplies it in Options (0 = off, litres only). Only
+        # fills fuel_level when the source gave none; never overwrites a real %.
+        _tank_cap = self.entry.data.get(CONF_FUEL_TANK_CAPACITY, 0)
+        _fuel_l = data.get("fuel_level_liters")
+        if (isinstance(_tank_cap, (int, float)) and not isinstance(_tank_cap, bool)
+                and _tank_cap > 0 and isinstance(_fuel_l, (int, float))
+                and not isinstance(_fuel_l, bool) and _fuel_l >= 0):
+            data["fuel_tank_capacity_liters"] = int(round(_tank_cap))
+            if data.get("fuel_level") is None:
+                data["fuel_level"] = max(
+                    0, min(100, int(round(_fuel_l / _tank_cap * 100))))
 
         # Battery State of Health. Audi device-grant cars now carry a REAL SoH read
         # from the batteryHealthState BFF job (set upstream in the API layer), so we
@@ -5061,6 +6480,12 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             )
             _threshold_s = max(STALE_DATA_MIN_AGE_S, 8 * _interval_s)
             _age = _capture_age_s(data)
+            # #465 — automatable twin of the stale-data Repair: a
+            # device_class=PROBLEM binary the user can drive automations off,
+            # from the SAME capture-age + threshold so the binary and the Repair
+            # can never disagree. Brand-agnostic; None (→ entity hidden) for a read
+            # that carries no capture timestamp.
+            data["data_stale"] = _age >= _threshold_s if _age is not None else None
             if _age is not None and _age >= _threshold_s:
                 raise_issue_stale_data(
                     self.hass, self.entry.entry_id, _vin_sd,
@@ -5068,6 +6493,41 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 )
             else:
                 clear_stale_data_issue(self.hass, self.entry.entry_id, _vin_sd)
+
+            # Stage-0 — surface the EU-DA portal feed's health + snapshot age as
+            # sensors, so a user can tell "the portal snapshot is stale/empty"
+            # from "the integration is broken". Only for a car actually read over
+            # the portal; a BFF/MBB/brand-native read has no portal connector and
+            # leaves both unset (the sensors stay unavailable → hidden).
+            _portal = (
+                getattr(self._cariad_client, "_eu_portal", None)
+                or getattr(self._cariad_client, "_supplementary_eu_portal", None)
+            )
+            if _portal is not None:
+                _reason = getattr(_portal, "last_no_data_reason", "") or ""
+                data["portal_health"] = _portal_health(
+                    data, _reason, _age, _threshold_s
+                )
+                data["minutes_since_last_snapshot"] = (
+                    int(_age // 60) if _age is not None else None
+                )
+                # #465/#1273 observability — surface the portal connector's own
+                # timestamps/counters so a user can see WHEN the data request was
+                # created, WHEN a real snapshot last arrived, and WHEN / HOW OFTEN
+                # the portal returned nothing. Set only in portal mode; None stays
+                # None (the TIMESTAMP sensors then read unavailable).
+                data["data_request_created_at"] = getattr(
+                    _portal, "data_request_started_at", None
+                )
+                data["last_snapshot_at"] = getattr(_portal, "last_snapshot_at", None)
+                data["last_no_data_at"] = getattr(_portal, "last_no_data_at", None)
+                data["no_data_count"] = getattr(_portal, "no_data_count", None)
+                # Stage-1 — the one-time historical export lifecycle state, set
+                # only while an export is actually in flight (or just finished) so
+                # the sensor stays hidden for the majority who never use it.
+                _hs = self.historical_export_state(_vin_sd)
+                if _hs != "idle":
+                    data["historical_export_state"] = _hs
 
         # Fix #32: Defensive is_charging reset.
         # When plug is disconnected, charging MUST be False regardless of API state.
@@ -5262,6 +6722,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         # right after Reconfigure). The captured object stays valid (or fails
         # cleanly as a closed session, handled by the except → cached data).
         client = self._cariad_client
+        self._push_official_mode(client)  # #1286 — official_only routing (race-safe)
         # P1-5 — attach the opt-in raw-dataset archive hook (no-op when off).
         self._wire_dataset_archive()
         try:
@@ -5293,7 +6754,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                     if _revived is not None:
                         result = _revived
                 if isinstance(result, Exception):
-                    _LOGGER.debug("Refresh failed for %s: %s", mask_vin(vin), result)
+                    _LOGGER.debug("Refresh failed for %s: %s", mask_vin(vin), type(result).__name__)
                     continue
                 if isinstance(result, VehicleData):
                     # v2.29.x — portal-safety, mirroring the poll path
@@ -5334,7 +6795,11 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("VW Group Connect: Manual refresh OK")
             return dict(self.vehicles)
         except Exception as err:  # noqa: BLE001
-            _LOGGER.error("VW Group Connect: Manual refresh failed: %s", err)
+            # class + status only — raw err str() can carry a VIN-path URL.
+            _LOGGER.error(
+                "VW Group Connect: Manual refresh failed: %s (status=%s)",
+                type(err).__name__, getattr(err, "status", None),
+            )
             with self._vehicles_lock:
                 return dict(self.vehicles)
 
@@ -5798,10 +7263,11 @@ class VagConnectCoordinator(DataUpdateCoordinator):
 
         When the caller does not pass ``duration_min`` / ``target_c``
         the integration reads the per-config ``auxheat_duration`` /
-        ``auxheat_target_temp`` numbers stored under ``entry.options``
-        (written by the new v2.8.0 ``VagConnectNumber`` sliders). If
-        those are absent we fall back to the spec defaults (30 min,
-        21 C), matching the numbers the Audi + VW phone apps preselect.
+        ``auxheat_target_temp`` numbers written by the v2.8.0
+        ``VagConnectNumber`` sliders (options, folded into ``entry.data``
+        by the update-listener — read options-then-data). If those are
+        absent we fall back to the spec defaults (30 min, 21 C), matching
+        the numbers the Audi + VW phone apps preselect.
         """
         brand = str(self.entry.data.get(CONF_BRAND, "")).lower()
         cariad_brand = brand in {"volkswagen", "audi"}
@@ -5819,15 +7285,26 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             await self._cariad_cmd(vin, "command_start_aux_heating", spin=spin)
             return
 
+        # b7 (grounded audit P1-3) — read options THEN data. The options
+        # update-listener folds options into entry.data and blanks entry.options
+        # (__init__.py), so by read time the slider values live in entry.data;
+        # reading options alone always fell through to the 30 min / 21 C spec
+        # defaults right after the user moved the slider. Mirrors _spin_from_entry
+        # (below) and number.native_value.
         options = dict(getattr(self.entry, "options", None) or {})
+        data = dict(getattr(self.entry, "data", None) or {})
         if duration_min is None:
-            opt_dur = options.get("auxheat_duration") if isinstance(options, dict) else None
+            opt_dur = options.get("auxheat_duration")
+            if opt_dur is None:
+                opt_dur = data.get("auxheat_duration")
             try:
                 duration_min = int(opt_dur) if opt_dur is not None else 30
             except (TypeError, ValueError):
                 duration_min = 30
         if target_c is None:
-            opt_temp = options.get("auxheat_target_temp") if isinstance(options, dict) else None
+            opt_temp = options.get("auxheat_target_temp")
+            if opt_temp is None:
+                opt_temp = data.get("auxheat_target_temp")
             try:
                 target_c = float(opt_temp) if opt_temp is not None else 21.0
             except (TypeError, ValueError):
@@ -6116,6 +7593,94 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 "(%s) — will retry next poll.", type(err).__name__,
             )
 
+    def has_data_act_portal_channel(self) -> bool:
+        """True when this entry reads the EU Data Act portal — as its primary
+        (read-only) channel OR as a supplementary channel merged onto a command
+        primary.
+
+        Both can use the portal's one-time historical export and the continuous
+        data-request button; the kickoff scraper is authed on the shared session
+        where the (primary or supplementary) portal logged in — see
+        ``async_create_data_act_request`` and its b12 note. #923
+        (@naked-head/@dazzzl): the export button was gated on read-only-portal
+        mode only, so a merged ``eu_data_act+website_authproxy`` setup never got
+        it even though the export works exactly the same there.
+
+        b5 follow-up (@naked-head/@dazzzl A/B): the two clauses below still miss a
+        portal feed brought up by the *auto-kickoff* path on a command-capable
+        primary — there ``is_read_only()`` is False (the MBB-command carve-out
+        keeps command entities alive) and ``CONF_SUPPLEMENTARY_EU_PORTAL`` is
+        unset (the portal came from the kickoff, not the options toggle). So also
+        recognise the portal from the same live signals the buttons' own action
+        (``async_request_historical_export``) and ``portal_health`` use: an armed
+        portal connector, or a persisted active Custom Data Request identifier.
+        ``register_dynamic_spawner`` re-evaluates this gate on every coordinator
+        update, so the buttons still spawn if the connector arms a poll later.
+        """
+        from .const import (  # noqa: PLC0415
+            CONF_DATA_ACT_IDENTIFIERS,
+            CONF_SUPPLEMENTARY_EU_PORTAL,
+        )
+        if self.is_read_only() or self.entry.data.get(CONF_SUPPLEMENTARY_EU_PORTAL):
+            return True
+        client = getattr(self, "_cariad_client", None)
+        if (
+            getattr(client, "_eu_portal", None) is not None
+            or getattr(client, "_supplementary_eu_portal", None) is not None
+        ):
+            return True
+        # options→data fold can lag a session; match the kickoff's own read order.
+        identifiers = (
+            self.entry.options.get(CONF_DATA_ACT_IDENTIFIERS)
+            or self.entry.data.get(CONF_DATA_ACT_IDENTIFIERS)
+            or {}
+        )
+        return bool(identifiers)
+
+    def _reconcile_ola_repair(self) -> None:
+        """Raise/clear the SEAT/CUPRA ``ola_headers_outdated`` Repair from the
+        client's persistent-403 counter (#281/#282), with a portal-mode guard.
+
+        #1301 (@anju1337): SEAT/CUPRA OLA is server-side revoked. Once an entry
+        reads via the EU Data Act portal, ``get_vehicles`` / ``get_status``
+        short-circuit to the portal and never call OLA, so the counter/flag can
+        only be cleared by a *successful* OLA response that can never happen
+        again — the repair froze "on" and re-raised every poll (270+ firings).
+        When a portal channel is serving the data, OLA-403 history is moot:
+        clear the repair, reset the frozen counters (so a leftover best-effort
+        OLA read can't re-trip it), and never re-raise. The honest OLA repair
+        still fires for an entry NOT in portal mode. No-op for non-OLA brands
+        (the counters default to False/0).
+        """
+        try:
+            client = self._cariad_client
+            ola_flag = getattr(client, "ola_headers_repair_needed", False)
+            consecutive_403 = getattr(client, "_ola_consecutive_403", 0)
+            portal_active = (
+                getattr(client, "_eu_portal", None) is not None
+                or getattr(client, "_supplementary_eu_portal", None) is not None
+            )
+            from .repairs import (  # noqa: PLC0415
+                clear_ola_headers_issue,
+                raise_issue_ola_headers_outdated,
+            )
+            if portal_active:
+                if ola_flag or consecutive_403:
+                    clear_ola_headers_issue(self.hass, self.entry.entry_id)
+                    setattr(client, "ola_headers_repair_needed", False)
+                    setattr(client, "_ola_consecutive_403", 0)
+            elif ola_flag and consecutive_403 > 0:
+                raise_issue_ola_headers_outdated(
+                    self.hass, self.entry.entry_id,
+                    self.entry.data.get(CONF_BRAND, "unknown"),
+                    consecutive_403,
+                )
+            elif not ola_flag and consecutive_403 == 0:
+                # a successful OLA response cleared the flag — clear the issue too.
+                clear_ola_headers_issue(self.hass, self.entry.entry_id)
+        except Exception:  # noqa: BLE001
+            pass
+
     def is_read_only(self) -> bool:
         """v1.12.0 (#63) — return True if user enabled Read-only Mode.
 
@@ -6292,7 +7857,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
 
         vehicle = self.vehicles.get(vin)
         if not isinstance(vehicle, dict):
-            raise HomeAssistantError(f"Vehicle '{vin}' not found for ABRP send.")
+            raise HomeAssistantError(f"Vehicle '…{vin[-6:]}' not found for ABRP send.")
 
         resolved_key, resolved_token = self._abrp_credentials(
             vin, api_key=api_key, token=token
@@ -6545,16 +8110,45 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         # releases the lock — after 60s we proceed anyway.
         cmd_class = self._COMMAND_CLASS.get(method, method)
         lock = self._get_command_lock(vin, cmd_class)
+        # b7 (grounded audit P1-1) — time only LOCK ACQUISITION, never command
+        # execution. The old code wrapped the whole dispatch (which included a full
+        # multi-VIN async_request_refresh) in a 60s timeout, so a slow / multi-VIN /
+        # portal account blew the budget and then RE-DISPATCHED the physical command
+        # UNLOCKED → a non-idempotent charge/unlock/aux-heat was sent to the car
+        # TWICE. No competitor re-issues on timeout. On a contended lock we now
+        # surface a soft "busy" error and never re-send; the refresh moved out of
+        # the locked/timed section entirely (see below).
         try:
-            async with asyncio.timeout(_COMMAND_LOCK_TIMEOUT):
-                async with lock:
-                    await self._dispatch_cmd_locked(vin, method, **kwargs)
+            await asyncio.wait_for(lock.acquire(), _COMMAND_LOCK_TIMEOUT)
         except TimeoutError:
             _LOGGER.warning(
-                "VW Group Connect: %s(%s) lock timeout (%ss) — proceeding without lock",
+                "VW Group Connect: %s(%s) skipped — another same-class command is "
+                "still running after %ss",
                 method, mask_vin(vin), _COMMAND_LOCK_TIMEOUT,
             )
+            raise HomeAssistantError(
+                f"{method} skipped: another command for this vehicle is still "
+                "in progress"
+            ) from None
+        try:
             await self._dispatch_cmd_locked(vin, method, **kwargs)
+        finally:
+            lock.release()
+        # b7 — refresh AFTER the command completes, OUTSIDE the lock and the
+        # command's own error scope. A refresh/portal error must never be recorded as
+        # a command failure (P2-twin) nor surfaced as a failed button press, and the
+        # heavy multi-VIN refresh must not count against the command-lock budget (that
+        # coupling is what used to trip the 60 s timeout). Awaited so callers still see
+        # fresh state on return, but in its own guard so it can't masquerade as a
+        # command error. Only reached on success — a failed dispatch re-raises out of
+        # the finally above, exactly as before.
+        try:
+            await self.async_request_refresh()
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug(
+                "VW Group Connect: post-command refresh failed for %s(%s) [%s]",
+                method, mask_vin(vin), type(exc).__name__,
+            )
 
     async def _dispatch_cmd_locked(self, vin: str, method: str, **kwargs: Any) -> None:
         """Inner dispatch — assumes per-VIN-per-class lock already held.
@@ -6566,7 +8160,10 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         try:
             fn = getattr(self._cariad_client, method)
             await fn(vin, **kwargs)
-            await self.async_request_refresh()
+            # b7 (grounded audit P1-1 / P2-twin) — the post-command refresh moved to
+            # the caller (_cariad_cmd), OUTSIDE this try and the command lock, so a
+            # refresh/portal error is no longer misclassified as a command failure
+            # and the multi-VIN refresh no longer eats the command-lock budget.
             try:
                 self.record_command_success(vin, method)
             except Exception:  # noqa: BLE001
@@ -6584,7 +8181,41 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 )
             except Exception:  # noqa: BLE001
                 pass
-            _LOGGER.error("VW Group Connect: %s(%s) failed: %s", method, mask_vin(vin), err)
+            # class + status only — raw err str() can carry the VIN-path command
+            # URL; the classified reason is already logged one branch up.
+            _LOGGER.error(
+                "VW Group Connect: %s(%s) failed: %s (status=%s)",
+                method, mask_vin(vin), type(err).__name__,
+                getattr(err, "status", None),
+            )
+            # b15 — a two-way primary (Audi BFF) that refuses a command with an
+            # auth 401/403 (the shape a revoked device-grant takes) → try the
+            # durable MBB fallback ONCE before surfacing, iff the user opted in
+            # and the car is MBB-eligible (both settled at arm time). MBB success
+            # ends here; MBB failure falls through and surfaces the ORIGINAL BFF
+            # error, never the fallback's.
+            fb = self._mbb_command_fallback(method, err)
+            if fb is not None:
+                try:
+                    await getattr(fb, method)(vin, **kwargs)
+                    # b7 — refresh moved to the caller (_cariad_cmd); keep it out of
+                    # this try so a refresh error isn't misread as a fallback failure.
+                    try:
+                        self.record_command_success(vin, method)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    _LOGGER.info(
+                        "VW Group Connect: %s(%s) recovered via the MBB fallback"
+                        " after the BFF refused it (HTTP %s).",
+                        method, mask_vin(vin), getattr(err, "status", "?"),
+                    )
+                    return
+                except Exception as fb_err:  # noqa: BLE001
+                    _LOGGER.info(
+                        "VW Group Connect: MBB fallback for %s(%s) also failed"
+                        " (%s) — surfacing the original BFF error.",
+                        method, mask_vin(vin), type(fb_err).__name__,
+                    )
             # v2.18.0 (#659) — surface the failure instead of letting the raw
             # APIError escape. HA doesn't know our exception types, so it logged
             # "Unexpected exception" and showed the user a Python traceback for
@@ -6640,8 +8271,15 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 from .cariad.exceptions import (  # noqa: PLC0415
                     CommandFailureReason,
                     classify_command_failure,
+                    extract_safe_error_code,
                 )
 
+                # #1355 — str(APIError) no longer carries the body, so surface the
+                # SAFE backend error CODE (enum-like, e.g. USER_NOT_AUTHORIZED) so
+                # the user still learns what the car said without leaking the body.
+                _code = extract_safe_error_code(getattr(err, "body", ""))
+                if _code and _code not in msg:
+                    msg = f"{msg} ({_code})"
                 if classify_command_failure(err) in (
                     CommandFailureReason.MISSING_CAPABILITY,
                     CommandFailureReason.NOT_ENTITLED,
@@ -6653,6 +8291,38 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             except Exception:  # noqa: BLE001
                 pass  # enrichment must never change the command outcome
             raise HomeAssistantError(msg) from err
+
+    def _mbb_command_fallback(self, method: str, err: Exception) -> Any | None:
+        """b15 — the armed MBB fallback connector to retry a command on, or None.
+
+        Non-None ONLY when: the two-way primary client has an MBB fallback armed
+        (a device-grant Audi that opted in — already MBB-eligible, settled at arm
+        time), the failure is a BFF AUTH REFUSAL (``APIError`` 401/403, the shape
+        a revoked device-grant takes), and the command method exists on the MBB
+        connector. Deliberately NARROW: our own ``HomeAssistantError`` guards, an
+        ``SpinError`` / ``VehicleCommandError`` (both non-APIError), a capability
+        / entitlement gate, and a transient 5xx / timeout / 404 all return None —
+        MBB can't fix those, and a needless second call just doubles the failure."""
+        # Gate on the explicit config flag via a REAL dict lookup first — never
+        # ``getattr(client, "_mbb_fallback")`` alone, which a MagicMock test
+        # client would auto-vivify to a truthy value (mirrors the MagicMock-safe
+        # gating in ``_mbb_command_channel_client``). Also the cheapest guard.
+        try:
+            if not self.entry.data.get(CONF_MBB_COMMAND_FALLBACK):
+                return None
+        except Exception:  # noqa: BLE001
+            return None
+        from .cariad.exceptions import APIError  # noqa: PLC0415
+        if isinstance(err, HomeAssistantError) or not isinstance(err, APIError):
+            return None
+        if getattr(err, "status", None) not in (401, 403):
+            return None
+        client = getattr(self, "_cariad_client", None)
+        getter = getattr(client, "mbb_fallback_connector", None)
+        fb = getter() if callable(getter) else None
+        if fb is None:
+            return None
+        return fb if callable(getattr(fb, method, None)) else None
 
     async def async_set_charge_mode(self, vin: str, mode: str) -> None:
         """Set charging mode (MANUAL / TIMER / PREFERRED_CHARGING_TIMES)."""

@@ -4,7 +4,72 @@
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
+
+# ── redaction (self-contained; this is a leaf module, no cross-imports) ──────
+_UUID_RE = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+_VIN_RE = re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b")
+
+
+def _redact_url(url: str) -> str:
+    """Host+path of *url*, query + fragment dropped, UUID/VIN path segments masked.
+
+    An APIError message is logged and re-raised in many places via ``str(err)``;
+    the raw request URL carries the VIN (``…/vehicles/<VIN>/…``) and sometimes a
+    UUID data-request id, and the query can carry tokens. Keeping only host+path
+    with those masked lets the error stay diagnosable without leaking PII/secrets
+    into a debug log a reporter pastes into an issue. (#1355)
+    """
+    try:
+        from urllib.parse import urlparse  # noqa: PLC0415
+
+        p = urlparse(url)
+        safe = _UUID_RE.sub("<uuid>", f"{p.netloc}{p.path}")
+        return _VIN_RE.sub("<vin>", safe) or "<empty-url>"
+    except Exception:  # noqa: BLE001
+        return "<unparseable-url>"
+
+
+def extract_safe_error_code(body: str) -> str:
+    """Pull the bounded backend error CODE from a raw error *body*, for surfacing.
+
+    Since ``str(APIError)`` no longer carries the body (#1355 redaction), a command
+    that fails with a backend reason (e.g. ``USER_NOT_AUTHORIZED`` /
+    ``missingCapability``) would otherwise reach the user as a bare "API error 403".
+    This returns ONLY the enum-like code field (``errorCode`` / ``error`` /
+    ``code``, incl. one nested ``error`` object) — never free-text fields like
+    ``error_description`` / ``message`` / ``info`` which can carry PII — capped to
+    60 chars. Returns "" when no code is present. Never raises.
+    """
+    if not body or not isinstance(body, str):
+        return ""
+    try:
+        import json  # noqa: PLC0415
+
+        data = json.loads(body)
+    except Exception:  # noqa: BLE001
+        return ""
+
+    def _dig(d: object, depth: int = 0) -> str:
+        if depth > 2 or not isinstance(d, dict):
+            return ""
+        for key in ("errorCode", "error", "code"):
+            val = d.get(key)
+            if isinstance(val, str) and val:
+                return val
+            if isinstance(val, int):
+                return str(val)
+            if isinstance(val, dict):
+                nested = _dig(val, depth + 1)
+                if nested:
+                    return nested
+        return ""
+
+    code = _dig(data)
+    return code[:60] if code else ""
 
 
 class CommandProfile(StrEnum):
@@ -121,7 +186,10 @@ def classify_command_failure(exc: BaseException) -> CommandFailureReason:
         return CommandFailureReason.UNKNOWN
 
     status = getattr(exc, "status", 0) or 0
-    body = str(exc).lower()
+    # Read markers from the RAW body attribute, not str(exc): the APIError message
+    # is now redacted (no body), and the raw body is the full 4 KB the backend
+    # sent, not the old 200-char message slice. (redaction #1355)
+    body = (getattr(exc, "body", "") or "").lower()
 
     # Body-content first — these are unambiguous markers regardless of
     # which 4xx the backend used.
@@ -264,6 +332,21 @@ class AuthenticationError(CariadError):
     """Login failed — wrong credentials or account issue."""
 
 
+class TokenRefreshRetryError(CariadError):
+    """A token refresh was rejected TRANSIENTLY — not a dead refresh token.
+
+    A refresh exchange can fail for reasons a fresh login does NOT fix: a
+    transient ``invalid_client`` / ``server_error`` / 5xx / network blip. Only a
+    genuinely dead grant (``invalid_grant``) needs a new login. Classifying the
+    rest as this error — deliberately a sibling of ``AuthenticationError``, NOT a
+    subclass — keeps a temporary hiccup from bouncing the user to a fresh QR /
+    credential reauth prompt: the poll loop reauths ONLY on ``AuthenticationError``
+    (``isinstance`` check), so this falls through to the transient-retry path and
+    the entry stays live until the next poll. Do NOT make it a subclass of
+    ``AuthenticationError`` — a test pins that, because it would silently undo the
+    whole point."""
+
+
 class NorthAmericaAttestationError(AuthenticationError):
     """#1165/#659 — VW North America blocks the sign-in token exchange behind
     Play-Integrity device attestation (~2026-07-30). The con-veh host 401s with a
@@ -328,6 +411,73 @@ class EmailTwoFactorRequiredError(TwoFactorRequiredError):
         )
 
 
+class PorscheCaptchaRequiredError(AuthenticationError):
+    """b19 (#1337, CJNE-comparison #12a) — Porsche's Auth0 tenant rendered a
+    captcha challenge instead of continuing the login redirect chain.
+
+    Carries what the interactive config-flow step needs to resume the SAME PKCE
+    transaction after the user solves it (the verifier cannot be regenerated —
+    it is bound to the original ``/authorize`` request), the same way
+    CJNE/pyporscheconnectapi's ``PorscheCaptchaRequiredError`` does.
+
+    ``resume`` (G5, #1337) is present only for a captcha that appears LATER in
+    the flow than the identifier step — i.e. in the post-password redirect chain
+    (which CJNE never sees, because their login completes). It is an opaque
+    descriptor ``{"url": <screen POST url>, "form": <ACUL submittedFormData +
+    state>}`` that lets the resume replay the solved captcha back to the exact
+    ACUL screen that presented it, instead of re-driving identifier + password.
+    ``None`` means the classic identifier-step captcha, which resumes by
+    re-POSTing the identifier with the ``captcha`` field (unchanged).
+    """
+
+    def __init__(
+        self,
+        captcha_image: str,
+        state: str,
+        code_verifier: str,
+        resume: dict | None = None,
+    ) -> None:
+        super().__init__(
+            "Porsche requires a captcha to be solved — the interactive setup "
+            "step will show it. If it cannot be cleared, sign in once in the "
+            "Porsche app from the same network."
+        )
+        self.captcha_image = captcha_image
+        self.state = state
+        self.code_verifier = code_verifier
+        self.resume = resume
+
+
+class PorscheLoginWallError(AuthenticationError):
+    """b23 (#1337, @Hollywoodchaos + @mps222 on v4.7.2) — the Porsche login got
+    *past* credentials (identifier + password were accepted) but the Auth0
+    redirect chain ended on a rendered page instead of an authorization code:
+    a captcha/consent wall the headless flow can't clear (observed at
+    ``my.porsche.com`` after the passkey-enrollment screen was already
+    declined).
+
+    Distinct from the plain ``AuthenticationError`` raised for an actual 401/400
+    on the identifier/password step, so the config flow stops telling these
+    users "email or password incorrect" (their credentials are verified-good)
+    and instead names the real wall — mirroring how ``NorthAmericaAttestation
+    Error`` rescued the VW-NA case. Carries no secret; the message is static."""
+
+    def __init__(self, screen: str = "", marker: str = "") -> None:
+        # v4.7.8 (#1337) — name WHAT was hit. ``screen`` is "host/acul-screen-
+        # name" (e.g. "my.porsche.com/unknown"), ``marker`` the secret-free page
+        # marker (title + keyword flags). Both are already-redacted by
+        # construction (no URL/query/body/token), so they may travel into the
+        # WARNING log line, the abort dialog and the one-click GitHub report —
+        # the datapoint every wall report so far was missing.
+        where = f" (screen: {screen}; {marker})" if screen or marker else ""
+        super().__init__(
+            "Porsche login reached a captcha/consent screen after the password "
+            f"step that a headless login cannot complete — credentials are fine{where}."
+        )
+        self.screen = screen
+        self.marker = marker
+
+
 class PortalInteractionRequiredError(AuthenticationError):
     """v2.15.4 (#527) — the EU Data Act portal login stopped on a step that
     needs a one-time human action in the browser/app, but is NOT a wrong-
@@ -353,6 +503,32 @@ class PortalInteractionRequiredError(AuthenticationError):
         if reason:
             msg += f" ({reason})"
         msg += ". This is NOT a wrong-password problem."
+        super().__init__(msg)
+        self.reason = reason
+
+
+class PortalSessionExpiredError(AuthenticationError):
+    """b12 (#1340 @cyrano330) — the IDK login AND the EU Data Act portal login
+    both succeeded, but the portal then returned 401 on the vehicle enumeration
+    even after a fresh re-login/refresh — i.e. the portal won't authorise an
+    otherwise-valid session.
+
+    Distinct from ``AuthenticationError`` so the coordinator surfaces the
+    ``data_act_session_expired`` repair (re-login via the OptionsFlow) instead of
+    the credential catch-all — the password is provably fine (the login returned
+    an auth code), so telling the user to re-type it is wrong. Only raised on the
+    SECOND enumeration 401, which is reachable only after a successful login.
+    """
+
+    def __init__(self, reason: str = "") -> None:
+        msg = (
+            "EU Data Act portal returned 401 on vehicle enumeration after a "
+            "successful login"
+        )
+        if reason:
+            msg += f" ({reason})"
+        msg += ". This is NOT a wrong-password problem — the portal session "
+        msg += "needs re-establishing."
         super().__init__(msg)
         self.reason = reason
 
@@ -411,7 +587,10 @@ class VehicleNotFoundError(CariadError):
     """VIN not found in the account garage."""
 
     def __init__(self, vin: str) -> None:
-        super().__init__(f"Vehicle {vin} not found in account garage.")
+        # Mask the VIN in the message — VehicleNotFoundError is logged/re-raised
+        # via str() on the poll + command paths; keep the raw VIN as an attribute.
+        masked = f"…{vin[-6:]}" if isinstance(vin, str) and len(vin) >= 6 else "?"
+        super().__init__(f"Vehicle {masked} not found in account garage.")
         self.vin = vin
 
 
@@ -430,7 +609,11 @@ class APIError(CariadError):
     """Unexpected API response."""
 
     def __init__(self, status: int, url: str, body: str = "") -> None:
-        super().__init__(f"API error {status} for {url}: {body[:200]}")
+        # Message is REDACTED: many call sites log or re-raise ``str(APIError)``,
+        # and the raw url (VIN/UUID path, token query) + response body would leak
+        # there. The raw url/body are kept as ATTRIBUTES below for classification
+        # and retry; only the human-facing message is masked. (#1355)
+        super().__init__(f"API error {status} for {_redact_url(url)}")
         self.status = status
         self.url = url
         # v2.9.0 - keep the raw body around so callers can inspect for

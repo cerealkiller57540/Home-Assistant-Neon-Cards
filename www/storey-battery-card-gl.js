@@ -212,6 +212,18 @@
     return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${_fx(xL)}" y1="0" x2="${_fx(xR)}" y2="0">${body}</linearGradient>`;
   }
 
+  /* ⚠️ IDs SVG CONSTANTS (gCapSbc, gBodySbc, gVSbc, gTopSbc, sbcCatGlow,
+   * sbcCatClip, sbcScrClip, sbc_full_fill, gsp0/gsp1) — volontairement NON
+   * préfixés par instance. L'unicité repose ENTIÈREMENT sur le ShadowRoot :
+   * chaque carte a le sien, donc deux cartes sur le même dashboard ne peuvent
+   * pas se voler leurs url(#…) / clip-path, même avec des IDs identiques.
+   * C'est aussi ce qui permet à _batCache (Map au niveau MODULE, partagée par
+   * toutes les instances) de servir le même SVG à toutes les cartes.
+   * → Si un jour un <svg> sort du shadow (export PNG, <use> cross-root, rendu
+   *   dans le document principal), CES IDS DEVIENNENT GLOBAUX et collisionnent :
+   *   il faudra alors les préfixer par instance ET sortir _batCache du module,
+   *   sinon la carte B recevra le SVG (et les IDs) bakés pour la carte A.
+   * (arbitrage tranché avec Chris le 2026-08-30) */
   function _stackDefs() {
     return (
       `<defs>${_grad("gCapSbc", CAP_STOPS)}${_grad("gBodySbc", BODY_STOPS)}` +
@@ -668,8 +680,8 @@
    * Conforme à la photo officielle : plaque pleine hauteur du capot avec
    * languette jaune sur son bord gauche. La prise jaune _capSocket() reste
    * dispo en commentaire ci-dessus pour le jour où le volet s'ouvrira. */
-  const PLATE_X0 = P_W - 118,
-    PLATE_X1 = P_W - 28; // unités modèle
+  const PLATE_X0 = P_W - 148,
+    PLATE_X1 = P_W - 58; // unités modèle (décalée de 30 vers la gauche)
   function _capCover() {
     const py = 0.6,
       plH = CAPH - 1.2;
@@ -849,8 +861,8 @@
 
     /* poignée stadium sur la face droite (corps + chaque module) */
     if (withHandle && P_D - 2 * P_R >= 26) {
-      const hl = Math.min(22, (P_D - 2 * P_R) / 2 - 2); // demi-longueur (modèle)
-      const hh = 20 * GS * P_KH; // hauteur écran (~20 mm)
+      const hl = Math.min(38, (P_D - 2 * P_R) / 2 - 2); // demi-longueur (modèle)
+      const hh = 30 * GS * P_KH; // hauteur écran (~30 mm)
       const hh2 = hh * 0.65;
       const RF = `matrix(${VX.toFixed(4)},${VY.toFixed(4)},0,1,${(P_W * UX + OX).toFixed(2)},${(P_W * UY + OY).toFixed(2)})`;
       const slabs = [[CAPH, UNITH]];
@@ -1219,11 +1231,18 @@
 
     _modules() {
       const { modules_entity, modules } = this._config;
+      const clamp = (n) => Math.min(3, Math.max(0, n));
       if (modules_entity && this._hass) {
         const s = this._hass.states[modules_entity];
-        if (s) return Math.min(3, Math.max(0, parseInt(s.state) || 0));
+        // parseInt("unavailable") || 0 renvoyait 0 ET retournait aussitôt :
+        // un simple état transitoire faisait DISPARAÎTRE les modules à l'écran
+        // au lieu de retomber sur la valeur de config. On ne fait confiance à
+        // l'entité que si elle porte un entier réel.
+        const n = s ? Number.parseInt(s.state, 10) : NaN;
+        if (Number.isFinite(n)) return clamp(n);
       }
-      return Math.min(3, Math.max(0, parseInt(modules) || 0));
+      const cfg = Number.parseInt(modules, 10);
+      return Number.isFinite(cfg) ? clamp(cfg) : 0;
     }
 
     _ent(id) {
@@ -1263,16 +1282,6 @@
       const cyberpunk = !!this._config.cyberpunk_mode;
       const neonGlow = !!this._config.neon_glow;
       const cardModBg = !!this._config.card_mod_bg;
-      const accent = cyberpunk
-        ? this._config.color_accent || CP_ACCENT
-        : this._config.color_accent || DEF_ACCENT;
-      const bg = cardModBg
-        ? "transparent"
-        : cyberpunk
-          ? this._config.color_bg || CP_BG
-          : this._config.color_bg || DEF_BG;
-      const totalKwh = ((modules + 1) * KWH_PER).toFixed(1);
-      const batH = _batHeight(modules) + 2;
 
       const soc = this._ent(this._config.soc_entity);
       const power = this._ent(this._config.power_entity);
@@ -1282,10 +1291,32 @@
       const socVal = Number.isFinite(socNumber) ? Math.min(100, Math.max(0, socNumber)) : null;
       const pwVal = Number.isFinite(powerNumber) ? powerNumber : null;
       const masterState = master ? master.v.toUpperCase().trim() : null;
+      // master_status_entity est la seule source jugée fiable pour l'état
+      // directionnel : si elle est unavailable/unknown, TOUT ce qu'on affiche
+      // (SOC, W, sens de charge) est potentiellement figé/périmé → mode erreur
+      // global plutôt qu'une staleness fine par entité.
+      const hasError = master === null && !!this._config.master_status_entity;
+      const ERR_RED = "#ff3b30";
+
+      const accent = hasError
+        ? ERR_RED
+        : cyberpunk
+          ? this._config.color_accent || CP_ACCENT
+          : this._config.color_accent || DEF_ACCENT;
+      const bg = cardModBg
+        ? "transparent"
+        : cyberpunk
+          ? this._config.color_bg || CP_BG
+          : this._config.color_bg || DEF_BG;
+      const totalKwh = ((modules + 1) * KWH_PER).toFixed(1);
+      const batH = _batHeight(modules) + 2;
 
       const threshold = Math.abs(parseFloat(this._config.power_threshold)) || 50;
       let isCharging, isIdle;
-      if (pwVal !== null && Math.abs(pwVal) <= threshold) {
+      if (hasError) {
+        isCharging = false;
+        isIdle = false;
+      } else if (pwVal !== null && Math.abs(pwVal) <= threshold) {
         isCharging = false;
         isIdle = true;
       } else if (masterState) {
@@ -1299,7 +1330,7 @@
         isIdle = true;
       }
 
-      const hasDots = socVal !== null || pwVal !== null || masterState !== null;
+      const hasDots = hasError || socVal !== null || pwVal !== null || masterState !== null;
       const socFullThr = parseFloat(this._config.soc_full_threshold) || 97;
       const isSocFull = socVal !== null && socVal >= socFullThr;
       const DOTS_X = SVG_W + 10;
@@ -1348,6 +1379,8 @@
       let glowSVG = "";
       // couleur charge/décharge : défaut dynamique (logique card), chaque sens surchargé
       // INDÉPENDAMMENT par l'UI si la couleur correspondante est fournie.
+      // En mode erreur (master status indisponible) : rouge fixe, overrides ignorés,
+      // même logique que l'accent — le sens de charge n'est pas fiable.
       const gcDefault = cyberpunk
         ? isCharging
           ? CP_CHARGE
@@ -1358,14 +1391,16 @@
       const gcOverride = isCharging
         ? this._config.elec_color_charge
         : this._config.elec_color_discharge;
-      const gc1 = gcOverride || gcDefault;
-      const gc2 = cyberpunk
-        ? isCharging
-          ? "#d9fffe"
-          : "#fbd4ff"
-        : isCharging
-          ? "#fff3b0"
-          : "#d6e4ff";
+      const gc1 = hasError ? ERR_RED : gcOverride || gcDefault;
+      const gc2 = hasError
+        ? ERR_RED
+        : cyberpunk
+          ? isCharging
+            ? "#d9fffe"
+            : "#fbd4ff"
+          : isCharging
+            ? "#fff3b0"
+            : "#d6e4ff";
       if (this._config.glow_enabled) {
         const cKey =
           (this._config.elec_color_charge || "") + "/" + (this._config.elec_color_discharge || "");
@@ -1373,7 +1408,7 @@
           "glow_" +
           modules +
           "_" +
-          (isIdle ? "idle" : isCharging ? 1 : 0) +
+          (hasError ? "err" : isIdle ? "idle" : isCharging ? 1 : 0) +
           "_" +
           (cyberpunk ? "cp" : "std") +
           "_" +
@@ -1430,10 +1465,10 @@
         dy = 4,
         panelsBot = 0;
 
-      if (socVal !== null) {
-        const col = socVal >= 25 ? accent : cyberpunk ? "#7209b7" : BLUE_EL;
-        const { circles, bW, bH } = _panelDots(socVal.toFixed(0), col);
-            panelsSVG += `<g class="dp" role="button" tabindex="0" aria-label="SOC" data-entity="${_sbcEscape(soc.id)}" transform="translate(0,${dy})" style="cursor:pointer;filter:drop-shadow(0 0 5px ${col}44);">
+      if (socVal !== null || hasError) {
+        const col = hasError ? ERR_RED : socVal >= 25 ? accent : cyberpunk ? "#7209b7" : BLUE_EL;
+        const { circles, bW, bH } = _panelDots(hasError ? "----" : socVal.toFixed(0), col);
+            panelsSVG += `<g class="dp" role="button" tabindex="0" aria-label="SOC" data-entity="${_sbcEscape(soc ? soc.id : this._config.soc_entity)}" transform="translate(0,${dy})" style="cursor:pointer;filter:drop-shadow(0 0 5px ${col}44);">
           <text x="2" y="-2" font-size="5.5" letter-spacing="1.1" fill="${col}" style="font-family:-apple-system,sans-serif;font-weight:500;">SOC</text>
           <rect x="0" y="0" width="${bW}" height="${bH}" rx="5" fill="#222"/>
           ${circles}
@@ -1442,11 +1477,14 @@
         dy += +bH + 12;
       }
 
-      if (pwVal !== null) {
-        const pwCol = isCharging ? (cyberpunk ? CP_CHARGE : BLUE_EL) : accent;
-        const lbl = (isCharging ? "\u2193" : "\u2191") + " W";
-        const { circles, bW, bH } = _panelDots(Math.round(Math.abs(pwVal)).toString(), pwCol);
-        panelsSVG += `<g class="dp" role="button" tabindex="0" aria-label="Power" data-entity="${_sbcEscape(power.id)}" transform="translate(0,${dy})" style="cursor:pointer;filter:drop-shadow(0 0 5px ${pwCol}44);">
+      if (pwVal !== null || hasError) {
+        const pwCol = hasError ? ERR_RED : isCharging ? (cyberpunk ? CP_CHARGE : BLUE_EL) : accent;
+        const lbl = hasError ? "W" : (isCharging ? "\u2193" : "\u2191") + " W";
+        const { circles, bW, bH } = _panelDots(
+          hasError ? "----" : Math.round(Math.abs(pwVal)).toString(),
+          pwCol
+        );
+        panelsSVG += `<g class="dp" role="button" tabindex="0" aria-label="Power" data-entity="${_sbcEscape(power ? power.id : this._config.power_entity)}" transform="translate(0,${dy})" style="cursor:pointer;filter:drop-shadow(0 0 5px ${pwCol}44);">
           <text x="2" y="-2" font-size="5.5" letter-spacing="1.1" fill="${pwCol}" style="font-family:-apple-system,sans-serif;font-weight:500;">${lbl}</text>
           <rect x="0" y="0" width="${bW}" height="${bH}" rx="5" fill="#222"/>
           ${circles}
@@ -1455,27 +1493,37 @@
         dy += +bH + 12;
       }
 
-      if (pwVal !== null || masterState !== null) {
-        const arrowEntityId = master ? master.id : power ? power.id : null;
-        const dirCol = isIdle ? null : isCharging ? (cyberpunk ? CP_CHARGE : BLUE_EL) : accent;
+      if (hasError || pwVal !== null || masterState !== null) {
+        const arrowEntityId = master ? master.id : power ? power.id : this._config.master_status_entity;
+        const dirCol = hasError
+          ? ERR_RED
+          : isIdle
+            ? null
+            : isCharging
+              ? (cyberpunk ? CP_CHARGE : BLUE_EL)
+              : accent;
         const {
           circles: arrowC,
           bW: arrowBW,
           bH: arrowBH,
-        } = isSocFull
-          ? _fullDots(accent, cyberpunk)
-          : _arrowDots(isIdle ? true : isCharging, dirCol, accent);
-        const lblArrow = isSocFull
-          ? "FULL"
-          : isIdle
-            ? "IDLE"
-            : masterState
-              ? masterState
-              : isCharging
-                ? "CHARGING"
-                : "DISCHARGING";
-        panelsSVG += `<g${arrowEntityId ? ` class="dp" role="button" tabindex="0" aria-label="${_sbcEscape(lblArrow)}" data-entity="${_sbcEscape(arrowEntityId)}"` : ""}  transform="translate(0,${dy})" style="cursor:pointer;${isIdle && !isSocFull ? "" : "filter:drop-shadow(0 0 6px " + (isSocFull ? (cyberpunk ? CP_ACCENT : accent) : dirCol) + "55);"}">
-          <text x="2" y="-2" font-size="5.5" letter-spacing="1.1" fill="${isSocFull ? (cyberpunk ? CP_ACCENT : accent) : dirCol || "rgba(255,255,255,.28)"}" style="font-family:-apple-system,sans-serif;font-weight:500;">${lblArrow}</text>
+        } = hasError
+          ? _panelDots("----", ERR_RED)
+          : isSocFull
+            ? _fullDots(accent, cyberpunk)
+            : _arrowDots(isIdle ? true : isCharging, dirCol, accent);
+        const lblArrow = hasError
+          ? "ERROR"
+          : isSocFull
+            ? "FULL"
+            : isIdle
+              ? "IDLE"
+              : masterState
+                ? masterState
+                : isCharging
+                  ? "CHARGING"
+                  : "DISCHARGING";
+        panelsSVG += `<g${arrowEntityId ? ` class="dp" role="button" tabindex="0" aria-label="${_sbcEscape(lblArrow)}" data-entity="${_sbcEscape(arrowEntityId)}"` : ""}  transform="translate(0,${dy})" style="cursor:pointer;${!hasError && isIdle && !isSocFull ? "" : "filter:drop-shadow(0 0 6px " + (hasError ? ERR_RED : isSocFull ? (cyberpunk ? CP_ACCENT : accent) : dirCol) + "55);"}">
+          <text x="2" y="-2" font-size="5.5" letter-spacing="1.1" fill="${hasError ? ERR_RED : isSocFull ? (cyberpunk ? CP_ACCENT : accent) : dirCol || "rgba(255,255,255,.28)"}" style="font-family:-apple-system,sans-serif;font-weight:500;">${lblArrow}</text>
           <rect x="0" y="0" width="${arrowBW}" height="${arrowBH}" rx="5" fill="#222"/>
           ${arrowC}
         </g>`;
@@ -1487,14 +1535,14 @@
       let pillHTML;
       if (socVal !== null) {
         const avail = ((socVal / 100) * +totalKwh).toFixed(1);
-        pillHTML = `<div class="kwh-pill" style="background:${accent}11;--pill-col:${accent}">
+        pillHTML = `<div class="kwh-pill">
           <span class="kwh-num" style="color:${accent}">${avail}</span>
           <span class="kwh-sep" style="color:${accent}88">/</span>
           <span class="kwh-num" style="color:${accent}">${totalKwh}</span>
           <span class="kwh-unit" style="color:${accent}">kWh</span>
         </div>`;
       } else {
-        pillHTML = `<div class="kwh-pill" style="background:${accent}11;--pill-col:${accent}">
+        pillHTML = `<div class="kwh-pill">
           <span class="kwh-num" style="color:${accent}">${totalKwh}</span>
           <span class="kwh-unit" style="color:${accent}">kWh</span>
         </div>`;
@@ -1523,11 +1571,11 @@
         .top-band { display:flex; justify-content:space-between; align-items:center; padding:16px 14px 0; width:100% }
         .brand-row { display:flex; align-items:center; gap:8px }
         .brand {
-          font-size: var(--sbc-title-size, 24px); letter-spacing: var(--sbc-title-spacing, clamp(1px, 0.5cqi, 3px));
+          font-size: var(--sbc-title-size, 24px); letter-spacing: var(--sbc-title-spacing, 0.02em);
           color: var(--sbc-title-color, rgba(var(--rgb-primary-text-color),0.55));
           background: var(--sbc-title-grad, none); -webkit-background-clip: var(--sbc-title-gradclip, initial); -webkit-text-fill-color: var(--sbc-title-gradfill, initial); background-clip: var(--sbc-title-gradclip, initial);
           font-family: var(--sbc-title-font, var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif));
-          font-weight: var(--sbc-title-weight, 400); font-style: var(--sbc-title-style, normal);
+          font-weight: var(--sbc-title-weight, 600); font-style: var(--sbc-title-style, normal);
           line-height:1; text-transform: var(--sbc-title-transform, uppercase);
           text-shadow: var(--sbc-title-shadow, 0 0 30px var(--sbc-glow));
           animation: var(--sbc-title-flicker, none);
@@ -1538,28 +1586,31 @@
           height:1px; margin: 8px 14px 0;
           background: linear-gradient(90deg, transparent, rgba(var(--rgb-primary-color,98,0,234),0.55), rgba(var(--rgb-accent-color,0,255,249),0.25), transparent);
         }
+        /* kwh — texte lumineux, plus de pilule (cf .mw-stat-value, mova-mower-card) */
         .kwh-pill {
           position:relative; display:inline-flex; align-items:baseline; gap:4px;
-          padding:5px 13px; border-radius:99px; cursor:default;
+          padding:0; cursor:default;
         }
-        .kwh-pill::before {
-          content:''; position:absolute; inset:0; border-radius:99px;
-          border:1.5px solid transparent;
-          background:linear-gradient(135deg, var(--pill-col),
-            color-mix(in srgb, var(--pill-col) 30%, transparent), transparent) border-box;
-          -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
-          -webkit-mask-composite: destination-out; mask-composite: exclude; pointer-events:none;
+        .kwh-num  {
+          font-size:16px; font-weight:800; letter-spacing:-.02em;
+          text-shadow: 0 0 1px rgba(255,255,255,.5), 0 0 6px currentColor, 0 0 13px currentColor;
         }
-        .kwh-num  { font-size:16px; font-weight:800; letter-spacing:-.02em }
-        .kwh-sep  { font-size:13px; font-weight:600; margin:0 1px }
-        .kwh-unit { font-size:10px; color:inherit; opacity:.55; letter-spacing:.07em; text-transform:uppercase }
+        .kwh-sep  { font-size:13px; font-weight:600; margin:0 1px; text-shadow: 0 0 5px currentColor }
+        .kwh-unit {
+          font-size:10px; color:inherit; opacity:.7; letter-spacing:.07em; text-transform:uppercase;
+          text-shadow: 0 0 1px rgba(255,255,255,.5), 0 0 6px currentColor, 0 0 13px currentColor;
+        }
         .pills-row { display:flex; align-items:center; gap:8px }
         .svg-body { padding:12px 14px 16px; position:relative }
         canvas.elec-gl { position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none }
-        .dp { transition:opacity .1s; contain:layout style }
+        .dp { transition:opacity .1s; contain:layout style; outline:none }
         .dp:active { opacity:.7 }
-        /* iPad/mobile : coupe toutes les anims CSS (SMIL déjà strippé en JS) */
-        :host(.low-power) * { animation:none !important; }
+        .dp:focus-visible { outline:2px solid currentColor; outline-offset:2px; border-radius:4px }
+        /* iPad/mobile : coupe toutes les anims CSS (SMIL déjà strippé en JS),
+           SAUF la respiration du liseré néon (led-breathe) : opacité pure sur
+           quelques <path> déjà en place, pas de RAF ni de rebuild DOM -> le
+           seul mouvement qu'on garde volontairement sur low-power. */
+        :host(.low-power) *:not(.led-seg) { animation:none !important; }
         @keyframes led-breathe { 0%,100%{opacity:.25} 60%{opacity:.55} 82%,88%{opacity:1} 94%{opacity:.8} }
         @keyframes sb-flow { from { stroke-dashoffset:0 } to { stroke-dashoffset:var(--o1) } }
         .cmt { animation:sb-flow 3.2s linear infinite; animation-delay:var(--dl,0s) }
@@ -1616,7 +1667,7 @@
 
         .glow-grp   { will-change:transform; transform:translateZ(0) }
         .panels-grp { will-change:transform }
-        :host([data-neon]) .kwh-pill { box-shadow: 0 0 8px var(--sbc-accent) }
+        :host([data-neon]) .kwh-num, :host([data-neon]) .kwh-unit { text-shadow: 0 0 1px rgba(255,255,255,.5), 0 0 7px currentColor, 0 0 16px currentColor, 0 0 26px currentColor }
         :host([data-cp]) .kwh-unit { color: var(--sbc-cp-primary,${CP_PRIMARY}); opacity:.6 }
       </style>
       <ha-card>
@@ -1671,7 +1722,7 @@
       if (hdr.italic) this.style.setProperty("--sbc-title-style", "italic");
       else this.style.removeProperty("--sbc-title-style");
       const sbcGlowColor = hdr.glow_color || "var(--primary-color, #6200EA)";
-      const sbcGlowSize = parseFloat(hdr.glow_size) || 12;
+      const sbcGlowSize = parseFloat(hdr.glow_size) || 14;
       if (!hdr.title_shadow && hdr.glow) {
         const sz = sbcGlowSize;
         this.style.setProperty(
@@ -1736,8 +1787,8 @@
 
       const totalH = Math.max(batH, hasDots ? panelsBot + 8 : 0);
       d.svg.setAttribute("viewBox", `0 0 ${VBW} ${totalH}`);
-      // Couleur icone = header.icon_color si défini, sinon header.color, sinon accent
-      const iconColor = this._config.header?.icon_color || this._config.header?.color || accent;
+      // Couleur icone = header.icon_color si défini, sinon défaut FIXE lisible (indépendant du glow, cf. neon-entities-card)
+      const iconColor = this._config.header?.icon_color || this._config.header?.color || 'rgba(var(--rgb-primary-text-color),0.85)';
       // Glow icone = MEME formule que neon-entities-card : 4 couches de drop-shadow
       // (coeur blanc 0.2 + 3 halos 0.4/0.8/1.0×size) si header.glow, sinon dérivé de
       // title_shadow (compat ancienne config), sinon un halo simple par défaut.
@@ -1861,10 +1912,13 @@
    * la géométrie n'est plus procédurale (const MODS=5, sdBox) : elle provient
    * d'une TEXTURE bakée sur la VRAIE silhouette iso → l'élec suit les vrais
    * joints, plus de décalage. Encodage de la texture (uField) :
-   *   R = couverture DOUCE du corps de module (champ ~[0..1], falloff large)
-   *   G = abscisse curviligne du joint supérieur (0..1 le long de la couture)
-   *   B = id de module normalisé (0..1) → seed/pulse propres à chaque module
-   *   A = masque DOUX du joint supérieur (bande large centrée sur la couture)
+   *   R = proximité continue à la couture (~[0..1], falloff large)
+   *   G = abscisse curviligne le long de la couture (0..1)
+   *   B = offset SIGNÉ par rapport à la couture (0.5 = pile dessus)
+   *   A = id de module encodé en clair (40/80/120…), décodé côté shader
+   *       par floor((a*255-40)/40 + 0.5) → seed/pulse propres à chaque module
+   * (⚠️ ce bloc a menti jusqu'au 2026-08-30 : il décrivait B et A inversés et
+   *  un « masque » qui n'a jamais existé. Cf. le bake ~l.2079 qui fait foi.)
    * Alignement : gl_FragCoord → UV du viewBox via uSvgOff/uSvgSize (bbox réelle
    * du SVG dans le canvas), donc indépendant du letterboxing du conteneur. */
   const SBC_FRAG = `
@@ -2228,6 +2282,16 @@ void main(){
       this._gl = null;
       this._seamKey = null;
     }
+    // WebGL indisponible sur cet appareil : on ne retente PAS à chaque render.
+    // _glFailed est volontairement collant pour toute la vie de l'élément — un
+    // navigateur qui refuse le contexte une fois le refusera à l'identique, et
+    // la boucle de tentatives coûte un canvas + un try/catch par rendu.
+    // (Une vraie perte de contexte APRÈS création passe, elle, par
+    // _handleElecContextLost/_Restored et ne met pas ce drapeau.)
+    if (this._glFailed) {
+      cv.style.display = "none";
+      return;
+    } // → fallback RAF-SVG
     if (!this._gl) {
       try {
         this._gl = new _SbcGL(cv);
@@ -2239,6 +2303,7 @@ void main(){
         );
       } catch (e) {
         this._gl = null;
+        this._glFailed = true;
         cv.style.display = "none";
         return;
       } // → fallback RAF-SVG
@@ -2261,7 +2326,7 @@ void main(){
     const svg = this._dom && this._dom.svg;
     const cv = svg && svg.parentElement.querySelector("canvas.elec-gl");
     if (!cv || !this._gl) return false;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = SBC_IS_LOW_POWER ? 1 : Math.min(window.devicePixelRatio || 1, 2);
     const cr = cv.getBoundingClientRect();
     // rect pas encore layouté (display retiré à l'instant, section repliée…)
     // → ne PAS figer à 2×2 ; on retentera à la frame suivante.
@@ -2333,7 +2398,8 @@ void main(){
     const loop = (now) => {
       this._glRaf = requestAnimationFrame(loop);
       if (!this._gl || document.hidden) return;
-      if (now - (this._glLast || 0) < 1000 / 30) return;
+      const capFps = SBC_IS_LOW_POWER ? 24 : 30;
+      if (now - (this._glLast || 0) < 1000 / capFps) return;
       this._glLast = now;
       // Rattrapage layout/resize : si le buffer n'a pas encore sa vraie taille
       // (1ʳᵉ mesure sur canvas non layouté → 2×2) ou si la taille CSS a changé,
@@ -2841,17 +2907,18 @@ void main(){
       });
       this._color("header.color", "Couleur titre", "var(--primary-color)");
       this._select("header.font", "Police", SBC_FONTS, "— thème HA —");
-      this._group("Typo & effets avancés (12 paramètres)", false, () => {
-        this._text("header.font_weight", "Épaisseur", "400");
-        this._text("header.letter_spacing", "Espacement", "clamp(1px, 0.5cqi, 3px)");
-        this._toggle("header.uppercase", "Majuscules", true);
+      this._toggle("header.uppercase", "Majuscules", true);
+
+      this._group("Effets avancés du titre", false, () => {
+        this._text("header.font_weight", "Épaisseur", "600");
+        this._text("header.letter_spacing", "Espacement", "0.02em");
         this._toggle("header.italic", "Italique", false);
         this._text("header.title_shadow", "Text-shadow", "0 0 8px rgba(0,212,255,0.7)");
         this._toggle("header.gradient", "Titre en dégradé");
         this._color("header.gradient_from", "Dégradé — départ", "var(--primary-color)");
         this._color("header.gradient_to", "Dégradé — arrivée", "var(--accent-color)");
         this._toggle("header.glow", "Glow du titre");
-        this._text("header.glow_size", "Taille du glow", "12");
+        this._text("header.glow_size", "Taille du glow", "14");
         this._color("header.glow_color", "Couleur du glow", "var(--primary-color)");
         this._toggle("header.flicker", "Scintillement du titre");
         this._color("header.icon_color", "Couleur de l'icône", "défaut : accent");

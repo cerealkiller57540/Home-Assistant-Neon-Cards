@@ -36,8 +36,25 @@ def get_api(host: str, password: str = "") -> NetgearSwitchConnector:
     )
     # Only login if password is not empty.
     # This allows to call get_unique_id before the user has provided a password
-    if password and not api.get_login_cookie():
-        raise CannotLoginError
+    #
+    # GS108T : le daemon HTTP du firmware 2010 tombe par periodes et la page
+    # port_cfg.html est de toute facon inexploitable (tronquee en plein milieu
+    # du port 3, aucune ligne portID). Tout ce dont l'integration a besoin est
+    # lu en SNMP. On ne fait donc plus echouer le setup sur un login HTTP :
+    # sans cookie, l'entree monte quand meme et les capteurs SNMP remontent.
+    logged_in = False
+    if password:
+        try:
+            logged_in = bool(api.get_login_cookie())
+        except Exception:  # noqa: BLE001 - LoginFailedError & co : non bloquant en SNMP
+            _LOGGER.debug("Login HTTP en echec sur %s", host, exc_info=True)
+    if password and not logged_in:
+        if getattr(api._page_parser, "_snmp_host", None):  # noqa: SLF001
+            _LOGGER.warning(
+                "Login HTTP impossible sur %s ; on continue en SNMP seul.", host
+            )
+        else:
+            raise CannotLoginError
     return api
 
 
@@ -56,10 +73,19 @@ class HomeAssistantNetgearSwitch:
         self.device_name = entry.title
         self._host: str = entry.data[CONF_HOST]
         self._password = entry.data[CONF_PASSWORD]
+        # Communaute SNMP en ECRITURE, utilisee seulement pour ifAdminStatus.
+        # La lecture reste sur "public" (cf. parsers.py). Surchargeable par
+        # l'option "snmp_write_community" de l'entree, sans toucher au code.
+        self.snmp_write_community: str = entry.options.get(
+            "snmp_write_community", "private"
+        )
 
         # set on setup
         self.api: NetgearSwitchConnector | None = None
         self.model = None
+        self.hw_version: str | None = None
+        self.sw_version: str | None = None
+        self.serial_number: str | None = None
 
         # async lock
         self.api_lock = asyncio.Lock()
@@ -78,6 +104,30 @@ class HomeAssistantNetgearSwitch:
                 str(self.api.switch_model),
             )
         self.model = self.api.switch_model.MODEL_NAME
+        # MODEL_NAME vient de MODELS et vaut "GS108T" : la revision materielle y est
+        # perdue. NETGEAR-INVENTORY-MIB donne le modele exact ("GS108Tv2"), c'est
+        # celui-la qu'on affiche. Echec non fatal : on garde MODEL_NAME.
+        try:
+            from .snmp_client import snmp_get_hardware_info
+
+            hw = snmp_get_hardware_info(self._host)
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Inventaire SNMP indisponible sur %s", self._host)
+            hw = {}
+        self.model = hw.get("model") or self.model
+        # HA prefixe deja le champ par "Materiel" : une valeur nue "A" ne dit rien.
+        # "revision A" se lit comme une phrase complete dans la fiche d'appareil.
+        hw_rev = hw.get("hw_rev")
+        self.hw_version = f"revision {hw_rev}" if hw_rev else None
+        try:
+            from .snmp_client import snmp_get_entity_info
+
+            entity = snmp_get_entity_info(self._host)
+            self.sw_version = entity.get("firmware") or None
+            self.serial_number = entity.get("serial_number") or None
+        except Exception:  # noqa: BLE001
+            self.sw_version = None
+            self.serial_number = None
         return True
 
     async def async_setup(self) -> bool:
@@ -129,8 +179,17 @@ class NetgearCoordinatorEntity(CoordinatorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return the device information."""
+        # Sans ces champs la fiche d'appareil HA reste vide. model vaut "GS108Tv2"
+        # (inventaire SNMP), pas le "GS108T" generique de MODELS.
         return DeviceInfo(
             identifiers={(DOMAIN, self._switch.unique_id)},
+            name=self._switch.device_name,
+            manufacturer="NETGEAR",
+            model=self._switch.model,
+            sw_version=self._switch.sw_version,
+            hw_version=self._switch.hw_version,
+            serial_number=self._switch.serial_number,
+            configuration_url=f"http://{self._switch._host}",  # noqa: SLF001
         )
 
 

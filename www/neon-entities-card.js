@@ -11,7 +11,7 @@
  * Boutons cover agrandis (34px, SVG 16px) → cible tactile confortable iPad
  * Couleurs : variables standard HA (primary-text-color / primary-color),
  *   thème-agnostique + surcharge UI (name/value/icon/primary/accent)
- * @version 1.13.1
+ * @version 1.14.4
  */
 
 console.log('neon-entities-card.js loaded!');
@@ -54,6 +54,18 @@ const DOMAIN_ICONS = {
   fan:          'mdi:fan',
   media_player: 'mdi:speaker',
 };
+
+// "#00E8FF" / "#0af" -> "0,232,255". Rend null pour tout le reste (var(), rgb(),
+// vide) : une expression CSS n'est pas decomposable ici, on laisse alors le
+// fallback theme jouer. Sert a deriver les triplets rgba() depuis la couleur
+// saisie, pour ne pas avoir a saisir DEUX FOIS la meme couleur dans l'editeur.
+function _hexToTriplet(c) {
+  if (typeof c !== 'string') return null;
+  const m = c.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!m) return null;
+  const h = m[1].length === 3 ? m[1].split('').map(x => x + x).join('') : m[1];
+  return [0, 2, 4].map(i => parseInt(h.substr(i, 2), 16)).join(',');
+}
 
 function binaryLabel(deviceClass, on) {
   const map = {
@@ -169,9 +181,13 @@ class NeonEntitiesCard extends HTMLElement {
     const valueColor   = cfg.value_color || 'rgba(var(--nec-cy), 0.75)';
     const iconColor    = cfg.icon_color  || colorPrimary;
     // Triplets RGB alimentant les ~40 rgba() de la card (fonds, bordures, boutons,
-    // glows). Non renseignes -> fallback theme strictement identique a avant.
-    const rgbPrimary   = cfg.rgb_primary || 'var(--rgb-primary-color, 98,0,234)';
-    const rgbAccent    = cfg.rgb_accent  || 'var(--rgb-accent-color, 0,255,249)';
+    // glows). Ce sont les MEMES couleurs que color_primary/color_accent ci-dessus,
+    // juste sous la forme "r,g,b" exigee par rgba() — d'ou la derivation automatique :
+    // saisir la couleur en haut suffit, les champs RGB ne servent plus qu'a decorreler
+    // volontairement les deux (cas rare). Ordre : champ explicite > derive de la
+    // couleur si elle est en hex > fallback theme (identique a avant).
+    const rgbPrimary   = cfg.rgb_primary || _hexToTriplet(cfg.color_primary) || 'var(--rgb-primary-color, 98,0,234)';
+    const rgbAccent    = cfg.rgb_accent  || _hexToTriplet(cfg.color_accent)  || 'var(--rgb-accent-color, 0,255,249)';
     const cardBgColor  = cfg.card_bg     || 'rgba(10,6,30,0.82)';
     // Police du titre : bloc COPIE de neon-markdown-card telle quelle (chaine de
     // fallback purement locale, sans dependance a un chargement externe type Google
@@ -223,17 +239,44 @@ class NeonEntitiesCard extends HTMLElement {
       ? `filter:drop-shadow(0 0 ${Math.round(hdrGlowSize * 0.2)}px #fff) drop-shadow(0 0 ${Math.round(hdrGlowSize * 0.4)}px ${hdrGlowColor}) drop-shadow(0 0 ${Math.round(hdrGlowSize * 0.8)}px ${hdrGlowColor}) drop-shadow(0 0 ${hdrGlowSize}px ${hdrGlowColor});`
       : '';
 
+    // FIX fond opaque apres navigation entre onglets (2026-08-29) : backdrop-filter
+    // etait applique INCONDITIONNELLEMENT ici. Or il ne floute que ce qui est
+    // reellement peint DERRIERE la card ; apres une navigation SPA, HA recompose la
+    // vue et le backdrop n'est plus peint sous la card -> Chrome ne rend plus que la
+    // couleur de fond, qui parait opaque. Un F5 reconstruit l'arbre de compositing et
+    // "repare" -> signature du bug. La neon-markdown-card voisine ne l'a jamais eu
+    // parce qu'elle n'active le blur QUE sur opt-in (shared.bg_blur, defaut "" = rien).
+    // On aligne : blur uniquement si bg_blur est demande.
+    const blurNum = parseFloat(cfg.bg_blur);
+    const blurVal = (!isNaN(blurNum) && blurNum > 0) ? `${blurNum}px`
+                  : (cfg.bg_blur === true) ? 'var(--blur-strength, 20px)'
+                  : '';
+    // !important OBLIGATOIRE ici : card-mod (theme neo-tokyo-v5) injecte son <style>
+    // APRES le notre DANS le shadow root de la card, donc a specificite egale il gagne
+    // par ordre d'apparition -> nos regles ha-card apparaissent BARREES dans DevTools.
+    // Le theme pose `ha-card-backdrop-filter: blur(12px) saturate(150%)`, neutralise par
+    // le `transform: translateZ(0)` que card-mod met sur :host (contexte d'empilement =>
+    // plus rien derriere a flouter) -> fond opaque. Sans `none !important`, retirer NOTRE
+    // backdrop-filter ne change RIEN : c'est celui du theme qui s'applique.
+    // (Cause etablie par les captures DevTools de Chris, pas par deduction.)
+    const blurCss = blurVal
+      ? `backdrop-filter: blur(${blurVal}) saturate(160%) !important;
+      -webkit-backdrop-filter: blur(${blurVal}) saturate(160%) !important;`
+      : `backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;`;
+
     const cardBg = cfg.use_theme_card ? `
       background: var(--ha-card-background);
       border: var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, rgba(var(--nec-uv), 0.45));
       box-shadow: var(--ha-card-box-shadow, 0 8px 32px rgba(0,0,0,0.55));
-      backdrop-filter: var(--ha-card-backdrop-filter, blur(var(--blur-strength, 20px)) saturate(160%));
-      -webkit-backdrop-filter: var(--ha-card-backdrop-filter, blur(var(--blur-strength, 20px)) saturate(160%));
+      ${blurCss}
     ` : `
-      background: ${cardBgColor};
-      border: 1px solid rgba(var(--nec-uv), 0.45);
-      backdrop-filter: blur(var(--blur-strength, 20px)) saturate(160%);
-      -webkit-backdrop-filter: blur(var(--blur-strength, 20px)) saturate(160%);
+      /* !important : card-mod du theme repose sinon background/border par-dessus
+         (cf commentaire blurCss). Uniquement dans cette branche : avec
+         use_theme_card=true, on VEUT au contraire laisser le theme gagner. */
+      background: ${cardBgColor} !important;
+      border: 1px solid rgba(var(--nec-uv), 0.45) !important;
+      ${blurCss}
       box-shadow:
         0 0 0 1px rgba(var(--nec-bl), 0.06),
         0 8px 32px rgba(0,0,0,0.55),
@@ -319,10 +362,12 @@ class NeonEntitiesCard extends HTMLElement {
       /* ── Dividers ── */
       .main-div {
         height: 1px;
-        background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--nec-p) 55%, transparent), color-mix(in srgb, var(--nec-a) 45%, transparent), color-mix(in srgb, var(--nec-p) 55%, transparent), transparent);
+        background: linear-gradient(90deg, color-mix(in srgb, var(--nec-p) 55%, transparent), color-mix(in srgb, var(--nec-a) 45%, transparent), color-mix(in srgb, var(--nec-p) 55%, transparent));
         background-size: 200% 100%;
         animation: nec-div-flow 7s linear infinite;
         margin: 0 14px;
+        -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+        mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
       }
       @media (prefers-reduced-motion: reduce) { .main-div { animation: none; } }
       .sect-div {
@@ -362,11 +407,11 @@ class NeonEntitiesCard extends HTMLElement {
       z-index: 2;
     }
 
-    /* On assombrit aussi légèrement le fond de la ligne active pour le contraste */
+    /* Fond de la ligne active : transparent au repos, s'opacifie au survol */
     .row.on {
-      background: rgba(var(--nec-uv), 0.10) !important; /* teinte primaire en transparence */
       border-left: 1px solid color-mix(in srgb, var(--nec-p) 35%, #000);
     }
+      .row.on:hover { background: rgba(var(--nec-uv), 0.10) !important; /* teinte primaire en transparence */ }
       .row:hover { background: rgba(var(--nec-uv),0.05) !important; }
       @media (hover: hover) and (prefers-reduced-motion: no-preference) {
         .row:hover::after {
@@ -450,7 +495,7 @@ class NeonEntitiesCard extends HTMLElement {
         background: linear-gradient(90deg,
           color-mix(in srgb, var(--nec-p) 55%, transparent),
           color-mix(in srgb, var(--nec-a) 30%, transparent),
-          rgba(157,0,255,0.55),
+          color-mix(in srgb, var(--nec-a) 60%, transparent),
           color-mix(in srgb, var(--nec-p) 55%, transparent));
         background-size: 300% 100%;
         animation: nec-plasma 3.5s linear infinite;
@@ -472,7 +517,7 @@ class NeonEntitiesCard extends HTMLElement {
         position: absolute; inset: 5px; border-radius: 50%;
         background: #fff; box-shadow: 0 0 6px #d9fffe; opacity: .9;
       }
-      .tog.off .tog-thumb { left: 2px; background: transparent; border: 2px solid rgba(var(--rgb-primary-color),0.50); }
+      .tog.off .tog-thumb { left: 2px; background: transparent; border: 2px solid rgba(var(--nec-uv),0.65); }
       .tog.on  .tog-thumb { transform: translateX(0); }
       .tog.active { transform: scale(0.92); filter: brightness(1.25); }
 
@@ -502,14 +547,15 @@ class NeonEntitiesCard extends HTMLElement {
       .cbtn {
         width: 34px; height: 34px; border-radius: 7px;
         display: flex; align-items: center; justify-content: center;
-        border: 1px solid rgba(var(--nec-uv),0.35);
-        background: rgba(var(--nec-uv),0.10);
+        border: 1px solid color-mix(in srgb, var(--nec-p) 55%, transparent);
+        background: color-mix(in srgb, var(--nec-p) 16%, transparent);
+        box-shadow: 0 0 5px color-mix(in srgb, var(--nec-p) 22%, transparent);
         cursor: pointer; -webkit-tap-highlight-color: transparent;
-        transition: background .15s;
+        transition: background .15s, box-shadow .15s;
       }
-      .cbtn:hover  { background: rgba(var(--nec-uv),0.22); box-shadow: 0 0 8px rgba(var(--nec-uv),0.30); }
-      .cbtn:active { background: rgba(var(--nec-uv),0.36); }
-      .cbtn svg { width: 16px; height: 16px; stroke: rgba(var(--rgb-primary-color),0.80); filter: drop-shadow(0 0 2px rgba(var(--rgb-primary-color),0.6)); }
+      .cbtn:hover  { background: color-mix(in srgb, var(--nec-p) 32%, transparent); box-shadow: 0 0 10px color-mix(in srgb, var(--nec-p) 45%, transparent); }
+      .cbtn:active { background: color-mix(in srgb, var(--nec-p) 45%, transparent); }
+      .cbtn svg { width: 16px; height: 16px; stroke: var(--nec-a); filter: drop-shadow(0 0 3px color-mix(in srgb, var(--nec-a) 70%, transparent)); }
 
       /* ── Sensor value ── */
       .sensor-val {
@@ -587,10 +633,10 @@ class NeonEntitiesCard extends HTMLElement {
         border: 1px solid rgba(var(--nec-uv),0.35);
         background: rgba(var(--nec-uv),0.10);
         cursor: pointer; font-size: 14px; line-height: 1;
-        color: rgba(var(--rgb-primary-color),0.75);
+        color: rgba(var(--nec-uv),0.95);
         -webkit-tap-highlight-color: transparent;
         transition: background .15s, box-shadow .15s; user-select: none;
-        text-shadow: 0 0 4px rgba(var(--rgb-primary-color),0.6);
+        text-shadow: 0 0 5px rgba(var(--nec-uv),0.7);
       }
       .nbtn:hover  { background: rgba(var(--nec-uv),0.22); box-shadow: 0 0 8px rgba(var(--nec-uv),0.30); }
       .nbtn:active { background: rgba(var(--nec-uv),0.36); }
@@ -1186,6 +1232,7 @@ class NeonEntitiesCardEditor extends HTMLElement {
     this._built = false;
     this._lastEmitted = null;
     this._lastSeen    = null;
+    this._openIdx = null; // index de l'entité actuellement dépliée dans l'éditeur compact
   }
 
   setConfig(c) {
@@ -1238,8 +1285,27 @@ class NeonEntitiesCardEditor extends HTMLElement {
   }
 
   // ── Helpers de champ (template) ──────────────────────────────────────────────
-  _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d); return d; }
-  _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; this.appendChild(d); return d; }
+  // Titre de section fixe (non repliable) — repère visuel plat, comme sur les autres cards néon.
+  _section(t) {
+    this._target = null; // les sections top-level reviennent s'ancrer directement sur `this`
+    const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d); return d;
+  }
+  // Sous-groupe repliable (pattern neon-solar-production-card.js / neon-climate-card-webgl.js) —
+  // ha-expansion-panel natif HA. buildFn() ré-ancre les helpers dessus via _target, puis restaure
+  // l'ancrage précédent (permet d'imbriquer).
+  _group(title, expanded, buildFn) {
+    const panel = document.createElement('ha-expansion-panel');
+    panel.outlined = true;
+    panel.header = title;
+    if (expanded) panel.expanded = true;
+    (this._target || this).appendChild(panel);
+    const prevTarget = this._target;
+    this._target = panel;
+    buildFn();
+    this._target = prevTarget;
+    return panel;
+  }
+  _hint(t) { const d = document.createElement('div'); d.className = 'hint'; (this._target || this).appendChild(d); return d; }
 
   _text(key, label, ph = '') {
     const w = this._row(label).wrap;
@@ -1262,6 +1328,44 @@ class NeonEntitiesCardEditor extends HTMLElement {
     };
     txt.addEventListener('change', () => { this._set(key, txt.value || undefined); refresh(); });
     pick.addEventListener('input', () => { txt.value = pick.value; this._set(key, pick.value); });
+    box.appendChild(txt); box.appendChild(pick); w.appendChild(box);
+    refresh();
+    return txt;
+  }
+
+  // Variante de _color pour les champs qui attendent un TRIPLET RGB NU (ex "0,180,255")
+  // et non une couleur CSS : la valeur est injectée dans rgba(<triplet>, alpha), donc un
+  // "#00b4ff" y produirait du CSS invalide. Le picker convertit donc hex -> triplet à
+  // l'écriture, et triplet -> hex à la relecture. Le champ texte reste libre : on peut
+  // toujours y taper "var(--rgb-lavande)" à la main, le picker retombe alors sur la
+  // valeur RÉSOLUE du défaut sans rien écraser.
+  _rgbColor(key, label, cssDefault = null, ph = 'ex: 0,180,255') {
+    const w = this._row(label).wrap;
+    const box = document.createElement('div'); box.className = 'color-row';
+    const txt = document.createElement('input'); txt.type = 'text'; txt.placeholder = ph; txt.value = this._read(key) ?? '';
+    const pick = document.createElement('input'); pick.type = 'color';
+    // "12, 34, 56" -> "#0c2238" ; tout le reste (var(), vide, %) -> null
+    const tripletToHex = (v) => {
+      const m = (v || '').trim().match(/^(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})$/);
+      if (!m) return null;
+      const n = [m[1], m[2], m[3]].map(Number);
+      if (n.some(x => x > 255)) return null;
+      return '#' + n.map(x => x.toString(16).padStart(2, '0')).join('');
+    };
+    const refresh = () => {
+      const explicit = tripletToHex(txt.value);
+      // champ vide ou expression CSS : on montre la couleur réellement appliquée
+      pick.value = explicit || (cssDefault ? this._resolveColor(cssDefault) : null) || '#6200EA';
+      // le picker ne peut pas représenter une expression var() : on le grise pour
+      // signaler qu'il ne reflète pas la valeur tapée (même geste que la card sœur).
+      pick.style.opacity = (explicit || !txt.value.trim()) ? '1' : '0.4';
+    };
+    txt.addEventListener('change', () => { this._set(key, txt.value || undefined); refresh(); });
+    pick.addEventListener('input', () => {
+      const h = pick.value; // toujours #rrggbb
+      const triplet = [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16)).join(',');
+      txt.value = triplet; this._set(key, triplet); pick.style.opacity = '1';
+    });
     box.appendChild(txt); box.appendChild(pick); w.appendChild(box);
     refresh();
     return txt;
@@ -1296,7 +1400,11 @@ class NeonEntitiesCardEditor extends HTMLElement {
     const w = this._row(label).wrap;
     const sel = document.createElement('select');
     if (emptyLabel !== null) { const o = document.createElement('option'); o.value = ''; o.textContent = emptyLabel; sel.appendChild(o); }
-    options.forEach(opt => { const o = document.createElement('option'); o.value = opt; o.textContent = opt; sel.appendChild(o); });
+    options.forEach(opt => {
+      // accepte une string nue (ex: NEON_FONTS) ou un tuple [valeur, libellé]
+      const [v, lbl] = Array.isArray(opt) ? opt : [opt, opt];
+      const o = document.createElement('option'); o.value = v; o.textContent = lbl; sel.appendChild(o);
+    });
     sel.value = this._read(key) ?? '';
     sel.addEventListener('change', () => this._set(key, sel.value || undefined));
     w.appendChild(sel); return sel;
@@ -1307,7 +1415,7 @@ class NeonEntitiesCardEditor extends HTMLElement {
     const lbl = document.createElement('label');
     if (isHtml) lbl.innerHTML = labelHtml; else lbl.textContent = labelHtml;
     const wrap = document.createElement('div'); wrap.className = 'field-wrap';
-    row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
+    row.appendChild(lbl); row.appendChild(wrap); (this._target || this).appendChild(row);
     return { row, wrap };
   }
 
@@ -1369,6 +1477,8 @@ class NeonEntitiesCardEditor extends HTMLElement {
       :host { display:block; padding:14px; font-family:var(--primary-font-family,Roboto,sans-serif); }
       .sec { font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--divider-color); }
       .sec:first-child { margin-top:0; }
+      ha-expansion-panel { display:block; margin:8px 0; --expansion-panel-content-padding:8px 12px 12px; }
+      ha-expansion-panel .row:first-child { margin-top:2px; }
       .row { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
       .row label { flex:0 0 150px;font-size:12px;color:var(--secondary-text-color); }
       .row label .mdi-link { color:var(--primary-color);font-size:9px;text-transform:none;letter-spacing:0; }
@@ -1388,12 +1498,21 @@ class NeonEntitiesCardEditor extends HTMLElement {
       .del-btn { position:absolute;top:8px;right:8px;background:none;border:none;color:var(--error-color,#e53935);cursor:pointer;font-size:18px;padding:0;line-height:1; }
       .add-btn { font-size:12px;padding:6px 12px;border:1px dashed var(--primary-color);border-radius:6px;cursor:pointer;background:none;color:var(--primary-color);margin-right:6px;margin-top:4px; }
       .divider-block { border:1px dashed var(--divider-color);border-radius:6px;padding:6px 12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;color:var(--secondary-text-color);font-size:12px; }
+      .entity-row { display:flex;align-items:center;gap:4px;border:1px solid var(--divider-color);border-radius:6px;padding:4px 8px;margin-bottom:4px; }
+      .row-btn { display:inline-flex;align-items:center;justify-content:center;min-width:24px;min-height:24px;background:none;border:none;cursor:pointer;font-size:14px;line-height:1;padding:2px 6px;color:var(--secondary-text-color); }
+      .row-btn:disabled { opacity:.25;cursor:default; }
+      .row-btn.edit-btn { color:var(--primary-color); }
+      .row-btn.row-del-btn { position:static;color:var(--error-color,#e53935);font-size:18px; }
+      .row-btn ha-icon { display:inline-flex;--mdc-icon-size:16px; }
+      .row-label { flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px; }
+      .block-inline { margin-top:-2px; }
     `;
   }
 
   _render() {
     this._built = true;
     this.innerHTML = '';
+    this._target = null;
     const st = document.createElement('style'); st.textContent = this._css(); this.appendChild(st);
     this._schema();
     this._fillDatalists();
@@ -1410,53 +1529,73 @@ class NeonEntitiesCardEditor extends HTMLElement {
     this._color('header.color', 'Couleur titre', 'var(--primary-color)', 'défaut : couleur primaire — ex rgb(var(--rgb-lavande))');
     this._text('header.title_size', 'Taille titre', 'clamp(7px,2.6cqi,11px)');
     this._select('header.font', 'Police', NEON_FONTS, '— thème HA —');
-    this._text('header.font_weight', 'Épaisseur', '700');
-    this._text('header.letter_spacing', 'Espacement', 'clamp(1px, 0.5cqi, 3px)');
     this._toggle('header.uppercase', 'Majuscules', true);
-    this._toggle('header.italic', 'Italique', false);
-    this._text('header.title_shadow', 'Text-shadow');
-    this._toggle('header.gradient', 'Titre en dégradé');
-    this._color('header.gradient_from', 'Dégradé — départ', 'var(--primary-color)');
-    this._color('header.gradient_to', 'Dégradé — arrivée', 'var(--accent-color)');
-    this._toggle('header.glow', 'Glow du titre');
-    this._text('header.glow_size', 'Taille du glow', '12');
-    this._color('header.glow_color', 'Couleur du glow', 'var(--primary-color)');
-    this._toggle('header.flicker', 'Scintillement du titre');
-    this._color('header.icon_color', "Couleur de l'icône", null, 'défaut : couleur du titre');
-    this._text('header.icon_size', "Taille de l'icône", 'défaut : 1.2 × la taille du titre');
-    this._hint('Mêmes réglages que la neon-markdown-card. Text-shadow ci-dessus, si renseigné, remplace le glow.');
+
+    this._group('Effets avancés du titre', false, () => {
+      this._text('header.font_weight', 'Épaisseur', '700');
+      this._text('header.letter_spacing', 'Espacement', 'clamp(1px, 0.5cqi, 3px)');
+      this._toggle('header.italic', 'Italique', false);
+      this._text('header.title_shadow', 'Text-shadow');
+      this._toggle('header.gradient', 'Titre en dégradé');
+      this._color('header.gradient_from', 'Dégradé — départ', 'var(--primary-color)');
+      this._color('header.gradient_to', 'Dégradé — arrivée', 'var(--accent-color)');
+      this._toggle('header.glow', 'Glow du titre');
+      this._text('header.glow_size', 'Taille du glow', '12');
+      this._color('header.glow_color', 'Couleur du glow', 'var(--primary-color)');
+      this._toggle('header.flicker', 'Scintillement du titre');
+      this._color('header.icon_color', "Couleur de l'icône", null, 'défaut : couleur du titre');
+      this._text('header.icon_size', "Taille de l'icône", 'défaut : 1.2 × la taille du titre');
+      this._hint('Mêmes réglages que la neon-markdown-card. Text-shadow ci-dessus, si renseigné, remplace le glow.');
+    });
 
     this._section('Apparence');
-    this._color('name_color', 'Couleur des noms',     'rgba(var(--rgb-primary-text-color),0.75)', 'défaut : texte primaire — ex rgb(var(--rgb-lavande))');
-    this._color('value_color', 'Couleur des valeurs', 'rgba(var(--rgb-accent-color),0.75)',       'défaut : accent — ex #00fff9');
-    this._color('icon_color', 'Couleur des icônes',   'var(--primary-color)',                     'défaut : couleur primaire — ex var(--primary-color)');
-    this._color('color_primary', 'Couleur primaire',  'var(--primary-color)',                     'ex: #6200EA / var(--primary-color)');
-    this._color('color_accent', 'Couleur accent',     'var(--accent-color)',                      'ex: #00fff9 / var(--accent-color)');
-    this._text('rgb_primary', 'Teinte RGB primaire',   'var(--rgb-primary-color)');
-    this._hint('Triplet RGB (ex : 0,180,255) pilotant fonds, bordures et boutons. Vide = couleur du theme.');
-    this._text('rgb_accent', 'Teinte RGB accent',      'var(--rgb-accent-color)');
-    this._hint('Triplet RGB (ex : 0,255,249) pilotant valeurs, badges et jauges. Vide = couleur du theme.');
-    this._color('card_bg', 'Fond de la card',          'rgba(10,6,30,0.82)',                       'ex : rgba(4,16,24,0.82) - ignore si Heriter du card-mod theme');
+    this._group('Couleurs texte & icônes', false, () => {
+      this._color('name_color', 'Couleur des noms',     'rgba(var(--rgb-primary-text-color),0.75)', 'défaut : texte primaire — ex rgb(var(--rgb-lavande))');
+      this._color('value_color', 'Couleur des valeurs', 'rgba(var(--rgb-accent-color),0.75)',       'défaut : accent — ex #00fff9');
+      this._color('icon_color', 'Couleur des icônes',   'var(--primary-color)',                     'défaut : couleur primaire — ex var(--primary-color)');
+    });
+    this._group('Thème & fond', false, () => {
+      this._color('color_primary', 'Couleur primaire',  'var(--primary-color)',                     'ex: #6200EA / var(--primary-color)');
+      this._color('color_accent', 'Couleur accent',     'var(--accent-color)',                      'ex: #00fff9 / var(--accent-color)');
+      this._hint('Ces deux couleurs pilotent toute la card : fonds, bordures, boutons, valeurs, badges et jauges en héritent automatiquement.');
+      this._color('card_bg', 'Fond de la card',          'rgba(10,6,30,0.82)',                       'ex : rgba(4,16,24,0.82) - ignore si Heriter du card-mod theme');
+      this._text('bg_blur', 'Flou du fond (px)', 'vide = pas de flou');
+      this._hint('Optionnel. Le flou d\'arrière-plan peut devenir opaque après navigation entre onglets (limite du backdrop-filter, corrigée par un F5) — laisser vide en cas de doute.');
+
+      // Replié et en second : depuis la dérivation auto des triplets, ces champs ne
+      // servent QUE si on veut décorréler les rgba() de la couleur principale.
+      this._group('Décorréler les teintes RGB (avancé)', false, () => {
+        this._hint('Inutile dans le cas normal : les teintes ci-dessous sont déduites des deux couleurs ci-dessus. À ne remplir que pour donner aux fonds/bordures une teinte DIFFÉRENTE de la couleur principale.');
+        // Défaut passé en rgb(var(--…)) pour être RÉSOLVABLE par _resolveColor : le
+        // triplet nu stocké dans le YAML n'est pas une couleur CSS à lui seul.
+        this._rgbColor('rgb_primary', 'Teinte RGB primaire', 'rgb(var(--rgb-primary-color, 98,0,234))');
+        this._rgbColor('rgb_accent', 'Teinte RGB accent',    'rgb(var(--rgb-accent-color, 0,255,249))');
+      });
+    });
+    this._group('Options d\'affichage', false, () => {
+      this._toggle('use_theme_card', 'Hériter du card-mod thème');
+      this._toggle('show_label', "Afficher le type d'entité");
+      this._toggle('pulse_active', 'Pulse du liseré actif', true);
+      this._toggle('flash_on_change', 'Flash de la valeur au changement');
+      this._toggle('value_glow', 'Glow valeurs & statuts', true);
+    });
 
     this._section('Pied de page');
     this._toggle(null, 'Afficher pied', true, 'footer');
     this._text('footer.text', 'Texte', 'MAISON · NEO ENTITIES CARD');
 
     this._section('Entités');
-    this._hint("Entités et séparateurs dans l'ordre souhaité.");
+    this._hint("Entités et séparateurs dans l'ordre souhaité. Cliquer une ligne pour la déplier.");
     this._renderEntityBlocks();
     const addEnt = document.createElement('button'); addEnt.className = 'add-btn'; addEnt.textContent = '+ Entité';
-    addEnt.addEventListener('click', () => { this._config.entities.push({ entity: '' }); this._dispatch(); this._render(); });
+    addEnt.addEventListener('click', () => {
+      this._config.entities.push({ entity: '' });
+      this._openIdx = this._config.entities.length - 1; // la nouvelle entrée s'ouvre directement
+      this._dispatch(); this._render();
+    });
     const addDiv = document.createElement('button'); addDiv.className = 'add-btn'; addDiv.textContent = '+ Séparateur';
     addDiv.addEventListener('click', () => { this._config.entities.push({ type: 'divider' }); this._dispatch(); this._render(); });
-    this.appendChild(addEnt); this.appendChild(addDiv);
-
-    this._section('Options');
-    this._toggle('use_theme_card', 'Hériter du card-mod thème');
-    this._toggle('show_label', "Afficher le type d'entité");
-    this._toggle('pulse_active', 'Pulse du liseré actif', true);
-    this._toggle('flash_on_change', 'Flash de la valeur au changement');
-    this._toggle('value_glow', 'Glow valeurs & statuts', true);
+    (this._target || this).appendChild(addEnt); (this._target || this).appendChild(addDiv);
   }
 
   // Champ icône statique (header) — même rendu que _entIcon mais via _set.
@@ -1473,30 +1612,63 @@ class NeonEntitiesCardEditor extends HTMLElement {
 
   _renderEntityBlocks() {
     const ents = this._config.entities || [];
+    const moveEnt = (i, dir) => {
+      const j = i + dir;
+      if (j < 0 || j >= ents.length) return;
+      [ents[i], ents[j]] = [ents[j], ents[i]];
+      if (this._openIdx === i) this._openIdx = j;
+      else if (this._openIdx === j) this._openIdx = i;
+      this._dispatch(); this._render();
+    };
+    const removeEnt = (i) => {
+      ents.splice(i, 1);
+      if (this._openIdx === i) this._openIdx = null;
+      else if (this._openIdx != null && i < this._openIdx) this._openIdx -= 1;
+      this._dispatch(); this._render();
+    };
+
     ents.forEach((item, i) => {
-      if (item.type === 'divider') {
-        const div = document.createElement('div'); div.className = 'divider-block';
-        div.innerHTML = `<span>— Séparateur —</span>`;
-        const del = document.createElement('button'); del.className = 'del-btn'; del.innerHTML = '×';
-        del.addEventListener('click', () => { this._config.entities.splice(i, 1); this._dispatch(); this._render(); });
-        div.appendChild(del); this.appendChild(div); return;
+      // --- ligne compacte : nom + réordonner + éditer + supprimer ---
+      const row = document.createElement('div'); row.className = 'entity-row';
+
+      const up = document.createElement('button'); up.className = 'row-btn'; up.title = 'Monter'; up.innerHTML = '↑';
+      up.disabled = (i === 0);
+      up.addEventListener('click', (e) => { e.stopPropagation(); moveEnt(i, -1); });
+      const down = document.createElement('button'); down.className = 'row-btn'; down.title = 'Descendre'; down.innerHTML = '↓';
+      down.disabled = (i === ents.length - 1);
+      down.addEventListener('click', (e) => { e.stopPropagation(); moveEnt(i, 1); });
+
+      const label = document.createElement('span'); label.className = 'row-label';
+      label.textContent = (item.type === 'divider')
+        ? '— Séparateur —'
+        : (item.name || this._hass?.states?.[item.entity]?.attributes?.friendly_name || item.entity || '(vide)');
+
+      const del = document.createElement('button'); del.className = 'row-btn row-del-btn'; del.title = 'Supprimer';
+      del.innerHTML = '<ha-icon icon="mdi:trash-can-outline" style="--mdc-icon-size:16px"></ha-icon>';
+      del.addEventListener('click', (e) => { e.stopPropagation(); removeEnt(i); });
+
+      row.appendChild(up); row.appendChild(down); row.appendChild(label);
+
+      if (item.type !== 'divider') {
+        const edit = document.createElement('button'); edit.className = 'row-btn edit-btn'; edit.title = 'Éditer'; edit.innerHTML = '✎';
+        edit.addEventListener('click', (e) => { e.stopPropagation(); this._openIdx = (this._openIdx === i) ? null : i; this._render(); });
+        row.appendChild(edit);
       }
-      const block = document.createElement('div'); block.className = 'block';
-      const title = document.createElement('div'); title.className = 'block-title'; title.textContent = `Entité ${i + 1}`;
-      block.appendChild(title);
-      const del = document.createElement('button'); del.className = 'del-btn'; del.innerHTML = '×';
-      del.addEventListener('click', () => { this._config.entities.splice(i, 1); this._dispatch(); this._render(); });
-      block.appendChild(del);
+      row.appendChild(del);
+      (this._target || this).appendChild(row);
 
-      this._entField(block, i, 'entity',        'Entité *',       item.entity,        { entity: true, ph: 'domain.objet' });
-      this._entField(block, i, 'status_entity', 'Statut associé', item.status_entity, { entity: true, ph: 'binary_sensor.porte_garage' });
-      this._entField(block, i, 'name',          'Nom affiché',    item.name,          { ph: 'friendly name' });
-      this._entIcon (block, i, item.icon);
-      this._entField(block, i, 'label',         'Label (ligne 1)',item.label,         { ph: 'SWITCH' });
-      this._entField(block, i, 'secondary_info','Info secondaire',item.secondary_info,{ ph: 'state ou vide' });
-      this._entField(block, i, 'decimal_places','Décimales',      item.decimal_places,{ ph: '1' });
-
-      this.appendChild(block);
+      // --- détail déplié : seulement l'entrée ouverte ---
+      if (item.type !== 'divider' && this._openIdx === i) {
+        const block = document.createElement('div'); block.className = 'block block-inline';
+        this._entField(block, i, 'entity',        'Entité *',       item.entity,        { entity: true, ph: 'domain.objet' });
+        this._entField(block, i, 'status_entity', 'Statut associé', item.status_entity, { entity: true, ph: 'binary_sensor.porte_garage' });
+        this._entField(block, i, 'name',          'Nom affiché',    item.name,          { ph: 'friendly name' });
+        this._entIcon (block, i, item.icon);
+        this._entField(block, i, 'label',         'Label (ligne 1)',item.label,         { ph: 'SWITCH' });
+        this._entField(block, i, 'secondary_info','Info secondaire',item.secondary_info,{ ph: 'state ou vide' });
+        this._entField(block, i, 'decimal_places','Décimales',      item.decimal_places,{ ph: '1' });
+        (this._target || this).appendChild(block);
+      }
     });
   }
 
@@ -1523,10 +1695,10 @@ window.customCards.push({
   preview:     true,
 });
 
-console.info('%c NEON-ENTITIES-CARD %c v1.13.2 ', 'color:#6200EA;font-weight:bold;background:#040816', 'color:#fff;background:#444');
+console.info('%c NEON-ENTITIES-CARD %c v1.15.0 ', 'color:#6200EA;font-weight:bold;background:#040816', 'color:#fff;background:#444');
 
 console.info(
-  '%c 📋 neon-entities-card v1.13.2 %c Neo Tokyo ',
+  '%c 📋 neon-entities-card v1.15.0 %c Neo Tokyo ',
   'background:#6200EA;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#BB86FC;padding:2px 4px;border-radius:0 3px 3px 0;'
 );

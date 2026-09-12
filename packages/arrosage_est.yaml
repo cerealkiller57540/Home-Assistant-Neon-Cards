@@ -23,7 +23,9 @@
 #  GARDE-FOU (filet anti-fuite, indépendant d'Hermes) :
 #    coupe si volume jour ≥ 280 L  OU  vanne ON > 35 min  OU  volume DE LA SESSION
 #    (delta depuis arrosage_est_volume_debut_session) ≥ cible. Le sensor Zigbee est
-#    cumulé JOUR (ne repart pas à 0 par pression de bouton) → triggers en `state`
+#    cumule SESSION (repart a 0 au DEMARRAGE de la session suivante, jamais a
+#    minuit -- nom firmware trompeur ; pour un vrai volume/jour voir
+#    sensor.arrosage_est_eau_journaliere) → triggers en `state`
 #    (tout changement) + condition, jamais en `numeric_state: above` seul (qui ne
 #    se redéclenche que sur un franchissement et rate toute 2e session du jour).
 #
@@ -222,8 +224,9 @@ automation:
   # coulé jusqu'à 171 L (seul le garde-fou volume l'a arrêtée). On recompare donc
   # au VRAI volume litres = daily_irrigation_volume.
   # ── 0. REPÈRE DÉBUT DE SESSION : capture le volume cumulé du jour à l'ouverture
-  # de la vanne. Le sensor Zigbee est cumulé JOUR (ne repart pas à 0 par pression
-  # de bouton) ; sans ce repère, "cible atteinte" ne peut comparer que le total du
+  # de la vanne. Le sensor Zigbee est cumulé SESSION (il repart à 0 au DÉMARRAGE
+  # de la session suivante, jamais à minuit -- nom firmware trompeur) ; sans ce
+  # repère, "cible atteinte" ne peut comparer que le total du
   # jour à la cible, ce qui casse dès la 2e session du jour. Couvre TOUTES les
   # ouvertures (script lancer/programmer/heure creux ET bouton ON/OFF manuel),
   # vu que toutes finissent par switch.turn_on.
@@ -477,6 +480,25 @@ template:
         state_class: total_increasing
         state: >
           {{ (states('input_number.arrosage_est_eau_totale') | float(0) / 1000) | round(3) }}
+
+  # 1bis) EAU TOTALE en LITRES — source du utility_meter journalier.
+  #    Pourquoi : sensor.arrosage_est_daily_irrigation_volume n'est PAS un volume
+  #    du jour mais le volume de la DERNIERE SESSION (firmware Tuya mal nomme) :
+  #    il reste fige sur sa derniere valeur entre deux arrosages et ne repart a 0
+  #    qu'au DEMARRAGE de la session suivante, pas a minuit. La card affichait donc
+  #    "210 L aujourd'hui" un jour sans arrosage. On derive un vrai volume/jour d'un
+  #    compteur cumulatif sain, via utility_meter (cycle daily) -> voir
+  #    configuration.yaml : arrosage_est_eau_journaliere.
+  #    Unite L (et non m3) pour rester comparable au plafond 280 L de la card.
+  - sensor:
+      - name: "Arrosage EST eau totale L"
+        unique_id: arrosage_est_eau_totale_litres
+        icon: mdi:water
+        unit_of_measurement: "L"
+        device_class: water
+        state_class: total_increasing
+        state: >
+          {{ states('input_number.arrosage_est_eau_totale') | float(0) | round(3) }}
 
   # 2) MÉTÉO PRÉ-MÂCHÉE POUR HERMES (évite l'appel weather.get_forecasts qui
   #    renvoie 400 via le skill). HA fait l'appel, Hermes lit ces sensors simples.

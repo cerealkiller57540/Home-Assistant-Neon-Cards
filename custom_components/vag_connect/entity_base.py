@@ -13,20 +13,53 @@ from .const import DOMAIN
 from .coordinator import VagConnectCoordinator
 
 
+# #1316 — brands whose slug title-cases badly (underscores / mixed case). This
+# display override keeps the device page + entity names clean; every other brand
+# falls back to ``brand.title()`` unchanged, so no existing device is renamed.
+_BRAND_DISPLAY: dict[str, str] = {
+    "volkswagen_commercial": "Volkswagen Commercial Vehicles",
+}
+
+
+def _brand_display(brand: str) -> str:
+    """Human-readable brand label for the HA device (manufacturer + name).
+
+    HA registry ``manufacturer``/``name`` are plain strings (not translatable),
+    so this is one canonical English label — consistent with ``const.BRANDS``."""
+    return _BRAND_DISPLAY.get((brand or "").lower()) or brand.title()
+
+
 def _device_name(vehicle: dict, brand: str) -> str:
     """Return "{Brand} {Model}" or "{Brand} {VIN[-6:]}" as device name."""
+    label = _brand_display(brand)
     model = (vehicle.get("model") or "").strip()
     if model and model.lower() not in ("vag vehicle", "unknown", ""):
-        return f"{brand.title()} {model}"
+        return f"{label} {model}"
     vin = vehicle.get("vin", "")
-    return f"{brand.title()} {vin[-6:]}" if vin else brand.title()
+    return f"{label} {vin[-6:]}" if vin else label
+
+
+# Connection-status diagnostics that must stay AVAILABLE even when the vehicle
+# poll is failing — otherwise the user is blinded to WHY the car went
+# unavailable exactly when they need to read it (the whole car went dark, so did
+# the "last reported", "data source", error-reporter and connectivity entities).
+# Keyed by entity_description.key; custom classes set ``_stay_available_on_poll_failure``.
+_CONNECTION_STATUS_KEYS = frozenset({
+    "last_updated_at",
+    "last_seen_at",
+    "data_source_channel",
+    "error_reporter_count",
+    "connection_active",
+})
 
 
 class VagConnectEntity(CoordinatorEntity[VagConnectCoordinator]):
     """Base entity shared by all VW Group Connect platforms.
 
-    parallel_updates=0: the coordinator's background poll loop owns all API
-    calls.  HA entities never initiate requests directly.
+    Parallel updates: the coordinator's background poll loop owns all API
+    calls, so entity updates need no throttling. HA reads that from a
+    MODULE-level ``PARALLEL_UPDATES = 0`` in each platform file (an entity
+    attribute is a no-op), so it is declared there, not here.
 
     available: per-VIN — entity is unavailable when its vehicle's last poll
     failed, even if other vehicles in the same account succeeded.
@@ -42,7 +75,6 @@ class VagConnectEntity(CoordinatorEntity[VagConnectCoordinator]):
     """
 
     _attr_has_entity_name = True
-    _attr_parallel_updates = 0  # coordinator owns all API requests
     # v1.9.1 — set on subclasses that map 1:1 to a coordinator command.
     # ``None`` means "not a command-bound entity, never use Phase-2 gating".
     _command_id: str | None = None
@@ -78,7 +110,17 @@ class VagConnectEntity(CoordinatorEntity[VagConnectCoordinator]):
         v1.9.1 (Capability-Filter Phase 2): for command-bound entities,
         also returns False if the coordinator's ``FeatureState`` records a
         definitive "command not supported" outcome from a previous attempt.
+
+        Connection-status diagnostics (``_CONNECTION_STATUS_KEYS`` / classes that
+        set ``_stay_available_on_poll_failure``) stay available regardless of the
+        poll outcome, so a car going unreachable doesn't also hide the very
+        entities that explain why.
         """
+        desc = getattr(self, "entity_description", None)
+        if getattr(self, "_stay_available_on_poll_failure", False) or (
+            desc is not None and getattr(desc, "key", "") in _CONNECTION_STATUS_KEYS
+        ):
+            return True
         if not super().available:
             # Connector-level failure (``last_update_success``). That is a
             # statement about the poll, not about this car: a single-vehicle
@@ -116,6 +158,7 @@ class VagConnectEntity(CoordinatorEntity[VagConnectCoordinator]):
         # durable section landing page over a deep link that gets renamed.
         "audi":          "https://my.audi.com/",
         "volkswagen":    "https://www.volkswagen.de/de/besitzer-und-nutzer.html",
+        "volkswagen_commercial": "https://www.volkswagen-nutzfahrzeuge.de/",  # #1316
         "skoda":         "https://www.skoda-auto.com/",
         "seat":          "https://www.seat.com/owners",
         "cupra":         "https://www.cupraofficial.com/services/mycupra.html",
@@ -176,7 +219,11 @@ class VagConnectEntity(CoordinatorEntity[VagConnectCoordinator]):
             identifiers={(DOMAIN, self._vin)},
             name=name,
             model=_model_str,
-            manufacturer=brand.title(),
+            # Prefer an explicit manufacturer the reader resolved (e.g. acpp maps
+            # brandCode "A" → "Audi"); else the display label for the config brand
+            # (#1316: "Volkswagen Commercial Vehicles", not "Volkswagen_Commercial";
+            # unmapped brands stay title-cased as before).
+            manufacturer=vehicle.get("manufacturer") or _brand_display(brand),
             serial_number=self._vin,
             hw_version=(str(_year) if _year else None),
             sw_version=vehicle.get("firmware_version"),
@@ -282,7 +329,10 @@ class VagConnectEntity(CoordinatorEntity[VagConnectCoordinator]):
 
         source = self._field_source
         if source:
-            attrs["source"] = source
+            # friendly channel name ("Car-Net"), not the raw token ("mbb").
+            # _field_source stays the raw token for internal keying.
+            from ._channel_labels import channel_display_name  # noqa: PLC0415
+            attrs["source"] = channel_display_name(source)
 
         own = self._platform_attributes()
         if own:

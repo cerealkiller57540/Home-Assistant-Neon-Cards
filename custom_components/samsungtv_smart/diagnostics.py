@@ -9,9 +9,27 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
-from .const import CONF_OAUTH_TOKEN, DOMAIN
+from .const import (
+    CONF_ART_LLM_API_KEY,
+    CONF_ART_VISION_API_KEY,
+    CONF_IP_CONTROL_TOKEN,
+    CONF_OAUTH_TOKEN,
+    DOMAIN,
+)
 
-TO_REDACT = {CONF_API_KEY, CONF_MAC, CONF_TOKEN, CONF_OAUTH_TOKEN}
+# Diagnostics are routinely attached to GitHub issues, so every credential in
+# entry.data has to be listed here — anything missing is published in clear.
+# CONF_API_KEY is the SmartThings PAT; the two art keys are the user's own
+# OpenAI/Gemini and Google Vision keys, which are billable and were leaking.
+TO_REDACT = {
+    CONF_API_KEY,
+    CONF_ART_LLM_API_KEY,
+    CONF_ART_VISION_API_KEY,
+    CONF_IP_CONTROL_TOKEN,
+    CONF_MAC,
+    CONF_OAUTH_TOKEN,
+    CONF_TOKEN,
+}
 
 
 async def async_get_config_entry_diagnostics(

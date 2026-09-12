@@ -48,6 +48,7 @@ from .api.ipcontrol import (
     SamsungIPControlAuthError,
     SamsungIPControlError,
     SamsungIPControlTransportError,
+    SamsungIPControlUnsupportedError,
 )
 from .const import (
     ART_IDENTIFY_DEBOUNCE,
@@ -55,6 +56,7 @@ from .const import (
     CONF_ART_IDENTIFY_ENABLE,
     CONF_DEVICE_ID,
     CONF_ENABLE_IP_CONTROL,
+    CONF_IP_CONTROL_POLL_INTERVAL,
     CONF_IP_CONTROL_TOKEN,
     CONF_IS_FRAME_TV,
     CONF_OAUTH_TOKEN,
@@ -63,11 +65,15 @@ from .const import (
     CONF_WS_NAME,
     DATA_ART_API,
     DATA_CFG,
+    DATA_IP_CONTROL_STATE_COORDINATOR,
+    DEFAULT_IP_CONTROL_POLL_INTERVAL,
     DEFAULT_PORT,
     DEFAULT_ST_POLL_ON_INTERVAL,
     DOMAIN,
     ST_POLL_OFF_INTERVAL,
+    TUNER_INPUT_SOURCES,
     WS_PREFIX,
+    ip_control_port,
 )
 from .token_notify import METHOD_IP_CONTROL, clear_token_problem, notify_token_problem
 
@@ -78,6 +84,13 @@ def _ip_control_active(entry: ConfigEntry) -> bool:
     """True when IP Control is paired AND enabled in the options."""
     return bool(entry.data.get(CONF_IP_CONTROL_TOKEN)) and entry.options.get(
         CONF_ENABLE_IP_CONTROL, True
+    )
+
+
+def _ip_control_poll_interval(entry: ConfigEntry) -> int:
+    """Configured IP Control poll cadence (seconds) for the state sensors."""
+    return entry.options.get(
+        CONF_IP_CONTROL_POLL_INTERVAL, DEFAULT_IP_CONTROL_POLL_INTERVAL
     )
 
 
@@ -164,10 +177,6 @@ def _st_child_gate(entity) -> bool:
     return True
 
 
-# Update interval for the read-only IP Control state sensors. Picture/sound
-# settings change slowly, so a relaxed cadence keeps JSON-RPC traffic light.
-IP_CONTROL_STATE_SCAN_INTERVAL = timedelta(seconds=30)
-
 # How long to wait before re-fetching the thumbnail of an Art Store (SAM-*)
 # artwork the TV has not cached locally yet. The TV materializes the thumbnail
 # a little while after the content is displayed/favorited; this bounded retry
@@ -187,12 +196,12 @@ class SamsungIPControlSensorDescription(SensorEntityDescription):
     source: str = "tv"
 
 
-# getTVStates fields exposed as diagnostic sensors. These particular fields
-# (inputSource, pictureMode, soundMode, pictureSize, speakerSelect, mute,
-# volume) mirror media_player / select state and are read-only over IP Control.
-# The getVideoStates fields (contrast/brightness/sharpness/color/tint) are NOT
-# here — they are settable `number` sliders (see number.py), written via their
-# <field>Control methods when the picture mode allows it.
+# getTVStates fields exposed as diagnostic sensors. Setter availability for
+# matching IP Control fields is model-dependent; these remain read-only sensor
+# entities even when a corresponding local setter (such as inputSourceControl)
+# is available. The getVideoStates fields (contrast/brightness/sharpness/color/
+# tint) are NOT here — they are settable `number` sliders (see number.py),
+# written via their <field>Control methods when the picture mode allows it.
 IP_CONTROL_STATE_SENSORS: tuple[SamsungIPControlSensorDescription, ...] = (
     # getTVStates
     SamsungIPControlSensorDescription(
@@ -586,6 +595,9 @@ async def async_setup_entry(  # noqa: C901
     # coordinator so each poll issues just two JSON-RPC calls for all 12.
     if _ip_control_active(entry):
         state_coordinator = IPControlStateCoordinator(hass, entry, host)
+        hass.data[DOMAIN][entry.entry_id][
+            DATA_IP_CONTROL_STATE_COORDINATOR
+        ] = state_coordinator
         entities.extend(
             IPControlStateSensor(
                 state_coordinator, entry, description, device_name, device_unique_id
@@ -601,6 +613,8 @@ async def async_setup_entry(  # noqa: C901
             device_name,
             len(IP_CONTROL_STATE_SENSORS),
         )
+    else:
+        hass.data[DOMAIN][entry.entry_id].pop(DATA_IP_CONTROL_STATE_COORDINATOR, None)
 
     if entities:
         async_add_entities(entities)
@@ -2617,9 +2631,11 @@ class SmartThingsPowerConsumptionSensor(CoordinatorEntity, SensorEntity):
 class IPControlStateCoordinator(DataUpdateCoordinator):
     """Polls getTVStates over IP Control for the read-only state sensors.
 
-    A single coordinator feeds all the getTVStates sensors, so each cycle issues
-    one JSON-RPC call (plus a cheap power-state check) regardless of how many
-    sensors are enabled. The TV is skipped while it is powered off, both to
+    A single coordinator feeds all the getTVStates sensors, so each cycle shares
+    one getTVStates request (plus a cheap power-state check) regardless of how
+    many sensors are enabled. When a non-Frame TV is on a tuner input, one
+    optional directChannelControl request may also fetch local channel metadata.
+    The TV is skipped while it is powered off, both to
     avoid pointless traffic and because the state getters return stale values in
     standby. (The getVideoStates picture fields moved to settable number
     sliders with their own coordinator — see number.py.)
@@ -2637,12 +2653,13 @@ class IPControlStateCoordinator(DataUpdateCoordinator):
             hass,
             self._log,
             name=f"IP Control state {entry.title}",
-            update_interval=IP_CONTROL_STATE_SCAN_INTERVAL,
+            update_interval=timedelta(seconds=_ip_control_poll_interval(entry)),
         )
         self._entry = entry
         self._host = host
         self._ip_control: SamsungIPControl | None = None
         self._ip_control_token: str | None = None
+        self._channel_control_supported: bool | None = None
 
     def _device_title(self) -> str:
         entry = self.hass.config_entries.async_get_entry(self._entry.entry_id)
@@ -2657,7 +2674,12 @@ class IPControlStateCoordinator(DataUpdateCoordinator):
             return None
         token = entry.data.get(CONF_IP_CONTROL_TOKEN)
         if self._ip_control is None or self._ip_control_token != token:
-            self._ip_control = SamsungIPControl(self.hass, self._host, token=token)
+            self._ip_control = SamsungIPControl(
+                self.hass,
+                self._host,
+                port=ip_control_port(entry.data),
+                token=token,
+            )
             self._ip_control_token = token
         return self._ip_control
 
@@ -2682,10 +2704,60 @@ class IPControlStateCoordinator(DataUpdateCoordinator):
                 )
                 return {"tv": {}, "powered_off": True}
 
-            # Only getTVStates is consumed now (the getVideoStates fields moved
-            # to settable `number` sliders that read/write directly), so this
-            # coordinator issues a single JSON-RPC call per cycle.
+            # getTVStates remains the primary shared snapshot. When the tuner is
+            # the active input, also query optional local channel metadata.
+            # Frame TVs have a tuner too and answer the getter (measured on a
+            # QN55LS03FAFXZA), so they are not excluded; a panel that does not
+            # implement directChannelControl answers -32601 and is then never
+            # asked again for the life of the coordinator.
             tv_states = await client.async_get_tv_states()
+
+            channel_states: dict[str, Any] = {}
+            input_source = tv_states.get("inputSource")
+            tuner_active = (
+                isinstance(input_source, str)
+                and input_source.casefold() in TUNER_INPUT_SOURCES
+            )
+            # pictureMode is "Ambient" exactly while art is on the panel — the
+            # free panel signal async_get_art_mode cross-checks against, with no
+            # extra request here. A Frame in art mode still reports inputSource
+            # "TV" (measured), so without this the tuner would look active and
+            # be polled for a channel number that means nothing while art is
+            # displayed.
+            art_mode_on = tv_states.get("pictureMode") == "Ambient"
+
+            if (
+                tuner_active
+                and not art_mode_on
+                and self._channel_control_supported is not False
+            ):
+                try:
+                    channel_states = await client.async_get_channel()
+                    self._channel_control_supported = True
+                except SamsungIPControlUnsupportedError:
+                    if art_mode_on:
+                        # The decompiled server dispatches directChannelControl
+                        # from a map that is not active in ambient/art mode, so
+                        # a TV that does support it can still answer "method not
+                        # found" while art is displayed. Latching on that would
+                        # disable the channel for the life of the coordinator
+                        # over a temporary display state, so retry later instead.
+                        self._log.debug(
+                            "IP Control channel state unavailable while art mode "
+                            "is on — not treating it as unsupported"
+                        )
+                    else:
+                        self._channel_control_supported = False
+                        self._log.debug(
+                            "IP Control channel state is not supported on this TV"
+                        )
+                except SamsungIPControlAuthError:
+                    raise
+                except SamsungIPControlError as ex:
+                    # Channel metadata is optional. A transient failure must not
+                    # invalidate the normal getTVStates snapshot.
+                    self._log.debug("IP Control channel state read failed: %s", ex)
+
         except SamsungIPControlAuthError as ex:
             notify_token_problem(
                 self.hass,
@@ -2712,7 +2784,11 @@ class IPControlStateCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(f"IP Control state read failed: {ex}") from ex
 
         clear_token_problem(self.hass, self._entry.entry_id, METHOD_IP_CONTROL)
-        return {"tv": tv_states, "powered_off": False}
+        return {
+            "tv": tv_states,
+            "channel": channel_states,
+            "powered_off": False,
+        }
 
 
 class IPControlStateSensor(CoordinatorEntity, SensorEntity):

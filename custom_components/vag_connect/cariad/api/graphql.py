@@ -44,6 +44,14 @@ _PORTAL_AUTH_URLS: dict[str, str] = {
 # VW EU GraphQL: portal lives on myvw.volkswagen.de
 _GRAPHQL_ENDPOINTS["volkswagen"] = "https://myvw.volkswagen.de/userinfo-emea/v2/myvw/proxy/vgql/v1/graphql"
 
+# Audi PRIMARY vgql source — the myAudi app-API. This is the endpoint the classic
+# myAudi clients read the vehicle list + ``media.longName`` from, and it serves
+# accounts the ``www.audi.de`` web-proxy above rejects (a rejected proxy is why an
+# Audi S6 fell back to a bare "Audi (2021)" with no model). Preferred for Audi;
+# the web-proxy is kept as the fallback. (US accounts point at the AoA host.)
+_AUDI_APP_API_ENDPOINT = "https://app-api.live-my.audi.com/vgql/v1/graphql"
+_AUDI_APP_API_ENDPOINT_US = "https://app-api.my.aoa.audi.com/vgql/v1/graphql"
+
 # Brand-specific client IDs for the vgql proxy (X-App-ID header)
 _BRAND_APP_IDS: dict[str, str] = {
     "audi":       "de.audi.myaudi",
@@ -145,9 +153,11 @@ query GET_USER_VEHICLES {
   userVehicles {
     vin
     nickname
+    csid
     vehicle {
       brand { name }
       core { modelYear }
+      classification { driveTrain }
       media {
         shortName
         longName
@@ -175,6 +185,38 @@ class VehicleImageData:
     exterior_color: str | None = None
     nickname: str | None = None         # User-set nickname in app
     model_year: int | None = None       # e.g. 2021 (vehicle.core.modelYear)
+    # vgql authoritative drivetrain classification (vehicle.classification.driveTrain,
+    # e.g. "electric" / "hybrid" / "gasoline" / "diesel") + the stable customer-
+    # service id. Both are fetched on the same userVehicles query we already run for
+    # the model name; the official myAudi client reads them here too.
+    drive_train: str | None = None
+    csid: str | None = None
+
+
+# v4.4.0 — the vehicle model designation lives in ``media.shortName`` /
+# ``media.longName``, which are *localised* catalog strings. The vgql backend
+# only fills them when the request carries a locale: without ``Accept-Language``
+# + ``X-User-Country`` it answers with ``modelYear`` but ``media: null``, which
+# left cars as a bare "Audi (2021)". Live A/B proof (same token, same query):
+# no locale headers → all media null; ``Accept-Language: de-DE`` +
+# ``X-User-Country: DE`` → "Audi S6 Avant TDI quattro tiptronic". The classic
+# myAudi / We Connect clients always send them (cf. audi_connect
+# audi_services.py). We take the country from the account id-token and pair it
+# with a sensible language (the two never have to match perfectly — the model
+# names are language-neutral; the point is that a valid locale is present).
+_COUNTRY_LANG: dict[str, str] = {
+    "AT": "de", "CH": "de", "LI": "de", "BE": "nl", "LU": "fr",
+    "GB": "en", "UK": "en", "IE": "en",
+}
+
+
+def _locale_headers(country: str | None) -> dict[str, str]:
+    """``Accept-Language`` + ``X-User-Country`` so the vgql returns localised
+    ``media`` (the model name). Defaults to DE — a safe EU default that always
+    populates media — when the account country is unknown."""
+    ctry = (country or "DE").strip().upper() or "DE"
+    lang = _COUNTRY_LANG.get(ctry, ctry.lower())
+    return {"Accept-Language": f"{lang}-{ctry}", "X-User-Country": ctry}
 
 
 class VehicleImageFetcher:
@@ -188,19 +230,73 @@ class VehicleImageFetcher:
         self._session = session
 
     async def fetch_image_data(
-        self, access_token: str, brand: str, graphql_url: str | None = None
+        self, access_token: str, brand: str, graphql_url: str | None = None,
+        *, app_api: bool = False, country: str | None = None,
     ) -> dict[str, VehicleImageData]:
         """Return {vin: VehicleImageData} for all vehicles in the account.
 
         graphql_url: override the default endpoint for this brand.
+        app_api: send the myAudi app-API header shape (X-App-Name) — set it when
+            the override URL is the app-api vgql, so it gets the right headers.
+        country: account country (ISO-2) for the locale headers that make the
+            backend return the localised ``media`` model name; see
+            ``_locale_headers``.
         Returns empty dict on any error — images are optional, never block startup.
+
+        Audi resilience: the primary vgql source is the ``www.audi.de`` web-proxy,
+        which rejects some accounts' BFF tokens outright (HTTP 4xx → the car falls
+        back to a bare "Audi (2021)"). The myAudi app-API vgql
+        (``app-api.live-my.audi.com``) is the more reliable source — it's what the
+        classic myAudi clients read the vehicle list + ``media.longName`` from. So
+        for Audi we fall back to it when the web-proxy returns nothing, unless the
+        caller pinned an explicit ``graphql_url``.
         """
-        endpoint = graphql_url or _GRAPHQL_ENDPOINTS.get(brand.lower())
+        if graphql_url is not None:  # an explicit override always wins
+            return await self._fetch_from(
+                graphql_url, access_token, brand, app_api=app_api, country=country,
+            )
+
+        if brand.lower() == "audi":
+            # myAudi app-API FIRST (the proven source, what the classic myAudi
+            # clients use), then the www.audi.de web-proxy as a fallback. Either
+            # order alone leaves some accounts without a model; try both.
+            result = await self._fetch_from(
+                _AUDI_APP_API_ENDPOINT, access_token, brand, app_api=True,
+                country=country,
+            )
+            if not result:
+                _LOGGER.info(
+                    "Audi app-API vgql returned no vehicles — falling back to the "
+                    "www.audi.de web-proxy",
+                )
+                result = await self._fetch_from(
+                    _GRAPHQL_ENDPOINTS["audi"], access_token, brand, country=country,
+                )
+            return result
+
+        endpoint = _GRAPHQL_ENDPOINTS.get(brand.lower())
         if not endpoint:
             _LOGGER.debug("No GraphQL endpoint configured for brand '%s'", brand)
             return {}
+        return await self._fetch_from(endpoint, access_token, brand, country=country)
 
-        try:
+    async def _fetch_from(
+        self, endpoint: str, access_token: str, brand: str, *,
+        app_api: bool = False, country: str | None = None,
+    ) -> dict[str, VehicleImageData]:
+        """POST the userVehicles query to one endpoint and parse it, or {} on error."""
+        if app_api:
+            # myAudi app-API headers (matches the classic myAudi client shape).
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type":  "application/json; charset=utf-8",
+                "Accept":        "application/json",
+                "X-App-Name":    "myAudi",
+                "X-App-Version": _BRAND_APP_VERSIONS.get(brand.lower(), "5.5.1"),
+                "User-Agent":    _BRAND_USER_AGENTS.get(
+                    brand.lower(), "myAudi/5.5.1 Android/34"),
+            }
+        else:
             headers = {
                 "Authorization": f"Bearer {access_token}",
                 "Content-Type":  "application/json",
@@ -211,7 +307,10 @@ class VehicleImageFetcher:
                 "User-Agent":    _BRAND_USER_AGENTS.get(
                     brand.lower(), "myAudi/5.5.1 Android/34"),
             }
-
+        # Localised model strings (media.shortName/longName) only come back when
+        # the request carries a locale — see _locale_headers.
+        headers.update(_locale_headers(country))
+        try:
             async with self._session.post(
                 endpoint,
                 json={"query": _GQL_QUERY},
@@ -220,17 +319,21 @@ class VehicleImageFetcher:
             ) as resp:
                 if resp.status != 200:
                     body = await resp.text()
+                    # body withheld — a GraphQL error body can echo VIN/nickname;
+                    # a byte count is enough for triage.
                     _LOGGER.warning(
-                        "GraphQL images failed for %s: HTTP %d @ %s — %s",
-                        brand, resp.status, endpoint, body[:200],
+                        "GraphQL images failed for %s: HTTP %d @ %s (%d-byte body)",
+                        brand, resp.status, endpoint, len(body),
                     )
                     return {}
                 data = await resp.json()
-
         except Exception as err:  # noqa: BLE001
-            err_str = str(err)
-            if err_str:
-                _LOGGER.warning("GraphQL image fetch failed for %s: %s", brand, err_str)
+            # class only — str(err) carries the request URL on a redirect/SSO hop.
+            if str(err):
+                _LOGGER.warning(
+                    "GraphQL image fetch failed for %s (%s)",
+                    brand, type(err).__name__,
+                )
             else:
                 # Empty error = connection reset / server blocked request (common for non-Audi brands)
                 _LOGGER.debug(
@@ -238,7 +341,6 @@ class VehicleImageFetcher:
                     brand,
                 )
             return {}
-
         return self._parse_response(data)
 
     @staticmethod
@@ -267,12 +369,13 @@ class VehicleImageFetcher:
                     continue
                 code = (err.get("extensions") or {}).get("code", "?")
                 path = err.get("path", [])
-                msg = err.get("message", "")
+                # msg withheld — a server-authored error message can echo the
+                # VIN/input; code + path already identify the affected field.
                 _LOGGER.info(
                     "GraphQL partial error (PPC/PPE platform pattern): "
-                    "code=%s path=%s msg=%s — affected VIN(s) skipped, "
+                    "code=%s path=%s — affected VIN(s) skipped, "
                     "other vehicles render normally",
-                    code, path, msg[:120],
+                    code, path,
                 )
         try:
             vehicles = data.get("data", {}).get("userVehicles", []) or []
@@ -301,6 +404,8 @@ class VehicleImageFetcher:
                     if mt and url:
                         urls[mt] = url
 
+                _drive_train = (vehicle.get("classification") or {}).get("driveTrain")
+                _csid = v.get("csid")
                 result[vin] = VehicleImageData(
                     vin=vin,
                     image_urls=urls,
@@ -309,13 +414,15 @@ class VehicleImageFetcher:
                     exterior_color=media.get("exteriorColor"),
                     nickname=v.get("nickname"),
                     model_year=_model_year,
+                    drive_train=_drive_train if isinstance(_drive_train, str) else None,
+                    csid=_csid if isinstance(_csid, str) else None,
                 )
                 _LOGGER.debug(
                     "GraphQL images for %s (%s): %d mediaTypes",
-                    vin, media.get("shortName", "?"), len(urls),
+                    vin[-6:], media.get("shortName", "?"), len(urls),
                 )
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("GraphQL response parse error: %s", err)
+            _LOGGER.debug("GraphQL response parse error: %s", type(err).__name__)
         return result
 
     @staticmethod

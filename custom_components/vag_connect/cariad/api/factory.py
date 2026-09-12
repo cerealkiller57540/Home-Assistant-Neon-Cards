@@ -15,6 +15,9 @@ from .porsche import PorscheClient
 from .vw_na import VWNAClient
 from .audi_na import AudiNAClient
 from .bentley import BentleyClient
+from .commercial import VWCommercialClient
+from .plugandplay import PlugAndPlayCloudClient
+from .skoda_official import SkodaOfficialClient
 
 
 class CariadClientFactory:
@@ -30,11 +33,16 @@ class CariadClientFactory:
         country: str = "us",
         ola_app_version_override: str | None = None,
         ola_user_agent_override: str | None = None,
-    ) -> CariadBaseClient | PorscheClient | VWNAClient:
+    ) -> (
+        CariadBaseClient | PorscheClient | VWNAClient
+        | PlugAndPlayCloudClient | SkodaOfficialClient
+    ):
         """Return an authenticated-ready client for the given brand.
 
         Supported brands:
           volkswagen    — VW EU (WeConnect ID, EMEA BFF)
+          volkswagen_commercial — VW Commercial Vehicles / Nutzfahrzeuge
+                          (EU-Data-Act portal realm, read-only)
           audi          — Audi EU (myAudi, EMEA BFF)
           skoda         — Škoda (MyŠkoda, mysmob.api.connect.skoda-auto.cz)
           seat          — SEAT (OLA server)
@@ -53,6 +61,10 @@ class CariadClientFactory:
         lower = brand.lower()
         if lower == "volkswagen":
             return VWEUClient(session, email, password, spin)
+        if lower == "volkswagen_commercial":
+            # #1316 — VW Commercial Vehicles (Nutzfahrzeuge): a separate EU-Data-Act
+            # realm, reads via the portal (state_brand VOLKSWAGEN_COMMERCIAL_VEHICLES).
+            return VWCommercialClient(session, email, password, spin)
         if lower == "audi":
             return AudiClient(session, email, password, spin)
         if lower == "skoda":
@@ -75,8 +87,22 @@ class CariadClientFactory:
             # v2.14.11 — Bentley on the Audi IDK client/tenant; read-only
             # until the qmauth two-way gates include "bentley" (live-test).
             return BentleyClient(session, email, password, spin)
+        if lower == "audi_acpp":
+            # plug&play OBD-dongle cloud reader (Audi acpp). Read-only and its
+            # own silo (token is NOT BFF-whitelisted). Takes a BrandConfig, not a
+            # brand string, so IDKAuth uses the plain-OAuth (no x-qmauth) branch.
+            from ..models import BRAND_AUDI_ACPP
+            return PlugAndPlayCloudClient(
+                session, BRAND_AUDI_ACPP, email, password, spin
+            )
+        if lower == "skoda_official":
+            # Škoda OFFICIAL public API (opt-in) — first-party, attestation-free,
+            # X-API-Key auth (no OAuth). No BrandConfig needed. The VIN(s) ride the
+            # ``email`` slot (comma-separated) and the API key the ``password`` slot.
+            from .skoda_official import SkodaOfficialClient
+            return SkodaOfficialClient(session, email, password, spin)
         raise ValueError(
             f"Unknown brand '{brand}'. Supported: "
-            "volkswagen, audi, skoda, seat, cupra, volkswagen_na, audi_na, "
-            "porsche, bentley"
+            "volkswagen, volkswagen_commercial, audi, skoda, seat, cupra, "
+            "volkswagen_na, audi_na, porsche, bentley"
         )

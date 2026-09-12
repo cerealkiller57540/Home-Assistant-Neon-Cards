@@ -14,6 +14,20 @@ select_picture_mode:
       selector:
         text:
 
+start_hue_sync:
+  name: Start Hue Sync
+  description: Start Philips Hue Sync without opening the app on the TV.
+  target:
+    entity:
+      integration: samsungtv_smart
+
+stop_hue_sync:
+  name: Stop Hue Sync
+  description: Stop Philips Hue Sync without opening the app on the TV.
+  target:
+    entity:
+      integration: samsungtv_smart
+
 send_text:
   name: Send Text
   description: >-
@@ -143,7 +157,11 @@ art_upload:
         text:
     matte_id:
       name: Matte Style
-      description: "Matte style (format: type_color, e.g., modern_apricot, shadowbox_polar)"
+      description: >-
+        Matte style, "type_color" (e.g. modern_apricot, shadowbox_polar). Both
+        halves must exist on YOUR TV — call art_get_matte_list to see its lists,
+        or read the options of the Matte Type / Matte Color selects. An id the
+        TV does not know is refused before the upload. Use "none" for no matte.
       required: false
       default: "shadowbox_polar"
       example: "modern_apricot"
@@ -159,6 +177,13 @@ art_upload:
           options:
             - "jpg"
             - "png"
+    show:
+      name: Show Immediately
+      description: Display the artwork on the TV as soon as it is uploaded.
+      required: false
+      default: false
+      selector:
+        boolean:
 
 art_upload_batch:
   name: Batch Upload Artwork
@@ -401,7 +426,10 @@ art_get_photo_filter_list:
 
 art_get_matte_list:
   name: Get Matte List
-  description: Get list of available matte styles.
+  description: >-
+    Get the matte types and colours this TV supports. Returns response data —
+    call it with a response variable, or run it from Developer Tools > Actions
+    to see the lists.
   target:
     entity:
       integration: samsungtv_smart

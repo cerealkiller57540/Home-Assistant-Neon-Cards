@@ -32,7 +32,14 @@ def vehicle_cache_key(entry_id: str) -> str:
 # misleading, so those always reflect the latest poll (fresh-or-unknown).
 CARRY_FORWARD_FIELDS: frozenset[str] = frozenset({
     "odometer_km",
-    "battery_soc", "primary_engine_soc_pct",
+    # NOT ``primary_engine_soc_pct`` (#1310, indigomejor): on a combustion Škoda
+    # ``_primary_soc_or_none`` deliberately suppresses the 12V-SoC that mirrors the
+    # fuel level by returning None. reconcile() can't tell "deliberately withheld"
+    # from "poll omitted it", so carrying it forward resurrected the stale value —
+    # latching the bogus 12V sensor at the last full-tank reading (100 %) forever,
+    # since every future poll re-suppresses it. Same trap as the last-fill-up
+    # fields below. A genuine distinct 12V reading is re-sent each poll anyway.
+    "battery_soc",
     "fuel_level", "primary_engine_fuel_level_pct", "secondary_engine_fuel_level_pct",
     "range_km", "electric_range_km", "combustion_range_km", "total_range_km",
     "range_estimated_full_km", "range_wltp_km", "cng_range_km", "adblue_range_km",
@@ -41,6 +48,28 @@ CARRY_FORWARD_FIELDS: frozenset[str] = frozenset({
     "fuel_tank_capacity_liters",
     "service_km", "oil_service_km", "service_due_in_days", "oil_service_due_in_days",
     "last_seen_at",
+    # #1310 (indigomejor) — equipment_count comes and goes with a richer/leaner
+    # payload but doesn't actually change poll-to-poll; blanking it to "unknown"
+    # every time a poll omitted the block made it useless in automations/history.
+    # NOT the last-fill-up fields: those are staleness-suppressed in _parse_fueling
+    # (an implausibly old account session is dropped), and carrying them forward
+    # would resurrect exactly the suppressed stale reading we just removed.
+    "equipment_count",
+    # #1310 (indigomejor) — lifetime_* are cumulative long-term aggregates the
+    # source re-sends whole when it has data (EU Data Act portal for Škoda; the
+    # 1h-cached trip-stats refresh for Audi/VW). A poll that omits the block used to
+    # blank them to "unknown" between deliveries, making them useless in
+    # history/automations. Carry the last value forward ("old but visible"); a
+    # genuine owner reset ships a fresh non-None value that still wins in reconcile.
+    # Never per-poll-suppressed (unlike primary_engine_soc_pct / last_refuel_*), so
+    # the carry-forward trap above does not apply.
+    "lifetime_distance_km", "lifetime_avg_speed_kmh", "lifetime_travel_time_min",
+    "lifetime_avg_fuel_consumption_l_100km",
+    "lifetime_avg_electric_consumption_kwh_100km",
+    "lifetime_avg_recuperation_kwh_100km", "lifetime_trip_distance_km",
+    "lifetime_trip_start_odometer_km", "lifetime_avg_aux_consumption_kwh_100km",
+    "lifetime_avg_gas_consumption_kg_100km", "lifetime_range_gain_km",
+    "lifetime_zero_emission_km",
 })
 
 # #923 — the parked position belongs in the "old but visible" class too: a
@@ -95,7 +124,13 @@ def position_age_seconds(previous: dict[str, Any]) -> float | None:
     supply a timestamp would otherwise lose a working position entirely.
     """
     for key in ("position_captured_at", "last_seen_at"):
-        stamp = _parse_iso(previous.get(key))
+        # b7 (grounded audit P1-2) — use _as_aware_dt, NOT _parse_iso. Škoda/SEAT/
+        # CUPRA set last_seen_at as a datetime object (compute_connection_state) and
+        # never set position_captured_at; _parse_iso is string-only, so it returned
+        # None for both → age None → the POSITION_MAX_AGE_S expiry was skipped and a
+        # stale parked position was carried forward indefinitely for those brands
+        # (the correct coercer already exists and is used elsewhere in this module).
+        stamp = _as_aware_dt(previous.get(key))
         if stamp is not None:
             return (datetime.now(tz=timezone.utc) - stamp).total_seconds()
     return None
@@ -103,7 +138,20 @@ def position_age_seconds(previous: dict[str, Any]) -> float | None:
 # Fields that physically only ever increase. A fresh value below the recorded
 # one is a bad reading (the portal occasionally serves a stale / zero odometer)
 # — keep the recorded value so the "km" sensor never jumps backwards.
-MONOTONIC_INCREASING_FIELDS: tuple[str, ...] = ("odometer_km",)
+# b7 (grounded audit P1-5, INTERIM) — total_charged_energy_kwh is exposed as a
+# TOTAL_INCREASING energy sensor but is summed from a trailing 50-session window
+# (skoda.py get_charging_history has no nextCursor paging), so once a car has >50
+# lifetime sessions an old session is evicted, the summed "total" DROPS, and HA
+# reads the drop as a meter reset → phantom kWh spike in the Energy Dashboard.
+# Clamping it here kills the spike (a no-op for cars under 50 sessions, where the
+# window IS the true total). STOPGAP, not the real fix: for high-session cars the
+# clamped value freezes near its peak rather than tracking a true lifetime total —
+# the real fix (page nextCursor to a real cumulative, or import per-session HA
+# long-term statistics) is staged pending a live Škoda charging-statistics fixture.
+MONOTONIC_INCREASING_FIELDS: tuple[str, ...] = (
+    "odometer_km",
+    "total_charged_energy_kwh",
+)
 
 # Raw portal field name -> the entity attribute it fills, for the contested
 # reading resolver below. Deliberately explicit and NUMERIC-only: comparing a
@@ -220,6 +268,27 @@ def _heal_cached_sentinels(previous: dict[str, Any]) -> dict[str, Any]:
     if odo is not None and drop_odometer_sentinel(odo) is None:
         previous = dict(previous)
         previous.pop("odometer_km", None)
+
+    # #1316 — a pre-fix cache can hold a PHANTOM electric_range_km on a pure
+    # combustion car (a diesel/CNG the old mapper mislabelled hybrid). Once the
+    # fixed mapper resolves the car as combustion-only, ``has_battery`` goes False,
+    # but electric_range_km is a CARRY_FORWARD field: the fresh poll now yields
+    # None, so :func:`reconcile` would re-latch the cached phantom forever, leaving
+    # a self-contradictory snapshot (no battery, yet an electric range) that keeps
+    # the stale sensor fed and shows in diagnostics. That contradiction — an
+    # electric range with no battery on a combustion car — only ever arises from the
+    # bug, so drop it here (and total_range_km when it merely duplicates range_km).
+    # A genuine EV/PHEV cache keeps has_battery True, so this never touches a real
+    # electric range.
+    if (previous.get("electric_range_km") is not None
+            and not previous.get("has_battery")
+            and not previous.get("is_electric")
+            and not previous.get("is_hybrid")
+            and previous.get("has_combustion")):
+        previous = dict(previous)
+        previous.pop("electric_range_km", None)
+        if previous.get("total_range_km") == previous.get("range_km"):
+            previous.pop("total_range_km", None)
     return previous
 
 
@@ -262,12 +331,29 @@ def reconcile(
     # the leaf as unreliable and hold the recorded value — exactly like an omitted
     # field. Inert for cars that never ship the HV pair (their SoC always reads as
     # leaf-only, so the recorded provenance is never HV and this never fires).
+    # #1231 (Ra72xx): on a MULTI-channel car (e.g. vw.de PRIMARY + EU Data Act
+    # supplementary) the channel merge can split provenance — ``battery_soc`` is
+    # handed to the LIVE channel (website_authproxy) by the live-supersede pass,
+    # while ``battery_soc_from_hv`` stays owned by the eu_data_act batch feed
+    # (leaf-only → False). A live channel's SoC is an on-demand read and IS
+    # reliable, so the leaf-only hold below must NOT fire for it — otherwise it
+    # latches the fresh live value to EU-DA's ~15-min cadence (the SoC "bounces to
+    # 55 when reality is 54" / lags symptom). Only hold when the fresh SoC itself
+    # came from the batch feed, or when its source is unknown — the single-channel
+    # EU-DA case this guard was written for (field_sources['battery_soc'] ==
+    # 'eu_data_act'), which stays fully covered.
+    from ._channel_merge import _BATCH_SOURCES  # noqa: PLC0415
+    _fresh_soc_src = (fresh.get("field_sources") or {}).get("battery_soc")
+    _fresh_soc_is_live = (
+        _fresh_soc_src is not None and _fresh_soc_src not in _BATCH_SOURCES
+    )
     _fresh_from_hv = merged.get("battery_soc_from_hv")
     _prev_from_hv = previous.get("battery_soc_from_hv")
     if (
         _prev_from_hv is True
         and _fresh_from_hv is False
         and previous.get("battery_soc") is not None
+        and not _fresh_soc_is_live
     ):
         if merged.get("battery_soc") != previous.get("battery_soc"):
             notes.append(
@@ -287,15 +373,21 @@ def reconcile(
     # coordinates, which is worse than showing no address.
     if merged.get("latitude") is None and merged.get("longitude") is None:
         age = position_age_seconds(previous)
+        # b9 (regression fix) — a parked car really is still where it was, so keep
+        # the last-known pin VISIBLE even past the 24h freshness window, but flag it
+        # stale so the map / automations can tell a fresh fix from a day-old one.
+        # (b7 P1-2 dropped it entirely once the age became computable for the
+        # datetime-stamp brands, so a car parked >24h — an airport, a holiday —
+        # lost its device_tracker location.)
+        for field in (*POSITION_FIELDS, "position_captured_at"):
+            if merged.get(field) is None and previous.get(field) is not None:
+                merged[field] = previous[field]
         if age is not None and age > POSITION_MAX_AGE_S:
+            merged["position_is_stale"] = True
             notes.append(
                 f"recorded position is {age / 3600:.0f}h old "
-                f"(limit {POSITION_MAX_AGE_S // 3600}h); dropped, not carried"
+                f"(limit {POSITION_MAX_AGE_S // 3600}h); kept but flagged stale"
             )
-        else:
-            for field in (*POSITION_FIELDS, "position_captured_at"):
-                if merged.get(field) is None and previous.get(field) is not None:
-                    merged[field] = previous[field]
     # Contested readings: the export delivered one field twice under a single
     # capture time with different values, so the parser could only pick by
     # position in the array. That is not evidence, and it is what makes a

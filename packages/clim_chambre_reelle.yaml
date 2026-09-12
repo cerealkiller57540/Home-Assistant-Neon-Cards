@@ -1,0 +1,96 @@
+# ---------------------------------------------------------------------------
+# Clim chambre : ETAT REEL, mesure electriquement.
+#
+# POURQUOI CE PACKAGE (30/08/2026)
+# L'entite `climate.clim_chambre` est portee par un blaster IR NodOn, qui EMET
+# des trames sans jamais recevoir de retour de la clim. Son `system_mode` n'est
+# donc pas une mesure : c'est le souvenir de la derniere trame envoyee. Resultat
+# vecu le 30/08 : la clim a tourne 6 min a 520 W pendant que HA affichait `off`.
+#
+# Le Shelly PM, lui, mesure vraiment. Ce package s'en sert comme source de
+# verite, independante du blaster.
+#
+# Seuils calibres sur 765 points (27->30/08) :
+#   5-10 W  : 543 points  -> veille
+#   10-20 W :   0 point   -> trou franc, d'ou le seuil a 20 W
+#   >100 W  : 163 points  -> compresseur en charge (max 575 W)
+# ---------------------------------------------------------------------------
+
+template:
+  - binary_sensor:
+      - name: Clim Chambre en marche
+        unique_id: clim_chambre_en_marche_reel
+        device_class: running
+        icon: mdi:air-conditioner
+        # `is_number` evite un faux `off` quand le Shelly est unavailable :
+        # dans ce cas on ne sait pas, et on ne pretend pas que c'est eteint.
+        state: >
+          {% set p = states('sensor.shellyproem50_441d6474e7c8_energy_meter_0_puissance') %}
+          {{ is_number(p) and p | float > 20 }}
+        availability: >
+          {{ is_number(states('sensor.shellyproem50_441d6474e7c8_energy_meter_0_puissance')) }}
+        delay_on: "00:00:30"
+        delay_off: "00:02:00"
+
+      # Divergence : ce que HA CROIT vs ce que la clim FAIT.
+      - name: Clim Chambre incoherence
+        unique_id: clim_chambre_incoherence
+        icon: mdi:alert-decagram
+        state: >
+          {% set reel = is_state('binary_sensor.clim_chambre_en_marche', 'on') %}
+          {% set annonce = not is_state('climate.clim_chambre', 'off') %}
+          {{ reel != annonce }}
+        availability: >
+          {{ has_value('binary_sensor.clim_chambre_en_marche')
+             and has_value('climate.clim_chambre') }}
+        attributes:
+          detail: >
+            {% set p = states('sensor.shellyproem50_441d6474e7c8_energy_meter_0_puissance') %}
+            HA annonce « {{ states('climate.clim_chambre') }} », compteur {{ p }} W
+
+automation:
+  - id: clim_chambre_divergence_reelle
+    alias: ❄️ Clim Chambre - Divergence état réel / état annoncé
+    description: >
+      Alerte quand la mesure electrique contredit l'etat annonce par le blaster
+      IR. Cas principal : la clim tourne alors que HA la croit eteinte (le bug
+      du 30/08). Le cas inverse (HA croit qu'elle tourne, rien ne consomme)
+      signale une trame IR perdue.
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.clim_chambre_incoherence
+        to: "on"
+        for: "00:03:00"
+    conditions: []
+    actions:
+      - action: persistent_notification.create
+        data:
+          notification_id: clim_chambre_divergence
+          title: ❄️ Clim chambre — état incohérent
+          message: >
+            {% set p = states('sensor.shellyproem50_441d6474e7c8_energy_meter_0_puissance') | float(0) %}
+            {% if p > 20 %}
+              La clim **tourne réellement** ({{ p | round(0) }} W) alors que Home
+              Assistant l'annonce « {{ states('climate.clim_chambre') }} ».
+              Le blaster IR ne voit pas cet état.
+            {% else %}
+              Home Assistant annonce « {{ states('climate.clim_chambre') }} » mais
+              le compteur ne mesure que {{ p | round(0) }} W : la clim ne tourne
+              pas. Trame IR probablement perdue.
+            {% endif %}
+
+  # Le retour a la coherence efface la notification : sans ca elle reste figee
+  # a l'ecran et on croit le probleme encore present (feedback_notifs_persistent).
+  - id: clim_chambre_divergence_resolue
+    alias: ❄️ Clim Chambre - Divergence résolue
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.clim_chambre_incoherence
+        to: "off"
+        for: "00:02:00"
+    actions:
+      - action: persistent_notification.dismiss
+        data:
+          notification_id: clim_chambre_divergence

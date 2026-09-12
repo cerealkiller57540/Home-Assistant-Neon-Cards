@@ -242,8 +242,7 @@ function buildFanSVG() {
   <!-- hub -->
   <circle id="hub-ring" cx="97" cy="92" r="14" fill="rgba(2,5,16,.98)" stroke="#00D4FF" stroke-width="1.4" filter="url(#f-glow)"/>
   <circle id="hub-glow" cx="97" cy="92" r="6.5" fill="rgba(0,212,255,.8)" filter="url(#f-hub)">
-    <animate attributeName="r"       values="6.5;8.5;6.5;5.5;6.5"   dur="2.8s" repeatCount="indefinite" calcMode="spline" keySplines=".4 0 .6 1;.4 0 .6 1;.4 0 .6 1;.4 0 .6 1"/>
-    <animate attributeName="opacity" values=".8;.3;.9;.25;.8"         dur="2.8s" repeatCount="indefinite"/>
+    <!-- pulse SMIL désactivé sur demande Chris (26/08/2026) : gênant visuellement, à repenser plus tard -->
   </circle>
   <text id="hub-defrost" x="97" y="97" text-anchor="middle" font-size="11" fill="#FFEE58" opacity="0" style="transition:opacity .8s ease">❄</text>
   <circle cx="97" cy="92" r="2.8" fill="white"/>
@@ -337,37 +336,91 @@ function buildCustomVars(colors) {
   return lines.length ? `:host {\n${lines.join('\n')}\n}\n` : '';
 }
 
+// ── Chargement dynamique de police (header.font) ────────────────────────────
+// Orbitron/Share Tech Mono restent chargées en dur (buildTemplate) : ce loader
+// ne sert que si hdr.font pointe vers une AUTRE police Google Fonts.
+const _hpcFontLoaded = new Set(['Orbitron', 'Share Tech Mono']);
+function _hpcLoadFont(family) {
+  if (!family || _hpcFontLoaded.has(family)) return;
+  const id = `hpc-font-${family.replace(/\s/g, '-')}`;
+  if (document.getElementById(id)) { _hpcFontLoaded.add(family); return; }
+  const link = document.createElement('link');
+  link.id = id; link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@400;600;700&display=swap`;
+  link.onerror = () => { link.onerror = null; link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}&display=swap`; };
+  document.head.appendChild(link);
+  _hpcFontLoaded.add(family);
+}
+
 // ── NeonHeader inline ─────────────────────────────────────────────────────────
 function _neonHeaderCss(hdr) {
   if (!hdr || hdr === false) return '';
-  const color  = hdr.color       || 'rgba(180,130,255,0.55)';
-  const size   = hdr.title_size  || 'clamp(8px, 2vw, 11px)';
-  const font   = hdr.font        ? `'${hdr.font}', ` : "'Orbitron', ";
-  const shadow = hdr.title_shadow || 'none';
+  if (hdr.font) _hpcLoadFont(hdr.font);
+  const color      = hdr.color       || 'rgba(180,130,255,0.55)';
+  const size       = hdr.title_size  || 'clamp(8px, 2vw, 11px)';
+  const font       = hdr.font        ? `'${hdr.font}', ` : "'Orbitron', ";
+  const weight     = parseFloat(hdr.font_weight) || 600;             // défaut canon nmc
+  const spacing    = hdr.letter_spacing || '0.02em';                  // défaut canon nmc — _text obligatoire, jamais _px/parseFloat
+  const uppercase  = hdr.uppercase === false ? 'none' : 'uppercase';
+  const italic     = hdr.italic ? 'italic' : 'normal';
+  const shadowRaw  = hdr.title_shadow;                                // brut, PAS shadow||'none' : sinon la branche shadow gagne toujours sur le glow
   const badgeColor = hdr.badge_color || 'rgba(0,255,249,0.7)';
+  const iconColor  = hdr.icon_color  || 'rgba(var(--rgb-primary-text-color),0.85)';   // défaut FIXE, indépendant de color/glowColor
+  const iconSize   = hdr.icon_size ? `${parseFloat(hdr.icon_size)}px` : `clamp(16px, calc(${size} * 1.125), 18px)`;
+  const glowOn     = !!hdr.glow;   // opt-in strict, conforme au canon ha-neon-css
+  const glowColor  = hdr.glow_color  || 'var(--primary-color, #00E8FF)';
+  const glowSize   = parseFloat(hdr.glow_size) || 14;   // défaut canon nmc (pas 8)
+  const iconGlow   = glowOn
+    ? `filter: drop-shadow(0 0 ${Math.round(glowSize*0.2)}px #fff) drop-shadow(0 0 ${Math.round(glowSize*0.4)}px ${glowColor}) drop-shadow(0 0 ${Math.round(glowSize*0.8)}px ${glowColor}) drop-shadow(0 0 ${glowSize}px ${glowColor});`
+    : '';
+  // Glow titre (même triple-couche que l'icône) : opt-in via header.glow, écrasé par title_shadow s'il est défini
+  const titleGlowShadow = glowOn
+    ? `0 0 ${Math.round(glowSize*0.2)}px #fff, 0 0 ${Math.round(glowSize*0.4)}px ${glowColor}, 0 0 ${Math.round(glowSize*0.8)}px ${glowColor}, 0 0 ${glowSize}px ${glowColor}`
+    : 'none';
+  const titleShadow = (shadowRaw != null && shadowRaw !== '') ? shadowRaw : titleGlowShadow;
+  // Gradient texte : opt-in, s'applique à la place de `color:` (pose -webkit-text-fill-color:transparent, DOIT précéder text-shadow)
+  const gradFrom   = hdr.gradient_from || 'var(--primary-color, #00E8FF)';
+  const gradTo     = hdr.gradient_to   || 'var(--accent-color, #FF50A0)';
+  const gradCss    = hdr.gradient
+    ? `background:linear-gradient(90deg,${gradFrom},${gradTo});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;`
+    : `color:${color};`;
+  // Flicker : durée/décalage figés en dur (pas de composante aléatoire par instance ici, contrairement à nmc._flickDur)
+  const flickAnim  = hdr.flicker ? `animation:hdr-flicker 4.5s ease-in-out infinite -1s;` : '';
+  // Position icône : gauche (défaut) / droite / dessus
+  const iconPos    = hdr.icon_position || 'left';
+  const groupDir   = iconPos === 'top' ? 'column' : iconPos === 'right' ? 'row-reverse' : 'row';
   return `
 .neon-hdr { display:flex; align-items:center; gap:8px; padding:8px 4px 8px; }
-.neon-hdr-icon { display:flex; align-items:center; flex-shrink:0; }
-.neon-hdr-icon ha-icon {
-  --mdc-icon-size: clamp(16px, calc(${size} * 1.125), 18px); color: ${color};
-  filter: drop-shadow(0 0 8px color-mix(in srgb, currentColor, transparent 10%));
+.neon-hdr-group { display:flex; flex-direction:${groupDir}; align-items:center; gap:8px; flex:1; min-width:0; }
+.nmc-icon-wrap { display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:visible; }
+.nmc-icon-wrap ha-icon, .nmc-icon-wrap svg {
+  display:flex; align-items:center; justify-content:center;
+  --mdc-icon-size: ${iconSize};
+  color: ${iconColor};
+  overflow:visible;
+  ${iconGlow}
 }
 .neon-hdr-body { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; justify-content:center; }
-#badge { margin-left:auto; flex-shrink:0; align-self:center; font-size:clamp(9px, 1.8vw, 10px); padding: 3px 10px; }
+#badge { margin-left:auto; flex-shrink:0; align-self:center; font-size:clamp(9px, 1.8vw, 10px); padding: 0; }
 @media (orientation: landscape) and (max-height: 850px) {
   .neon-hdr { flex-direction: column; align-items: flex-start; gap: 3px; }
-  .neon-hdr-icon { position: absolute; }
+  .nmc-icon-wrap { position: absolute; }
   .neon-hdr-body { padding-left: 28px; }
   #badge { margin-left: 0; align-self: flex-start; }
 }
-.neon-hdr-title {
+@keyframes hdr-flicker { 0%,19%,21%,23%,25%,54%,56%,100%{opacity:1;} 20%,24%,55%{opacity:.6;} }
+.nmc-title {
   font-family: ${font}var(--primary-font-family, system-ui);
   font-size: clamp(14px, ${size}, ${size});
-  color: ${color};
+  font-weight: ${weight};
+  text-transform: ${uppercase};
+  font-style: ${italic};
+  ${gradCss}
   padding-left: 8px;
-  letter-spacing: clamp(1px, 0.5cqi, 3px);
-  text-shadow: ${shadow}; line-height: 1.2;
+  letter-spacing: ${spacing};
+  text-shadow: ${titleShadow};
   white-space: nowrap; overflow: visible; text-overflow: ellipsis;
+  ${flickAnim}
 }
 .neon-hdr-subtitle {
   font-family: ${font}var(--primary-font-family, system-ui);
@@ -399,9 +452,12 @@ function _buildNeonHeaderHTML(hdr) {
   if (!icon && !title) return '';
   return `
   <div class="neon-hdr">
-    ${icon ? `<div class="neon-hdr-icon"><ha-icon icon="${icon}"></ha-icon></div>` : ''}
-    <div class="neon-hdr-body">
-      ${title ? `<span class="neon-hdr-title">${title}</span>` : ''}
+    <div class="neon-hdr-group">
+      ${icon ? `<div class="nmc-icon-wrap"><ha-icon icon="${icon}"></ha-icon></div>` : ''}
+      <div class="neon-hdr-body">
+        ${title ? `<span class="nmc-title">${title}</span>` : ''}
+        ${subtitle ? `<span class="neon-hdr-subtitle">${subtitle}</span>` : ''}
+      </div>
     </div>
     <span class="badge badge-off" id="badge">■ ARRÊT</span>
     ${badge ? `<span class="neon-hdr-badge">${badge}</span>` : ''}
@@ -472,28 +528,19 @@ ha-card {
 /* ── header ── */
 .hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; padding: 0 0 0 0; }
 
+/* badge — texte lumineux, plus de cadre (cf .mw-stat-value, mova-mower-card).
+   Le prefixe ●/❄/■ vient du textContent (JS, map des modes) et fait office de pastille. */
 .badge {
-  font-size: clamp(7px, 1.5vw, 8px); padding: 2px 8px; border-radius: 3px;
-  display: inline-flex; align-items: center; width: fit-content;
-  letter-spacing: .12em; text-transform: uppercase;
-  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
-  position: relative; overflow: hidden;
-  text-shadow: 0 0 4px currentColor;
+  font-size: clamp(8px, 1.6vw, 9px); padding: 0; border: 0; background: none;
+  display: inline-flex; align-items: center; gap: 4px; width: fit-content;
+  letter-spacing: .14em; text-transform: uppercase; font-weight: 700;
+  position: relative;
+  text-shadow: 0 0 1px #fff, 0 0 6px currentColor, 0 0 13px currentColor;
 }
-.badge::before {
-  content: ''; position: absolute; inset: 0; border-radius: 2px;
-  pointer-events: none; z-index: 2;
-  mask-image: linear-gradient(90deg, black 5%, transparent 32%, transparent 68%, black 95%);
-  -webkit-mask-image: linear-gradient(90deg, black 5%, transparent 32%, transparent 68%, black 95%);
-}
-.badge-off    { color: rgba(255,255,255,.82); border-color: rgba(185,242,255,.28); background: rgba(var(--badge-off-rgb),.06); }
-.badge-off::before { box-shadow: inset 2px 0 0 0 rgba(var(--badge-off-rgb),.5), inset -2px 0 0 0 rgba(var(--badge-off-rgb),.5); }
-.badge-on     { color: var(--badge-on-color); border-color: rgba(var(--rgb-badge-on),.35); background: rgba(var(--rgb-badge-on),.03); box-shadow: 0 0 8px rgba(var(--rgb-badge-on),.45), inset 0 0 4px rgba(var(--rgb-badge-on),.25); animation: uv-flicker 6s infinite alternate ease-in-out; }
-.badge-on::before  { box-shadow: inset 2px 0 0 0 var(--badge-on-color), inset -2px 0 0 0 var(--badge-on-color), -10px 0 18px -2px var(--badge-on-color), 10px 0 18px -2px var(--badge-on-color); }
-.badge-cool   { color: var(--badge-cool-color); border-color: rgba(var(--rgb-badge-cool),.35); background: rgba(var(--rgb-badge-cool),.05); }
-.badge-cool::before { box-shadow: inset 2px 0 0 0 var(--badge-cool-color), inset -2px 0 0 0 var(--badge-cool-color), -10px 0 18px -2px var(--badge-cool-color), 10px 0 18px -2px var(--badge-cool-color); }
-.badge-defrost { color: var(--badge-defrost-color); border-color: rgba(var(--rgb-badge-defrost),.35); background: rgba(var(--rgb-badge-defrost),.05); }
-.badge-defrost::before { box-shadow: inset 2px 0 0 0 var(--badge-defrost-color), inset -2px 0 0 0 var(--badge-defrost-color), -10px 0 18px -2px var(--badge-defrost-color), 10px 0 18px -2px var(--badge-defrost-color); }
+.badge-off     { color: rgba(255,255,255,.82); text-shadow: 0 0 1px #fff, 0 0 5px rgba(255,255,255,.35); }
+.badge-on      { color: var(--badge-on-color); animation: uv-flicker 6s infinite alternate ease-in-out; }
+.badge-cool    { color: var(--badge-cool-color); }
+.badge-defrost { color: var(--badge-defrost-color); }
 
 /* ── layout ── */
 .body {
@@ -1339,6 +1386,20 @@ class HeatPumpCardEditor extends HTMLElement {
   _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d); return d; }
   _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; this.appendChild(d); return d; }
 
+  // ── Groupe repliable (pattern canonique storey-battery-card-gl.js / neon-switch-card.js) ──
+  _group(title, expanded, buildFn) {
+    const panel = document.createElement('ha-expansion-panel');
+    panel.outlined = true;
+    panel.header = title;
+    if (expanded) panel.expanded = true;
+    this.appendChild(panel);
+    const prevAppendTo = this._appendTo;
+    this._appendTo = panel;
+    buildFn();
+    this._appendTo = prevAppendTo;
+    return panel;
+  }
+
   _text(key, label, ph = '') {
     const row = this._row(label);
     const inp = document.createElement('input');
@@ -1538,8 +1599,30 @@ class HeatPumpCardEditor extends HTMLElement {
 
     this._section('En-tête');
     this._text('header.title', 'Titre header', 'ex: PAC Ecodan');
+    this._text('header.subtitle', 'Sous-titre header', '');
     this._icon('header.icon', 'Icône header');
+    this._select('header.icon_position', 'Position icône', [
+      ['left', 'Gauche'], ['right', 'Droite'], ['top', 'Dessus'],
+    ]);
     this._color('header.color', 'Couleur header', 'var(--primary-color)');
+    this._text('header.title_size', 'Taille titre', 'clamp(8px, 2vw, 11px)');
+    this._text('header.font', 'Police (nom Google Font)', 'Orbitron');
+    this._toggle('header.uppercase', 'Majuscules', true);
+
+    this._group('Effets avancés du titre', false, () => {
+      this._number('header.font_weight', 'Épaisseur', { min: 100, max: 900, step: 100, ph: '600' });
+      this._text('header.letter_spacing', 'Espacement', '0.02em');
+      this._toggle('header.italic', 'Italique', false);
+      this._toggle('header.gradient', 'Gradient titre', false);
+      this._color('header.gradient_from', 'Gradient début', 'var(--primary-color, #00E8FF)');
+      this._color('header.gradient_to', 'Gradient fin', 'var(--accent-color, #FF50A0)');
+      this._toggle('header.glow', 'Glow icône + titre', false);
+      this._number('header.glow_size', 'Taille glow', { min: 2, max: 30, step: 1, ph: '14' });
+      this._color('header.glow_color', 'Couleur glow', 'var(--primary-color, #00E8FF)');
+      this._toggle('header.flicker', 'Flicker', false);
+      this._color('header.icon_color', 'Couleur icône', null, 'défaut : blanc cassé');
+      this._number('header.icon_size', 'Taille icône (px)', { min: 10, max: 48, step: 1, ph: '18' });
+    });
 
     this._section('Entités');
     HPC_ENTITY_KEYS.forEach(k => this._entity(`entities.${k}`, HPC_ENTITY_LABELS[k], HPC_ENTITY_PREFIX[k]));
@@ -1565,7 +1648,7 @@ window.customCards.push({
 });
 
 console.info(
-  '%c ⚡ heat-pump-card v11.6 %c Gas Spectrum + Editor ',
+  '%c ⚡ heat-pump-card v11.7 %c Header canonique ',
   'background:#00D4FF;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;',
   'background:#040811;color:#00D4FF;padding:2px 4px;border-radius:0 3px 3px 0;'
 );

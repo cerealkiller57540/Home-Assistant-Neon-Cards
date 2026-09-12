@@ -174,6 +174,91 @@ SENSOR_DESCRIPTIONS: tuple[VagSensorDescription, ...] = (
         data_key="plug_state",
         icon="mdi:power-plug",
         condition="electric",
+        # #1055 — enum sensor so HA localizes the state label. Values are
+        # normalized to this set in coordinator._enrich (anything else → None).
+        device_class=SensorDeviceClass.ENUM,
+        options=["connected", "disconnected"],
+    ),
+    # Stage-0 EU Data Act observability. portal_health tells a user whether the
+    # PORTAL is delivering, apart from whether the integration is working — the
+    # single most visible signal for the field's #1 problem (a fresh delivery
+    # wrapping a stale payload). Enum so HA localizes the state; enabled by
+    # default; computed in coordinator._enrich and only set for a portal read.
+    VagSensorDescription(
+        key="portal_health",
+        translation_key="portal_health",
+        data_key="portal_health",
+        icon="mdi:cloud-check-variant",
+        device_class=SensorDeviceClass.ENUM,
+        options=[
+            "ok",
+            "waiting_for_portal_data",
+            "empty_snapshots",
+            "delivery_not_ready",
+            "portal_error",
+            "stale",
+        ],
+    ),
+    # The car's own data-capture age in minutes — how old the newest portal
+    # snapshot is. Diagnostic + disabled by default (portal_health is the at-a-
+    # glance version); enable it to automate on a staleness threshold.
+    VagSensorDescription(
+        key="minutes_since_last_snapshot",
+        translation_key="minutes_since_last_snapshot",
+        data_key="minutes_since_last_snapshot",
+        icon="mdi:timer-sand",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+    ),
+    # Stage-1 — the one-time historical-export lifecycle state. Only present
+    # (visible) while an export is in flight or just finished; hidden otherwise.
+    VagSensorDescription(
+        key="historical_export_state",
+        translation_key="historical_export_state",
+        data_key="historical_export_state",
+        icon="mdi:history",
+        device_class=SensorDeviceClass.ENUM,
+        options=["pending", "done", "timed_out"],
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    # #465/#1273 EU Data Act observability — the portal connector's own lifecycle
+    # timestamps/counter, so a user can see WHEN the data request was created, WHEN
+    # a real snapshot last arrived, and WHEN / HOW OFTEN the portal returned nothing.
+    # Data-present gated (portal-only, spawn when the value first arrives — same as
+    # raw_api_fields) + diagnostic.
+    VagSensorDescription(
+        key="data_request_created_at",
+        translation_key="data_request_created_at",
+        data_key="data_request_created_at",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:calendar-plus",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="last_snapshot_at",
+        translation_key="last_snapshot_at",
+        data_key="last_snapshot_at",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:database-clock",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="last_no_data_at",
+        translation_key="last_no_data_at",
+        data_key="last_no_data_at",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:cloud-alert",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="no_data_count",
+        translation_key="no_data_count",
+        data_key="no_data_count",
+        icon="mdi:counter",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     # v2.22.0 (evcc) — normalized IEC-61851 charge status (A=unplugged /
     # B=plugged-idle / C=charging) for the evcc connector's custom-vehicle
@@ -608,6 +693,75 @@ SENSOR_DESCRIPTIONS: tuple[VagSensorDescription, ...] = (
         icon="mdi:clock-outline",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
+    # Audi plug&play (acpp) trip-logbook + fuel-log extras. All phantom-gated via
+    # _DATA_PRESENT_REQUIRED → they only spawn on an acpp car that has synced a
+    # drive/refuel; every other brand leaves the field None.
+    VagSensorDescription(
+        key="last_trip_eco_score",
+        translation_key="last_trip_eco_score",
+        data_key="last_trip_eco_score",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:leaf",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="last_trip_intake_air_temp_c",
+        translation_key="last_trip_intake_air_temp_c",
+        data_key="last_trip_intake_air_temp_c",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        icon="mdi:air-filter",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="trip_count",
+        translation_key="trip_count",
+        data_key="trip_count",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:road-variant",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="score_points_total",
+        translation_key="score_points_total",
+        data_key="score_points_total",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:trophy-outline",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="last_refuel_liters_added",
+        translation_key="last_refuel_liters_added",
+        data_key="last_refuel_liters_added",
+        native_unit_of_measurement="L",
+        icon="mdi:fuel",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="last_refuel_tank_before_l",
+        translation_key="last_refuel_tank_before_l",
+        data_key="last_refuel_tank_before_l",
+        native_unit_of_measurement="L",
+        icon="mdi:gauge-low",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="last_refuel_tank_after_l",
+        translation_key="last_refuel_tank_after_l",
+        data_key="last_refuel_tank_after_l",
+        native_unit_of_measurement="L",
+        icon="mdi:gauge-full",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="last_refuel_odometer_km",
+        translation_key="last_refuel_odometer_km",
+        data_key="last_refuel_odometer_km",
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        device_class=SensorDeviceClass.DISTANCE,
+        icon="mdi:counter",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
     # v2.31.0 (8.15.0 APK) — Škoda pay-to-park current/last session (read-only;
     # phantom-gated → only spawns for pay-to-park users).
     VagSensorDescription(
@@ -870,6 +1024,39 @@ SENSOR_DESCRIPTIONS: tuple[VagSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
 
+    # vgql coverage (2026-08-28) — the authoritative drivetrain classification
+    # (electric/hybrid/gasoline/diesel) from the vgql we already run for the
+    # model name. Diagnostic string, distinct from the is_electric/is_hybrid
+    # booleans; phantom-guarded (hidden until the vgql actually supplies it).
+    VagSensorDescription(
+        key="drive_train",
+        translation_key="drive_train",
+        data_key="drive_train",
+        icon="mdi:car-cog",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    # The stable per-vehicle Customer Service ID (vgql `csid`). A durable
+    # secondary identifier; disabled by default — power-user / support handle.
+    VagSensorDescription(
+        key="csid",
+        translation_key="csid",
+        data_key="csid",
+        icon="mdi:identifier",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+    ),
+    # "Parked since" — the capture time of the current parking position. No new
+    # network read: reuses position_captured_at we already fetch. HA renders it
+    # as a relative age ("parked 3 h ago").
+    VagSensorDescription(
+        key="parked_since",
+        translation_key="parked_since",
+        data_key="position_captured_at",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:car-clock-outline",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+
     VagSensorDescription(
         key="departure_timer_1_time",
         translation_key="departure_timer_1_time",
@@ -1019,6 +1206,19 @@ SENSOR_DESCRIPTIONS: tuple[VagSensorDescription, ...] = (
         translation_key="software_version",
         data_key="software_version",
         icon="mdi:chip",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    # #1333 (Scout, Elroq) — Škoda readiness software-update lifecycle. Plain
+    # STRING sensor (no device_class/options) on purpose: an ENUM would drop any
+    # value we haven't catalogued, and we only have one confirmed token so far —
+    # a string surfaces every value verbatim (Scout "never suppress" policy).
+    # Škoda-only; gated via _DATA_PRESENT_REQUIRED so other brands + older firmware
+    # get no phantom "unknown" entity.
+    VagSensorDescription(
+        key="readiness_software_update_status",
+        translation_key="readiness_software_update_status",
+        data_key="readiness_software_update_status",
+        icon="mdi:cellphone-arrow-down",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     # v1.15.0 (#35) — Skoda Charging History → HA Energy Dashboard.
@@ -1295,6 +1495,21 @@ SENSOR_DESCRIPTIONS: tuple[VagSensorDescription, ...] = (
         icon="mdi:speedometer",
         suggested_display_precision=0,
     ),
+    # b8 (#1310, indigomejor) — last-trip travel time. Already parsed into
+    # last_trip_duration_min (minutes) by every trip-capable brand but had no entity.
+    # Per-trip → MEASUREMENT (resets each ignition cycle; NOT the cumulative
+    # TOTAL_INCREASING the lifetime_travel_time_min sibling uses). myskoda +
+    # volkswagencarnet both expose it as DURATION / minutes / MEASUREMENT.
+    VagSensorDescription(
+        key="last_trip_duration_min",
+        translation_key="last_trip_duration_min",
+        data_key="last_trip_duration_min",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:map-clock-outline",
+        suggested_display_precision=0,
+    ),
     # b10 — EU Data Act portal long-tail trip/maintenance sensors.
     VagSensorDescription(
         key="lifetime_avg_speed_kmh",
@@ -1360,6 +1575,67 @@ SENSOR_DESCRIPTIONS: tuple[VagSensorDescription, ...] = (
         icon="mdi:lightning-bolt",
         suggested_display_precision=1,
         condition="electric",
+    ),
+
+    # #1378 (Škoda Elroq) — short-term (recent) average electric consumption.
+    VagSensorDescription(
+        key="short_term_avg_electric_consumption_kwh_100km",
+        translation_key="short_term_avg_electric_consumption_kwh_100km",
+        data_key="short_term_avg_electric_consumption_kwh_100km",
+        native_unit_of_measurement="kWh/100 km",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:lightning-bolt-outline",
+        suggested_display_precision=1,
+        condition="electric",
+    ),
+    # v4.7.8 — the same portal leaf in its documented FUEL shape (l/100km);
+    # v4.7.6 consumed it and dropped it. Scout policy: never suppress a value.
+    VagSensorDescription(
+        key="short_term_avg_fuel_consumption_l_100km",
+        translation_key="short_term_avg_fuel_consumption_l_100km",
+        data_key="short_term_avg_fuel_consumption_l_100km",
+        native_unit_of_measurement="L/100 km",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:gas-station-outline",
+        suggested_display_precision=1,
+        condition="combustion",
+    ),
+    # v4.7.8 (#1195/#1380) — the "SoC at the last charge report" snapshot the
+    # portal ships beside the live SoC. Kept apart from battery_soc so the live
+    # value always wins; surfaced here so the Scout stops re-reporting it.
+    VagSensorDescription(
+        key="battery_soc_charge_report",
+        translation_key="battery_soc_charge_report",
+        data_key="battery_soc_charge_report",
+        native_unit_of_measurement="%",
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:battery-clock",
+        condition="electric",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+    ),
+    # v4.7.8 (#1396, CUPRA Raval) — anti-theft alarm reason from the portal
+    # feed (verbatim enum string). Diagnostic; only cars that report it get it.
+    VagSensorDescription(
+        key="alarm_reason",
+        translation_key="alarm_reason",
+        data_key="alarm_reason",
+        icon="mdi:alarm-light-outline",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+
+    # #1375 (Audi S6 TDI) — SCR/AdBlue engine-start counter (diagnostic).
+    VagSensorDescription(
+        key="engine_starts_count",
+        translation_key="engine_starts_count",
+        data_key="engine_starts_count",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        icon="mdi:engine",
+        # v4.7.8 — SCR/AdBlue engine starts exist only on combustion cars;
+        # without this every EV got a (disabled) "Engine Starts" entity.
+        condition="combustion",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
     ),
 
     VagSensorDescription(
@@ -1567,6 +1843,71 @@ SENSOR_DESCRIPTIONS: tuple[VagSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         suggested_display_precision=0,
         condition="combustion",
+    ),
+    # acpp plug&play — absolute fuel in the tank (litres) from the OBD dongle.
+    VagSensorDescription(
+        key="fuel_level_liters",
+        translation_key="fuel_level_liters",
+        data_key="fuel_level_liters",
+        native_unit_of_measurement="L",
+        icon="mdi:gas-station",
+        suggested_display_precision=1,
+        condition="combustion",
+    ),
+    # acpp plug&play — factory master-data (carport) bonus sensors.
+    VagSensorDescription(
+        key="exterior_color", translation_key="exterior_color",
+        data_key="exterior_color", icon="mdi:palette",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="engine_power", translation_key="engine_power",
+        data_key="engine_power", icon="mdi:engine",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="engine_torque_nm", translation_key="engine_torque_nm",
+        data_key="engine_torque_nm", native_unit_of_measurement="Nm",
+        icon="mdi:engine", entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=0,
+    ),
+    VagSensorDescription(
+        key="engine_cylinders", translation_key="engine_cylinders",
+        data_key="engine_cylinders", icon="mdi:engine",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="engine_displacement_ccm", translation_key="engine_displacement_ccm",
+        data_key="engine_displacement_ccm", native_unit_of_measurement="cm³",
+        icon="mdi:engine", entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=0,
+    ),
+    VagSensorDescription(
+        key="engine_code", translation_key="engine_code",
+        data_key="engine_code", icon="mdi:engine",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="fuel_type", translation_key="fuel_type",
+        data_key="fuel_type", icon="mdi:fuel",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    # "Datenstand" — when the dongle last synced its snapshot. Renders as a
+    # relative age in HA, so users see how fresh the reading is.
+    VagSensorDescription(
+        key="data_captured_at", translation_key="data_captured_at",
+        data_key="data_captured_at", device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:clock-check-outline", entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="transmission", translation_key="transmission",
+        data_key="transmission", icon="mdi:car-shift-pattern",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="interior_color", translation_key="interior_color",
+        data_key="interior_color", icon="mdi:palette",
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     # v2.2.0 Phase 7 PR #4 — Skoda tier-B from scout-audit.
     # Climate-timer count (parity to VW EU/Audi PR #2 departure
@@ -2531,6 +2872,20 @@ SENSOR_DESCRIPTIONS: tuple[VagSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
     ),
+    # #528/#538 — TPMS system-type. On an indirect/ABS-based TPMS car the whole
+    # actual-pressure family is "1" (dropped), so this is the ONLY tyre signal that
+    # car gets: "measured" (per-wheel numeric) vs "indirect" (present, no values).
+    # ENUM so HA localizes it; diagnostic + off by default (matches the tyre family).
+    VagSensorDescription(
+        key="tpms_status",
+        translation_key="tpms_status",
+        data_key="tpms_status",
+        icon="mdi:car-tire-alert",
+        device_class=SensorDeviceClass.ENUM,
+        options=["measured", "indirect"],
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+    ),
     # F. Lights / energy / misc.
     VagSensorDescription(
         key="parking_lights_state",
@@ -3304,6 +3659,14 @@ _DATA_PRESENT_REQUIRED: frozenset[str] = frozenset({
     # b1/A6 — raw-discovery sensor only spawns when the portal actually
     # delivered unmapped fields (empty dict on every other brand/channel).
     "raw_api_fields",
+    # #465/#1273 — EU-portal-only observability sensors: each spawns when its
+    # value first arrives (a request created / a snapshot / a no-data poll) and
+    # stays absent on non-portal channels. no_data_count is 0 (not None) in portal
+    # mode so it appears immediately; the timestamps appear on their first event.
+    "data_request_created_at",
+    "last_snapshot_at",
+    "last_no_data_at",
+    "no_data_count",
     # v2.17.1 (Scout #701, VW ID.7) — EU-portal-only interior temp,
     # HV-battery-derived charge-target time + profile user capacity.
     # Non-portal cars leave these None → no phantom entity.
@@ -3327,6 +3690,7 @@ _DATA_PRESENT_REQUIRED: frozenset[str] = frozenset({
     # Cross-brand support deferred — CARIAD-BFF + OLA don't expose an
     # equivalent endpoint yet (Research 2026-05-02).
     "software_version",
+    "readiness_software_update_status",  # #1333 — Škoda-only readiness signal
     # v1.15.0 (#35) — Skoda-only charging history. Cross-brand deferred
     # (CARIAD-BFF/OLA equivalent endpoints unverified).
     "total_charged_energy_kwh",
@@ -3391,6 +3755,16 @@ _DATA_PRESENT_REQUIRED: frozenset[str] = frozenset({
     "last_refuel_fuel_type",
     "last_refuel_station",
     "last_refuel_at",
+    # Audi plug&play (acpp) trip-logbook + fuel-log extras — acpp-only, so every
+    # other brand leaves these None and no phantom entity spawns.
+    "last_trip_eco_score",
+    "last_trip_intake_air_temp_c",
+    "trip_count",
+    "score_points_total",
+    "last_refuel_liters_added",
+    "last_refuel_tank_before_l",
+    "last_refuel_tank_after_l",
+    "last_refuel_odometer_km",
     # v2.31.0 — Škoda pay-to-park; only present for enrolled users.
     "parking_location",
     "parking_cost",
@@ -3676,6 +4050,7 @@ _DATA_PRESENT_REQUIRED: frozenset[str] = frozenset({
     "tyre_pressure_required_rl",
     "tyre_pressure_required_rr",
     "tyre_pressure_required_spare",
+    "tpms_status",  # #528/#538 — only spawns when the actual-pressure family shipped
     # v2.15.5 (#541) — V2G / bidirectional-charging charge-level limits.
     # EU-Data-Act dialect only; vehicles/channels without the field stay None.
     "bidi_max_charge_level_pct",
@@ -3691,25 +4066,106 @@ _DATA_PRESENT_REQUIRED: frozenset[str] = frozenset({
     # stay None → no phantom.
     "battery_care_score",
     "battery_care_score_threshold",
+    # v4.4.0 (vgql coverage, 2026-08-28) — drivetrain classification + the
+    # stable customer-service id come from the Audi/VW-EU vgql only. Every
+    # other brand/channel leaves them None → no phantom entity. "parked_since"
+    # reads position_captured_at (its data_key), which stays None for cars/
+    # channels that never report a parking position → no phantom there either.
+    "drive_train",
+    "csid",
+    "parked_since",
 })
 
-# v1.14.0 (#24) — Trip Statistics is brand-restricted at the API level
-# (CARIAD-BFF only — Audi + VW EU). Other brands' clients don't expose
-# ``get_trip_statistics``. Gate at setup so SEAT/CUPRA/Skoda/Porsche/VW NA
-# users don't get four "unknown" sensors per VIN. Capability gating
-# (Phase 3, #56) further hides them when the subscription is absent.
+# v1.14.0 (#24) — Trip Statistics is brand-restricted. Audi + VW EU fill these
+# from the CARIAD-BFF; Škoda fills only the per-trip (last_trip_*) keys from its
+# own mysmob parse (#1310). Gate at setup so SEAT/CUPRA/Porsche/VW NA users —
+# whose clients don't expose trip data — don't get "unknown" sensors per VIN.
+# Capability gating (Phase 3, #56) further hides them when the subscription is
+# absent.
 _TRIP_STATS_KEYS: frozenset[str] = frozenset({
     "last_trip_distance_km",
     "last_trip_avg_speed_kmh",
+    "last_trip_duration_min",
     "last_trip_avg_fuel_consumption_l_100km",
     "last_trip_avg_electric_consumption_kwh_100km",
-    # v2.0.0 (Big-Bang) — long-term aggregates from /tripstatistics?type=longTerm
-    # (CARIAD-BFF only). Same brand gate as the per-trip keys above.
+    # v2.0.0 (Big-Bang) — long-term aggregates. Audi/VW EU ONLY: the CARIAD-BFF
+    # /tripstatistics?type=longTerm since-reset cumulative. Škoda does NOT fill
+    # these (its mysmob endpoint only returns a current-WEEK window, not a
+    # lifetime total — see #1310), so they stay None on Škoda → hide-empty → no
+    # sensor. Kept here because Audi/VW use them.
     "lifetime_distance_km",
     "lifetime_avg_fuel_consumption_l_100km",
     "lifetime_avg_electric_consumption_kwh_100km",
 })
-_TRIP_STATS_BRANDS: frozenset[str] = frozenset({"audi", "volkswagen"})
+# #1310 (indigomejor): Škoda populates only the 4 last_trip_* keys (the most-recent
+# per-DAY entry from detailedStatistics) in its own get_status parse (skoda.py) —
+# NOT the lifetime_* aggregates: its mysmob response is a weekly window, and
+# mislabeling a weekly total as lifetime corrupted HA long-term stats, so it's no
+# longer mapped (odometer_km carries the true total). The CARIAD-BFF FETCH gate
+# stays audi/volkswagen only (coordinator._TRIP_STATS_BRANDS) because Škoda already
+# has the per-trip data inline — no wrong BFF call fires for Škoda.
+# b7 (grounded audit P1-7) — SEAT/CUPRA populate last_trip_* / lifetime_distance_km
+# every get_status (seat_cupra.py driving-data/SHORT, corrected in #392) and declare
+# trip_statistics=True, but were omitted here so the trip sensors never spawned for
+# two active brands. The hide-empty guard below still suppresses any lifetime_* field
+# they leave None; command_trip_stats stays unknown (not False) for them, so the
+# secondary gate does not re-hide.
+# b8 (trip-sweep finding 7) — audi_acpp (plug&play OBD dongle) fills
+# last_trip_distance_km + last_trip_duration_min (plugandplay.py) but was omitted here,
+# so its trip sensors were hidden. Add it as a spawn-gate brand; hide-empty still
+# suppresses the avg_*/lifetime_* keys it doesn't fill, and the CARIAD-BFF FETCH gate
+# (coordinator._TRIP_STATS_BRANDS) stays audi/volkswagen only so no wrong call fires.
+_TRIP_STATS_BRANDS: frozenset[str] = frozenset(
+    {"audi", "volkswagen", "skoda", "seat", "cupra", "audi_acpp"}
+)
+
+# Per-window opening position (% open), from the EU-DA window-lifter positions
+# (``position_*_door_window_lifter``). Parsed into ``windows_position`` — a slot
+# only lands there when the car actually reports a value, so cars without window
+# telemetry spawn no entities (self-gating, no "unknown" clutter). Mirrors the
+# per-window binary sensor's slot names.
+_WINDOW_POSITION_TKEYS = {
+    "frontLeft":  "window_position_front_left",
+    "frontRight": "window_position_front_right",
+    "rearLeft":   "window_position_rear_left",
+    "rearRight":  "window_position_rear_right",
+}
+
+
+class VagWindowPositionSensor(VagConnectEntity, SensorEntity):
+    """Opening position of a single window, in percent (0 = closed)."""
+
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:window-open-variant"
+    _attr_suggested_display_precision = 0
+
+    def __init__(
+        self,
+        coordinator: VagConnectCoordinator,
+        vin: str,
+        window_id: str,
+    ) -> None:
+        super().__init__(coordinator, vin, f"window_position_{window_id}")
+        self._window_id = window_id
+        _tkey = _WINDOW_POSITION_TKEYS.get(window_id)
+        if _tkey:
+            self._attr_translation_key = _tkey
+        else:
+            self._attr_name = window_id
+
+    @property
+    def native_value(self) -> int | float | None:
+        pos = self._vehicle.get("windows_position", {})
+        val = pos.get(self._window_id)
+        return val if isinstance(val, (int, float)) and not isinstance(val, bool) else None
+
+
+# b13 — platinum parallel-updates rule: the coordinator's background poll
+# loop owns every API request, so entity updates need no throttling. HA reads
+# this MODULE-level constant (an entity attr is a no-op).
+PARALLEL_UPDATES = 0
 
 
 async def async_setup_entry(
@@ -3786,9 +4242,21 @@ async def async_setup_entry(
             if desc.key in _TRIP_STATS_KEYS:
                 if not trip_stats_supported:
                     continue
+                # b7 (grounded audit P1-7) — the tripStatistics capability gate only
+                # applies to brands that FETCH trips from the CARIAD-BFF
+                # /tripstatistics endpoint (audi/volkswagen). Škoda/SEAT/CUPRA get
+                # trip data inline from their own get_status parse, so a missing
+                # tripStatistics cap must NOT hide their sensors; the hide-empty guard
+                # below already suppresses any field they don't fill.
+                # v4.7.8 (#923 guiumb) — ...but ONLY when the car has no trip
+                # value at all. A VW-EU portal car gets its trips from the EU Data
+                # Act feed, not the BFF; the "no tripStatistics capability" gate
+                # was hiding real data those cars already carried.
                 if (
-                    coordinator.command_capability_supported(vin, "command_trip_stats")
+                    brand in ("audi", "volkswagen")
+                    and coordinator.command_capability_supported(vin, "command_trip_stats")
                     is False
+                    and vehicle.get(desc.data_key) is None
                 ):
                     continue
             # b3 — hide empty: skip data sensors with no value yet (reporters,
@@ -3802,6 +4270,10 @@ async def async_setup_entry(
                 entities.append(ReporterSensor(coordinator, vin, desc))
             else:
                 entities.append(VagConnectSensor(coordinator, vin, desc))
+
+        # Per-window opening position (%), self-gating on populated slots.
+        for window_id in vehicle.get("windows_position", {}):
+            entities.append(VagWindowPositionSensor(coordinator, vin, window_id))
         return entities
 
     register_dynamic_spawner(entry, coordinator, async_add_entities, _build_for_vin)
@@ -3944,9 +4416,19 @@ class VagConnectSensor(VagConnectEntity, SensorEntity):
         # Only present when a genuine tie occurred, so it never bloats the
         # recorder on a clean poll.
         if self.entity_description.key == "data_source_channel":
+            from ._channel_labels import channels_overview  # noqa: PLC0415
+            src_attrs: dict[str, Any] = {}
+            raw = self._vehicle.get("source_channel")
+            _display, labels = channels_overview(
+                raw if isinstance(raw, str) else None)
+            if labels:
+                # friendly per-channel list + the raw token join for support
+                src_attrs["channels"] = labels
+                src_attrs["raw"] = raw
             contested = self._vehicle.get("contested_fields")
             if isinstance(contested, dict) and contested:
-                return json_safe_dict({"contested_fields": contested})
+                src_attrs["contested_fields"] = contested
+            return json_safe_dict(src_attrs) if src_attrs else None
         # v2.15.3 — Skoda trip-cost sensors carry the (dynamic) ISO currency
         # code as an attribute, since device_class=MONETARY would force a fixed
         # native currency unit we don't know ahead of time.
@@ -3970,6 +4452,15 @@ class VagConnectSensor(VagConnectEntity, SensorEntity):
     @property
     def native_value(self) -> Any:
         val = self._vehicle.get(self.entity_description.data_key)
+        # data_source_channel — show the friendly, de-duplicated channel list
+        # ("Car-Net + EU Data Act portal") instead of the raw token join
+        # ("eu_data_act+mbb"). The raw value stays in the ``raw`` attribute and
+        # in ``source_channel`` itself, so nothing that keys on tokens changes.
+        if self.entity_description.key == "data_source_channel":
+            from ._channel_labels import channels_overview  # noqa: PLC0415
+            display, _labels = channels_overview(
+                val if isinstance(val, str) else None)
+            return display
         # v2.10.0 (charging_statistics) - power-curve sample list. Native
         # value is the COUNT to keep state HA-recorder friendly; the full
         # list lives in extra_state_attributes (see above). Returns None
@@ -4118,6 +4609,10 @@ class ReporterSensor(VagConnectSensor):
     sensor still appears even when a single vehicle in a multi-VIN setup
     becomes unavailable.
     """
+
+    # The reporter/scout counts are exactly what you need when a poll fails, so
+    # keep them available regardless of the per-vehicle poll outcome.
+    _stay_available_on_poll_failure = True
 
     @property
     def native_value(self) -> Any:

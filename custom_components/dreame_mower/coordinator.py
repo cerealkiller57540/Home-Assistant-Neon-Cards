@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime, timezone
 import logging
+import time
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.util import dt as dt_util
 
 from homeassistant.const import CONF_NAME, CONF_PASSWORD, CONF_USERNAME
 
@@ -36,12 +40,31 @@ from .dreame.property import (
 )
 from .dreame.const import (
     CURRENT_MAP_ID_PROPERTY_NAME,
+    EDGE_BLADE_OFFSET_KEY,
+    EDGE_MOWING_AUTO_KEY,
+    EDGE_MOWING_SAFE_KEY,
     POWER_STATE_PROPERTY,
+    RAIN_DEVICE_CODES,
+    SCHEDULING_SUMMARY_PROPERTY,
     DeviceStatus,
     MowingPreferenceMode,
     STATUS_PROPERTY,
     supports_cutting_height,
 )
+from .dreame.property.property_misc import (
+    PROPERTY_1_1_ACTIVE_CODES_NAME,
+    SETTINGS_CHANGED_PROPERTY_NAME,
+)
+
+# How long a change the integration made itself keeps the device from triggering
+# a re-read. The device announces every change, including the ones it was just
+# told to make, and a write already knows what it wrote.
+_SETTINGS_WRITE_ECHO_SECONDS = 5.0
+
+# The two records the device announces changes to, each with its own echo window
+# so a write to one does not suppress a re-read of the other.
+_WRITE_DEVICE_SETTINGS = "device_settings"
+_WRITE_MOWING_PREFERENCES = "mowing_preferences"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -74,6 +97,12 @@ class DreameMowerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._selected_zone_id: int | None = None
         self._selected_spot_area_id: int | None = None
         self._consumable_values: list[int] | None = None
+        self._charging_settings: dict[str, Any] | None = None
+        self._rain_settings: dict[str, Any] | None = None
+        self._anti_theft_settings: dict[str, Any] | None = None
+        self._rain_protection_end_timestamp: int | None = None
+        self._last_writes: dict[str, float] = {}
+        self._preference_refresh: asyncio.Task[bool] | None = None
 
         # Initialize coordinator with no automatic polling (device will push updates)
         super().__init__(
@@ -327,12 +356,6 @@ class DreameMowerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_update_listeners()
         return zone_heights
 
-    async def async_fetch_cutting_heights(self) -> None:
-        """Read the current map's map-wide and per-zone cutting heights."""
-        await self.device.refresh_cutting_height()
-        await self.device.refresh_zone_cutting_heights()
-        self.async_update_listeners()
-
     async def async_set_cutting_height(
         self,
         height_cm: float,
@@ -340,6 +363,7 @@ class DreameMowerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         zone_id: int | None = None,
     ) -> bool:
         """Set a cutting height, defaulting to the current map and its map-wide record."""
+        self._note_write(_WRITE_MOWING_PREFERENCES)
         updated = await self.device.set_cutting_height(height_cm, map_id, zone_id)
         self.async_update_listeners()
         return updated
@@ -350,9 +374,364 @@ class DreameMowerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         map_id: int | None = None,
     ) -> bool:
         """Choose whether a map follows its map-wide or its per-zone preferences."""
+        self._note_write(_WRITE_MOWING_PREFERENCES)
         updated = await self.device.set_mowing_preference_mode(mode, map_id)
         self.async_update_listeners()
         return updated
+
+    @property
+    def edge_mowing_settings(self) -> dict[str, bool] | None:
+        """Return the current map's edge mowing settings, if they are known."""
+        return self.device.edge_mowing_settings
+
+    @property
+    def zone_edge_mowing_settings(self) -> dict[int, dict[str, bool]]:
+        """Return the per-zone edge mowing settings known for the current map."""
+        return self.device.zone_edge_mowing_settings
+
+    @property
+    def supports_edge_mowing_settings(self) -> bool:
+        """Return whether the device reported edge mowing settings."""
+        return self.device.edge_mowing_settings is not None
+
+    @property
+    def supports_safe_edge_mowing(self) -> bool:
+        """Return whether the device keeps a safe edge mowing setting."""
+        settings = self.device.edge_mowing_settings
+        return settings is not None and EDGE_MOWING_SAFE_KEY in settings
+
+    @property
+    def edge_mowing_auto(self) -> bool | None:
+        """Return whether the mower mows the edges on its own, if it is known."""
+        return self._edge_mowing_setting(EDGE_MOWING_AUTO_KEY)
+
+    @property
+    def edge_blade_offset(self) -> bool | None:
+        """Return whether the blade disc shifts sideways for the edges, if it is known."""
+        return self._edge_mowing_setting(EDGE_BLADE_OFFSET_KEY)
+
+    @property
+    def edge_mowing_safe(self) -> bool | None:
+        """Return whether the mower keeps a buffer from the boundary, if it is known."""
+        return self._edge_mowing_setting(EDGE_MOWING_SAFE_KEY)
+
+    def _edge_mowing_setting(self, key: str) -> bool | None:
+        """Return one edge mowing setting of the current map, if it is known."""
+        settings = self.device.edge_mowing_settings
+        if settings is None:
+            return None
+        return settings.get(key)
+
+    async def async_fetch_mowing_preferences(self, *, after_change: bool = False) -> bool:
+        """Read the current map's map-wide and per-zone mowing settings.
+
+        The settings all live in the same records, so the cutting heights and the
+        edge mowing settings come out of a single read each.
+
+        A caller that asks while a read is already running joins that read rather
+        than repeating it: the device answers one command at a time, so a second
+        read of the same records would only make everything wait for it. A read
+        that follows a change the device announced is the exception — it has to
+        start after the announcement to be sure of seeing the change, so it waits
+        the running read out and then takes its own.
+        """
+        refresh = self._preference_refresh
+        if after_change and refresh is not None and not refresh.done():
+            await asyncio.gather(refresh, return_exceptions=True)
+            refresh = None
+
+        if refresh is None or refresh.done():
+            refresh = self.hass.async_create_task(self._async_read_mowing_preferences())
+            self._preference_refresh = refresh
+
+        return await refresh
+
+    async def _async_read_mowing_preferences(self) -> bool:
+        """Read every mowing preference record of the current map."""
+        read = await self.device.refresh_mowing_preferences()
+        await self.device.refresh_zone_mowing_preferences()
+        self.async_update_listeners()
+        return read
+
+    async def async_fetch_edge_mowing_settings(self) -> dict[str, bool] | None:
+        """Read the current map's edge mowing settings from the device."""
+        settings = await self.device.refresh_edge_mowing_settings()
+        self.async_update_listeners()
+        return settings
+
+    async def async_set_edge_mowing_settings(
+        self,
+        auto: bool | None = None,
+        blade_offset: bool | None = None,
+        safe: bool | None = None,
+        map_id: int | None = None,
+        zone_id: int | None = None,
+    ) -> bool:
+        """Switch edge mowing settings, keeping every unspecified one as it is."""
+        self._note_write(_WRITE_MOWING_PREFERENCES)
+        updated = await self.device.set_edge_mowing_settings(
+            auto=auto,
+            blade_offset=blade_offset,
+            safe=safe,
+            map_id=map_id,
+            zone_id=zone_id,
+        )
+        self.async_update_listeners()
+        return updated
+
+    @property
+    def supports_charging_period(self) -> bool:
+        """Return whether the device reported a custom charging period."""
+        return self._charging_settings is not None
+
+    @property
+    def charging_period_enabled(self) -> bool | None:
+        """Return whether the custom charging period is on, if it is known."""
+        if self._charging_settings is None:
+            return None
+        return bool(self._charging_settings["charging_period_enabled"])
+
+    @property
+    def charging_period_start_minutes(self) -> int | None:
+        """Return the start of the charging period in minutes since midnight."""
+        if self._charging_settings is None:
+            return None
+        return int(self._charging_settings["charging_period_start_minutes"])
+
+    @property
+    def charging_period_end_minutes(self) -> int | None:
+        """Return the end of the charging period in minutes since midnight."""
+        if self._charging_settings is None:
+            return None
+        return int(self._charging_settings["charging_period_end_minutes"])
+
+    async def async_fetch_charging_settings(self) -> bool:
+        """Read the battery and charging settings from the device."""
+        settings = await self.device.get_charging_settings()
+        if settings is None:
+            return False
+
+        self._charging_settings = settings
+        self.async_update_listeners()
+        return True
+
+    async def async_set_charging_period(
+        self,
+        enabled: bool | None = None,
+        start_minutes: int | None = None,
+        end_minutes: int | None = None,
+    ) -> bool:
+        """Update the custom charging period, keeping every unspecified part as is."""
+        self._note_write(_WRITE_DEVICE_SETTINGS)
+        settings = await self.device.set_charging_period(
+            enabled=enabled,
+            start_minutes=start_minutes,
+            end_minutes=end_minutes,
+        )
+        if settings is None:
+            return False
+
+        self._charging_settings = settings
+        self.async_update_listeners()
+        return True
+
+    @property
+    def supports_rain_protection(self) -> bool:
+        """Return whether the device reported rain protection settings."""
+        return self._rain_settings is not None
+
+    @property
+    def rain_protection_enabled(self) -> bool | None:
+        """Return whether rain protection is on, if it is known."""
+        if self._rain_settings is None:
+            return None
+        return bool(self._rain_settings["rain_protection_enabled"])
+
+    @property
+    def rain_delay_hours(self) -> int | None:
+        """Return how long the mower waits after rain, in whole hours."""
+        if self._rain_settings is None:
+            return None
+        return int(self._rain_settings["rain_delay_hours"])
+
+    @property
+    def rain_protection_end_time(self) -> datetime | None:
+        """Return when rain protection lets the mower work again, if it is holding it back."""
+        if self._rain_protection_end_timestamp is None:
+            return None
+        return datetime.fromtimestamp(self._rain_protection_end_timestamp, tz=timezone.utc)
+
+    @property
+    def rain_protection_active(self) -> bool:
+        """Return whether rain is currently keeping the mower from working.
+
+        The device leaves the end time it last reported in place, so a time that
+        has passed says nothing about the mower being held back any more.
+        """
+        end_time = self.rain_protection_end_time
+        return end_time is not None and end_time > dt_util.utcnow()
+
+    async def async_fetch_rain_settings(self) -> bool:
+        """Read the rain protection settings from the device."""
+        settings = await self.device.get_rain_settings()
+        if settings is None:
+            return False
+
+        self._rain_settings = settings
+        self.async_update_listeners()
+        return True
+
+    async def async_fetch_rain_protection_end(self) -> bool:
+        """Read when rain protection lets the mower work again.
+
+        A read that did not come through leaves the known end time in place: it
+        is the state the entities report on, and dropping it would read as the
+        mower being free to work.
+        """
+        end_timestamp = await self.device.get_rain_protection_end_timestamp()
+        if end_timestamp is None:
+            return False
+
+        self._rain_protection_end_timestamp = end_timestamp or None
+        self.async_update_listeners()
+        return True
+
+    @property
+    def supports_anti_theft(self) -> bool:
+        """Return whether the device reported anti-theft settings."""
+        return self._anti_theft_settings is not None
+
+    @property
+    def supports_anti_theft_pin_check(self) -> bool:
+        """Return whether the device asks for a PIN code before it is switched off."""
+        return (
+            self._anti_theft_settings is not None
+            and self._anti_theft_settings["pin_check_enabled"] is not None
+        )
+
+    @property
+    def lift_alarm_enabled(self) -> bool | None:
+        """Return whether the alarm goes off when the mower is lifted, if it is known."""
+        if self._anti_theft_settings is None:
+            return None
+        return bool(self._anti_theft_settings["lift_alarm_enabled"])
+
+    @property
+    def off_map_alarm_enabled(self) -> bool | None:
+        """Return whether the alarm goes off when the mower leaves the map, if it is known."""
+        if self._anti_theft_settings is None:
+            return None
+        return bool(self._anti_theft_settings["off_map_alarm_enabled"])
+
+    @property
+    def location_reporting_enabled(self) -> bool | None:
+        """Return whether the mower reports its position, if it is known."""
+        if self._anti_theft_settings is None:
+            return None
+        return bool(self._anti_theft_settings["location_reporting_enabled"])
+
+    @property
+    def anti_theft_pin_check_enabled(self) -> bool | None:
+        """Return whether the mower asks for its PIN code before it is switched off."""
+        if self._anti_theft_settings is None:
+            return None
+        pin_check_enabled = self._anti_theft_settings["pin_check_enabled"]
+        return None if pin_check_enabled is None else bool(pin_check_enabled)
+
+    async def async_fetch_anti_theft_settings(self) -> bool:
+        """Read the anti-theft settings from the device."""
+        settings = await self.device.get_anti_theft_settings()
+        if settings is None:
+            return False
+
+        self._anti_theft_settings = settings
+        self.async_update_listeners()
+        return True
+
+    async def async_set_anti_theft_settings(
+        self,
+        lift_alarm: bool | None = None,
+        off_map_alarm: bool | None = None,
+        location_reporting: bool | None = None,
+        pin_check: bool | None = None,
+    ) -> bool:
+        """Update the anti-theft settings, keeping every unspecified switch as is."""
+        self._note_write(_WRITE_DEVICE_SETTINGS)
+        settings = await self.device.set_anti_theft_settings(
+            lift_alarm=lift_alarm,
+            off_map_alarm=off_map_alarm,
+            location_reporting=location_reporting,
+            pin_check=pin_check,
+        )
+        if settings is None:
+            return False
+
+        self._anti_theft_settings = settings
+        self.async_update_listeners()
+        return True
+
+    async def async_fetch_device_settings(self) -> None:
+        """Read the settings record and everything that hangs off it.
+
+        The charging, rain and anti-theft settings share one record, so one read
+        serves them all, and it doubles as the probe that decides which of them
+        the device offers at all. The time rain protection lets the mower work
+        again is kept outside the record, so it is read after it and only when
+        the device turns out to have rain protection.
+        """
+        await self.async_refresh_device_settings()
+
+        if not self.supports_rain_protection:
+            # A device with no rain settings has no protection that could expire.
+            return
+
+        await self.async_fetch_rain_protection_end()
+
+    async def async_refresh_device_settings(self) -> None:
+        """Re-read every setting the integration keeps from the device.
+
+        The settings all live in one record, so the charging, rain and anti-theft
+        settings come out of a single read.
+        """
+        settings = await self.device.get_device_settings()
+        if settings is None:
+            return
+
+        charging_settings = self.device.decode_charging_settings(settings)
+        if charging_settings is not None:
+            self._charging_settings = charging_settings
+
+        rain_settings = self.device.decode_rain_settings(settings)
+        if rain_settings is not None:
+            self._rain_settings = rain_settings
+
+        anti_theft_settings = self.device.decode_anti_theft_settings(settings)
+        if anti_theft_settings is not None:
+            self._anti_theft_settings = anti_theft_settings
+
+        self.async_update_listeners()
+
+    async def async_set_rain_protection(
+        self,
+        enabled: bool | None = None,
+        delay_hours: int | None = None,
+    ) -> bool:
+        """Update rain protection, keeping every unspecified part as is."""
+        self._note_write(_WRITE_DEVICE_SETTINGS)
+        settings = await self.device.set_rain_protection(
+            enabled=enabled,
+            delay_hours=delay_hours,
+        )
+        if settings is None:
+            return False
+
+        self._rain_settings = settings
+        self.async_update_listeners()
+
+        # Switching protection off releases a mower rain is holding back, so the
+        # end time it reported no longer stands.
+        await self.async_fetch_rain_protection_end()
+        return True
 
     @property
     def task_target_map_id(self) -> int | None:
@@ -476,12 +855,26 @@ class DreameMowerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _handle_device_update(self, property_name: str, value: Any) -> None:
         """Handle device property updates and notify Home Assistant."""
+        if property_name == SETTINGS_CHANGED_PROPERTY_NAME:
+            # The device announces that a setting changed without saying which,
+            # so the settings are read back whenever it does.
+            self.hass.create_task(self._async_refresh_settings_on_change())
+        if property_name == SCHEDULING_SUMMARY_PROPERTY.name:
+            # The device announces a changed mowing preference on this property,
+            # again without saying which map or setting changed, so the records
+            # are read back whenever it reports here.
+            self.hass.create_task(self._async_refresh_preferences_on_change())
+        if property_name == PROPERTY_1_1_ACTIVE_CODES_NAME and self.supports_rain_protection:
+            if RAIN_DEVICE_CODES & value:
+                # Rain just took the mower off the lawn, so it now knows when it
+                # may resume.
+                self.hass.create_task(self._async_refresh_rain_protection_end())
         if property_name == STATUS_PROPERTY.name and int(value) == DeviceStatus.CHARGING:
             self.hass.create_task(self._async_refresh_consumables_on_charging())
-        if property_name == CURRENT_MAP_ID_PROPERTY_NAME and self.supports_cutting_height:
-            # The cutting height is stored per map, so it has to be re-read
+        if property_name == CURRENT_MAP_ID_PROPERTY_NAME:
+            # The mowing settings are stored per map, so they have to be re-read
             # whenever the active map changes.
-            self.hass.create_task(self._async_refresh_cutting_height_on_map_change())
+            self.hass.create_task(self._async_refresh_preferences_on_map_change())
         self._normalize_selection_state()
 
         # Handle device code error notifications
@@ -539,12 +932,56 @@ class DreameMowerCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             {"notification_id": notification_id, "title": title, "message": message},
         )
 
-    async def _async_refresh_cutting_height_on_map_change(self) -> None:
-        """Re-read the cutting heights after the active map changed."""
+    async def _async_refresh_preferences_on_map_change(self) -> None:
+        """Re-read the mowing settings after the active map changed."""
         try:
-            await self.async_fetch_cutting_heights()
+            await self.async_fetch_mowing_preferences()
         except Exception as ex:
-            _LOGGER.warning("Cutting height refresh on map change failed: %s", ex)
+            _LOGGER.warning("Mowing preference refresh on map change failed: %s", ex)
+
+    async def _async_refresh_rain_protection_end(self) -> None:
+        """Re-read the rain protection end time after the mower reported rain."""
+        try:
+            await self.async_fetch_rain_protection_end()
+        except Exception as ex:
+            _LOGGER.warning("Rain protection end time refresh failed: %s", ex)
+
+    async def _async_refresh_preferences_on_change(self) -> None:
+        """Re-read the mowing settings after the device announced one changed."""
+        if self._write_was_ours(_WRITE_MOWING_PREFERENCES):
+            _LOGGER.debug("Ignoring the echo of a mowing preference change this integration made")
+            return
+
+        if self.current_map_id is None:
+            # Without a map there is no record to address the read at.
+            return
+
+        try:
+            await self.async_fetch_mowing_preferences(after_change=True)
+        except Exception as ex:
+            _LOGGER.warning("Mowing preference refresh on change failed: %s", ex)
+
+    async def _async_refresh_settings_on_change(self) -> None:
+        """Re-read the settings after the device announced one of them changed."""
+        if self._write_was_ours(_WRITE_DEVICE_SETTINGS):
+            _LOGGER.debug("Ignoring the echo of a settings change this integration made")
+            return
+
+        try:
+            await self.async_refresh_device_settings()
+        except Exception as ex:
+            _LOGGER.warning("Settings refresh on change failed: %s", ex)
+
+    def _write_was_ours(self, record: str) -> bool:
+        """Return whether the integration wrote to a record a moment ago."""
+        last_write = self._last_writes.get(record)
+        if last_write is None:
+            return False
+        return (time.monotonic() - last_write) < _SETTINGS_WRITE_ECHO_SECONDS
+
+    def _note_write(self, record: str) -> None:
+        """Remember that the integration just wrote to a record."""
+        self._last_writes[record] = time.monotonic()
 
     async def _async_refresh_consumables_on_charging(self) -> None:
         """Fetch updated CMS counters when the device transitions to charging."""

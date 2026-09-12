@@ -137,6 +137,9 @@
       },
       "consumable_robot_health": {
         "name": "Состояние обслуживания"
+      },
+      "rain_protection_end": {
+        "name": "Возобновление кошения после защиты от дождя"
       }
     },
     "binary_sensor": {
@@ -166,6 +169,48 @@
     "number": {
       "cutting_height": {
         "name": "Высота скашивания"
+      }
+    },
+    "switch": {
+      "charging_period": {
+        "name": "Период зарядки"
+      },
+      "rain_protection": {
+        "name": "Защита от дождя"
+      },
+      "lift_alarm": {
+        "name": "Сигнал при подъёме"
+      },
+      "off_map_alarm": {
+        "name": "Сигнал при выходе за карту"
+      },
+      "location_reporting": {
+        "name": "Местоположение в реальном времени"
+      },
+      "anti_theft_pin_check": {
+        "name": "Запрос PIN-кода перед выключением"
+      },
+      "edge_mowing_auto": {
+        "name": "Автоматическая краевая стрижка"
+      },
+      "edge_blade_offset": {
+        "name": "EdgeMaster"
+      },
+      "edge_mowing_safe": {
+        "name": "Безопасное скашивание по краям"
+      }
+    },
+    "time": {
+      "charging_period_start": {
+        "name": "Начало периода зарядки"
+      },
+      "charging_period_end": {
+        "name": "Конец периода зарядки"
+      }
+    },
+    "select": {
+      "rain_delay": {
+        "name": "Задержка после дождя"
       }
     }
   }

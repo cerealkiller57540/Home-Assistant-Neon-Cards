@@ -1234,12 +1234,15 @@ class NeonSolarCardWebgl extends HTMLElement {
     this._gl           = null;   // couche WebGL du reflet (variante webgl)
     this._glRaf        = 0;      // /!\ distinct de _rafId : celui-ci coalesce le DOM
     this._glVisible    = true;   // pilote par l IntersectionObserver
+    this._glLast       = 0;      // throttle FPS iPad/low-power
     this._glTick       = (t) => {
       /* La boucle s auto-annule des qu elle cesse d etre utile : contexte perdu,
          card hors ecran, ou plus aucune animation a jouer. Rallumee par
          _glSync(). */
       if (!this._gl || !this._glVisible || !this._glAnimated()) { this._glRaf = 0; return; }
       this._glRaf = requestAnimationFrame(this._glTick);
+      if (IS_LOW_POWER && t - this._glLast < 1000 / 24) return;  // cap 24fps sur iPad
+      this._glLast = t;
       this._glFrame(t);
     };
     /* Repeindre UNE frame hors boucle : c est ce qui garde le reflet juste quand
@@ -2143,7 +2146,7 @@ class NeonSolarCardWebgl extends HTMLElement {
 
     const r = R.wrap.getBoundingClientRect();
     if (!r.width || !r.height) return;         /* card repliee : rien a peindre */
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = IS_LOW_POWER ? 1 : Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.max(1, Math.round(r.width  * dpr));
     const h = Math.max(1, Math.round(r.height * dpr));
     if (w !== R.w || h !== R.h) {

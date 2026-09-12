@@ -2903,10 +2903,11 @@ class NeonDualThermoCardWebgl extends HTMLElement {
       tainted: false, bgImg: null, bgEl: null, blur: 12,
       t0: (typeof performance !== 'undefined' ? performance.now() : Date.now()),
       dpr: Math.min((typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1) || 1,
-                    NDT_IS_LOW_POWER ? 1.5 : 2),
+                    NDT_IS_LOW_POWER ? 1 : 2),
       // 30 FPS suffit pour la perception du plasma et évite de monopoliser le
-      // GPU sur les dashboards qui affichent plusieurs cartes WebGL.
-      minDt: NDT_REDUCED ? 400 : 1000 / 30,
+      // GPU sur les dashboards qui affichent plusieurs cartes WebGL ; 24 sur
+      // iPad/mobile (NDT_IS_LOW_POWER) pour limiter la chauffe.
+      minDt: NDT_REDUCED ? 400 : (NDT_IS_LOW_POWER ? 1000 / 24 : 1000 / 30),
     };
     this._wgl = rig;
 

@@ -188,7 +188,19 @@ async def async_setup_entry(
     # Router entities
     switch_entities = []
 
+    # En SNMP pur, firmware/serial/bootloader n'ont pas de source : sysDescr donne le
+    # modele, pas une version. Plutot que d'inventer une valeur, on ne cree pas l'entite.
+    # Filtre sur la valeur mesuree, pas sur une liste de cles en dur : si un jour une
+    # source apparait, le capteur revient tout seul.
+    switch_infos = coordinator_switch_infos.data or {}
+
     for description in DEVICE_SENSOR_TYPES:
+        if switch_infos.get(description.key, None) == "":
+            _LOGGER.debug(
+                "[sensor] %s vide (pas de source SNMP), entite non creee",
+                description.key,
+            )
+            continue
         descr_entity = NetgearRouterSensorEntity(
             coordinator=coordinator_switch_infos,
             switch=gs_switch,

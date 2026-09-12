@@ -137,6 +137,9 @@
       },
       "consumable_robot_health": {
         "name": "État de maintenance"
+      },
+      "rain_protection_end": {
+        "name": "Reprise de la tonte après protection pluie"
       }
     },
     "binary_sensor": {
@@ -166,6 +169,48 @@
     "number": {
       "cutting_height": {
         "name": "Hauteur de coupe"
+      }
+    },
+    "switch": {
+      "charging_period": {
+        "name": "Période de charge"
+      },
+      "rain_protection": {
+        "name": "Protection pluie"
+      },
+      "lift_alarm": {
+        "name": "Alarme de soulèvement"
+      },
+      "off_map_alarm": {
+        "name": "Alarme hors carte"
+      },
+      "location_reporting": {
+        "name": "Localisation en temps réel"
+      },
+      "anti_theft_pin_check": {
+        "name": "Vérification du code PIN avant l'arrêt"
+      },
+      "edge_mowing_auto": {
+        "name": "Tonte automatique des bordures"
+      },
+      "edge_blade_offset": {
+        "name": "EdgeMaster"
+      },
+      "edge_mowing_safe": {
+        "name": "Tonte des bordures sécurisée"
+      }
+    },
+    "time": {
+      "charging_period_start": {
+        "name": "Début de la période de charge"
+      },
+      "charging_period_end": {
+        "name": "Fin de la période de charge"
+      }
+    },
+    "select": {
+      "rain_delay": {
+        "name": "Délai après la pluie"
       }
     }
   }

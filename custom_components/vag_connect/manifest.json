@@ -2,7 +2,8 @@
   "domain": "vag_connect",
   "name": "VW Group Connect",
   "after_dependencies": [
-    "llm"
+    "llm",
+    "http"
   ],
   "codeowners": [
     "@its-me-prash"
@@ -22,5 +23,5 @@
     "aiomqtt>=2.0.0",
     "adb-shell==0.4.4"
   ],
-  "version": "4.2.0"
+  "version": "4.7.9"
 }

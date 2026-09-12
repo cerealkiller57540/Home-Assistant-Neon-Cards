@@ -1,4 +1,4 @@
-/* ── neon-climate-card-webgl v1.0 ──────────────────────────────────────────────
+/* ── neon-climate-card-webgl v1.4 ──────────────────────────────────────────────
  * Variante WEBGL de neon-climate-card : le souffle sous la grille n'est plus une
  * animation 2D scriptée mais un vrai fluide (Navier-Stokes stable, lignée Stam /
  * PavelDoGreat) rendu par shaders. Chaque fente de la grille est un jet à part
@@ -51,7 +51,7 @@
     'DM Sans','Playfair Display','Cinzel',
   ];
 
-  const CARD_VERSION = '1.0';
+  const CARD_VERSION = '1.5';
 
   /* Défauts validés au banc (climate_flow_v2.html). Ce sont EUX la référence :
    * les valeurs "théoriques" de la v1 avaient été calibrées sur une géométrie
@@ -1150,10 +1150,13 @@
       tgt.addEventListener('pointercancel', up);
       // le clic ne doit pas remonter jusqu'au more-info de .ac-body
       tgt.addEventListener('click', e => e.stopPropagation());
-      tgt.addEventListener('wheel', e => {
-        e.preventDefault(); e.stopPropagation();
-        this._adjustTemp(e.deltaY < 0 ? +1 : -1);
-      }, { passive: false });
+      /* PAS de handler `wheel` : la molette n'exige aucun clic, donc un simple
+       * défilement du dashboard avec le curseur au-dessus de la pilule réglait
+       * la consigne à l'insu de l'utilisateur. Mesuré le 30/08/2026 : deux crans
+       * involontaires (25→24→23, 5 messages MQTT /set en 700 ms) ont allumé la
+       * clim pour de bon — le blaster IR ne sait pas émettre « juste une
+       * consigne », il rejoue une trame complète avec un mode actif.
+       * Le drag ci-dessus reste : lui est intentionnel. */
     }
 
     _applyColors(){
@@ -1506,7 +1509,8 @@
         const active = this._windSolver;
         if (this._windMode === 'off' || !active) return;
         const now = performance.now();
-        if (now - this._windLastDraw < 1000 / 30) return;
+        const capFps = NCC_IS_LOW_POWER ? 24 : 30;
+        if (now - this._windLastDraw < 1000 / capFps) return;
         this._windLastDraw = now;
         try {
           const P = this._flowParams();
@@ -1708,14 +1712,14 @@
       const hdrGrad = hdr.gradient
         ? `background:linear-gradient(90deg,${hdrGradFrom},${hdrGradTo});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;`
         : '';
-      const hdrIconColor = hdr.icon_color || color;
+      const hdrIconColor = hdr.icon_color || 'rgba(var(--rgb-primary-text-color),0.85)';   // défaut FIXE, indépendant de color (cf skill ha-neon-css)
       const hdrIconSize  = hdr.icon_size
         ? (/^[\d.]+$/.test(String(hdr.icon_size)) ? `${hdr.icon_size}px` : hdr.icon_size)
         : size;
       const hdrFlick = hdr.flicker
         ? `animation:nec-flicker ${this._flickDur || 3}s ease-in-out infinite ${this._flickOff || 0}s;`
         : '';
-      const hdrWeight  = hdr.font_weight ?? 400;
+      const hdrWeight  = hdr.font_weight ?? 700;   // aligné sur neon-entities-card, la référence canon
       const hdrSpacing = hdr.letter_spacing || 'clamp(1px, 0.5cqi, 3px)';
       const hdrUpper   = hdr.uppercase === false ? 'none' : 'uppercase';
       const hdrItalic  = hdr.italic ? 'italic' : 'normal';
@@ -1856,6 +1860,14 @@
       if (!this._hass) return;
       const s = this._hass.states[this._config.entity];
       if (!s) return;
+      /* Garde-fou : ne JAMAIS régler la consigne quand l'appareil est éteint.
+       * L'entité est portée par un blaster IR (NodOn), qui est incapable
+       * d'émettre une commande partielle : toute trame encode l'état complet
+       * (mode + consigne + ventilation + volet). Envoyer une consigne sur une
+       * clim `off` fait donc partir une trame avec un mode ACTIF et l'allume
+       * réellement. Régler la température ne doit jamais être un interrupteur :
+       * pour allumer, on passe par les boutons de mode. */
+      if (s.state === 'off') return;
       const min  = parseFloat(s.attributes.min_temp)         || 16;
       const max  = parseFloat(s.attributes.max_temp)         || 30;
       const step = parseFloat(s.attributes.target_temp_step) || 1;
@@ -2536,7 +2548,9 @@
       s.style.cssText = 'width:100%;padding:6px 8px;border-radius:6px;cursor:pointer;' +
                         'background:var(--secondary-background-color);color:var(--primary-text-color);' +
                         'border:1px solid var(--divider-color);';
-      options.forEach(([v, lbl]) => {
+      options.forEach(opt => {
+        // accepte une string nue (ex: NEON_FONTS) ou un tuple [valeur, libellé] (ex: flow_quality)
+        const [v, lbl] = Array.isArray(opt) ? opt : [opt, opt];
         const o = document.createElement('option');
         o.value = v; o.textContent = lbl; s.appendChild(o);
       });
@@ -2552,13 +2566,6 @@
       // tout le schéma de la prod (en-tête, entités, couleurs de mode, display…)
       this._schemaBase();
 
-      this._section('Couleurs boutons machine');
-      this._hint('Gaz rares & radiations — la teinte monte avec le réglage');
-      this._color('color_fan_lo',   'Ventilation — mini',  COLOR_DEFAULTS.color_fan_lo);
-      this._color('color_fan_hi',   'Ventilation — maxi',  COLOR_DEFAULTS.color_fan_hi);
-      this._color('color_swing_lo', 'Volet — fermé',       COLOR_DEFAULTS.color_swing_lo);
-      this._color('color_swing_hi', 'Volet — grand ouvert', COLOR_DEFAULTS.color_swing_hi);
-
       this._section('Flux d\'air (WebGL)');
       this._select('flow_quality', 'Qualité', [
         ['auto',  'Auto — léger sur écran dense (recommandé)'],
@@ -2568,9 +2575,11 @@
       ], 'auto', 'Sur mobile (écran dense), « léger » rend le flux PLUS visible et ~7× moins coûteux : ' +
                  'à 2× la même matière est diluée sur 4× plus de pixels. L\'animation se met aussi en ' +
                  'veille dès que la card sort de l\'écran.');
-      this._hint('Défauts = réglages validés au banc. Double-clic sur une valeur pour y revenir.');
-      FLOW_META.forEach(([k, min, max, step, dec, note]) => {
-        this._slider('flow_' + k, k, min, max, step, dec, FLOW_DEFAULTS[k], note);
+      this._group('Réglages fins du flux (19 paramètres)', false, () => {
+        this._hint('Défauts = réglages validés au banc. Double-clic sur une valeur pour y revenir.');
+        FLOW_META.forEach(([k, min, max, step, dec, note]) => {
+          this._slider('flow_' + k, k, min, max, step, dec, FLOW_DEFAULTS[k], note);
+        });
       });
     }
 
@@ -2578,6 +2587,12 @@
      * Rapatrié de neon-climate-card.js : cette card est AUTONOME,
      * elle n'hérite plus de l'ancienne card CSS. */
     constructor() { super(); this._config = {}; this._hass = null; this._rendered = false; }
+    /* HA appelle .setConfig() sur l'élément retourné par getConfigElement() — sans cet alias
+     * public, _setConfigBase() ne se déclenche jamais et l'éditeur reste vide (bug constaté le
+     * 24/08/26 : DOM <neon-climate-card-webgl-editor></...> sans aucun enfant, pas d'erreur
+     * console car HA ne fait qu'ignorer l'absence de la méthode). */
+    setConfig(c) { this._setConfigBase(c); }
+    disconnectedCallback() { this._disconnectedBase(); }
     _setConfigBase(c) {
       this._config = { ...(c || {}) };
       if (!this._rendered) { this._rendered = true; this._render(); }
@@ -2621,8 +2636,28 @@
       });
       this._bindIconPreviews(true);
     }
-    _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d); return d; }
-    _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; this.appendChild(d); return d; }
+    // Titre de section fixe (non repliable) — repère visuel plat, comme sur les autres cards néon.
+    _section(t) {
+      this._target = null; // les sections top-level reviennent s'ancrer directement sur `this`
+      const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d);
+      return d;
+    }
+    // Sous-groupe repliable (pattern storey-battery-card-gl.js / neon-solar-production-card.js) —
+    // ha-expansion-panel natif HA. buildFn() ré-ancre les helpers dessus via _target, puis restaure
+    // l'ancrage précédent (permet d'imbrer, même si on ne l'utilise pas ici).
+    _group(title, expanded, buildFn) {
+      const panel = document.createElement('ha-expansion-panel');
+      panel.outlined = true;
+      panel.header = title;
+      if (expanded) panel.expanded = true;
+      (this._target || this).appendChild(panel);
+      const prevTarget = this._target;
+      this._target = panel;
+      buildFn();
+      this._target = prevTarget;
+      return panel;
+    }
+    _hint(t) { const d = document.createElement('div'); d.className = 'hint'; (this._target || this).appendChild(d); return d; }
     _text(key, label, ph = '') {
       const w = this._row(label).wrap;
       const inp = document.createElement('input');
@@ -2682,7 +2717,7 @@
       const lbl = document.createElement('label');
       if (isHtml) lbl.innerHTML = labelHtml; else lbl.textContent = labelHtml;
       const wrap = document.createElement('div'); wrap.className = 'field-wrap';
-      row.appendChild(lbl); row.appendChild(wrap); this.appendChild(row);
+      row.appendChild(lbl); row.appendChild(wrap); (this._target || this).appendChild(row);
       return { row, wrap };
     }
     _toHex(c) {
@@ -2727,6 +2762,8 @@
         :host { display:block; padding:14px; font-family:var(--primary-font-family,Roboto,sans-serif); }
         .sec { font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--divider-color); }
         .sec:first-child { margin-top:0; }
+        ha-expansion-panel { display:block; margin:8px 0; --expansion-panel-content-padding:8px 12px 12px; }
+        ha-expansion-panel .row:first-child { margin-top:2px; }
         .row { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
         .row label { flex:0 0 160px;font-size:12px;color:var(--secondary-text-color); }
         .row label .mdi-link { color:var(--primary-color);font-size:9px;text-transform:none;letter-spacing:0; }
@@ -2745,6 +2782,7 @@
     }
     _render() {
       this.innerHTML = '';
+      this._target = null;
       const st = document.createElement('style'); st.textContent = this._css(); this.appendChild(st);
       this._schema();
       this._fillDatalists();
@@ -2757,52 +2795,60 @@
       this._color('header.color', 'Couleur titre', 'var(--primary-color)', 'défaut : couleur primaire — ex rgb(var(--rgb-lavande))');
       this._text('header.title_size', 'Taille titre', '16px');
       this._select('header.font', 'Police', NEON_FONTS, '— thème HA —');
-      this._text('header.subtitle', 'Sous-titre', 'optionnel');
-      this._text('header.badge', 'Badge', 'optionnel');
-      this._text('header.font_weight', 'Épaisseur', '400');
-      this._text('header.letter_spacing', 'Espacement', 'clamp(1px, 0.5cqi, 3px)');
       this._toggle('header.uppercase', 'Majuscules', true);
-      this._toggle('header.italic', 'Italique', false);
-      this._text('header.title_shadow', 'Text-shadow', '0 0 6px ...');
-      this._toggle('header.gradient', 'Titre en dégradé');
-      this._color('header.gradient_from', 'Dégradé — départ', 'var(--primary-color)');
-      this._color('header.gradient_to', 'Dégradé — arrivée', 'var(--accent-color)');
-      this._toggle('header.glow', 'Glow du titre');
-      this._text('header.glow_size', 'Taille du glow', '12');
-      this._color('header.glow_color', 'Couleur du glow', 'var(--primary-color)');
-      this._toggle('header.flicker', 'Scintillement du titre');
-      this._color('header.icon_color', "Couleur de l'icône", 'défaut : couleur du titre');
-      this._text('header.icon_size', "Taille de l'icône", 'défaut : taille du titre');
-      this._hint('Mêmes réglages que la neon-entities-card. Text-shadow ci-dessus, si renseigné, remplace le glow.');
 
-      this._section('Entité principale');
+      this._group('Effets avancés du titre', false, () => {
+        this._text('header.subtitle', 'Sous-titre', 'optionnel — texte sous le titre');
+        this._text('header.badge', 'Badge', 'optionnel — étiquette courte à côté du titre, ex: AUTO');
+        this._text('header.font_weight', 'Épaisseur', '400');
+        this._text('header.letter_spacing', 'Espacement', 'clamp(1px, 0.5cqi, 3px)');
+        this._toggle('header.italic', 'Italique', false);
+        this._text('header.title_shadow', 'Text-shadow', '0 0 6px ...');
+        this._toggle('header.gradient', 'Titre en dégradé');
+        this._color('header.gradient_from', 'Dégradé — départ', 'var(--primary-color)');
+        this._color('header.gradient_to', 'Dégradé — arrivée', 'var(--accent-color)');
+        this._toggle('header.glow', 'Glow du titre');
+        this._text('header.glow_size', 'Taille du glow', '12');
+        this._color('header.glow_color', 'Couleur du glow', 'var(--primary-color)');
+        this._toggle('header.flicker', 'Scintillement du titre');
+        this._color('header.icon_color', "Couleur de l'icône", 'défaut : couleur du titre');
+        this._text('header.icon_size', "Taille de l'icône", 'défaut : taille du titre');
+        this._hint('Mêmes réglages que la neon-entities-card. Text-shadow, si renseigné, remplace le glow.');
+      });
+
+      this._section('Entité, capteurs & options');
       this._entity('entity', 'Entité climate *', 'climate');
       this._text('name', 'Nom affiché', 'Vide = friendly_name');
-
-      this._section('Capteurs');
       this._entity('humidity_entity', 'Entité humidité', 'sensor');
       this._hint("Facultatif — sinon current_humidity de l'entité climate");
       this._entity('power_entity', 'Entité puissance', 'sensor');
       this._hint("Facultatif — anime le flux d'air seulement si puissance ≥ seuil (sinon basé sur le mode seul)");
-
-      this._section('Couleurs boutons mode');
-      this._color('color_off', 'OFF', MODE_DEFAULTS.off);
-      this._color('color_heat', 'HEAT', MODE_DEFAULTS.heat);
-      this._color('color_cool', 'COOL', MODE_DEFAULTS.cool);
-      this._color('color_dry', 'DRY', MODE_DEFAULTS.dry);
-      this._color('color_fan', 'FAN ONLY', MODE_DEFAULTS.fan_only);
-      this._color('color_fan_btn', 'FAN (bouton cycle)', '#00FFAA');
-
-      this._section('Couleur pill température');
-      this._color('color_pill', 'Pill cible', PILL_DEFAULT);
-
-      this._section('Couleur display AC');
-      this._color('color_display', 'Dot-matrix / display', '#00fff9');
-      this._toggle('neon_display_glow', 'Triple neon glow', true);
-
-      this._section('Options');
       this._toggle('show_wind', 'Animation air', true);
       this._text('power_threshold', 'Seuil puissance (W)', '10');
+
+      this._section('Couleurs');
+      this._group('Boutons mode', false, () => {
+        this._color('color_off', 'OFF', MODE_DEFAULTS.off);
+        this._color('color_heat', 'HEAT', MODE_DEFAULTS.heat);
+        this._color('color_cool', 'COOL', MODE_DEFAULTS.cool);
+        this._color('color_dry', 'DRY', MODE_DEFAULTS.dry);
+        this._color('color_fan', 'FAN ONLY', MODE_DEFAULTS.fan_only);
+        this._color('color_fan_btn', 'FAN (bouton cycle)', '#00FFAA');
+      });
+      this._group('Pill température', false, () => {
+        this._color('color_pill', 'Pill cible', PILL_DEFAULT);
+      });
+      this._group('Display AC', false, () => {
+        this._color('color_display', 'Dot-matrix / display', '#00fff9');
+        this._toggle('neon_display_glow', 'Triple neon glow', true);
+      });
+      this._group('Boutons machine (ventilation / volet)', false, () => {
+        this._hint('Gaz rares & radiations — la teinte monte avec le réglage');
+        this._color('color_fan_lo',   'Ventilation — mini',  COLOR_DEFAULTS.color_fan_lo);
+        this._color('color_fan_hi',   'Ventilation — maxi',  COLOR_DEFAULTS.color_fan_hi);
+        this._color('color_swing_lo', 'Volet — fermé',       COLOR_DEFAULTS.color_swing_lo);
+        this._color('color_swing_hi', 'Volet — grand ouvert', COLOR_DEFAULTS.color_swing_hi);
+      });
     }
   }
 

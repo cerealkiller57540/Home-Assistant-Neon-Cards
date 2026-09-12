@@ -31,6 +31,16 @@
           "mfa_code": "6-numeroinen koodi — voimassa muutaman minuutin."
         }
       },
+      "porsche_captcha": {
+        "title": "Captcha vaaditaan",
+        "description": "Porsche vaatii captchan ratkaisemista kirjautumisen jatkamiseksi.\n\n{captcha_img}\n\nRatkaise se kerran parhaan arvauksesi mukaan — toistuvat epäonnistuneet yritykset ovat johtaneet Porsche-tilien lukitsemiseen epäilyttävän toiminnan vuoksi.\n\nVastauksesi lähetetään vain Porschen kirjautumispalveluun, ei koskaan kolmansille osapuolille tai tälle projektille. Jos kuva ei lataudu tai virheet toistuvat, voit ilmoittaa siitä: {report_url}",
+        "data": {
+          "captcha_code": "Captcha-koodi"
+        },
+        "data_description": {
+          "captcha_code": "Kirjoita yllä olevassa kuvassa näkyvät merkit."
+        }
+      },
       "email_password": {
         "title": "Kirjaudu sähköpostilla + salasanalla (vanha tapa)",
         "description": "Yhdistä ajoneuvosi Home Assistantiin.\n\nValitse merkkisi ja syötä valmistajan sovelluksen kirjautumistiedot.",
@@ -144,14 +154,31 @@
           "vin": "VIN (sovelluksessa näkyvä auto)",
           "spin": "S-PIN (valinnainen)",
           "companion_use_addon": "Yhdistä ADB Bridge -lisäosan kautta",
-          "companion_addon_token": "Lisäosan token"
+          "companion_addon_token": "Lisäosan token",
+          "companion_use_relay": "Käytä companion-agenttisovellusta (puhelin soittaa Home Assistantille)",
+          "companion_agent_token": "Agentin tunnus"
         },
         "data_description": {
           "adb_host": "Puhelimen osoite verkossasi, esim. 192.168.1.42.",
           "adb_port": "Yleensä 5555, kun ADB toimii Wi-Fin yli.",
           "vin": "Sovelluksessa näkyvän auton 17-merkkinen VIN.",
           "companion_use_addon": "Valitse tämä Android 11:tä tai uudempaa puhelinta varten, joka tarjoaa vain langattoman virheenkorjauksen. Syötä sitten yllä LISÄOSAN osoite puhelimen osoitteen sijaan.",
-          "companion_addon_token": "Tarvitaan vain, jos määritit api_token-arvon lisäosassa."
+          "companion_addon_token": "Tarvitaan vain, jos määritit api_token-arvon lisäosassa.",
+          "companion_use_relay": "Valitse tämä, jos puhelimessa on companion-agenttisovellus. Silloin puhelin soittaa Home Assistantille: ADB:tä, langatonta vianjäljitystä tai kiinteää IP-osoitetta ei tarvita — jätä osoitekenttä tyhjäksi.",
+          "companion_agent_token": "Agenttisovelluksen luoma satunnainen tunnus. Vähintään 32 merkkiä ja jokaiselle ajoneuvolle oma."
+        }
+      },
+      "audi_mbb_fallback": {
+        "title": "Audi — pidä etäkomennot toiminnassa (varayhteys)",
+        "description": "Tämä lisää varayhteyden, jotta Audisi etäkomennot — lukitus/avaus, ilmastointi ja lataus — pysyvät toiminnassa, vaikka Audi joskus muuttaisi tapaa, jolla sovellus kirjautuu sisään. Arjessa mikään ei muutu: Audisi käyttää tavallista yhteyttään, ja varayhteys astuu kuvaan vain, jos tavallinen lakkaa hyväksymästä komentoja. Käyttöönotto vaatii yhden nopean selainvahvistuksen (salasanaa ei tallenneta). Valitse Audi, jonka lisäsit jo QR-/sovelluskirjautumisella. Toimii useimmissa bensiini-, diesel- ja lataushybridi-Audeissa; joitakin uusimpia täyssähkömalleja ei tueta, ja ne hylätään automaattisesti.",
+        "data": {
+          "entry_id": "Mikä Audi",
+          "mbb_vins": "Ajoneuvon tunnus (VIN) — jätä yleensä tyhjäksi",
+          "spin": "S-PIN (tarvitaan vain lukitukseen/avaukseen)"
+        },
+        "data_description": {
+          "mbb_vins": "Jätä tämä tyhjäksi, ellei käyttöönotto pyydä sitä.",
+          "spin": "Audi-S-PINisi — koodi, jota käytät etälukitukseen/-avaukseen."
         }
       }
     },
@@ -166,20 +193,33 @@
       "invalid_credentials": "Sähköpostiosoite tai salasana väärin.",
       "upstream_unavailable": "VW-taustajärjestelmä tilapäisesti tavoittamattomissa. Tämä on palvelinpuolen ongelma VW:llä, EI kirjautumistieto-ongelma. Odota 5–15 minuuttia ja yritä uudelleen. ÄLÄ määritä integraatiota uudelleen.",
       "na_signin_attestation": "Sähköpostiosoitteesi ja salasanasi ovat kunnossa — Volkswagen North America estää nyt tämän kirjautumisen Googlen laitevahvistustarkistuksen (Play Integrity) taakse, jonka vain virallinen sovellus aidossa puhelimessa pystyy läpäisemään. Salasanan syöttäminen uudelleen ei auta; kyseessä on VW:n palvelinpuolen lukitus, ei kirjautumistieto-ongelma. (Seuranta: #1165.)",
+      "porsche_login_wall": "Sähköpostisi ja salasanasi ovat kunnossa — kirjautuminen pääsi salasanavaiheen ohi, mutta päätyi sitten Porschen captcha-/suostumusnäyttöön (havaittu joillakin tileillä osoitteessa my.porsche.com), jota headless-kirjautuminen ei pysty ohittamaan. Salasanan syöttäminen uudelleen ei auta; kyseessä on Porschen puolen este, ei tunnistetieto-ongelma. Yritä enintään kerran — toistuvat yritykset ovat johtaneet Porsche-tilien lukitukseen. (Seuranta: #1337.)",
       "brand_not_dag_eligible": "Valittu merkki ei tue selainkirjautumista. Käytä sen sijaan sähköposti + salasana -kirjautumista.",
       "skoda_qr_retired": "Volkswagen sammutti Škodan salasanattoman (QR) kirjautumisen, eikä se toimi enää. Palaa takaisin ja valitse ”Sähköposti + salasana (vanha tapa)”, valitse siellä Škoda ja kirjaudu MyŠkoda-sähköpostillasi ja -salasanallasi.",
+      "device_grant_retired": "Tämän merkin sovelluksen laitekirjautumisen valmistaja poisti käytöstä, eikä sitä voi enää suorittaa automaattisesti — se vaatii nyt sovelluksen laitepohjaisen vahvistuksen. Audi: palaa takaisin ja valitse ”Sähköposti + salasana”, ja määritä sitten vain luku -tilassa oleva EU Data Act -portaali, joka toimii edelleen. Porsche: vain luku -varajärjestelmää ei vielä ole (seurataan kohdassa #1337).",
       "portal_interaction_required": "EU Data Act -portaali vaatii kertaluonteisen toimenpiteen selaimessasi tai merkin sovelluksessa (esim. käyttöehtojen hyväksyminen, suostumuksen vahvistaminen, käyttöönoton/alueen valinnan viimeistely) ennen kuin selaimeton pääsy toimii. Tämä EI ole väärän salasanan ongelma — avaa portaali kerran selaimessa, suorita kehote loppuun ja yritä sitten uudelleen.",
       "still_waiting_browser": "Odotetaan yhä selaimen hyväksyntää. Avaa yllä oleva URL-osoite, kirjaudu sisään, vahvista koodi ja napsauta sitten Lähetä uudelleen.",
       "companion_cannot_connect": "Puhelimeen ei saatu yhteyttä ADB:n kautta. Tarkista, että se on verkossa, että ADB Wi-Fin yli on käytössä ja että hyväksyit virheenkorjauskehotteen.",
       "companion_needs_addon": "Tämä näyttää Android 11 -puhelimelta tai uudemmalta, joka käyttää langatonta virheenkorjausta. Suora yhteys tästä ei toimi sen kanssa (se vaatii TLS:n ja parituksen). Asenna 'VW Group App ADB Bridge' -lisäosa (github.com/its-me-prash/vwgroup-app-adb-bridge) ja anna sen osoite tähän. Vanhemmat puhelimet (Android 10 tai vanhempi) yhdistyvät suoraan.",
       "companion_app_not_found": "Yhteys puhelimeen muodostettiin, mutta merkin sovellusta ei ole asennettu siihen.",
-      "companion_unknown_brand": "Kyseiselle merkille ei ole vielä apupuhelimen esiasetusta."
+      "companion_unknown_brand": "Kyseiselle merkille ei ole vielä apupuhelimen esiasetusta.",
+      "companion_agent_token_too_short": "Agentin tunnus on liian lyhyt. Liitä agenttisovelluksen luoma satunnainen tunnus (vähintään 32 merkkiä).",
+      "companion_host_required": "Anna puhelimen IP-osoite — tai valitse agenttivaihtoehto, jos puhelin soittaa Home Assistantille.",
+      "missing_captcha": "Kirjoita yllä olevassa kuvassa näkyvät merkit.",
+      "captcha_retry": "Ratkaise yllä näkyvä captcha jatkaaksesi."
     },
     "abort": {
       "already_configured": "Tämä tili on jo määritetty.",
       "reauth_successful": "Uudelleenkirjautuminen onnistui.",
       "reconfigure_successful": "Määritys päivitetty onnistuneesti.",
-      "mbb_not_eligible": "Ajoneuvosi ei sovellu pysyvään MBB-kirjautumiseen — taustajärjestelmä palautti ”Unknown user”. Tämä tarkoittaa, että se on uudempi ID- / MEB-malli (ID.3/4/5, e-up jne.), jota ei koskaan liitetty vanhaan Car-Net/MBB-järjestelmään, joten pysyvä kirjautuminen + etäkomennot eivät tavoita sitä. Käytä näille ajoneuvoille EU Data Act -portaalikanavaa (tai sähköposti + salasana -kirjautumista) sen sijaan. MBB-kirjautuminen on tarkoitettu vanhemmille Car-Net-autoille (useimmat PHEV- / polttomoottorimallit)."
+      "mbb_not_eligible": "Ajoneuvosi ei sovellu pysyvään MBB-kirjautumiseen — taustajärjestelmä palautti ”Unknown user”. Tämä tarkoittaa, että se on uudempi ID- / MEB-malli (ID.3/4/5, e-up jne.), jota ei koskaan liitetty vanhaan Car-Net/MBB-järjestelmään, joten pysyvä kirjautuminen + etäkomennot eivät tavoita sitä. Käytä näille ajoneuvoille EU Data Act -portaalikanavaa (tai sähköposti + salasana -kirjautumista) sen sijaan. MBB-kirjautuminen on tarkoitettu vanhemmille Car-Net-autoille (useimmat PHEV- / polttomoottorimallit).",
+      "mbb_fallback_armed": "Varayhteys otettu käyttöön. Jos Audisi tavallinen yhteys joskus lakkaa hyväksymästä etäkomentoja, lukitus/avaus, ilmastointi ja lataus siirtyvät automaattisesti varayhteyteen. Arjessa mikään ei muutu.",
+      "no_devicegrant_audi": "Sopivaa Audia ei löytynyt. Tämä varayhteys koskee vain Audia, jonka lisäsit QR-/sovelluskirjautumisella ja jolla sitä ei vielä ole. Lisää Audisi ensin siten ja palaa sitten tänne.",
+      "porsche_login_wall": "Tunnistetietosi ovat kunnossa — kirjautuminen pääsi salasanavaiheen ohi, mutta pysähtyi Porschen captcha-/suostumusnäyttöön, jota se ei voi suorittaa automaattisesti (havaittu osoitteessa my.porsche.com). Kyseessä on Porschen puolen este, seurattu kohdassa #1337, ei väärä salasana. Älä yritä uudelleen silmukassa — toistuvat yritykset ovat lukinneet Porsche-tilejä. Jos voit, ilmoita siitä, jotta voimme korjata sen (liitä diagnostiikka): {report_url}",
+      "porsche_captcha_failed": "Captchaa ei voitu vahvistaa, ja se on nyt käytetty. Sulje tämä ikkuna ja aloita Porsche-kirjautuminen uudelleen saadaksesi uuden. Jos voit, ilmoita siitä, jotta voimme korjata sen (liitä diagnostiikka): {report_url}",
+      "porsche_captcha_cooldown": "Liian monta captcha-yritystä. Toistuvat yritykset voivat saada Porschen lukitsemaan tilin väliaikaisesti tai merkitsemään verkkosi, joten toiminto pysäytettiin tilisi suojaamiseksi. Odota muutama minuutti ennen kuin yrität uudelleen. Jos voit, ilmoita siitä, jotta voimme korjata sen (liitä diagnostiikka): {report_url}",
+      "reconfigure_failed": "Uudelleenmääritys epäonnistui: määritysmerkintää ei löytynyt. Yritä uudelleen.",
+      "reauth_failed": "Uudelleentodennus epäonnistui: määritysmerkintää ei löytynyt. Yritä uudelleen."
     },
     "progress": {
       "awaiting_browser_login": "Avaa {verification_uri} millä tahansa selaimella, kirjaudu Brand ID -tiliisi ja vahvista koodi {user_code}.",
@@ -194,6 +234,7 @@
           "scan_interval": "Päivitysväli",
           "spin": "S-PIN",
           "battery_nominal_kwh": "Akun nimelliskapasiteetti (kWh, SoH-laskentaan)",
+          "fuel_tank_capacity": "Polttoainesäiliön tilavuus (litraa, polttoaine-%)",
           "enable_reverse_geocoding": "Käänteinen geokoodaus (pysäköintiosoite)",
           "read_only_mode": "Vain luku -tila",
           "companion_read_charge_detail": "Companion: lue lataustavoite (navigoi sovelluksessa)",
@@ -204,20 +245,27 @@
           "enable_push_audi_vw": "Audi/VW push-päivitykset (Cariad FCM, live (beta))",
           "client_id_override": "OAuth client_id -ohitus (tehokäyttäjät)",
           "eu_data_act_auto_kickoff": "EU Data Act: luo mukautettu datapyyntö automaattisesti",
-          "supplementary_authproxy": "Lisää Volkswagen.de-lukukanava (yhdistä lisätietoja)",
+          "supplementary_authproxy": "Lisää tai päivitä Volkswagen.de-lukukanava (yhdistä lisätietoja)",
           "hide_empty_entities": "Piilota entiteetit ilman tietoja",
-          "supplementary_eu_portal": "Lisää EU Data Act -portaalin lukukanava",
+          "supplementary_eu_portal": "Lisää tai päivitä EU Data Act -portaalin lukukanava",
           "remove_supplementary_authproxy": "Poista vw.de-lukukanava",
           "remove_supplementary_eu_portal": "Poista EU Data Act -portaalin lukukanava",
-          "supplementary_tibber": "Lisää Tibber-lukukanava (sähköauton lataustiedot)",
+          "supplementary_tibber": "Lisää tai päivitä Tibber-lukukanava (sähköauton lataustiedot)",
           "remove_supplementary_tibber": "Poista Tibber-lukukanava",
           "abrp_enable": "Ota käyttöön ABRP-telemetrian lähetys",
           "abrp_api_key": "ABRP api_key (kehittäjäavain)",
           "abrp_user_token": "ABRP-tunniste (ajoneuvokohtainen)",
           "keep_raw_datasets": "Säilytä EU Data Act -raakadatajoukot (diagnostiikka)",
+          "auto_utility_meters": "Luo kuukausimittarit automaattisesti (ladattu energia, kilometrit)",
           "test_cohort": "Auta parantamaan VW Group Connectia (vapaaehtoinen testiryhmä)",
           "vweu_device_grant": "Lisää VW EU Two-Way — komennot + live-lukemat (BETA)",
-          "remove_vweu_twoway": "Poista VW EU Two-Way (palaa edelliseen kanavaan)"
+          "remove_vweu_twoway": "Poista VW EU Two-Way (palaa edelliseen kanavaan)",
+          "companion_read_vehicle_health": "Companion: lue mittarilukema ja huolto ajoneuvon kunnosta (navigoi sovelluksessa)",
+          "companion_read_climate_detail": "Companion: lue tavoite- ja ulkolämpötila (navigoi sovelluksessa)",
+          "companion_read_parking_position": "Companion: lue pysäköintipaikka sovelluksen jakolinkistä (navigoi sovelluksessa)",
+          "skoda_official_api_key": "Virallinen Škoda-API-avain — lisää valmistajan virallisen API:n live-tietolähteeksi (ja vikasietona)",
+          "clear_skoda_official_key": "Tyhjennä tallennettu virallinen Škoda-API-avain (uusi luodaan automaattisesti, jos kirjautumisesi tukee sitä)",
+          "skoda_official_mode": "Škodan virallisen API:n lähdetila"
         },
         "data_description": {
           "scan_interval": "Kuinka usein tietoja haetaan (minuutteja). Vähintään: 3.",
@@ -236,6 +284,7 @@
           "abrp_api_key": "Kehittäjä-/kumppaniavain, jonka rekisteröit iterniolla (emme toimita sellaista). Tunnistaa integraation. Ei koskaan lokiin.",
           "abrp_user_token": "'Generic'-tunniste ABRP-sovelluksesta: Asetukset -> autosi -> Live Data. Ei koskaan lokiin.",
           "keep_raw_datasets": "Hyödyllinen vain EU Data Act -portaalikanavalla. Kun käytössä, portaalin toimittamat viimeisimmät raa'at datajoukko-ZIP-tiedostot säilytetään levyllä (.storage-kansiossa, ajoneuvokohtaisesti ja kokorajoitettuna), jotta väärä tai puuttuva arvo voidaan toistaa juuri niistä tavuista, jotka autosi lähetti. Nämä tiedostot sisältävät GPS-sijaintisi, VIN-numerosi ja telemetriasi, joten oletuksena se on pois päältä – ota se käyttöön vain vianmäärityksen ajaksi.",
+          "auto_utility_meters": "Oletuksena pois päältä. Kun tämä on käytössä, integraatio luo Home Assistant utility_meter -avustajat, jotka laskevat ladatun energian ja kilometrit kalenterikuukautta kohden, yhden ajoneuvoa kohti. Valitsin näkyy vain, kun vastaava lähdesensori on jo olemassa. Nämä ovat pysyviä avustajia: tämän poistaminen käytöstä estää uusien luomisen, mutta ei poista jo luotuja – poista ne kohdasta Asetukset → Laitteet ja palvelut → Avustajat.",
           "test_cohort": "Oletuksena pois päältä. Kun otat tämän käyttöön, integraatio saa tehdä autoosi kokeellisia lukupyyntöjä — kuten parhaillaan käynnissä olevaa yritystä hakea GPS-sijainti Volkswagenin EU-autoille — ja näyttää silloin tällöin suljettavan ilmoituksen, jossa sinua pyydetään jakamaan diagnostiikkatiedosto, jotta uusi ominaisuus voidaan varmistaa juuri sinun automallillesi. Kaikki jaettavat tiedot puhdistetaan automaattisesti ennen kuin ne lähtevät järjestelmästäsi: mukana ei koskaan ole VIN-tunnusta, GPS-sijaintia, tokeneita eikä sähköpostia. Juuri näin uudet ominaisuudet avautuvat sekä sinun autoosi että kaikille muille samaa mallia ajaville, ja voit halutessasi kytkeä sen milloin tahansa takaisin pois päältä.",
           "vweu_device_grant": "Vain Volkswagen, BETA. Lisää kaksisuuntaisen ohjauksen (lukitus/avaus, ilmastointi, lataus) ja live-CARIAD-lukemat kirjautumalla Volkswagen ID -tunnuksellasi. Volkswagen myöntää tätä kautta vain 1 tunnin tunnisteen, joten salasanasi tallennetaan sen automaattista uusimista varten — se lähetetään vain Volkswagenin omalle kirjautumispalvelimelle eikä sitä koskaan kirjata lokeihin tai diagnostiikkaan. Jos et halua tallentaa salasanaa, käytä sen sijaan vain luku -kanavia. Tämän rastittaminen avaa kirjautumisvaiheen."
         }
@@ -291,24 +340,25 @@
         "title": "VW EU Two-Way (komennot + live-lukemat, BETA)",
         "description": "**Kokeellinen, valinnainen — vain Volkswagen.** Lisää kaksisuuntaisen ohjauksen (lukitus/avaus, ilmastointi, lataus) ja live-CARIAD-lukemat kirjautumalla Volkswagen ID -tunnuksellasi. Koska Volkswagen myöntää tätä kautta vain 1 tunnin tunnisteen, salasanasi **tallennetaan**, jotta integraatio voi uusia sen automaattisesti. Se lähetetään vain Volkswagenin omalle kirjautumispalvelimelle eikä sitä koskaan kirjata lokeihin tai diagnostiikkaan. Etkö halua tallentaa salasanaa? Käytä sen sijaan vain luku -kanavia. **Edellytys:** Volkswagen ID:si on oltava ajoneuvon ensisijainen käyttäjä.",
         "data": {
-          "username": "Email Address",
-          "password": "Password"
+          "username": "Sähköpostiosoite",
+          "password": "Salasana"
         },
         "data_description": {
-          "username": "Volkswagen ID- / myVolkswagen-tilisi s\u00e4hk\u00f6posti.",
-          "password": "Volkswagen ID -salasanasi. K\u00e4ytet\u00e4\u00e4n vain 1 tunnin tunnisteen uusimiseen Volkswagenin kirjautumispalvelinta vasten; ei koskaan lokiin ja peitet\u00e4\u00e4n diagnostiikassa."
+          "username": "Volkswagen ID- / myVolkswagen-tilisi sähköposti.",
+          "password": "Volkswagen ID -salasanasi. Käytetään vain 1 tunnin tunnisteen uusimiseen Volkswagenin kirjautumispalvelinta vasten; ei koskaan lokiin ja peitetään diagnostiikassa."
         }
       }
     },
     "error": {
       "abrp_credentials_required": "ABRP:n käyttöönotto edellyttää sekä api_keyn että ajoneuvokohtaisen tunnisteen syöttämistä.",
-      "invalid_auth": "Kirjautuminen ep\u00e4onnistui. Tarkista Volkswagen ID -s\u00e4hk\u00f6postisi ja -salasanasi.",
-      "cannot_connect": "Volkswageniin ei saatu yhteytt\u00e4. Yrit\u00e4 uudelleen.",
-      "vweu_mfa_unsupported": "T\u00e4m\u00e4 tili vaatii s\u00e4hk\u00f6posti- tai todennussovelluskoodin, jota VW EU Two-Way ei viel\u00e4 osaa k\u00e4sitell\u00e4. K\u00e4yt\u00e4 sen sijaan vain luku -kanavia.",
-      "vweu_no_bff_data": "Kirjautuminen onnistui, mutta Volkswagen ei viel\u00e4 palauttanut t\u00e4lle autolle live-tietoja modernissa taustaj\u00e4rjestelm\u00e4ss\u00e4, joten VW EU Two-Way ei aktivoitunut ja nykyinen kanavasi s\u00e4ilyy ennallaan. Yrit\u00e4 my\u00f6hemmin uudelleen tai jaa diagnostiikkatiedosto, jotta voimme selvitt\u00e4\u00e4 asiaa."
+      "invalid_auth": "Kirjautuminen epäonnistui. Tarkista Volkswagen ID -sähköpostisi ja -salasanasi.",
+      "cannot_connect": "Volkswageniin ei saatu yhteyttä. Yritä uudelleen.",
+      "vweu_mfa_unsupported": "Tämä tili vaatii sähköposti- tai todennussovelluskoodin, jota VW EU Two-Way ei vielä osaa käsitellä. Käytä sen sijaan vain luku -kanavia.",
+      "vweu_no_bff_data": "Kirjautuminen onnistui, mutta Volkswagen ei vielä palauttanut tälle autolle live-tietoja modernissa taustajärjestelmässä, joten VW EU Two-Way ei aktivoitunut ja nykyinen kanavasi säilyy ennallaan. Yritä myöhemmin uudelleen tai jaa diagnostiikkatiedosto, jotta voimme selvittää asiaa.",
+      "terms_and_conditions": "Käyttöehdot on hyväksyttävä. Kirjaudu sovellukseen kerran ja vahvista."
     },
     "abort": {
-      "not_volkswagen": "T\u00e4m\u00e4 kanava on k\u00e4ytett\u00e4viss\u00e4 vain Volkswagenille.",
+      "not_volkswagen": "Tämä kanava on käytettävissä vain Volkswagenille.",
       "vweu_twoway_vw_disabled": "Volkswagen poisti käytöstä tämän kanavan käyttämän kirjautumisen 18.8.2026, joten sitä ei voi enää määrittää. Live-lukemat toimivat edelleen EU Data Act -portaalin kautta, ja pysyvä komentokanava klassisen Car-Net-taustajärjestelmän kautta on betavaiheessa — katso issue #584."
     }
   },
@@ -339,7 +389,33 @@
         "name": "Latauksen tila"
       },
       "plug_state": {
-        "name": "Latausportti"
+        "name": "Latausportti",
+        "state": {
+          "connected": "Kytketty",
+          "disconnected": "Irrotettu"
+        }
+      },
+      "portal_health": {
+        "name": "Portaalisyötteen tila",
+        "state": {
+          "ok": "Live",
+          "waiting_for_portal_data": "Odotetaan portaalin tietoja",
+          "empty_snapshots": "Tyhjät tilannevedokset",
+          "delivery_not_ready": "Toimitus ei valmis",
+          "portal_error": "Portaalivirhe",
+          "stale": "Vanhentunut"
+        }
+      },
+      "minutes_since_last_snapshot": {
+        "name": "Minuutteja viime tilannevedoksesta"
+      },
+      "historical_export_state": {
+        "name": "Historiatietojen vienti",
+        "state": {
+          "pending": "Pyydetty — valmistellaan",
+          "done": "Toimitettu",
+          "timed_out": "Aikakatkaisu"
+        }
       },
       "target_soc": {
         "name": "Lataustavoite"
@@ -421,6 +497,9 @@
       },
       "last_trip_avg_speed_kmh": {
         "name": "Viimeisen matkan keskinopeus"
+      },
+      "last_trip_duration_min": {
+        "name": "Viimeisen matkan kesto"
       },
       "last_trip_avg_fuel_consumption_l_100km": {
         "name": "Viimeisen matkan keskimääräinen polttoaineenkulutus"
@@ -532,6 +611,9 @@
       },
       "fuel_tank_capacity_liters": {
         "name": "Polttoainesäiliön tilavuus"
+      },
+      "fuel_level_liters": {
+        "name": "Polttoaineen määrä (litraa)"
       },
       "climate_running_requests_count": {
         "name": "Ilmastointipyyntöjä odottamassa"
@@ -1273,6 +1355,118 @@
       },
       "reminder_tyre_repair_kit": {
         "name": "Renkaankorjaussarjan muistutus"
+      },
+      "exterior_color": {
+        "name": "Ulkoväri"
+      },
+      "engine_power": {
+        "name": "Moottorin teho"
+      },
+      "engine_torque_nm": {
+        "name": "Vääntömomentti"
+      },
+      "engine_cylinders": {
+        "name": "Sylinterit"
+      },
+      "engine_displacement_ccm": {
+        "name": "Iskutilavuus"
+      },
+      "engine_code": {
+        "name": "Moottorikoodi"
+      },
+      "fuel_type": {
+        "name": "Polttoainetyyppi"
+      },
+      "data_captured_at": {
+        "name": "Tietojen ajankohta"
+      },
+      "window_position_front_left": {
+        "name": "Ikkunan asento vasen etu"
+      },
+      "window_position_front_right": {
+        "name": "Ikkunan asento oikea etu"
+      },
+      "window_position_rear_left": {
+        "name": "Ikkunan asento vasen taka"
+      },
+      "window_position_rear_right": {
+        "name": "Ikkunan asento oikea taka"
+      },
+      "transmission": {
+        "name": "Vaihteisto"
+      },
+      "interior_color": {
+        "name": "Sisäväri"
+      },
+      "drive_train": {
+        "name": "Käyttövoima"
+      },
+      "csid": {
+        "name": "Asiakaspalvelun tunnus"
+      },
+      "parked_since": {
+        "name": "Pysäköity"
+      },
+      "last_trip_eco_score": {
+        "name": "Viime matkan ekopisteet"
+      },
+      "last_trip_intake_air_temp_c": {
+        "name": "Viime matkan imuilman lämpötila"
+      },
+      "trip_count": {
+        "name": "Kirjatut matkat"
+      },
+      "score_points_total": {
+        "name": "Kuljettajan pistemäärä"
+      },
+      "last_refuel_liters_added": {
+        "name": "Lisätty polttoaine"
+      },
+      "last_refuel_tank_before_l": {
+        "name": "Säiliö ennen tankkausta"
+      },
+      "last_refuel_tank_after_l": {
+        "name": "Säiliö tankkauksen jälkeen"
+      },
+      "last_refuel_odometer_km": {
+        "name": "Matkamittari tankattaessa"
+      },
+      "data_request_created_at": {
+        "name": "Datapyyntö luotu"
+      },
+      "last_snapshot_at": {
+        "name": "Viimeisin tilannevedos vastaanotettu"
+      },
+      "last_no_data_at": {
+        "name": "Viimeisin kysely ilman dataa"
+      },
+      "no_data_count": {
+        "name": "Kyselyt ilman dataa"
+      },
+      "tpms_status": {
+        "name": "Rengaspaineen valvonta",
+        "state": {
+          "measured": "Mitattu (per pyörä)",
+          "indirect": "Epäsuora (ei painearvoja)"
+        }
+      },
+      "readiness_software_update_status": {
+        "name": "Ohjelmistopäivityksen tila"
+      },
+      "short_term_avg_electric_consumption_kwh_100km": {
+        "name": "Lyhyen aikavälin keskimääräinen sähkönkulutus"
+      },
+      "engine_starts_count": {
+        "name": "Moottorin käynnistykset"
+      },
+      "short_term_avg_fuel_consumption_l_100km": {
+        "name": "Lyhyen aikavälin keskimääräinen polttoaineenkulutus"
+      },
+      "battery_soc_charge_report": {
+        "name": "Akun varaustaso (viimeisin latausraportti)"
+      },
+      "alarm_reason": {
+        "name": "Hälytyksen syy"
       }
     },
     "binary_sensor": {
@@ -1578,6 +1772,15 @@
       },
       "marketing_consent_given": {
         "name": "Markkinointisuostumus annettu"
+      },
+      "data_source": {
+        "name": "Lähde: {source}"
+      },
+      "data_stale": {
+        "name": "Tiedot vanhentuneet"
+      },
+      "connect_contract_active": {
+        "name": "Connect-sopimus aktiivinen"
       }
     },
     "switch": {
@@ -1666,6 +1869,9 @@
       "data_act_request_button": {
         "name": "Luo EU Data Act -datapyyntö"
       },
+      "historical_export_button": {
+        "name": "Pyydä historiatietojen vienti"
+      },
       "companion_reset_button": {
         "name": "Nollaa companion-yhteys"
       }
@@ -1713,28 +1919,28 @@
     },
     "image": {
       "render_icon": {
-        "name": "3/4-näkymän kuvake"
+        "name": "3/4-näkymä (ikoni)"
       },
       "render_small": {
-        "name": "3/4-näkymä pieni"
+        "name": "3/4-näkymä (pieni)"
       },
       "render_medium": {
-        "name": "3/4-näkymä keskikoko"
+        "name": "3/4-näkymä (keskikoko)"
       },
       "render_side_sm": {
-        "name": "Sivuprofiili pieni"
+        "name": "Sivunäkymä (pieni)"
       },
       "render_side_lg": {
-        "name": "Sivuprofiili suuri"
+        "name": "Sivunäkymä (suuri)"
       },
       "render_angle_hd": {
-        "name": "3/4-näkymä HD"
+        "name": "3/4-näkymä (HD)"
       },
       "render_angle_lg": {
-        "name": "3/4-näkymä suuri"
+        "name": "3/4-näkymä (suuri)"
       },
       "vehicle_render": {
-        "name": "Ajoneuvon renderöinti"
+        "name": "Ajoneuvon kuva"
       }
     },
     "lock": {
@@ -1777,9 +1983,34 @@
     }
   },
   "issues": {
+    "skoda_official_manual_key": {
+      "title": "Škodan virallinen API — lisää API-avaimesi",
+      "fix_flow": {
+        "step": {
+          "enter_key": {
+            "title": "Lisää MyŠkoda-API-avain",
+            "description": "Home Assistant ei voinut luoda tälle autolle virallista Škoda-API-avainta automaattisesti. Luo sellainen MyŠkoda-sovelluksessa, valitse sitten ajoneuvo ja liitä avain tähän. Automaattinen luonti jatkaa yrittämistä taustalla — tämä on vain manuaalinen vaihtoehto.",
+            "data": {
+              "vin": "Ajoneuvo",
+              "api_key": "MyŠkoda-API-avain (alkaa msk_)"
+            }
+          }
+        },
+        "error": {
+          "key_required": "Liitä MyŠkoda-API-avaimesi."
+        },
+        "abort": {
+          "entry_gone": "Kyseistä integraatiomerkintää ei enää ole."
+        }
+      }
+    },
+    "invalid_credentials": {
+      "title": "Kirjautuminen epäonnistui — {brand}",
+      "description": "Home Assistant ei voinut kirjautua {brand}-tilillesi — yleensä väärä tai muutettu salasana, mutta tilapäinen esto voi näyttää samalta.\n\nAsetukset → Laitteet ja palvelut → VW Group Connect → ⋮ → Määritä uudelleen ja anna kirjautumistiedot uudelleen."
+    },
     "vweu_twoway_disabled": {
-      "title": "VW EU Two-Way: Volkswagen poisti k\u00e4yt\u00f6st\u00e4",
-      "description": "Volkswagen poisti 18.8.2026 k\u00e4yt\u00f6st\u00e4 kirjautumisen, jota VW EU Two-Way (moderni CARIAD-taustaj\u00e4rjestelm\u00e4) -kanava k\u00e4ytti, joten sen 1 tunnin tunnistetta ei voi en\u00e4\u00e4 uusia ja kaksisuuntaiset komennot t\u00e4m\u00e4n kanavan kautta ovat lakanneet toimimasta. T\u00e4m\u00e4 on Volkswagenin puolella tehty muutos \u2014 mit\u00e4\u00e4n ei ole m\u00e4\u00e4ritetty v\u00e4\u00e4rin sinun puolellasi, eik\u00e4 tilisi ole vaarassa (virhe tapahtuu ennen kuin mit\u00e4\u00e4n salasanaa l\u00e4hetet\u00e4\u00e4n).\n\n**Live-lukemasi toimivat edelleen** EU Data Act -portaalin kautta, joten t\u00e4m\u00e4 ei vaikuta antureihisi.\n\n**Kaksisuuntaisiin komentoihin (lukitus/avaus, ilmastointi, lataus):** pysyv\u00e4 korvaaja klassisen Car-Net (MBB) -taustaj\u00e4rjestelm\u00e4n kautta \u2014 jota Volkswagen EI ole poistanut k\u00e4yt\u00f6st\u00e4 \u2014 on nyt betavaiheessa. Katso issue #584, miten se otetaan k\u00e4ytt\u00f6\u00f6n ja testataan.\n\nVoit poistaa nyt k\u00e4yt\u00f6st\u00e4 poistuneen kanavan milloin tahansa integraation asetuksista (VW EU Two-Way \u2192 poista). T\u00e4m\u00e4 viesti on vain tiedoksi; integraatio jatkaa toimintaansa lukukanavillasi.\n\n**Vinkki:** ota k\u00e4ytt\u00f6\u00f6n vain YKSI kaksisuuntainen integraatio kutakin autoa kohti kerrallaan. VW rajoittaa pyynt\u00f6tahtia ja voi tilap\u00e4isesti lukita tilin, jota useat sovellukset kuormittavat yht\u00e4 aikaa \u2014 kun n\u00e4in k\u00e4y, edes virallinen VW-sovellus ei pysty ohjaamaan autoa, mik\u00e4 on merkki tilin lukituksesta eik\u00e4 t\u00e4st\u00e4 integraatiosta."
+      "title": "VW EU Two-Way: Volkswagen poisti käytöstä",
+      "description": "Volkswagen poisti 18.8.2026 käytöstä kirjautumisen, jota VW EU Two-Way (moderni CARIAD-taustajärjestelmä) -kanava käytti, joten sen 1 tunnin tunnistetta ei voi enää uusia ja kaksisuuntaiset komennot tämän kanavan kautta ovat lakanneet toimimasta. Tämä on Volkswagenin puolella tehty muutos — mitään ei ole määritetty väärin sinun puolellasi, eikä tilisi ole vaarassa (virhe tapahtuu ennen kuin mitään salasanaa lähetetään).\n\n**Live-lukemasi toimivat edelleen** EU Data Act -portaalin kautta, joten tämä ei vaikuta antureihisi.\n\n**Kaksisuuntaisiin komentoihin (lukitus/avaus, ilmastointi, lataus):** pysyvä korvaaja klassisen Car-Net (MBB) -taustajärjestelmän kautta — jota Volkswagen EI ole poistanut käytöstä — on nyt betavaiheessa. Katso issue #584, miten se otetaan käyttöön ja testataan.\n\nVoit poistaa nyt käytöstä poistuneen kanavan milloin tahansa integraation asetuksista (VW EU Two-Way → poista). Tämä viesti on vain tiedoksi; integraatio jatkaa toimintaansa lukukanavillasi.\n\n**Vinkki:** ota käyttöön vain YKSI kaksisuuntainen integraatio kutakin autoa kohti kerrallaan. VW rajoittaa pyyntötahtia ja voi tilapäisesti lukita tilin, jota useat sovellukset kuormittavat yhtä aikaa — kun näin käy, edes virallinen VW-sovellus ei pysty ohjaamaan autoa, mikä on merkki tilin lukituksesta eikä tästä integraatiosta."
     },
     "two_factor_required": {
       "title": "Kaksivaiheinen todennus vaaditaan — {brand}",
@@ -1827,7 +2058,7 @@
     },
     "data_act_no_data": {
       "title": "EU Data Act -portaali: ei vielä ajoneuvon tietoja ({brand})",
-      "description": "EU Data Act -portaali kirjasi sisään merkin {brand}, mutta ei vielä palauta ajoneuvon tietoja.\n\nIntegraatio luo jatkuvan datapyynnön puolestasi automaattisesti, joten tavalliset syyt tyhjälle syötteelle ovat:\n\n1. **Tietojen jakamisen suostumusta ei ole myönnetty tälle autolle.** Portaalissa myönnät EU Data Act -tietojenjakosuostumuksen ajoneuvokohtaisesti, kerran. Ennen kuin teet sen, pyyntö on luotu mutta pysyy tyhjänä — tämä on yleisin syy.\n2. **Auto ei ole vielä lähettänyt mitään uutta.** Tuore tietojoukko julkaistaan vasta, kun autolla on ajettu, sitä on ladattu tai lukittu/avattu, joten aivan uuden pyynnön täyttyminen voi kestää 15–60 minuuttia (tai lyhyen ajomatkan).\n3. **VW:n puolen häiriö.** VW ilmoitti kaikkia merkkejä koskevasta EU Data Act -portaalin häiriöstä touko-2026 lopulta; niin kauan kuin se kestää, portaali palauttaa tyhjää dataa jokaiselle työkalulle ja toipuu merkki kerrallaan.\n\n**Nopein tarkistus:** avaa `eu-data-act.drivesomethinggreater.com`, kirjaudu sisään ja varmista, että (a) tietojen jakamisen suostumus on myönnetty tälle autolle ja (b) käytössä on aktiivinen jatkuva (15 minuutin) datapyyntö, jossa kaikki klusterit on rastitettu. Jos et näe dataa sielläkään, kyse on VW:n puolesta — integraatio ei voi tehdä mitään, ennen kuin VW palauttaa sen.\n\nTämä on vain lukemiseen tarkoitettu portaalibeta — varoitus poistuu itsestään, kun dataa saapuu."
+      "description": "EU:n datasäädöksen portaaliin kirjauduttiin sisään merkin {brand} osalta, mutta se ei vielä palauta mitään ajoneuvon tietoja.\n\nIntegraatio yrittää luoda jatkuvan datapyynnön puolestasi automaattisesti, mutta joillakin tileillä portaali pitää selainistunnon anonyyminä — jolloin automaattinen pyyntö (ja sovelluksen sisäinen \"Luo EU:n datasäädöksen datapyyntö\" -painike) ei pysty valmistumaan, joten sinun on luotava pyyntö itse portaalissa. Tyhjän tietovirran tavalliset syyt:\n\n1. **Omistajuutta/käyttäjyyttä ei ole vahvistettu tälle autolle.** Portaalin on näytettävä ajoneuvosi omistajuus (tai käyttäjyys) vahvistettuna. Jos näin ei ole, vahvista se siellä ensin — välttämätöntä, vaikkakaan ei aina yksin riittävää.\n2. **Tietojen jakamisen suostumusta ei ole myönnetty tälle autolle.** Myönnät EU:n datasäädöksen tietojenjakosuostumuksen ajoneuvokohtaisesti, kerran. Ennen kuin teet sen, pyyntö pysyy tyhjänä.\n3. **Jatkuvaa pyyntöä ei ole vielä olemassa.** Jos automaattinen luonti ei onnistunut, luo se itse: lisää portaalissa mukautettu datapyyntö (Custom Data Request), jossa kaikki klusterit on rastitettu 15 minuutin taajuudella. **Poista ensin kaikki tätä samaa autoa koskevat vanhemmat pyynnöt** — portaali sallii vain yhden aktiivisen pyynnön ajoneuvoa kohti, joten tätä autoa koskeva vanhempi (esimerkiksi kuukausittainen) pyyntö estää uuden. Älä poista toisen auton pyyntöä: sekatilillä, jolla on sekä henkilö- että hyötyajoneuvoja, jokainen auto säilyttää oman pyyntönsä omassa osiossaan (henkilöautot kohdassa Volkswagen Personenkraftwagen, pakettiautot kohdassa Volkswagen Nutzfahrzeuge). Integraatio poimii sen seuraavalla kyselyllä — uudelleenkäynnistystä ei tarvita.\n4. **Auto ei ole vielä lähettänyt mitään uutta.** Uusi tietojoukko julkaistaan vasta, kun autoa on ajettu, ladattu tai lukittu/avattu, joten uuden pyynnön täyttymisen alkaminen voi kestää 15–60 minuuttia (tai lyhyen ajomatkan).\n5. **VW:n puolen käyttökatko.** VW ilmoitti kaikkia merkkejä koskevasta EU:n datasäädöksen portaalin käyttökatkosta toukokuun 2026 lopusta alkaen; katkon ajan portaali palauttaa tyhjää dataa jokaiselle työkalulle ja palautuu merkki kerrallaan.\n6. **Tai lisää volkswagen.de-sivuston lukukanava.** Integraation asetuksissa voit lisätä vain luku -tilaisen volkswagen.de-sivustokanavan vaihtoehtoiseksi lähteeksi: se kirjautuu sisään volkswagen.de-sivustolla (ei sovelluksen taustajärjestelmään, joka estää headless-kirjautumisen), ja palauttaa joillekin autoille kenttiä, joita portaalin tietovirta ei palauta. Se edellyttää, että Volkswagen ID:si on ajoneuvon vahvistettu ensisijainen käyttäjä.\n\n**Nopein tarkistus:** avaa `eu-data-act.drivesomethinggreater.com`, kirjaudu sisään ja varmista, että (a) omistajuus/käyttäjyys on vahvistettu, (b) tietojenjakosuostumus on myönnetty tälle autolle ja (c) aktiivinen jatkuva (15 minuutin) datapyyntö on olemassa, ja siinä on kaikki klusterit rastitettuina — luoden sen itse, jos sellaista ei ole. Jos et näe sielläkään dataa, kyse on VW:n puolesta — tämä integraatio ei voi tehdä mitään ennen kuin VW palauttaa sen toimintaan.\n\nTämä on vain luku -tilaisen portaalin beeta — varoitus poistuu itsestään, kun dataa saapuu."
     },
     "data_act_browser_missing": {
       "description": "Otit käyttöön selaimettoman varajärjestelmän EU Data Act -portaalille, mutta `playwright` Python-pakettia ei ole asennettu Home Assistant -kontissasi.\n\n**Asennus:** avaa HA-kontin komentokehote (Lisäosat → Terminal & SSH, tai `docker exec` manuaaliseen asennukseen) ja suorita:\n\n```\npip install playwright\nplaywright install chromium\n```\n\nChromium-lataus on suuri (noin 100 Mt), minkä vuoksi tämä riippuvuus on valinnainen sen sijaan, että se olisi niputettu integraation kanssa. Asennuksen jälkeen käynnistä Home Assistant uudelleen.\n\nVaihtoehtoisesti poista kytkin käytöstä kohdassa Asetukset → Laitteet ja palvelut → VW Group Connect → Määritä → 'EU Data Act -portaali: selaimeton varajärjestelmä'.",
@@ -1867,11 +2098,27 @@
     },
     "test_cohort_share_request": {
       "title": "Auta varmistamaan uusi ominaisuus — jaatko testituloksesi?",
-      "description": "Kiitos, että liityit vapaaehtoiseen testiryhmään. Autosi on mukana yhdessä tai useammassa kokeilussa — esimerkiksi GPS-sijainnin tai akun kunnon (State-of-Health) palauttamisessa VW:n EU-autoille volkswagen.de-kanavan kautta, tai sen tallentamisessa, miten autosi taustajärjestelmä tarkalleen vastaa komentoon. Jotta tulos voidaan varmistaa eri malleilla ja alustoilla, olisi todella suureksi avuksi, jos jakaisit diagnostiikkatiedoston: mene kohtaan Settings → Devices & Services → VW Group Connect → kolmen pisteen valikko → Download diagnostics, ja liitä sitten tiedosto asiaankuuluvaan testaajien issueen GitHubissa.\n\nVientitiedostosta poistetaan arkaluontoiset tiedot automaattisesti ennen kuin lataat sen — mukana ei ole VIN-tunnusta, GPS-tietoja, tokeneita eikä sähköpostia — joten sen voi turvallisesti julkaista. Näet tämän vain siksi, että liityit mukaan; voit ohittaa sen, ja testiryhmän poistaminen käytöstä integraation asetuksissa lopettaa nämä ilmoitukset kokonaan. Kiitos, että autat avaamaan ominaisuuksia kaikille, jotka ajavat samaa mallia."
+      "description": "Kiitos, että liityit vapaaehtoiseen testiryhmään. Autosi on mukana yhdessä tai useammassa kokeilussa — esimerkiksi GPS-sijainnin tai akun kunnon (State-of-Health) palauttamisessa VW:n EU-autoille volkswagen.de-kanavan kautta, tai sen tallentamisessa, miten autosi taustajärjestelmä tarkalleen vastaa komentoon. Jotta tulos voidaan varmistaa eri malleilla ja alustoilla, olisi todella suureksi avuksi, jos jakaisit diagnostiikkatiedoston: avaa autosi OMA laite (Settings → Devices & Services → VW Group Connect → autosi mukaan nimetty laite — ei \"VW Group Connect Settings\", joka sisältää vain asetukset eikä lainkaan ajoneuvon tietoja) → kolmen pisteen valikko → Download diagnostics, ja liitä sitten tiedosto alla linkitettyyn seurantaissueen (#923).\n\nVientitiedostosta poistetaan arkaluontoiset tiedot automaattisesti ennen kuin lataat sen — mukana ei ole VIN-tunnusta, GPS-tietoja, tokeneita eikä sähköpostia — joten sen voi turvallisesti julkaista. Näet tämän vain siksi, että liityit mukaan; voit ohittaa sen, ja testiryhmän poistaminen käytöstä integraation asetuksissa lopettaa nämä ilmoitukset kokonaan. Kiitos, että autat avaamaan ominaisuuksia kaikille, jotka ajavat samaa mallia."
     },
     "stale_data": {
       "title": "{vin}: ajoneuvon tiedot eivät ole päivittyneet {age} tuntiin",
       "description": "Auton viimeksi raportoimat tiedot kerättiin noin **{age} tuntia sitten**, vaikka integraatio hakee tietoja edelleen onnistuneesti. Tähän voi olla kaksi syytä: auto voi yksinkertaisesti olla pysäköitynä ja lepotilassa (normaalia — ei tarvitse tehdä mitään), tai sen EU Data Act -tietosyöte on saattanut vanhentua eikä toimita enää tuoreita lukemia.\n\nNäkemäsi arvot ovat viimeisimmät tunnetut, eivät reaaliaikaiset. Jos autoa on ajettu tai se on kytketty lataukseen tämän jälkeen eikä varoitus poistu, tietosyöte on mitä todennäköisimmin vanhentunut: avaa volkswagen.de → auton tietoasetukset ja uusi tai pyydä tietojen jakaminen uudelleen, tai lisää kanava uudelleen.\n\nTämä varoitus poistuu automaattisesti heti, kun tuoreempi lukema saapuu."
+    },
+    "historical_timeout": {
+      "title": "{vin}: kertaluonteinen historiatietojen vienti ei valmistunut",
+      "description": "Tälle autolle pyydetty kertaluonteinen historiatietojen vienti ei tuottanut tiedostoa määräaikaan mennessä. VW-portaali ei anna tälle pyynnölle lopputilaa, joten se on voitu hylätä hiljaisesti. Pyyntö on nollattu — voit pyytää sen uudelleen tai tarkistaa asian suoraan portaalista."
+    },
+    "skoda_official_enrolled": {
+      "title": "Škodan virallinen API — sinut on nyt liitetty automaattisesti",
+      "description": "Hyviä uutisia: käytimme olemassa olevaa Škoda-kirjautumistasi ja loimme autollesi virallisen Škoda API -avaimen, joten Home Assistant voi nyt lukea sen tietoja Škodan uuden, virallisen ja kestävän yhteyden kautta — automaattisena varayhteytenä siltä varalta, että tavallinen yhteys joskus takkuaa. Koska tätä virallista yhteyttä on rajoitettu (vain muutama pyyntö tunnissa), se pysyy valmiustilassa ja lukee tietoja vain silloin, kun pääyhteys ei siihen pysty — joten se ei hidasta mitään. Sinun ei tarvitse tehdä mitään; tämä on vain tiedoksi, ja voit sulkea tämän ilmoituksen."
+    },
+    "skoda_official_quota_full": {
+      "title": "Škodan virallinen API — avainten yläraja saavutettu",
+      "description": "Yritimme ottaa Škodan virallisen API:n automaattisesti käyttöön autollesi, mutta tililläsi on jo tälle ajoneuvolle enimmäismäärä eli 5 API-avainta. Ota se käyttöön vapauttamalla paikka MyŠkoda-sovelluksessa (Asetukset → API-avaimet → poista käyttämätön) ja lataamalla integraatio uudelleen, tai liitä olemassa oleva avain käsin integraation asetuksiin. Kaikki muu toimii kuten ennenkin."
+    },
+    "skoda_official_multi_integration": {
+      "title": "Škodan virallinen API — myös toinen integraatio käyttää sitä",
+      "description": "Škoda-tililtäsi löytyi enemmän virallisen API:n avaimia kuin tämä integraatio on luonut — yleensä se on merkki siitä, että myös jokin toinen integraatio tai sovellus lukee Škodan virallista API:a. Se ei sinänsä haittaa, mutta ne jakavat saman pienen, autokohtaisen pyyntömäärän, joten yhteinen liikenne voi saavuttaa Škodan pyyntörajan aiemmin ja pahimmassa tapauksessa johtaa tilin väliaikaiseen — tai lopulta pysyvään — estoon. Jos et tarvitse molempia, poista virallisen API:n avain, jota et käytä, MyŠkoda-sovelluksessa (Asetukset → API-avaimet). Voit sulkea tämän ilmoituksen."
     }
   },
   "services": {
@@ -2088,6 +2335,12 @@
     },
     "historical_portal_not_ready": {
       "message": "EU:n datasäädösportaali ei ole vielä valmis. Odota, kunnes integraatio on hakenut tiedot kerran käyttöönoton jälkeen, ja yritä sitten uudelleen."
+    },
+    "historical_disabled": {
+      "message": "Kertaluonteinen historiatietojen vienti on tällä hetkellä poistettu käytöstä."
+    },
+    "historical_wedge_blocked": {
+      "message": "Tälle autolle on jo käynnissä kertaluonteinen historiatietojen vienti. Portaali käsittelee vain yhtä tällaista pyyntöä kerrallaan, joten odota, että nykyinen valmistuu (tai aikakatkaistaan), ennen kuin pyydät uutta."
     }
   },
   "selector": {
@@ -2108,6 +2361,81 @@
         "start_ventilation": "Käynnistä tuuletus",
         "stop_ventilation": "Pysäytä tuuletus"
       }
+    },
+    "skoda_official_mode": {
+      "options": {
+        "auto": "Automaattinen (molemmat, virallista suositaan)",
+        "prefer_official": "Suosi virallista API:a",
+        "failover": "Virallinen API vain varajärjestelmänä",
+        "official_only": "Vain virallinen API",
+        "mysmob_only": "Vain vakiokanava"
+      }
+    },
+    "read_priority": {
+      "options": {
+        "auto": "Automaattinen (suositus)",
+        "prefer_website_authproxy": "Suosi vw.de-livedataa"
+      }
+    }
+  },
+  "triggers": {
+    "started_charging": {
+      "name": "Ajoneuvo aloitti lataamisen",
+      "description": "Käynnistyy, kun ajoneuvo aloittaa lataamisen."
+    },
+    "stopped_charging": {
+      "name": "Ajoneuvo lopetti lataamisen",
+      "description": "Käynnistyy, kun ajoneuvo lopettaa lataamisen."
+    },
+    "plugged_in": {
+      "name": "Ajoneuvo kytketty",
+      "description": "Käynnistyy, kun ajoneuvon latauskaapeli kytketään."
+    },
+    "unplugged": {
+      "name": "Ajoneuvo irrotettu",
+      "description": "Käynnistyy, kun ajoneuvon latauskaapeli irrotetaan."
+    },
+    "locked": {
+      "name": "Ajoneuvo lukittu",
+      "description": "Käynnistyy, kun ajoneuvo lukitaan."
+    },
+    "unlocked": {
+      "name": "Ajoneuvon lukitus avattu",
+      "description": "Käynnistyy, kun ajoneuvon lukitus avataan."
+    },
+    "started_preconditioning": {
+      "name": "Ajoneuvo aloitti esi-ilmastoinnin",
+      "description": "Käynnistyy, kun ajoneuvo aloittaa esi-ilmastoinnin."
+    },
+    "stopped_preconditioning": {
+      "name": "Ajoneuvo lopetti esi-ilmastoinnin",
+      "description": "Käynnistyy, kun ajoneuvo lopettaa esi-ilmastoinnin."
+    },
+    "charge_target_reached": {
+      "name": "Ajoneuvo saavutti lataustavoitteen",
+      "description": "Käynnistyy, kun ajoneuvon lataustaso saavuttaa tavoitteensa."
+    }
+  },
+  "conditions": {
+    "is_charging": {
+      "name": "Ajoneuvo lataa",
+      "description": "Tarkistaa, lataako jokin ajoneuvo parhaillaan."
+    },
+    "is_plugged_in": {
+      "name": "Ajoneuvo on kytketty",
+      "description": "Tarkistaa, onko jonkin ajoneuvon latauskaapeli kytketty."
+    },
+    "is_locked": {
+      "name": "Ajoneuvo on lukittu",
+      "description": "Tarkistaa, onko jokin ajoneuvo lukittu."
+    },
+    "is_preconditioning": {
+      "name": "Ajoneuvo esi-ilmastoi",
+      "description": "Tarkistaa, käyttääkö jokin ajoneuvo esi-ilmastointia."
+    },
+    "is_charge_target_reached": {
+      "name": "Ajoneuvo saavutti lataustavoitteen",
+      "description": "Tarkistaa, onko jonkin ajoneuvon lataustaso tavoitteessa tai sen yli."
     }
   }
 }

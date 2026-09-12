@@ -80,10 +80,11 @@ from .api.ipcontrol import (
     SamsungIPControl,
     SamsungIPControlAuthError,
     SamsungIPControlError,
+    SamsungIPControlUnsupportedError,
 )
 from .api.samsungcast import SamsungCastTube
 from .api.samsungws import ArtModeStatus, SamsungTVAsyncRest, SamsungTVWS
-from .api.smartthings import SmartThingsTV, STStatus
+from .api.smartthings import SmartThingsCapabilityUnsupported, SmartThingsTV, STStatus
 from .api.upnp import SamsungUPnP
 from .const import (
     ATTR_BRIGHTNESS,
@@ -139,6 +140,7 @@ from .const import (
     CONF_WS_NAME,
     DATA_ART_API,
     DATA_CFG,
+    DATA_IP_CONTROL_STATE_COORDINATOR,
     DATA_OPTIONS,
     DEFAULT_APP,
     DEFAULT_PORT,
@@ -172,19 +174,25 @@ from .const import (
     SERVICE_ART_UPLOAD_BATCH,
     SERVICE_SELECT_PICTURE_MODE,
     SERVICE_SEND_TEXT,
+    SERVICE_START_HUE_SYNC,
+    SERVICE_STOP_HUE_SYNC,
     SIGNAL_CONFIG_ENTITY,
     ST_POLL_OFF_INTERVAL,
     STD_APP_LIST,
+    TUNER_INPUT_SOURCES,
     WS_PREFIX,
     AppLaunchMethod,
     AppLoadMethod,
     PowerOnMethod,
+    ip_control_port,
 )
 from .entity import SamsungTVEntity
 from .logo import LOGO_OPTION_DEFAULT, LocalImageUrl, Logo, LogoOption
+from .picture_mode_keys import picture_mode_ws_key
 from .token_notify import (
     METHOD_IP_CONTROL,
     METHOD_LOCAL,
+    METHOD_SMARTTHINGS,
     clear_token_problem,
     notify_token_problem,
 )
@@ -219,6 +227,15 @@ KEYPRESS_MIN_DELAY = 0.2
 # #40). Mirrors the manual "home, wait, source" workaround.
 SOURCE_WAKE_DELAY = 1.5
 MAX_ST_ERROR_COUNT = 4
+# Consecutive authorization failures from SmartThings before we treat the
+# device as gone rather than the cloud as flaky, and slow the poll right down.
+MAX_ST_AUTH_ERROR_COUNT = 3
+# Poll interval (seconds) once SmartThings has refused the device id. A 403 is
+# not transient -- the id is wrong until the user reconfigures -- so retrying
+# every 5s only burns API quota and stretches the update cycle (#: a repaired
+# TV produced 1591 refusals in two hours). Long enough to be harmless, short
+# enough that a fix is noticed without a restart.
+ST_POLL_AUTH_ERROR_INTERVAL = 300
 MEDIA_TYPE_BROWSER = "browser"
 MEDIA_TYPE_KEY = "send_key"
 MEDIA_TYPE_TEXT = "send_text"
@@ -315,27 +332,41 @@ async def async_setup_entry(
         {vol.Required(ATTR_PICTURE_MODE): cv.string},
         "async_select_picture_mode",
     )
+    platform.async_register_entity_service(
+        SERVICE_START_HUE_SYNC,
+        {},
+        "async_start_hue_sync",
+    )
+    platform.async_register_entity_service(
+        SERVICE_STOP_HUE_SYNC,
+        {},
+        "async_stop_hue_sync",
+    )
 
     # Frame Art Extended Services
     platform.async_register_entity_service(
         SERVICE_ART_GET_ARTMODE,
         {},
         "async_art_get_artmode",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_ART_SET_ARTMODE,
         {vol.Required(ATTR_ENABLED): cv.boolean},
         "async_art_set_artmode",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_ART_AVAILABLE,
         {vol.Optional(ATTR_CATEGORY_ID): cv.string},
         "async_art_available",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_ART_GET_CURRENT,
         {},
         "async_art_get_current",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_ART_IDENTIFY,
@@ -351,6 +382,7 @@ async def async_setup_entry(
             vol.Optional(ATTR_SHOW, default=True): cv.boolean,
         },
         "async_art_select_image",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_ART_UPLOAD,
@@ -358,6 +390,7 @@ async def async_setup_entry(
             vol.Required(ATTR_FILE_PATH): cv.string,
             vol.Optional(ATTR_MATTE_ID, default="shadowbox_polar"): cv.string,
             vol.Optional(ATTR_FILE_TYPE, default="jpg"): cv.string,
+            vol.Optional(ATTR_SHOW, default=False): cv.boolean,
         },
         "async_art_upload",
         supports_response=SupportsResponse.OPTIONAL,
@@ -380,6 +413,7 @@ async def async_setup_entry(
         SERVICE_ART_DELETE,
         {vol.Required(ATTR_CONTENT_ID): cv.string},
         "async_art_delete",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_SEND_TEXT,
@@ -390,6 +424,7 @@ async def async_setup_entry(
         SERVICE_ART_GET_THUMBNAIL,
         {vol.Required(ATTR_CONTENT_ID): cv.string},
         "async_art_get_thumbnail",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_ART_GET_THUMBNAILS_BATCH,
@@ -401,16 +436,19 @@ async def async_setup_entry(
             vol.Optional("cleanup_orphans", default=True): cv.boolean,
         },
         "async_art_get_thumbnails_batch",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_ART_SET_BRIGHTNESS,
         {vol.Required(ATTR_BRIGHTNESS): vol.All(vol.Coerce(int), vol.Range(0, 100))},
         "async_art_set_brightness",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_ART_GET_BRIGHTNESS,
         {},
         "async_art_get_brightness",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_ART_SET_COLOR_TEMPERATURE,
@@ -420,11 +458,13 @@ async def async_setup_entry(
             )
         },
         "async_art_set_color_temperature",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_ART_GET_COLOR_TEMPERATURE,
         {},
         "async_art_get_color_temperature",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_ART_CHANGE_MATTE,
@@ -433,6 +473,7 @@ async def async_setup_entry(
             vol.Required(ATTR_MATTE_ID): cv.string,
         },
         "async_art_change_matte",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_ART_SET_PHOTO_FILTER,
@@ -441,16 +482,19 @@ async def async_setup_entry(
             vol.Required(ATTR_FILTER_ID): cv.string,
         },
         "async_art_set_photo_filter",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_ART_GET_PHOTO_FILTER_LIST,
         {},
         "async_art_get_photo_filter_list",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_ART_GET_MATTE_LIST,
         {},
         "async_art_get_matte_list",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_ART_SET_FAVOURITE,
@@ -459,6 +503,7 @@ async def async_setup_entry(
             vol.Optional(ATTR_STATUS, default="on"): cv.string,
         },
         "async_art_set_favourite",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_ART_SET_SLIDESHOW,
@@ -476,6 +521,7 @@ async def async_setup_entry(
             ),
         },
         "async_art_set_slideshow",
+        supports_response=SupportsResponse.OPTIONAL,
     )
     platform.async_register_entity_service(
         SERVICE_ART_SET_AUTO_ROTATION,
@@ -489,6 +535,7 @@ async def async_setup_entry(
             ),
         },
         "async_art_set_auto_rotation",
+        supports_response=SupportsResponse.OPTIONAL,
     )
 
 
@@ -674,6 +721,16 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         # PowerState='standby' override or the potentially-stale art_api cache.
         self._ip_control_client: SamsungIPControl | None = None
         self._ip_control_token_cached: str | None = None
+        # directVolumeControl is model-dependent. Some Samsung TVs support
+        # absolute volume locally, including with an external HDMI/eARC audio
+        # device, while others do not. None means "not probed yet".
+        self._ip_absolute_volume_supported: bool | None = None
+        # Current physical input reported by the shared getTVStates coordinator.
+        # Also updated optimistically after a successful local source change.
+        self._ip_input_source: str | None = None
+        # Last SmartThings input that matched nothing in the source list,
+        # so the warning above is logged once per change, not per poll.
+        self._last_unmapped_source: str | None = None
         self._ip_art_mode: bool | None = None
         # Consecutive transport-failure count; the cache is cleared once it
         # reaches IP_ART_MODE_MAX_FAILURES so a TV that stops answering on
@@ -759,6 +816,7 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
             )
 
         self._st_error_count = 0
+        self._st_auth_error_count = 0
         self._st_last_exc = None
         self._st_sources_loaded = False
         # SmartThings poll throttling: the local WebSocket is the primary state
@@ -1112,18 +1170,28 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         """
         entry = self.hass.config_entries.async_get_entry(self._entry_id)
         token = entry.data.get(CONF_IP_CONTROL_TOKEN) if entry else None
+
         if not token or not self._get_option(CONF_ENABLE_IP_CONTROL, True):
-            # Un-paired, or the IP Control channel was disabled in options —
-            # drop any cached client/value and behave as if not paired.
+            # Unpaired, or IP Control disabled.
             if self._ip_control_client is not None:
                 self._ip_control_client = None
                 self._ip_control_token_cached = None
+            self._ip_absolute_volume_supported = None
             return None
-        if self._ip_control_client is None or self._ip_control_token_cached != token:
+
+        port = ip_control_port(entry.data)
+
+        if (
+            self._ip_control_client is None
+            or self._ip_control_token_cached != token
+            or self._ip_control_client.port != port
+        ):
             self._ip_control_client = SamsungIPControl(
-                self.hass, self._host, token=token
+                self.hass, self._host, port=port, token=token
             )
             self._ip_control_token_cached = token
+            self._ip_absolute_volume_supported = None
+
         return self._ip_control_client
 
     def _on_art_transition(self) -> None:
@@ -1536,17 +1604,53 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
 
     async def _update_volume_info(self):
         """Update the volume info."""
-        if self._state == MediaPlayerState.ON:
-            # if self._st and self._setvolumebyst:
-            #     self._attr_volume_level = self._st.volume
-            #     self._attr_is_volume_muted = self._st.muted
-            #     return
+        if self._state != MediaPlayerState.ON:
+            return
 
-            if (volume := await self._upnp.async_get_volume()) is not None:
-                self._attr_volume_level = int(volume) / 100
+        # Prefer local IP Control when this TV implements directVolumeControl.
+        # This is discovered per device rather than inferred from model/year.
+        client = self._get_ip_control_client()
+
+        if client is not None and self._ip_absolute_volume_supported is not False:
+            try:
+                volume = await client.async_get_volume()
+            except SamsungIPControlUnsupportedError as ex:
+                if self._ip_control_ambient_mode_active():
+                    self._log.debug(
+                        "IP Control absolute volume unavailable while Ambient mode "
+                        "is active; not treating it as unsupported: %s",
+                        ex,
+                    )
+                else:
+                    self._ip_absolute_volume_supported = False
+                    self._log.debug(
+                        "IP Control absolute volume is not available on this TV: %s",
+                        ex,
+                    )
+            except SamsungIPControlError as ex:
+                # Network/state errors must not be mistaken for a missing
+                # capability. We can retry on the next normal update.
+                self._log.debug(
+                    "IP Control absolute-volume read failed (%s); "
+                    "falling back to UPnP",
+                    ex,
+                )
             else:
-                self._attr_volume_level = None
-            self._attr_is_volume_muted = await self._upnp.async_get_mute()
+                if self._ip_absolute_volume_supported is not True:
+                    self._log.info("IP Control absolute volume detected for this TV")
+
+                self._ip_absolute_volume_supported = True
+                self._attr_volume_level = volume / 100
+                self._attr_is_volume_muted = await self._upnp.async_get_mute()
+                return
+
+        # Existing behaviour for TVs without local absolute-volume support.
+        if (volume := await self._upnp.async_get_volume()) is not None:
+            self._attr_volume_level = int(volume) / 100
+        else:
+            self._attr_volume_level = None
+
+        self._attr_is_volume_muted = await self._upnp.async_get_mute()
 
     def _get_external_entity_status(self):
         """Get status from external binary sensor."""
@@ -1722,11 +1826,12 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         """
         if not self._source_list:
             return None
-        # source_list is {display_name: source_key} e.g. {"Home cinéma": "ST_HDMI3"}
-        # Check if source_id matches the ST_ suffix in any value
-        st_key = "ST_" + source_id
+        # source_list is {display_name: source_key}, e.g.
+        # {"Home cinéma": "ST_HDMI3"} or {"PlayStation": "IP_HDMI2"}
+        # Check if source_id matches a SmartThings or IP Control source key.
+        source_keys = (f"ST_{source_id}", f"IP_{source_id}")
         for display_name, source_key in self._source_list.items():
-            if source_key == st_key:
+            if source_key in source_keys:
                 return (display_name, source_key)
         # Also check for TV variant (dtv, digitalTv -> ST_TV)
         if source_id.upper() in ["DTV", "DIGITALTV", "TV"]:
@@ -1736,6 +1841,17 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         return None
 
     def _get_st_sources(self):
+        # A manually configured source list must always have priority
+        custom_source_list = self._get_option(CONF_SOURCE_LIST, {})
+        if custom_source_list:
+            self._log.debug(
+                "Samsung TV: using custom source list: %s",
+                custom_source_list,
+            )
+            self._source_list = custom_source_list
+            self._default_source_used = False
+            return
+
         if not self._st:
             self._log.debug("SmartThings not configured, _get_st_sources not executed")
             return
@@ -1830,14 +1946,105 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
             )
             self._dump_apps = False
 
+    def _get_ip_control_state_coordinator(self):
+        """Return the shared getTVStates coordinator created by sensor.py."""
+        return (
+            self.hass.data.get(DOMAIN, {})
+            .get(self._entry_id, {})
+            .get(DATA_IP_CONTROL_STATE_COORDINATOR)
+        )
+
+    def _ip_control_ambient_mode_active(self) -> bool:
+        """Return whether the shared IP Control snapshot reports Ambient mode."""
+        coordinator = self._get_ip_control_state_coordinator()
+        data = getattr(coordinator, "data", None)
+        if not isinstance(data, dict) or data.get("powered_off"):
+            return False
+
+        tv_states = data.get("tv")
+        return isinstance(tv_states, dict) and tv_states.get("pictureMode") == "Ambient"
+
+    def _get_ip_control_input_source(self) -> str | None:
+        """Return the latest physical input from the shared IP Control snapshot."""
+        # Do not consume a stale coordinator/cache after IP Control was disabled
+        # or unpaired in Reconfigure.
+        if self._get_ip_control_client() is None:
+            self._ip_input_source = None
+            return None
+
+        coordinator = self._get_ip_control_state_coordinator()
+        data = getattr(coordinator, "data", None)
+        if isinstance(data, dict) and not data.get("powered_off"):
+            tv_states = data.get("tv")
+            if isinstance(tv_states, dict):
+                value = tv_states.get("inputSource")
+                if isinstance(value, str) and value:
+                    self._ip_input_source = value
+
+        return self._ip_input_source
+
+    def _get_ip_control_channel(self) -> str | None:
+        """Return the latest tuner channel from the shared IP Control snapshot."""
+        if self._get_ip_control_client() is None:
+            return None
+
+        coordinator = self._get_ip_control_state_coordinator()
+        data = getattr(coordinator, "data", None)
+        if not isinstance(data, dict) or data.get("powered_off"):
+            return None
+
+        # The snapshot is refreshed at the configured IP Control poll cadence, so
+        # after switching the TV away from its tuner the previous poll's channel
+        # is still in `data` until the next one. Cross-check the input recorded
+        # in the same snapshot, or media_channel would keep reporting a channel
+        # number — and media_content_type would keep saying CHANNEL — for up to
+        # one poll cycle while the TV is already on HDMI.
+        tv_states = data.get("tv")
+        if isinstance(tv_states, dict):
+            input_source = tv_states.get("inputSource")
+            if (
+                isinstance(input_source, str)
+                and input_source.casefold() not in TUNER_INPUT_SOURCES
+            ):
+                return None
+
+        channel_states = data.get("channel")
+        if not isinstance(channel_states, dict):
+            return None
+
+        value = channel_states.get("channelNum")
+        if isinstance(value, (str, int)):
+            channel = str(value).strip()
+            if channel:
+                return channel
+
+        return None
+
     def _get_source(self):
         """Return the current input source."""
         if self.state != MediaPlayerState.ON:
             self._source = None
             return self._source
 
+        # A running app is more specific than the physical TV input.
+        if self._running_app != DEFAULT_APP:
+            self._source = self._running_app
+            return self._source
+
+        # When IP Control is paired, prefer its local getTVStates.inputSource
+        # over SmartThings. Resolve HDMI1/HDMI2/... back to the configured
+        # display name (e.g. "PC" / "Chromecast") so media_player.source stays
+        # consistent with source_list and mini-media-player selectors.
+        if local_source := self._get_ip_control_input_source():
+            if resolved := self._resolve_source_by_id(local_source):
+                self._source = resolved[0]
+                return self._source
+            if self._source_list and local_source in self._source_list:
+                self._source = local_source
+                return self._source
+
         use_st: bool = self._st is not None and self._st.state == STStatus.STATE_ON
-        if self._running_app != DEFAULT_APP or not use_st:
+        if not use_st:
             self._source = self._running_app
             return self._source
 
@@ -1853,6 +2060,21 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
             if value == cloud_key:
                 found_source = attr
                 break
+        else:
+            # SmartThings knows which input the TV is on, but no entry in the
+            # source list maps to it, so the reported source silently stays at
+            # the generic running-app value and looks like "it never updates"
+            # (#230). Happens when the source list is the default (KEY_* values,
+            # no ST_* keys) or when discovery returned only some of the inputs.
+            if cloud_key and cloud_key != self._last_unmapped_source:
+                self._log.debug(
+                    "SmartThings reports input %s, but no source list entry "
+                    "maps to it (list: %s) — reported source stays %s",
+                    cloud_key,
+                    self._source_list,
+                    found_source,
+                )
+            self._last_unmapped_source = cloud_key
 
         self._source = found_source
         return self._source
@@ -1987,7 +2209,12 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         if wake_edge:
             self._st_last_poll = now
             return True
-        if self._state == MediaPlayerState.ON:
+        if self._st_auth_error_count >= MAX_ST_AUTH_ERROR_COUNT:
+            # SmartThings is refusing this device id outright. Keep a slow
+            # heartbeat so a reconfigure is picked up without a restart, but
+            # stop polling at the normal cadence.
+            interval = ST_POLL_AUTH_ERROR_INTERVAL
+        elif self._state == MediaPlayerState.ON:
             interval = self._st_poll_on_interval
         else:
             interval = ST_POLL_OFF_INTERVAL
@@ -1995,6 +2222,20 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
             self._st_last_poll = now
             return True
         return False
+
+    @staticmethod
+    def _st_error_is_authorization(exc: Exception) -> bool:
+        """True when SmartThings refused the device rather than merely failing.
+
+        pysmartthings does not expose a stable exception class for this, so the
+        check is deliberately loose: the class name and the message are both
+        inspected. A false positive only slows polling down and shows a notice
+        the user can dismiss; a false negative just keeps today's behaviour.
+        """
+        text = f"{type(exc).__name__} {exc}".lower()
+        return any(
+            marker in text for marker in ("forbidden", "unauthorized", "401", "403")
+        )
 
     async def _async_st_update(self, **kwargs) -> bool | None:
         """Update SmartThings state of device."""
@@ -2019,14 +2260,48 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
                 self._log.warning(
                     "%s - SmartThings update failed, continuing with local"
                     " control only: %s",
-                    self.entity_id,
+                    # entity_id is still None during setup, which logged a
+                    # bare "None - ..." line right when a first-run failure is
+                    # most likely to be read.
+                    self.entity_id or self._name,
                     exc,
                 )
             self._st_last_exc = exc
+            self._note_st_auth_error(exc)
             return False
 
         self._st_last_exc = None
+        if self._st_auth_error_count:
+            self._log.info(
+                "%s - SmartThings is answering again, resuming normal polling",
+                self.entity_id or self._name,
+            )
+            self._st_auth_error_count = 0
+            clear_token_problem(self.hass, self._entry_id, METHOD_SMARTTHINGS)
         return True
+
+    def _note_st_auth_error(self, exc: Exception) -> None:
+        """Count an authorization refusal and, past the threshold, act on it."""
+        if not self._st_error_is_authorization(exc):
+            self._st_auth_error_count = 0
+            return
+        if self._st_auth_error_count >= MAX_ST_AUTH_ERROR_COUNT:
+            return
+        self._st_auth_error_count += 1
+        if self._st_auth_error_count < MAX_ST_AUTH_ERROR_COUNT:
+            return
+        self._log.error(
+            "%s - SmartThings refused this device %d times in a row (%s). The "
+            "stored device id is probably no longer valid -- this happens "
+            "after a mainboard repair, or when the TV is re-added in the "
+            "SmartThings app. Slowing polling to %ds; fix it under "
+            "Reconfigure > SmartThings device.",
+            self.entity_id or self._name,
+            self._st_auth_error_count,
+            exc,
+            ST_POLL_AUTH_ERROR_INTERVAL,
+        )
+        notify_token_problem(self.hass, self._entry_id, METHOD_SMARTTHINGS, self._name)
 
     async def async_update(self):
         """Update state of device."""
@@ -2393,18 +2668,21 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
     def supported_features(self) -> int:
         """Flag media player features that are supported."""
         features = SUPPORT_SAMSUNGTV_SMART
+
         if self.state == MediaPlayerState.ON:
             features |= MediaPlayerEntityFeature.BROWSE_MEDIA
+
         if self._st:
             features |= MediaPlayerEntityFeature.SELECT_SOUND_MODE
-        # Absolute volume (the slider) only targets the TV's internal volume:
-        # with an external output (HDMI-eARC receiver, optical, BT soundbar)
-        # UPnP/SmartThings setvolume is a no-op, so drop VOLUME_SET to hide the
-        # dead slider. VOLUME_STEP and VOLUME_MUTE are KEPT: the TV relays the
-        # up/down/mute keys to the external device over CEC/ARC (confirmed by a
-        # user with an eARC AVR), and the same relay applies to BT soundbars.
-        if self._speaker_output_is_internal() is False:
+
+        # Preserve the 8.7.0 protection for external receivers/soundbars unless
+        # this specific TV has positively demonstrated directVolumeControl.
+        if (
+            self._speaker_output_is_internal() is False
+            and self._ip_absolute_volume_supported is not True
+        ):
             features &= ~MediaPlayerEntityFeature.VOLUME_SET
+
         return features
 
     def _smartthings_reports_art(self) -> bool:
@@ -2519,10 +2797,16 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
     @property
     def media_channel(self):
         """Channel currently playing."""
-        if self._state == MediaPlayerState.ON:
-            if self._st:
-                if self._st.source in ["digitalTv", "TV"] and self._st.channel != "":
-                    return self._st.channel
+        if self._state != MediaPlayerState.ON:
+            return None
+
+        if local_channel := self._get_ip_control_channel():
+            return local_channel
+
+        if self._st:
+            if self._st.source in ["digitalTv", "TV"] and self._st.channel != "":
+                return self._st.channel
+
         return None
 
     @property
@@ -2830,23 +3114,44 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
             return False
 
     async def async_mute_volume(self, mute):
-        """Send mute command."""
+        """Set mute state."""
         if self._state != MediaPlayerState.ON:
             return
+
         if self.is_volume_muted is not None and mute == self.is_volume_muted:
             return
+
+        # With an external receiver/soundbar, the TV remote's KEY_MUTE is
+        # relayed to the external audio device over HDMI-CEC/ARC/eARC.
+        # An explicit IP Control muteControl state is not equally reliable
+        # with external audio, so use the same toggle path as the physical
+        # remote. The state guard above ensures we only toggle when needed.
+        if self._speaker_output_is_internal() is False:
+            await self.async_send_command("KEY_MUTE")
+
+            if self.is_volume_muted is not None:
+                self._attr_is_volume_muted = mute
+
+            return
+
+        # Internal speakers retain the existing IP Control behaviour, with
+        # WebSocket KEY_MUTE as fallback.
         client = self._get_ip_control_client()
         sent_via_ip_control = False
+
         if client is not None:
             try:
                 await client.async_set_mute(mute)
                 sent_via_ip_control = True
             except SamsungIPControlError as ex:
                 self._log.debug(
-                    "IP Control mute failed (%s); falling back to WebSocket", ex
+                    "IP Control mute failed (%s); falling back to WebSocket",
+                    ex,
                 )
+
         if not sent_via_ip_control:
             await self.async_send_command("KEY_MUTE")
+
         if self.is_volume_muted is not None:
             self._attr_is_volume_muted = mute
 
@@ -2854,25 +3159,61 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         """Set the volume level."""
         if self._state != MediaPlayerState.ON:
             return
+
         if self.volume_level is None:
             return
-        # Absolute volume only reaches the TV's internal speakers; with an
-        # external output the command is silently ignored by the TV. Warn
-        # (rather than raise, to keep legacy automations from erroring) and
-        # skip the pointless call. Use volume_up/down instead — the TV relays
-        # those to the external device over CEC/ARC.
-        if self._speaker_output_is_internal() is False:
+
+        target = int(volume * 100)
+        speaker_internal = self._speaker_output_is_internal()
+
+        # Prefer directVolumeControl whenever the capability has not already
+        # been ruled out for this IP Control client.
+        client = self._get_ip_control_client()
+
+        if client is not None and self._ip_absolute_volume_supported is not False:
+            try:
+                applied = await client.async_set_volume(target)
+            except SamsungIPControlUnsupportedError as ex:
+                if self._ip_control_ambient_mode_active():
+                    self._log.debug(
+                        "IP Control absolute volume unavailable while Ambient mode "
+                        "is active; not treating it as unsupported: %s",
+                        ex,
+                    )
+                else:
+                    self._ip_absolute_volume_supported = False
+                    self._log.debug(
+                        "IP Control absolute volume is not available on this TV: %s",
+                        ex,
+                    )
+            except SamsungIPControlError as ex:
+                self._log.debug(
+                    "IP Control absolute-volume set failed (%s); "
+                    "using the existing fallback when possible",
+                    ex,
+                )
+            else:
+                self._ip_absolute_volume_supported = True
+                self._attr_volume_level = applied / 100
+                return
+
+        # Without confirmed local absolute-volume support, retain the 8.7.0
+        # protection for external receivers/soundbars.
+        if speaker_internal is False:
             self._log.warning(
                 "volume_set ignored: the TV's speaker output is external "
-                "(receiver/soundbar) and absolute volume only targets the "
-                "internal speakers — use volume_up/volume_down instead"
+                "(receiver/soundbar) and IP Control absolute volume is not "
+                "available — use volume_up/volume_down instead"
             )
             return
+
+        # Internal speakers retain the existing SmartThings/UPnP behaviour.
         if self._st and self._setvolumebyst:
-            await self._st.async_send_command("setvolume", int(volume * 100))
+            await self._st.async_send_command("setvolume", target)
         else:
-            await self._upnp.async_set_volume(int(volume * 100))
-        self._attr_volume_level = volume
+            await self._upnp.async_set_volume(target)
+
+        self._attr_volume_level = target / 100
 
     def media_play_pause(self):
         """Simulate play pause media player."""
@@ -2910,6 +3251,75 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         else:
             self.send_command("KEY_REWIND")
 
+    async def _async_open_browser(self, url: str) -> bool:
+        """Open URL using IP Control, falling back to WebSocket."""
+
+        ip_client = self._get_ip_control_client()
+
+        if ip_client is not None:
+            try:
+                await ip_client.async_open_browser(url)
+                # Name the URL we asked for: the TV confirms only that the
+                # browser was launched (its getter returns applicationName and
+                # never the current page), so a "it opened the wrong page"
+                # report is only diagnosable if the log says what we requested.
+                self._log.info(
+                    "Browser launched via IP Control at %s; the TV does not "
+                    "report which URL it actually opened",
+                    url,
+                )
+                return True
+
+            except SamsungIPControlError as ex:
+                self._log.debug(
+                    "IP Control browser launch failed (%s); "
+                    "falling back to WebSocket",
+                    ex,
+                )
+
+        return await self.async_send_command(url, CMD_OPEN_BROWSER)
+
+    async def _async_ip_control_source(self, source_key: str) -> bool:
+        """Select an input source through local Samsung IP Control."""
+        input_source = source_key.removeprefix("IP_")
+        if not input_source:
+            self._log.error("Invalid IP Control source command: %s", source_key)
+            return False
+
+        client = self._get_ip_control_client()
+        if client is None:
+            self._log.error(
+                "IP Control is not paired or is disabled. Command not sent: %s",
+                source_key,
+            )
+            return False
+
+        try:
+            selected_source = await client.async_set_input_source(input_source)
+        except SamsungIPControlError as ex:
+            self._log.error("IP Control input source %s failed: %s", input_source, ex)
+            return False
+
+        # Keep media_player.source and the existing diagnostic input-source
+        # sensor in sync immediately. The next coordinator poll will confirm the
+        # physical state; no extra JSON-RPC request is needed here.
+        self._ip_input_source = selected_source
+        coordinator = self._get_ip_control_state_coordinator()
+        if coordinator is not None:
+            current_data = getattr(coordinator, "data", None)
+            updated_data = dict(current_data) if isinstance(current_data, dict) else {}
+            current_tv = updated_data.get("tv")
+            tv_states = dict(current_tv) if isinstance(current_tv, dict) else {}
+            tv_states["inputSource"] = selected_source
+            updated_data["tv"] = tv_states
+            updated_data["powered_off"] = False
+            set_updated_data = getattr(coordinator, "async_set_updated_data", None)
+            if callable(set_updated_data):
+                set_updated_data(updated_data)
+
+        self._log.debug("IP Control input source selected: %s", selected_source)
+        return True
+
     async def _async_send_keys(self, source_key):
         """Send key / chained keys."""
         prev_wait = True
@@ -2930,12 +3340,18 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
                     if not prev_wait:
                         await asyncio.sleep(KEYPRESS_DEFAULT_DELAY)
                     prev_wait = False
-                    if this_key.startswith("ST_"):
+                    if this_key.startswith("IP_"):
+                        if not await self._async_ip_control_source(this_key):
+                            return False
+                    elif this_key.startswith("ST_"):
                         await self._smartthings_keys(this_key)
                     else:
                         await self.async_send_command(this_key)
 
             return True
+
+        if source_key.startswith("IP_"):
+            return await self._async_ip_control_source(source_key)
 
         if source_key.startswith("ST_"):
             return await self._smartthings_keys(source_key)
@@ -3157,11 +3573,11 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
                 self._playing = True
                 return
 
-            await self.async_send_command(media_id, CMD_OPEN_BROWSER)
+            await self._async_open_browser(media_id)
 
         # Open url in browser
         elif media_type == MEDIA_TYPE_BROWSER:
-            await self.async_send_command(media_id, CMD_OPEN_BROWSER)
+            await self._async_open_browser(media_id)
 
         # Trying to make stream component work on TV
         elif media_type == "application/vnd.apple.mpegurl":
@@ -3280,30 +3696,6 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         the SmartThings API to return COMPLETED but the TV to show
         "function not available".
         """
-        # Map picture mode display names / internal ids to WS key codes.
-        # Only Dynamic, Standard, Movie and Eco have dedicated keys.
-        # Filmmaker Mode has no dedicated key.
-        _PICTURE_MODE_KEYS = {
-            # Dynamic
-            "dynamic": "KEY_DYNAMIC",
-            "dynamique": "KEY_DYNAMIC",
-            "dynamisch": "KEY_DYNAMIC",
-            "modedynamic": "KEY_DYNAMIC",
-            # Standard
-            "standard": "KEY_STANDARD",
-            "modestandard": "KEY_STANDARD",
-            # Movie / Film / Cinema
-            "movie": "KEY_MOVIE1",
-            "film": "KEY_MOVIE1",
-            "cinéma (étalonné)": "KEY_MOVIE1",
-            "modemovie": "KEY_MOVIE1",
-            "natural": "KEY_MOVIE1",
-            # Eco
-            "eco": "KEY_ESAVING",
-            "éco": "KEY_ESAVING",
-            "modeeco": "KEY_ESAVING",
-        }
-
         # 1. Try SmartThings API (works for native TV sources)
         if self._st:
             try:
@@ -3311,8 +3703,12 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
             except Exception:
                 pass
 
-        # 2. Also send WS key as fallback (bypasses HDMI restrictions)
-        ws_key = _PICTURE_MODE_KEYS.get(picture_mode.lower())
+        # 2. Also send WS key as fallback (bypasses HDMI restrictions, and is
+        # the only path left when the cloud refuses the command entirely).
+        mode_id = ""
+        if self._st:
+            mode_id = self._st.picture_mode_map.get(picture_mode, "")
+        ws_key = picture_mode_ws_key(picture_mode, mode_id)
         if ws_key:
             await self.async_send_command(ws_key)
             self._log.debug(
@@ -3322,10 +3718,34 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
             )
         else:
             self._log.debug(
-                "No direct WS key for '%s', skipping WS fallback "
-                "(FILMMAKER MODE has no dedicated remote key)",
+                "No WS key for picture mode '%s' (id=%s) — skipping WS fallback",
                 picture_mode,
+                mode_id or "unknown",
             )
+
+    async def _async_set_hue_sync(self, enabled: bool) -> None:
+        """Start or stop Hue Sync, turning a missing capability into a clear error."""
+        if not self._st:
+            raise HomeAssistantError("SmartThings is not configured for this TV")
+        try:
+            await self._st.async_set_hue_sync(enabled)
+        except SmartThingsCapabilityUnsupported as err:
+            raise HomeAssistantError(
+                f"This TV does not currently expose the {err} SmartThings "
+                "capability, so Hue Sync cannot be controlled. Check that the "
+                "Philips Hue Sync TV app is installed on the TV and paired with "
+                "your Hue bridge — on some models the capability only appears "
+                "once it is set up. If it is already set up, the model does not "
+                "support this."
+            ) from err
+
+    async def async_start_hue_sync(self) -> None:
+        """Start Philips Hue Sync without opening the TV app."""
+        await self._async_set_hue_sync(True)
+
+    async def async_stop_hue_sync(self) -> None:
+        """Stop Philips Hue Sync without opening the TV app."""
+        await self._async_set_hue_sync(False)
 
     # ==========================================
     # Frame Art Extended Service Methods
@@ -3513,6 +3933,18 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
             except Exception:  # noqa: BLE001 - best effort probe
                 pass
 
+        # Off, or gone. Tell the two apart before spending 10s trying to wake
+        # something that will never answer: a Frame in standby still serves its
+        # REST endpoint, an unplugged or faulty one does not. Without this an
+        # upload to a dead TV simply hung with nothing in the UI to explain it.
+        if await self._async_load_device_info(force=True) is None:
+            self._log.warning(
+                "Frame Art: %s is unreachable — cannot upload. Check the TV is "
+                "powered at the mains and on the network.",
+                self._host,
+            )
+            return False
+
         # Genuinely off: power it on, then leave the mode alone.
         ip_client = self._get_ip_control_client()
         if ip_client is not None:
@@ -3663,18 +4095,6 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
             self._log.error("Frame Art: Error ensuring Art Mode: %s", ex)
             return False
 
-    async def _force_art_coordinator_refresh(self):
-        """Force immediate refresh of Frame Art coordinator after artwork changes."""
-        try:
-            coordinator = self.hass.data[DOMAIN][self._entry_id].get(
-                "frame_art_coordinator"
-            )
-            if coordinator:
-                await coordinator.async_request_refresh()
-                self._log.debug("Forced Frame Art coordinator refresh")
-        except Exception as ex:
-            self._log.debug("Could not force coordinator refresh: %s", ex)
-
     async def async_art_select_image(
         self,
         content_id: str,
@@ -3694,19 +4114,69 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
         try:
             await self._art_api.select_image(content_id, category_id, show)
 
-            # Force immediate update 🚀
-            await self._force_art_coordinator_refresh()
-
             return {"success": True, "content_id": content_id}
         except Exception as ex:
             self._log.error("Error selecting artwork: %s", ex)
             return {"error": str(ex)}
+
+    async def _validate_matte_id(self, matte_id: str | None) -> str | None:
+        """Return an error message when the TV cannot render this matte id.
+
+        A matte is "<type>_<color>" and BOTH halves must come from the TV's own
+        lists, which differ by model — sending an id built from a type and a
+        colour this panel does not know makes the TV reject the upload with its
+        own error, or (worse, seen on a QN55LS03HEFXZA) store the artwork and
+        then fail rendering it, which looks like a TV fault rather than a bad
+        parameter (#243).
+
+        Returns None when the id is usable, or when the TV's lists could not be
+        read — an unreachable list must never block an upload that would have
+        worked.
+        """
+        if not matte_id or matte_id == "none":
+            return None
+
+        try:
+            matte_types, matte_colors = await self._art_api.get_matte_list(
+                include_color=True
+            )
+        except Exception as ex:  # noqa: BLE001 - never block an upload on this
+            self._log.debug("Frame Art: could not read the matte list: %s", ex)
+            return None
+
+        def _ids(entries, key: str) -> set[str]:
+            """Names from a matte list, which is dicts on some models, strings
+            on others — the same shape the matte selects handle."""
+            out: set[str] = set()
+            for entry in entries or []:
+                value = entry.get(key) if isinstance(entry, dict) else entry
+                if isinstance(value, str) and value:
+                    out.add(value)
+            return out
+
+        types = _ids(matte_types, "matte_type")
+        colors = _ids(matte_colors, "color")
+        if not types or not colors:
+            return None
+
+        matte_type, _, matte_color = matte_id.partition("_")
+        unknown = []
+        if matte_type not in types:
+            unknown.append(f"type '{matte_type}' (this TV has: {sorted(types)})")
+        if matte_color not in colors:
+            unknown.append(f"colour '{matte_color}' (this TV has: {sorted(colors)})")
+        if unknown:
+            return f"matte_id '{matte_id}' is not valid on this TV: " + "; ".join(
+                unknown
+            )
+        return None
 
     async def async_art_upload(
         self,
         file_path: str,
         matte_id: str = "shadowbox_polar",
         file_type: str = "jpg",
+        show: bool = False,
     ) -> dict:
         """Upload an image to the TV as artwork."""
         self._log.info("Frame Art: Starting upload of %s", file_path)
@@ -3717,7 +4187,7 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
 
         # Only needs the art app reachable — do not force Art Mode on.
         if not await self._ensure_tv_awake_for_art():
-            return {"error": "Failed to turn on TV"}
+            return {"error": "TV unreachable or could not be turned on"}
 
         try:
             # Check if file exists
@@ -3739,6 +4209,10 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
                 matte_id,
             )
 
+            if matte_error := await self._validate_matte_id(matte_id):
+                self._log.error("Frame Art: %s", matte_error)
+                return {"error": matte_error}
+
             content_id = await self._art_api.upload(
                 file_path,
                 matte=matte_id,
@@ -3751,9 +4225,6 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
                     "Frame Art: Upload successful, content_id=%s", content_id
                 )
 
-                # Force immediate update 🚀
-                await self._force_art_coordinator_refresh()
-
                 # The TV often needs a while (sometimes minutes) to generate the
                 # thumbnail for a just-uploaded image, so the immediate batch
                 # fetch fails for it ("No data"/"Connection reset") and the
@@ -3761,6 +4232,9 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
                 # to pick it up. Retry this specific content_id with backoff in
                 # the background until its thumbnail is available.
                 self.hass.async_create_task(self._retry_new_thumbnail(content_id))
+
+                if show:
+                    await self.async_art_select_image(content_id, show=True)
 
                 return {"success": True, "content_id": content_id}
 
@@ -3798,7 +4272,7 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
             return {"error": "Frame TV not supported"}
         # Writing to the art library does not require the panel to show art.
         if not await self._ensure_tv_awake_for_art():
-            return {"error": "Failed to turn on TV"}
+            return {"error": "TV unreachable or could not be turned on"}
 
         from .api._upload_sidecar import list_images
 
@@ -3832,7 +4306,6 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
 
         # Reflect the new art and fetch the (delayed) TV-side thumbnails.
         if result.get("uploaded"):
-            await self._force_art_coordinator_refresh()
             for content_id in result["uploaded"]:
                 self.hass.async_create_task(self._retry_new_thumbnail(content_id))
 
@@ -3872,8 +4345,6 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
                     "Frame Art: thumbnail for %s is now available (delayed retry)",
                     content_id,
                 )
-                # Nudge the gallery/sensor so it shows the new thumbnail now.
-                await self._force_art_coordinator_refresh()
                 return
         self._log.debug(
             "Frame Art: thumbnail for %s still unavailable after delayed retries",
@@ -3889,9 +4360,6 @@ class SamsungTVDevice(SamsungTVEntity, MediaPlayerEntity):
             return {"error": "Can only delete user-uploaded content (MY-*)"}
         try:
             await self._art_api.delete(content_id)
-
-            # Force immediate update 🚀
-            await self._force_art_coordinator_refresh()
 
             return {"success": True}
         except Exception as ex:

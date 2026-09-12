@@ -229,7 +229,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: VagConnectConfigEntry) -
             raise ConfigEntryNotReady(
                 "VW Group Connect setup failed. Check logs for details."
             ) from err
-        raise ConfigEntryNotReady(str(err)) from err
+        # class only — str(err) can carry an aiohttp request URL; keep the raw
+        # detail on the chained cause, not in the user-facing not-ready message.
+        _LOGGER.debug("VW Group Connect setup not ready (%s)", type(err).__name__)
+        raise ConfigEntryNotReady(
+            "VW Group Connect setup failed. Check logs for details."
+        ) from err
 
     if not ok:
         raise ConfigEntryNotReady(
@@ -257,9 +262,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: VagConnectConfigEntry) -
     # changes already in place, so it's a single inner-method swap.
     try:
         await coordinator.async_start_push_managers()
-    except Exception:  # noqa: BLE001
-        _LOGGER.exception(
-            "VW Group Connect: push manager startup failed — falling back to polling"
+    except Exception as exc:  # noqa: BLE001
+        # class-only, not .exception() — a push-connect error's str() can carry the
+        # broker URL / auth token, and a traceback re-renders it. Level kept ERROR.
+        _LOGGER.error(
+            "VW Group Connect: push manager startup failed (%s) — falling back to"
+            " polling", type(exc).__name__,
         )
 
     if not hass.services.has_service(DOMAIN, "lock"):
@@ -322,7 +330,7 @@ def _register_services(hass: HomeAssistant) -> None:
         c = _get_coordinator(hass, vin)
         if c is None:
             raise ServiceValidationError(
-                f"Vehicle '{vin}' not found.",
+                f"Vehicle '…{vin[-6:]}' not found.",
                 translation_domain=DOMAIN,
                 translation_key="vehicle_not_found",
             )
@@ -501,6 +509,12 @@ def _register_services(hass: HomeAssistant) -> None:
         # be fetched through the connector's own portal channel.
         await _coord(call.data["vin"]).async_import_export_file(
             call.data["vin"], call.data["file"]
+        )
+
+    async def _handle_cancel_historical_export(call: ServiceCall) -> None:
+        # #1273 — off-switch for an accidentally-triggered one-time export.
+        await _coord(call.data["vin"]).async_cancel_historical_export(
+            call.data["vin"]
         )
 
     async def _handle_set_departure_timer(call: ServiceCall) -> None:
@@ -703,6 +717,7 @@ def _register_services(hass: HomeAssistant) -> None:
         ("request_historical_export",      _handle_request_historical_export, SERVICE_VIN_SCHEMA),
         ("import_historical_export",       _handle_import_historical_export,  SERVICE_VIN_SCHEMA),
         ("import_export_file",             _handle_import_export_file,        SERVICE_IMPORT_FILE_SCHEMA),
+        ("cancel_historical_export",       _handle_cancel_historical_export,  SERVICE_VIN_SCHEMA),
         ("refresh_vehicle",                _handle_refresh,             vol.Schema({})),
         # v1.13.0 (#63 Phase 3) — explicit semantic-clear alias.
         ("refresh_cloud_cache",            _handle_refresh_cloud_cache, vol.Schema({})),
@@ -1103,5 +1118,13 @@ async def _async_update_listener(
             refresh_spin = getattr(coordinator, "_refresh_mbb_command_spin", None)
             if callable(refresh_spin):
                 refresh_spin()
+            # v4.7.9 (#584/#923) — the test-cohort opt-in was applied at setup
+            # only, so toggling it here silently needed a restart. Re-apply live.
+            apply_cohort = getattr(coordinator, "_apply_test_cohort", None)
+            if callable(apply_cohort):
+                try:
+                    await apply_cohort()
+                except Exception:  # noqa: BLE001 — never break a settings save
+                    _LOGGER.debug("test-cohort re-apply skipped", exc_info=True)
             # Trigger one immediate refresh so users see the effect
             await coordinator.async_request_refresh()

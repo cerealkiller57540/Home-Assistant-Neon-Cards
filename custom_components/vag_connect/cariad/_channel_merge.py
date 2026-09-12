@@ -33,6 +33,7 @@ import copy
 import logging
 from collections.abc import Awaitable
 from dataclasses import fields
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -45,6 +46,63 @@ _SKIP_FIELDS = frozenset(
     {"vin", "source_channel", "field_sources", "no_data", "has_battery",
      "has_combustion", "is_electric", "is_hybrid"}
 )
+
+# The EU Data Act portal's continuous feed is a ~15-minute BATCH export that
+# ships frozen stop-charging blocks (a snapshot from the last charge, re-sent —
+# sometimes re-stamped with a fresh capture time). Every other channel (vw.de
+# web, the CARIAD BFF, MBB, SEAT/CUPRA OLA, the brand-native reads) is a LIVE
+# read. For live telemetry — SoC, charging, plug, range, climate — a live
+# channel's reading must therefore always beat the batch feed's, regardless of
+# which channel is configured as primary; otherwise a stale batch value wins the
+# gap-fill and the reading jumps backwards mid-charge (Ra72xx, #1195-family).
+# This mirrors a competing integration's portal-supersedes-EU-DA dedup, but is
+# brand-agnostic (keyed on channel + field, never on brand).
+_BATCH_SOURCES = frozenset({"eu_data_act"})
+
+_LIVE_TELEMETRY = frozenset({
+    # battery / SoC / range
+    "battery_soc", "target_soc", "electric_range_km",
+    # charging live state
+    "charging_state", "is_charging", "charging_scenario", "charging_reason",
+    "charging_preferred_mode",
+    # charge power / rate / time / energy
+    "charging_power_kw", "charging_rate_kmh", "actual_charge_rate_kw",
+    "charge_complete_eta", "remaining_time_target_soc", "charge_session_energy_kwh",
+    # plug / connector
+    "plug_state", "plug_connected", "connector_locked",
+    # power flow
+    "external_power_supply_state", "energy_flow_active",
+    # climate live state
+    "climatisation_state", "climatisation_active",
+})
+
+# Volatile physical closure/lock state. Same reasoning as _LIVE_TELEMETRY: when
+# the batch feed is primary it can carry a ≥15-minute-stale (and, like the charge
+# blocks, sometimes frozen-and-re-stamped) door/window/lock snapshot, while a live
+# channel's on-demand read reflects the car's current closure state. A stale
+# "locked"/"closed" reading here is worse than for telemetry — it's the kind of
+# thing an automation ("warn me if a door is open") acts on — so a live channel's
+# reading must win exactly as it does for SoC/charging.
+#
+# Deliberately EXCLUDES the fields where "highest-priority live channel wins" is
+# NOT a safe proxy for "freshest":
+#   - odometer_km: monotonic and monotonic-protected elsewhere; a lower-priority
+#     live channel could hold a staler (lower) value → regression (see the
+#     odometer test). Gap-fill / primary must stand.
+#   - position (lat/lon/position_captured_at): governed by its own carry-forward
+#     TTL in vehicle_cache.reconcile, which already reasons about capture age.
+#   - fuel_level: has a dedicated endpoint-specific merge (BFF ← MBB VSR).
+#   - service_*/master data: effectively static; a 15-min batch age is irrelevant.
+_LIVE_CLOSURE = frozenset({
+    "doors_locked", "doors_open", "windows_open",
+    "doors_individual", "windows_individual", "windows_position",
+    "trunk_open", "trunk_locked", "hood_open", "bonnet_locked",
+})
+
+# Fields a live channel supersedes when the batch feed owns them (see the loop
+# below). Telemetry + volatile closure state; never the monotonic/static/TTL-
+# managed fields excluded above.
+_LIVE_SUPERSEDE = _LIVE_TELEMETRY | _LIVE_CLOSURE
 
 
 def merge_channels(
@@ -104,6 +162,63 @@ def merge_channels(
                     contributors.add(name)
                     # This channel filled the gap, so it owns the reading.
                     field_sources[f.name] = name
+
+    # Live supersede: a stale EU-DA batch value must never outrank a live
+    # channel's reading. For every superseding field (live telemetry + volatile
+    # closure state) the batch feed currently owns, hand it to the highest-
+    # priority live channel that actually has a reading. No-op when no live
+    # channel is present (EU-DA-only cars keep their value) or when a live channel
+    # already owns the field. Order-preserving (walks ``sources`` in priority
+    # order) and provenance-correct.
+    if any(nm not in _BATCH_SOURCES for nm, _ in sources):
+        for f_name in _LIVE_SUPERSEDE:
+            if field_sources.get(f_name) not in _BATCH_SOURCES:
+                continue  # a live channel already owns it, or nobody set it
+            for nm, vd in sources:
+                if nm in _BATCH_SOURCES:
+                    continue
+                live_val = getattr(vd, f_name, None)
+                if not _unset(f_name, live_val):
+                    setattr(merged, f_name, copy.deepcopy(live_val))
+                    field_sources[f_name] = nm
+                    contributors.add(nm)
+                    break
+
+    # v4.7.8 (#923/#1378) — position: FRESHEST capture wins, not merge order.
+    # The EU-DA batch feed can now carry a pin (``persLocation``), and with the
+    # portal as PRIMARY its 15-min-old pin would outrank a live vw.de fix via
+    # plain gap-fill (position is deliberately outside the live-supersede set:
+    # capture AGE, not channel class, is the right judge). Among every source
+    # that has a pin AND a parseable capture time, take the newest; a source
+    # without a timestamp can't win over one that has one.
+    _best_nm: str | None = None
+    _best_vd: VehicleData | None = None
+    _best_ts: datetime | None = None
+    for nm, vd in sources:
+        lat = getattr(vd, "latitude", None)
+        lon = getattr(vd, "longitude", None)
+        ts_raw = getattr(vd, "position_captured_at", None)
+        if lat is None or lon is None or not ts_raw:
+            continue
+        try:
+            ts = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        if _best_ts is None or ts > _best_ts:
+            _best_nm, _best_vd, _best_ts = nm, vd, ts
+    if (
+        _best_nm is not None
+        and _best_vd is not None
+        and field_sources.get("latitude") != _best_nm
+    ):
+        for f_name in ("latitude", "longitude", "position_captured_at", "heading"):
+            val = getattr(_best_vd, f_name, None)
+            if val is not None:
+                setattr(merged, f_name, copy.deepcopy(val))
+                field_sources[f_name] = _best_nm
+        contributors.add(_best_nm)
 
     _merge_drivetrain(merged, sources)
 
@@ -181,6 +296,7 @@ async def gather_and_merge(
     primary_name: str,
     primary: "VehicleData",
     suppliers: list[tuple[str, Awaitable["VehicleData | None"]]],
+    preferred: str | None = None,
 ) -> "VehicleData":
     """Read supplementary channels concurrently and merge them onto ``primary``.
 
@@ -210,4 +326,20 @@ async def gather_and_merge(
             sources.append((name, res))
     if len(sources) == 1:
         return primary
+    # #1357 — per-VIN read priority. The per-field winner is the ORDER of this
+    # list (merge_channels keeps sources[0] highest-trust and lets lower channels
+    # only fill gaps). When the caller names a ``preferred`` channel, stable-sort
+    # it to the front so it wins every field it carries while the others keep
+    # filling the rest. ``list.sort`` is stable, so every other tie-break — and
+    # thus the whole merge — is byte-for-byte identical to today when ``preferred``
+    # is None/"auto" or names the channel already at the front.
+    #
+    # NOTE: the preference reorders EVERY field the channel carries, INCLUDING
+    # position (lat/lon). The winning channel's ``position_captured_at`` travels
+    # with it, so freshness is still surfaced — but a caller that prefers a channel
+    # whose position is staler than another's will show the preferred channel's
+    # older fix (the whole point of the option is "trust this channel", so this is
+    # intended; the motivating case prefers the FRESHER channel).
+    if preferred and preferred != "auto":
+        sources.sort(key=lambda s: 0 if s[0] == preferred else 1)
     return merge_channels(sources)

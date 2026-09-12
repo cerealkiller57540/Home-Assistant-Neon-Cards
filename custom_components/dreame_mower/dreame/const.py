@@ -132,12 +132,25 @@ MOWING_PREFERENCE_VERSION_INDEX = 0
 MOWING_PREFERENCE_MAP_INDEX_INDEX = 1
 MOWING_PREFERENCE_AREA_ID_INDEX = 2
 MOWING_PREFERENCE_CUTTING_HEIGHT_INDEX = 4
+# Edge mowing slots, all of them flags that are 1 while the behaviour is on:
+#   auto         mow the edges on their own once an all-area or zone run finished
+#   blade offset shift the blade disc sideways for the edge laps, which cuts
+#                closer to the boundary than the centred disc reaches
+#   safe         keep a small buffer from the boundary while mowing the edges
+MOWING_PREFERENCE_EDGE_MOWING_AUTO_INDEX = 7
+MOWING_PREFERENCE_EDGE_BLADE_OFFSET_INDEX = 10
+MOWING_PREFERENCE_EDGE_MOWING_LAPS_INDEX = 11
+MOWING_PREFERENCE_EDGE_MOWING_SAFE_INDEX = 16
+# The offset blade disc only covers the edge over more than one lap, so the mower
+# rejects the setting while it is told to mow the edges a single time.
+MOWING_PREFERENCE_EDGE_BLADE_OFFSET_MIN_LAPS = 2
 # Records are written with the version slot zeroed; the device assigns the
 # resulting record version itself.
 MOWING_PREFERENCE_WRITE_VERSION = 0
 # Firmware that predates the trailing record slots rejects a full-length record
 # with MOWING_PREFERENCE_STATUS_INVALID. Such a write is retried with the record
-# truncated to the layout those firmware versions accept.
+# truncated to the layout those firmware versions accept. Safe edge mowing is the
+# first slot beyond that layout, so those firmware versions do not offer it.
 MOWING_PREFERENCE_LEGACY_LENGTH = 16
 # Per-request status reported in the "r" field of a 2:50 response.
 MOWING_PREFERENCE_STATUS_SUCCESS = 0
@@ -193,6 +206,8 @@ def cutting_height_max_cm(model: str) -> float:
 # key. Only the keys the integration understands are named here, every other key
 # is passed through as the device reports it.
 DEVICE_SETTINGS_BATTERY_KEY = "BAT"
+DEVICE_SETTINGS_RAIN_KEY = "WRP"
+DEVICE_SETTINGS_ANTI_THEFT_KEY = "ATA"
 
 # Battery and charging settings ("BAT")
 #
@@ -208,6 +223,58 @@ BATTERY_SETTING_CHARGING_PERIOD_ENABLED_INDEX = 3
 BATTERY_SETTING_CHARGING_PERIOD_START_INDEX = 4
 BATTERY_SETTING_CHARGING_PERIOD_END_INDEX = 5
 BATTERY_SETTING_LENGTH = 6
+
+# Rain protection settings ("WRP")
+#
+# The record holds the rain protection switch, the delay the mower waits after
+# rain before it picks an interrupted task back up, and how much water it takes
+# for the mower to consider it raining. The delay is in whole hours and only
+# takes effect the next time rain protection triggers.
+#
+# Older firmware reports the record without the sensitivity slot; the slot is
+# then assumed to be the least sensitive setting so the record can still be
+# written back in full.
+RAIN_SETTING_ENABLED_INDEX = 0
+RAIN_SETTING_DELAY_INDEX = 1
+RAIN_SETTING_SENSITIVITY_INDEX = 2
+RAIN_SETTING_LENGTH = 3
+RAIN_SETTING_MINIMUM_LENGTH = 2
+RAIN_SETTING_DEFAULT_SENSITIVITY = 0
+
+# The code the device reports while rain protection is keeping it off the lawn.
+# It shows up both as a one-off announcement on the device code property and as
+# a live bit in the heartbeat.
+DEVICE_CODE_BAD_WEATHER_PROTECTING = 56
+# Codes the device reports around rain, any of which means its plans changed
+# because of the weather.
+RAIN_DEVICE_CODES = frozenset({
+    DEVICE_CODE_BAD_WEATHER_PROTECTING,
+    57,  # a scheduled task was interrupted by rain
+    58,  # a scheduled task was suspended because of rain
+})
+
+# A delay of zero means the mower stays docked after rain until it is started
+# again, and is offered ahead of the hourly delays rather than after them.
+RAIN_DELAY_MIN_HOURS = 0
+RAIN_DELAY_MAX_HOURS = 24
+
+# Anti-theft settings ("ATA")
+#
+# The record holds one slot per anti-theft switch: the alarm that goes off when
+# the mower is lifted, the alarm that goes off when it leaves the map, and
+# whether the mower reports its position while it is away. Models that ask for
+# the PIN code before the mower may be switched off carry that switch as a
+# fourth slot; every other model reports the record without it.
+#
+# Locking the mower and raising an alarm is all the mower does on its own. The
+# off-map alarm and the position reports need the cellular module, and stay
+# without effect on a mower that has none.
+ANTI_THEFT_SETTING_LIFT_ALARM_INDEX = 0
+ANTI_THEFT_SETTING_OFF_MAP_ALARM_INDEX = 1
+ANTI_THEFT_SETTING_LOCATION_INDEX = 2
+ANTI_THEFT_SETTING_PIN_CHECK_INDEX = 3
+ANTI_THEFT_SETTING_LENGTH = 3
+
 
 # Times inside the settings record are minutes since midnight.
 MINUTES_PER_DAY = 1440
@@ -314,3 +381,12 @@ CURRENT_MAP_ID_PROPERTY_NAME = "current_map_id"
 CUTTING_HEIGHT_PROPERTY_NAME = "cutting_height"
 ZONE_CUTTING_HEIGHTS_PROPERTY_NAME = "zone_cutting_heights"
 MOWING_PREFERENCE_MODE_PROPERTY_NAME = "mowing_preference_mode"
+EDGE_MOWING_SETTINGS_PROPERTY_NAME = "edge_mowing_settings"
+ZONE_EDGE_MOWING_SETTINGS_PROPERTY_NAME = "zone_edge_mowing_settings"
+
+# Keys the edge mowing settings of one mowing preference record are reported
+# under. Safe edge mowing is missing from the record of firmware that predates
+# it, and is then absent from the settings rather than reported as off.
+EDGE_MOWING_AUTO_KEY = "edge_mowing_auto"
+EDGE_BLADE_OFFSET_KEY = "edge_blade_offset"
+EDGE_MOWING_SAFE_KEY = "edge_mowing_safe"

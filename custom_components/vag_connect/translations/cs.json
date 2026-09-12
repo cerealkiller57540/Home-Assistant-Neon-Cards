@@ -79,6 +79,16 @@
           "mfa_code": "6místný kód — platný několik minut."
         }
       },
+      "porsche_captcha": {
+        "title": "Vyžadována captcha",
+        "description": "Porsche vyžaduje vyřešení captcha pro pokračování přihlášení.\n\n{captcha_img}\n\nVyřeš ji jednou podle nejlepšího odhadu — opakované neúspěšné pokusy už u Porsche vedly k zablokování účtů kvůli podezřelé aktivitě.\n\nTvoje odpověď jde pouze do přihlašovací služby Porsche, nikdy třetím stranám ani tomuto projektu. Pokud se obrázek nenačte nebo se chyby opakují, můžeš to nahlásit: {report_url}",
+        "data": {
+          "captcha_code": "Kód captcha"
+        },
+        "data_description": {
+          "captcha_code": "Zadejte znaky zobrazené na obrázku výše."
+        }
+      },
       "email_password": {
         "title": "Přihlášení e-mailem + heslem (starší způsob)",
         "description": "Připojte své vozidlo k Home Assistantu.\n\nVyberte značku a zadejte přihlašovací údaje z aplikace výrobce.",
@@ -144,14 +154,31 @@
           "vin": "VIN (vozidlo zobrazené v aplikaci)",
           "spin": "S-PIN (volitelné)",
           "companion_use_addon": "Připojit přes doplněk ADB Bridge",
-          "companion_addon_token": "Token doplňku"
+          "companion_addon_token": "Token doplňku",
+          "companion_use_relay": "Použít aplikaci agenta (telefon volá Home Assistant)",
+          "companion_agent_token": "Token agenta"
         },
         "data_description": {
           "adb_host": "Adresa telefonu ve vaší síti, např. 192.168.1.42.",
           "adb_port": "Obvykle 5555 pro ADB přes Wi-Fi.",
           "vin": "17místný VIN vozidla zobrazeného v aplikaci.",
           "companion_use_addon": "Zaškrtněte u telefonu s Androidem 11 nebo novějším, který nabízí pouze bezdrátové ladění. Poté výše zadejte adresu DOPLŇKU místo adresy telefonu.",
-          "companion_addon_token": "Potřebné pouze v případě, že jste v doplňku nastavili api_token."
+          "companion_addon_token": "Potřebné pouze v případě, že jste v doplňku nastavili api_token.",
+          "companion_use_relay": "Zaškrtněte, pokud na telefonu běží aplikace agenta. Telefon pak volá Home Assistant: není potřeba ADB, bezdrátové ladění ani pevná IP adresa — pole s adresou nechte prázdné.",
+          "companion_agent_token": "Náhodný token vygenerovaný aplikací agenta. Nejméně 32 znaků a pro každé vozidlo jiný."
+        }
+      },
+      "audi_mbb_fallback": {
+        "title": "Audi — udržte dálkové příkazy v provozu (záložní připojení)",
+        "description": "Přidá záložní připojení, aby dálkové příkazy vašeho Audi — zamknout/odemknout, klimatizace a nabíjení — fungovaly dál, i kdyby Audi někdy změnilo způsob, jakým se aplikace přihlašuje. V běžném provozu se nic nemění: vaše Audi používá své normální připojení a záloha se zapojí jen tehdy, když normální připojení přestane přijímat příkazy. Nastavení vyžaduje jen jedno rychlé potvrzení v prohlížeči (žádné heslo se neukládá). Vyberte Audi, které jste už přidali pomocí přihlášení přes QR / aplikaci. Funguje u většiny benzinových, naftových a plug-in hybridních Audi; některé nejnovější plně elektrické modely nejsou podporovány a jsou automaticky odmítnuty.",
+        "data": {
+          "entry_id": "Které Audi",
+          "mbb_vins": "ID vozidla (VIN) — obvykle nechte prázdné",
+          "spin": "S-PIN (potřebný jen pro zamknutí/odemknutí)"
+        },
+        "data_description": {
+          "mbb_vins": "Nechte prázdné, pokud si to nastavení nevyžádá.",
+          "spin": "Vaše S-PIN k Audi — kód, který používáte pro dálkové zamykání/odemykání."
         }
       }
     },
@@ -167,19 +194,32 @@
       "portal_interaction_required": "Portál EU Data Act vyžaduje jednorázovou akci ve vašem prohlížeči nebo aplikaci značky (např. přijmout podmínky, potvrdit souhlas, dokončit onboarding/výběr regionu), než začne fungovat bezhlavý přístup. Toto NENÍ problém se špatným heslem — otevřete portál jednou v prohlížeči, dokončete výzvu a zkuste to znovu.",
       "upstream_unavailable": "Backend VW dočasně nedostupný. Toto je problém na straně serveru VW, NIKOLI chyba přihlášení. Počkejte 5–15 minut a zkuste to znovu. Integraci znovu NEKONFIGURUJTE.",
       "na_signin_attestation": "Vaše e-mailová adresa a heslo jsou v pořádku — Volkswagen Severní Amerika nyní blokuje toto přihlášení kontrolou atestace zařízení od Googlu (Play Integrity), kterou dokáže projít pouze oficiální aplikace na opravdovém telefonu. Opětovné zadání hesla nepomůže; jde o zámek na straně serveru VW, nikoli o problém s přihlašovacími údaji. (Sledováno: #1165.)",
+      "porsche_login_wall": "Tvůj e-mail a heslo jsou v pořádku — přihlášení prošlo krokem s heslem, ale poté skončilo na obrazovce captcha/souhlasu Porsche (pozorováno u některých účtů na my.porsche.com), kterou automatické přihlášení nedokáže překonat. Opětovné zadání hesla nepomůže; jde o překážku na straně Porsche, ne o problém s přihlašovacími údaji. Zkus to nejvýše jednou — opakované pokusy vedly k zablokování účtů Porsche. (Sledováno: #1337.)",
       "brand_not_dag_eligible": "Vybraná značka nepodporuje přihlášení přes prohlížeč. Použijte místo toho přihlášení e-mailem + heslem.",
       "skoda_qr_retired": "Bezheslové přihlášení Škoda (QR) společnost Volkswagen vypnula a už nefunguje. Vraťte se zpět a zvolte „E-mail + heslo (starší způsob)“, tam vyberte Škoda a přihlaste se svým e-mailem a heslem MyŠkoda.",
+      "device_grant_retired": "Přihlášení zařízením v aplikaci této značky výrobce vypnul a nelze je již dokončit automaticky — nyní vyžaduje ověření aplikace v zařízení. Audi: vraťte se zpět a zvolte „E-mail + heslo“, poté nastavte portál EU Data Act pouze pro čtení, který stále funguje. Porsche: zatím neexistuje záložní řešení pouze pro čtení (sledováno v #1337).",
       "still_waiting_browser": "Stále se čeká na potvrzení v prohlížeči. Otevřete URL výše, přihlaste se, potvrďte kód a poté znovu klikněte na Odeslat.",
       "companion_cannot_connect": "Telefon se nepodařilo kontaktovat přes ADB. Zkontrolujte, že je v síti, že je zapnuté ADB přes Wi-Fi a že jste potvrdili výzvu k ladění.",
       "companion_needs_addon": "Vypadá to na telefon s Androidem 11+ používající bezdrátové ladění, které zdejší přímé připojení neumí (vyžaduje TLS a párování). Nainstalujte doplněk 'VW Group App ADB Bridge' (github.com/its-me-prash/vwgroup-app-adb-bridge) a nasměrujte na něj companion. Starší telefony (Android 10 a starší) se připojí přímo zde.",
       "companion_app_not_found": "Připojení k telefonu proběhlo, ale aplikace značky na něm není nainstalovaná.",
-      "companion_unknown_brand": "Pro tuto značku zatím není k dispozici žádná přednastavená konfigurace doprovodného telefonu."
+      "companion_unknown_brand": "Pro tuto značku zatím není k dispozici žádná přednastavená konfigurace doprovodného telefonu.",
+      "companion_agent_token_too_short": "Token agenta je příliš krátký. Vložte náhodný token vygenerovaný aplikací agenta (nejméně 32 znaků).",
+      "companion_host_required": "Zadejte IP adresu telefonu — nebo zaškrtněte volbu agenta, pokud telefon volá Home Assistant.",
+      "missing_captcha": "Zadej znaky zobrazené na obrázku výše.",
+      "captcha_retry": "Pro pokračování vyřeš captcha zobrazenou výše."
     },
     "abort": {
       "already_configured": "Tento účet je již nastaven.",
       "reauth_successful": "Opětovné ověření bylo úspěšné.",
       "reconfigure_successful": "Konfigurace byla úspěšně aktualizována.",
-      "mbb_not_eligible": "Vaše vozidlo není způsobilé pro trvalé přihlášení MBB — backend vrátil „Unknown user“. Jde o novější model ID / MEB (ID.3/4/5, e-up apod.), který nikdy nebyl registrován ve starém systému Car-Net/MBB, takže trvalé přihlášení a vzdálené příkazy se k němu nedostanou. Pro taková vozidla použijte kanál portálu EU Data Act (nebo přihlášení e-mailem a heslem). Přihlášení MBB je pro starší vozy Car-Net (většina plug-in hybridních / spalovacích modelů)."
+      "mbb_not_eligible": "Vaše vozidlo není způsobilé pro trvalé přihlášení MBB — backend vrátil „Unknown user“. Jde o novější model ID / MEB (ID.3/4/5, e-up apod.), který nikdy nebyl registrován ve starém systému Car-Net/MBB, takže trvalé přihlášení a vzdálené příkazy se k němu nedostanou. Pro taková vozidla použijte kanál portálu EU Data Act (nebo přihlášení e-mailem a heslem). Přihlášení MBB je pro starší vozy Car-Net (většina plug-in hybridních / spalovacích modelů).",
+      "mbb_fallback_armed": "Záložní připojení je nastaveno. Pokud normální připojení vašeho Audi někdy přestane přijímat dálkové příkazy, zamykání/odemykání, klimatizace a nabíjení se automaticky přepnou na zálohu. V běžném provozu se nic nemění.",
+      "no_devicegrant_audi": "Nebylo nalezeno žádné odpovídající Audi. Tato záloha platí jen pro Audi přidané přihlášením přes QR / aplikaci, které ji ještě nemá. Nejprve takto přidejte své Audi a pak se sem vraťte.",
+      "porsche_login_wall": "Tvoje přihlašovací údaje jsou v pořádku — přihlášení prošlo krokem s heslem, ale zastavilo se na obrazovce captcha/souhlasu Porsche, kterou nelze dokončit automaticky (pozorováno na my.porsche.com). Jde o překážku na straně Porsche, sledovanou v #1337, ne o špatné heslo. Nezkoušej to opakovaně ve smyčce — opakované pokusy zablokovaly účty Porsche. Pokud můžeš, nahlas to prosím, ať to můžeme opravit (přilož diagnostiku): {report_url}",
+      "porsche_captcha_failed": "Captcha se nepodařilo ověřit a je nyní neplatná. Zavři toto okno a spusť přihlášení Porsche znovu pro získání nové. Pokud můžeš, nahlas to prosím, ať to můžeme opravit (přilož diagnostiku): {report_url}",
+      "porsche_captcha_cooldown": "Příliš mnoho pokusů o captcha. Opakované pokusy mohou vést k tomu, že Porsche účet dočasně zablokuje nebo označí tvou síť, proto bylo přihlašování zastaveno kvůli ochraně účtu. Než to zkusíš znovu, počkej několik minut. Pokud můžeš, nahlas to prosím, ať to můžeme opravit (přilož diagnostiku): {report_url}",
+      "reconfigure_failed": "Změna konfigurace selhala: konfigurační záznam nebyl nalezen. Zkus to prosím znovu.",
+      "reauth_failed": "Opětovné ověření selhalo: konfigurační záznam nebyl nalezen. Zkus to prosím znovu."
     },
     "progress": {
       "awaiting_browser_login": "Otevřete {verification_uri} v libovolném prohlížeči, přihlaste se pomocí účtu Brand ID a potvrďte kód {user_code}.",
@@ -194,6 +234,7 @@
           "scan_interval": "Interval aktualizace",
           "spin": "S-PIN",
           "battery_nominal_kwh": "Jmenovitá kapacita baterie (kWh, pro State of Health)",
+          "fuel_tank_capacity": "Objem nádrže (litry, pro % paliva)",
           "enable_reverse_geocoding": "Reverzní geokódování (adresa parkování)",
           "read_only_mode": "Režim jen pro čtení",
           "companion_read_charge_detail": "Companion: číst cíl nabíjení (naviguje v aplikaci)",
@@ -204,20 +245,27 @@
           "enable_push_audi_vw": "Audi/VW push updates (Cariad FCM, EXPERIMENTAL)",
           "client_id_override": "Přepsání OAuth client_id (pokročilí uživatelé)",
           "eu_data_act_auto_kickoff": "EU Data Act: automatické spuštění Custom Data Request",
-          "supplementary_authproxy": "Přidat čtecí kanál Volkswagen.de (sloučit data)",
+          "supplementary_authproxy": "Přidat nebo obnovit čtecí kanál Volkswagen.de (sloučit data)",
           "hide_empty_entities": "Skrýt entity bez dat",
-          "supplementary_eu_portal": "Přidat čtecí kanál portálu EU Data Act",
+          "supplementary_eu_portal": "Přidat nebo obnovit čtecí kanál portálu EU Data Act",
           "remove_supplementary_authproxy": "Odebrat čtecí kanál vw.de",
           "remove_supplementary_eu_portal": "Odebrat čtecí kanál portálu EU Data Act",
-          "supplementary_tibber": "Přidat čtecí kanál Tibber (data o nabíjení elektromobilu)",
+          "supplementary_tibber": "Přidat nebo obnovit čtecí kanál Tibber (data o nabíjení elektromobilu)",
           "remove_supplementary_tibber": "Odebrat čtecí kanál Tibber",
           "abrp_enable": "Povolit odesílání telemetrie ABRP",
           "abrp_api_key": "api_key ABRP (vývojářský klíč)",
           "abrp_user_token": "Token ABRP (pro vozidlo)",
           "keep_raw_datasets": "Uchovávat surová data EU Data Act (diagnostika)",
+          "auto_utility_meters": "Automaticky vytvářet měsíční měřidla (nabitá energie, kilometry)",
           "test_cohort": "Pomozte vylepšit VW Group Connect (dobrovolná testovací skupina)",
           "vweu_device_grant": "Přidat VW EU Two-Way — příkazy + živé čtení dat (BETA)",
-          "remove_vweu_twoway": "Odebrat VW EU Two-Way (n\u00e1vrat k p\u0159edchoz\u00edmu kan\u00e1lu)"
+          "remove_vweu_twoway": "Odebrat VW EU Two-Way (návrat k předchozímu kanálu)",
+          "companion_read_vehicle_health": "Companion: číst stav tachometru a servis ze stavu vozidla (naviguje v aplikaci)",
+          "companion_read_climate_detail": "Companion: číst cílovou a venkovní teplotu (naviguje v aplikaci)",
+          "companion_read_parking_position": "Companion: číst pozici parkování z odkazu pro sdílení v aplikaci (naviguje v aplikaci)",
+          "skoda_official_api_key": "Oficiální klíč API Škoda — přidá oficiální API výrobce jako živý zdroj dat (a zálohu)",
+          "clear_skoda_official_key": "Vymazat uložený oficiální klíč API Škoda (nový se vytvoří automaticky, pokud to vaše přihlášení podporuje)",
+          "skoda_official_mode": "Režim zdroje oficiálního API Škoda"
         },
         "data_description": {
           "scan_interval": "Jak často se stahují data (minuty). Minimum: 3.",
@@ -236,6 +284,7 @@
           "abrp_api_key": "Vývojářský/partnerský klíč, který si zaregistrujete u iternio (žádný nedodáváme). Identifikuje integraci. Nikdy se neloguje.",
           "abrp_user_token": "Token 'Generic' z aplikace ABRP: Nastavení -> vaše auto -> Live Data. Nikdy se neloguje.",
           "keep_raw_datasets": "Užitečné pouze na kanálu portálu EU Data Act. Po zapnutí se posledních několik surových ZIP souborů s daty, které portál dodá, uchová na disku (v .storage, na vozidlo a s limitem velikosti), aby bylo možné chybnou nebo chybějící hodnotu reprodukovat z přesně těch bajtů, které vůz odeslal. Tyto soubory obsahují vaši GPS polohu, VIN a telemetrii, proto je funkce ve výchozím nastavení vypnutá – zapněte ji jen při řešení potíží.",
+          "auto_utility_meters": "Ve výchozím nastavení vypnuto. Když je zapnuto, integrace vytvoří pomocníky Home Assistant utility_meter, kteří sčítají nabitou energii a ujeté kilometry za kalendářní měsíc, jednoho na vozidlo. Přepínač se objeví pouze tehdy, když už existuje odpovídající zdrojový senzor. Jsou to trvalí pomocníci: opětovným vypnutím se přestanou vytvářet noví, ale již vytvoření zůstanou – ty odstraňte v Nastavení → Zařízení a služby → Pomocníci.",
           "test_cohort": "Ve výchozím nastavení vypnuto. Když tuto možnost zapnete, integrace bude moci na vašem voze zkoušet experimentální čtení dat — třeba právě probíhající pokus o získání polohy GPS u vozů Volkswagen v EU — a občas vám zobrazí upozornění (které lze zavřít) s prosbou o sdílení diagnostického souboru, aby se pro váš model mohla potvrdit nová funkce. Vše, co sdílíte, se automaticky anonymizuje ještě předtím, než to opustí váš systém: nikdy to neobsahuje VIN, GPS, tokeny ani e-mail. Právě takto se odemykají nové funkce pro váš vůz i pro všechny, kdo jezdí stejným modelem — a kdykoli to zase můžete vypnout.",
           "vweu_device_grant": "Pouze Volkswagen, BETA. Přidává obousměrné ovládání (zamknout/odemknout, klimatizace, nabíjení) a živé čtení dat z CARIAD po přihlášení pomocí vašeho Volkswagen ID. Volkswagen zde vydává pouze hodinový token, takže se vaše heslo uloží, aby jej integrace mohla automaticky obnovovat — odesílá se výhradně na přihlašovací server samotného Volkswagenu a nikdy se nezapisuje do logů ani diagnostiky. Pokud heslo raději ukládat nechcete, použijte místo toho kanály jen pro čtení. Zaškrtnutím této volby se otevře krok přihlášení."
         }
@@ -288,27 +337,28 @@
         }
       },
       "add_vweu_twoway": {
-        "title": "VW EU Two-Way (p\u0159\u00edkazy + \u017eiv\u00e9 \u010dten\u00ed dat, BETA)",
+        "title": "VW EU Two-Way (příkazy + živé čtení dat, BETA)",
         "description": "**Experimentální, dobrovolné — pouze Volkswagen.** Přidává obousměrné ovládání (zamknout/odemknout, klimatizace, nabíjení) a živé čtení dat z CARIAD po přihlášení pomocí vašeho Volkswagen ID. Protože Volkswagen na této cestě vydává pouze hodinový token, vaše heslo se **uloží**, aby jej integrace mohla automaticky obnovovat. Odesílá se výhradně na přihlašovací server samotného Volkswagenu a nikdy se nezapisuje do logů ani diagnostiky. Nechcete heslo ukládat? Použijte místo toho kanály jen pro čtení. **Předpoklad:** vaše Volkswagen ID musí být hlavním uživatelem vozidla.",
         "data": {
-          "username": "Email Address",
-          "password": "Password"
+          "username": "E-mailová adresa",
+          "password": "Heslo"
         },
         "data_description": {
-          "username": "E-mail va\u0161eho \u00fa\u010dtu Volkswagen ID / myVolkswagen.",
-          "password": "Heslo k va\u0161emu Volkswagen ID. Pou\u017e\u00edv\u00e1 se pouze k obnoven\u00ed hodinov\u00e9ho p\u0159\u00edstupov\u00e9ho tokenu v\u016f\u010di p\u0159ihla\u0161ovac\u00edmu serveru Volkswagenu; nikdy se neloguje a z diagnostiky je odstran\u011bno."
+          "username": "E-mail vašeho účtu Volkswagen ID / myVolkswagen.",
+          "password": "Heslo k vašemu Volkswagen ID. Používá se pouze k obnovení hodinového přístupového tokenu vůči přihlašovacímu serveru Volkswagenu; nikdy se neloguje a z diagnostiky je odstraněno."
         }
       }
     },
     "error": {
       "abrp_credentials_required": "Pro povolení ABRP musíte zadat jak api_key, tak token vozidla.",
-      "invalid_auth": "P\u0159ihl\u00e1\u0161en\u00ed selhalo. Zkontrolujte e-mail a heslo sv\u00e9ho Volkswagen ID.",
-      "cannot_connect": "Volkswagen se nepoda\u0159ilo kontaktovat. Zkuste to pros\u00edm znovu.",
-      "vweu_mfa_unsupported": "Tento \u00fa\u010det vy\u017eaduje k\u00f3d z e-mailu nebo z ov\u011b\u0159ovac\u00ed aplikace, kter\u00fd VW EU Two-Way zat\u00edm neum\u00ed zpracovat. Pou\u017eijte m\u00edsto toho kan\u00e1ly jen pro \u010dten\u00ed.",
-      "vweu_no_bff_data": "P\u0159ihl\u00e1\u0161en\u00ed prob\u011bhlo, ale Volkswagen pro tento v\u016fz na modern\u00edm backendu zat\u00edm nevr\u00e1til \u017e\u00e1dn\u00e1 \u017eiv\u00e1 data, tak\u017ee VW EU Two-Way nebyl zapnut a v\u00e1\u0161 st\u00e1vaj\u00edc\u00ed kan\u00e1l z\u016fst\u00e1v\u00e1 beze zm\u011bny. Zkuste to pros\u00edm pozd\u011bji, nebo sd\u00edlejte diagnostiku, abychom se na to mohli pod\u00edvat."
+      "invalid_auth": "Přihlášení selhalo. Zkontrolujte e-mail a heslo svého Volkswagen ID.",
+      "cannot_connect": "Volkswagen se nepodařilo kontaktovat. Zkuste to prosím znovu.",
+      "vweu_mfa_unsupported": "Tento účet vyžaduje kód z e-mailu nebo z ověřovací aplikace, který VW EU Two-Way zatím neumí zpracovat. Použijte místo toho kanály jen pro čtení.",
+      "vweu_no_bff_data": "Přihlášení proběhlo, ale Volkswagen pro tento vůz na moderním backendu zatím nevrátil žádná živá data, takže VW EU Two-Way nebyl zapnut a váš stávající kanál zůstává beze změny. Zkuste to prosím později, nebo sdílejte diagnostiku, abychom se na to mohli podívat.",
+      "terms_and_conditions": "Je nutné přijmout obchodní podmínky. Přihlaste se v aplikaci."
     },
     "abort": {
-      "not_volkswagen": "Tento kan\u00e1l je dostupn\u00fd pouze pro Volkswagen.",
+      "not_volkswagen": "Tento kanál je dostupný pouze pro Volkswagen.",
       "vweu_twoway_vw_disabled": "Volkswagen dne 18. 8. 2026 vypnul přihlášení, které tento kanál používal, takže jej už nelze nastavit. Živé čtení dat dál funguje přes portál EU Data Act a trvalý příkazový kanál přes klasický backend Car-Net je v betě — viz issue #584."
     }
   },
@@ -339,7 +389,33 @@
         "name": "Stav nabíjení"
       },
       "plug_state": {
-        "name": "Nabíjecí konektor"
+        "name": "Nabíjecí konektor",
+        "state": {
+          "connected": "Připojeno",
+          "disconnected": "Odpojeno"
+        }
+      },
+      "portal_health": {
+        "name": "Stav kanálu portálu",
+        "state": {
+          "ok": "Živě",
+          "waiting_for_portal_data": "Čekání na data z portálu",
+          "empty_snapshots": "Prázdné snímky",
+          "delivery_not_ready": "Doručení není připraveno",
+          "portal_error": "Chyba portálu",
+          "stale": "Zastaralé"
+        }
+      },
+      "minutes_since_last_snapshot": {
+        "name": "Minuty od posledního snímku"
+      },
+      "historical_export_state": {
+        "name": "Historický export",
+        "state": {
+          "pending": "Vyžádáno — připravuje se",
+          "done": "Doručeno",
+          "timed_out": "Vypršel časový limit"
+        }
       },
       "target_soc": {
         "name": "Cíl nabíjení"
@@ -415,6 +491,9 @@
       },
       "last_trip_avg_speed_kmh": {
         "name": "Poslední Jízda — Prům. Rychlost"
+      },
+      "last_trip_duration_min": {
+        "name": "Poslední Jízda — Doba jízdy"
       },
       "last_trip_avg_fuel_consumption_l_100km": {
         "name": "Poslední Jízda — Prům. Spotřeba Paliva"
@@ -526,6 +605,9 @@
       },
       "fuel_tank_capacity_liters": {
         "name": "Objem nádrže"
+      },
+      "fuel_level_liters": {
+        "name": "Množství paliva (l)"
       },
       "climate_running_requests_count": {
         "name": "Čekající klima-požadavky"
@@ -1273,6 +1355,118 @@
       },
       "reminder_tyre_repair_kit": {
         "name": "Připomínka opravné sady"
+      },
+      "exterior_color": {
+        "name": "Barva karoserie"
+      },
+      "engine_power": {
+        "name": "Výkon motoru"
+      },
+      "engine_torque_nm": {
+        "name": "Točivý moment"
+      },
+      "engine_cylinders": {
+        "name": "Válce"
+      },
+      "engine_displacement_ccm": {
+        "name": "Zdvihový objem"
+      },
+      "engine_code": {
+        "name": "Kód motoru"
+      },
+      "fuel_type": {
+        "name": "Typ paliva"
+      },
+      "data_captured_at": {
+        "name": "Stav dat"
+      },
+      "window_position_front_left": {
+        "name": "Poloha okna vlevo vpředu"
+      },
+      "window_position_front_right": {
+        "name": "Poloha okna vpravo vpředu"
+      },
+      "window_position_rear_left": {
+        "name": "Poloha okna vlevo vzadu"
+      },
+      "window_position_rear_right": {
+        "name": "Poloha okna vpravo vzadu"
+      },
+      "transmission": {
+        "name": "Převodovka"
+      },
+      "interior_color": {
+        "name": "Barva interiéru"
+      },
+      "drive_train": {
+        "name": "Pohon"
+      },
+      "csid": {
+        "name": "ID zákaznického servisu"
+      },
+      "parked_since": {
+        "name": "Zaparkováno od"
+      },
+      "last_trip_eco_score": {
+        "name": "EcoSkóre poslední jízdy"
+      },
+      "last_trip_intake_air_temp_c": {
+        "name": "Teplota nasávaného vzduchu poslední jízdy"
+      },
+      "trip_count": {
+        "name": "Zaznamenané jízdy"
+      },
+      "score_points_total": {
+        "name": "Body skóre řidiče"
+      },
+      "last_refuel_liters_added": {
+        "name": "Natankováno"
+      },
+      "last_refuel_tank_before_l": {
+        "name": "Nádrž před tankováním"
+      },
+      "last_refuel_tank_after_l": {
+        "name": "Nádrž po tankování"
+      },
+      "last_refuel_odometer_km": {
+        "name": "Stav tachometru při tankování"
+      },
+      "data_request_created_at": {
+        "name": "Datový požadavek vytvořen"
+      },
+      "last_snapshot_at": {
+        "name": "Poslední snímek přijat"
+      },
+      "last_no_data_at": {
+        "name": "Poslední dotaz bez dat"
+      },
+      "no_data_count": {
+        "name": "Dotazy bez dat"
+      },
+      "tpms_status": {
+        "name": "Kontrola tlaku v pneumatikách",
+        "state": {
+          "measured": "Měřeno (na kolo)",
+          "indirect": "Nepřímé (bez hodnot tlaku)"
+        }
+      },
+      "readiness_software_update_status": {
+        "name": "Stav aktualizace softwaru"
+      },
+      "short_term_avg_electric_consumption_kwh_100km": {
+        "name": "Krátkodobá průměrná spotřeba elektřiny"
+      },
+      "engine_starts_count": {
+        "name": "Starty motoru"
+      },
+      "short_term_avg_fuel_consumption_l_100km": {
+        "name": "Krátkodobá průměrná spotřeba paliva"
+      },
+      "battery_soc_charge_report": {
+        "name": "Stav baterie (poslední zpráva o nabíjení)"
+      },
+      "alarm_reason": {
+        "name": "Důvod alarmu"
       }
     },
     "binary_sensor": {
@@ -1578,6 +1772,15 @@
       },
       "marketing_consent_given": {
         "name": "Marketingový souhlas udělen"
+      },
+      "data_source": {
+        "name": "Zdroj: {source}"
+      },
+      "data_stale": {
+        "name": "Data zastaralá"
+      },
+      "connect_contract_active": {
+        "name": "Smlouva Connect aktivní"
       }
     },
     "switch": {
@@ -1666,6 +1869,9 @@
       "data_act_request_button": {
         "name": "Vytvořit žádost o data EU Data Act"
       },
+      "historical_export_button": {
+        "name": "Vyžádat historický export"
+      },
       "companion_reset_button": {
         "name": "Resetovat spojení companion"
       }
@@ -1713,28 +1919,28 @@
     },
     "image": {
       "render_icon": {
-        "name": "Pohled 3/4 ikona"
+        "name": "Pohled 3/4 (ikona)"
       },
       "render_small": {
-        "name": "Pohled 3/4 malý"
+        "name": "Pohled 3/4 (malý)"
       },
       "render_medium": {
-        "name": "Pohled 3/4 střední"
+        "name": "Pohled 3/4 (střední)"
       },
       "render_side_sm": {
-        "name": "Boční pohled malý"
+        "name": "Boční pohled (malý)"
       },
       "render_side_lg": {
-        "name": "Boční pohled velký"
+        "name": "Boční pohled (velký)"
       },
       "render_angle_hd": {
-        "name": "Pohled 3/4 HD"
+        "name": "Pohled 3/4 (HD)"
       },
       "render_angle_lg": {
-        "name": "Pohled 3/4 velký"
+        "name": "Pohled 3/4 (velký)"
       },
       "vehicle_render": {
-        "name": "Vykreslení vozidla"
+        "name": "Vyobrazení vozidla"
       }
     },
     "lock": {
@@ -1777,9 +1983,34 @@
     }
   },
   "issues": {
+    "skoda_official_manual_key": {
+      "title": "Oficiální API Škoda — přidejte svůj API klíč",
+      "fix_flow": {
+        "step": {
+          "enter_key": {
+            "title": "Přidat API klíč MyŠkoda",
+            "description": "Home Assistant nedokázal pro toto auto automaticky vytvořit oficiální API klíč Škoda. Vytvořte jej v aplikaci MyŠkoda, poté vyberte vozidlo a vložte klíč sem. Automatické vytváření zkouší dál na pozadí — toto je jen ruční záložní možnost.",
+            "data": {
+              "vin": "Vozidlo",
+              "api_key": "API klíč MyŠkoda (začíná na msk_)"
+            }
+          }
+        },
+        "error": {
+          "key_required": "Vložte prosím svůj API klíč MyŠkoda."
+        },
+        "abort": {
+          "entry_gone": "Tento záznam integrace již neexistuje."
+        }
+      }
+    },
+    "invalid_credentials": {
+      "title": "Přihlášení selhalo — {brand}",
+      "description": "Home Assistant se nemohl přihlásit k účtu {brand} — obvykle nesprávné nebo změněné heslo, ale dočasné zablokování může vypadat stejně.\n\nNastavení → Zařízení a služby → VW Group Connect → ⋮ → Překonfigurovat a znovu zadat přihlašovací údaje."
+    },
     "vweu_twoway_disabled": {
       "title": "VW EU Two-Way: vypnuto Volkswagenem",
-      "description": "Dne 18. 8. 2026 Volkswagen vypnul p\u0159ihl\u00e1\u0161en\u00ed, kter\u00e9 kan\u00e1l VW EU Two-Way (modern\u00ed backend CARIAD) pou\u017e\u00edval, tak\u017ee jeho hodinov\u00fd token u\u017e nelze obnovit a obousm\u011brn\u00e9 p\u0159\u00edkazy p\u0159es tento kan\u00e1l p\u0159estaly fungovat. Jde o zm\u011bnu na stran\u011b Volkswagenu \u2014 na va\u0161\u00ed stran\u011b nen\u00ed nic \u0161patn\u011b nastaveno a v\u00e1\u0161 \u00fa\u010det nen\u00ed ohro\u017een (selh\u00e1n\u00ed nast\u00e1v\u00e1 je\u0161t\u011b p\u0159edt\u00edm, ne\u017e se ode\u0161le jak\u00e9koli heslo).\n\n**Va\u0161e \u017eiv\u00e9 \u010dten\u00ed dat funguje d\u00e1l** p\u0159es port\u00e1l EU Data Act, tak\u017ee va\u0161e senzory to nijak neovlivn\u00ed.\n\n**Pro obousm\u011brn\u00e9 p\u0159\u00edkazy (zamknout/odemknout, klimatizace, nab\u00edjen\u00ed):** trval\u00e1 n\u00e1hrada p\u0159es klasick\u00fd backend Car-Net (MBB) \u2014 kter\u00fd Volkswagen NEVYPNUL \u2014 je nyn\u00ed v bet\u011b. Postup, jak ji zapnout a otestovat, najdete v issue #584.\n\nNyn\u00ed neaktivn\u00ed kan\u00e1l m\u016f\u017eete kdykoli odebrat v nastaven\u00ed integrace (VW EU Two-Way \u2192 odebrat). Tato zpr\u00e1va je pouze informativn\u00ed; integrace b\u011b\u017e\u00ed d\u00e1l p\u0159es va\u0161e \u010dtec\u00ed kan\u00e1ly.\n\n**Tip:** pro dan\u00fd v\u016fz m\u011bjte sou\u010dasn\u011b zapnutou v\u017edy jen JEDNU obousm\u011brnou integraci. VW omezuje po\u010det po\u017eadavk\u016f a m\u016f\u017ee do\u010dasn\u011b zablokovat \u00fa\u010det, na kter\u00fd n\u011bkolik aplikac\u00ed \u00fato\u010d\u00ed najednou \u2014 kdy\u017e k tomu dojde, nedok\u00e1\u017ee v\u016fz ovl\u00e1dat ani ofici\u00e1ln\u00ed aplikace VW, co\u017e je sign\u00e1l, \u017ee jde o zablokov\u00e1n\u00ed \u00fa\u010dtu, nikoli o chybu t\u00e9to integrace."
+      "description": "Dne 18. 8. 2026 Volkswagen vypnul přihlášení, které kanál VW EU Two-Way (moderní backend CARIAD) používal, takže jeho hodinový token už nelze obnovit a obousměrné příkazy přes tento kanál přestaly fungovat. Jde o změnu na straně Volkswagenu — na vaší straně není nic špatně nastaveno a váš účet není ohrožen (selhání nastává ještě předtím, než se odešle jakékoli heslo).\n\n**Vaše živé čtení dat funguje dál** přes portál EU Data Act, takže vaše senzory to nijak neovlivní.\n\n**Pro obousměrné příkazy (zamknout/odemknout, klimatizace, nabíjení):** trvalá náhrada přes klasický backend Car-Net (MBB) — který Volkswagen NEVYPNUL — je nyní v betě. Postup, jak ji zapnout a otestovat, najdete v issue #584.\n\nNyní neaktivní kanál můžete kdykoli odebrat v nastavení integrace (VW EU Two-Way → odebrat). Tato zpráva je pouze informativní; integrace běží dál přes vaše čtecí kanály.\n\n**Tip:** pro daný vůz mějte současně zapnutou vždy jen JEDNU obousměrnou integraci. VW omezuje počet požadavků a může dočasně zablokovat účet, na který několik aplikací útočí najednou — když k tomu dojde, nedokáže vůz ovládat ani oficiální aplikace VW, což je signál, že jde o zablokování účtu, nikoli o chybu této integrace."
     },
     "two_factor_required": {
       "title": "Vyžadováno dvoufázové ověření — {brand}",
@@ -1827,7 +2058,7 @@
     },
     "data_act_no_data": {
       "title": "Portál EU Data Act: zatím žádná data vozidla ({brand})",
-      "description": "Portál EU Data Act se přihlásil pro {brand}, ale zatím nevrací žádná data vozidla.\n\nPrůběžný požadavek na data za vás integrace vytváří automaticky, takže obvyklé příčiny prázdného přísunu dat jsou:\n\n1. **Pro toto auto nebyl udělen souhlas se sdílením dat.** Na portálu udělujete souhlas se sdílením dat podle EU Data Act pro každé vozidlo, jednorázově. Dokud to neuděláte, požadavek se sice vytvoří, ale zůstává prázdný – to je nejčastější příčina.\n2. **Auto zatím neodeslalo nic nového.** Nová sada dat se zveřejní až poté, co auto jelo, nabíjelo se nebo bylo zamčeno/odemčeno, takže úplně nový požadavek se může začít plnit až za 15–60 minut (nebo po krátké jízdě).\n3. **Výpadek na straně VW.** VW od konce května 2026 hlásí výpadek portálu EU Data Act napříč všemi značkami; dokud trvá, portál vrací prázdná data pro každý nástroj a postupně se obnovuje značku po značce.\n\n**Nejrychlejší kontrola:** otevřete `eu-data-act.drivesomethinggreater.com`, přihlaste se a ověřte, že (a) je pro toto auto udělen souhlas se sdílením dat a (b) existuje aktivní průběžný (15minutový) požadavek na data se zaškrtnutými všemi datovými clustery. Pokud ani tam nevidíte žádná data, je problém na straně VW – integrace nic nezmůže, dokud to VW neobnoví.\n\nToto je beta portálu pouze pro čtení – upozornění zmizí samo, jakmile dorazí data."
+      "description": "Portál EU Data Act se přihlásil pro {brand}, ale zatím nevrací žádná data vozidla.\n\nIntegrace se za vás pokouší souvislý požadavek na data vytvořit automaticky, ale u některých účtů portál ponechá relaci prohlížeče anonymní — a pak se automatický požadavek (a tlačítko „Vytvořit požadavek na data podle EU Data Act\" v aplikaci) nemůže dokončit, takže si musíte požadavek v portálu vytvořit sami. Obvyklé příčiny prázdného přísunu dat:\n\n1. **Vlastnictví/užívání není pro toto vozidlo potvrzeno.** Portál musí u vašeho vozidla zobrazovat vlastnictví (nebo užívání) jako potvrzené. Pokud tomu tak není, potvrďte je tam nejdřív — nutné, i když samo o sobě ne vždy dostačující.\n2. **Souhlas se sdílením dat není pro toto vozidlo udělen.** Souhlas se sdílením dat podle EU Data Act udělujete pro každé vozidlo jednou. Dokud to neuděláte, požadavek zůstane prázdný.\n3. **Zatím neexistuje žádný souvislý požadavek.** Pokud automatické vytvoření neproběhlo, vytvořte jej sami: v portálu přidejte Vlastní požadavek na data (Custom Data Request) se všemi skupinami zaškrtnutými a s frekvencí 15 minut. **Nejprve smažte jakýkoli starší požadavek pro právě toto vozidlo** — portál povoluje jen jeden aktivní požadavek na vozidlo, takže starší (například měsíční) požadavek pro toto vozidlo blokuje nový. Nemažte požadavek jiného vozidla: u smíšeného účtu s osobními i užitkovými vozy si každé vozidlo zachovává svůj vlastní požadavek ve své vlastní sekci (osobní vozy pod Volkswagen Personenkraftwagen, dodávky pod Volkswagen Nutzfahrzeuge). Integrace jej převezme při dalším dotazu — restart není potřeba.\n4. **Vozidlo zatím neodeslalo nic nového.** Nová datová sada se zveřejní až poté, co bylo vozidlo řízeno, nabito nebo zamčeno/odemčeno, takže než se nový požadavek začne plnit, může to trvat 15–60 minut (nebo krátkou jízdu).\n5. **Výpadek na straně VW.** VW ohlásil výpadek portálu EU Data Act pro všechny značky od konce května 2026; dokud trvá, portál vrací prázdná data pro každý nástroj a zotavuje se značka po značce.\n6. **Nebo přidejte čtecí kanál webu volkswagen.de.** V možnostech integrace můžete jako alternativní zdroj přidat čtecí (read-only) kanál webu volkswagen.de: přihlásí se na webu volkswagen.de (ne do backendu aplikace, který blokuje bezhlavé přihlášení) a u některých vozidel vrací pole, která přísun z portálu nevrací. Vyžaduje, aby vaše Volkswagen ID bylo potvrzeným hlavním uživatelem vozidla.\n\n**Nejrychlejší kontrola:** otevřete `eu-data-act.drivesomethinggreater.com`, přihlaste se a ověřte, že (a) je potvrzeno vlastnictví/užívání, (b) je pro toto vozidlo udělen souhlas se sdílením dat a (c) existuje aktivní souvislý (15minutový) požadavek na data se všemi skupinami zaškrtnutými — pokud žádný neexistuje, vytvořte jej sami. Pokud ani tam nevidíte žádná data, je to na straně VW — tato integrace s tím nic nezmůže, dokud to VW neobnoví.\n\nToto je beta verze portálu jen pro čtení — jakmile data dorazí, upozornění samo zmizí."
     },
     "data_act_browser_missing": {
       "description": "Zapnul jsi zálohu přes headless prohlížeč pro portál EU Data Act, ale balíček Pythonu `playwright` není v tvém kontejneru Home Assistant nainstalovaný.\n\n**Instalace:** otevři shell kontejneru HA (Doplňky → Terminal & SSH, nebo `docker exec` pro ruční instalaci) a spusť:\n\n```\npip install playwright\nplaywright install chromium\n```\n\nStahování chromia je velké (kolem 100 MB), proto je tato závislost volitelná a není součástí integrace. Po instalaci restartuj Home Assistant.\n\nPřípadně vypni přepínač v Nastavení → Zařízení a služby → VW Group Connect → Konfigurovat → 'Portál EU Data Act: záloha přes headless prohlížeč'.",
@@ -1867,11 +2098,27 @@
     },
     "test_cohort_share_request": {
       "title": "Pomozte potvrdit novou funkci — podělíte se o výsledek testu?",
-      "description": "Děkujeme, že jste se přidali do dobrovolné testovací skupiny. Váš vůz je zařazen do jednoho či více experimentů — například do pokusu získat polohu GPS nebo kondici baterie (State of Health) u vozů Volkswagen v EU přes kanál volkswagen.de, nebo do zachycení toho, jak přesně backend vašeho vozu odpovídá na příkaz. Abychom výsledek mohli potvrdit napříč různými modely a platformami, moc by nám pomohlo, kdybyste sdíleli diagnostický soubor: přejděte do Settings → Devices & Services → VW Group Connect → nabídka se třemi tečkami → Stáhnout diagnostiku a soubor pak připojte k příslušnému GitHub issue pro testery.\n\nExport se automaticky anonymizuje ještě předtím, než si ho stáhnete — neobsahuje VIN, GPS, tokeny ani e-mail —, takže ho můžete klidně zveřejnit. Tuto zprávu vidíte jen proto, že jste se sami přihlásili; můžete ji zavřít a vypnutím testovací skupiny v nastavení integrace tato upozornění úplně zastavíte. Děkujeme, že pomáháte odemykat funkce pro všechny, kdo jezdí stejným modelem jako vy."
+      "description": "Děkujeme, že jste se přidali do dobrovolné testovací skupiny. Váš vůz je zařazen do jednoho či více experimentů — například do pokusu získat polohu GPS nebo kondici baterie (State of Health) u vozů Volkswagen v EU přes kanál volkswagen.de, nebo do zachycení toho, jak přesně backend vašeho vozu odpovídá na příkaz. Abychom výsledek mohli potvrdit napříč různými modely a platformami, moc by nám pomohlo, kdybyste sdíleli diagnostický soubor: otevřete zařízení vašeho vlastního vozu (Settings → Devices & Services → VW Group Connect → zařízení pojmenované podle vašeho auta — ne „VW Group Connect Settings“, které obsahuje jen konfiguraci a žádná data vozidla) → nabídka se třemi tečkami → Stáhnout diagnostiku a ten soubor pak připojte k propojenému sledovacímu issue níže (#923).\n\nExport se automaticky anonymizuje ještě předtím, než si ho stáhnete — neobsahuje VIN, GPS, tokeny ani e-mail —, takže ho můžete klidně zveřejnit. Tuto zprávu vidíte jen proto, že jste se sami přihlásili; můžete ji zavřít a vypnutím testovací skupiny v nastavení integrace tato upozornění úplně zastavíte. Děkujeme, že pomáháte odemykat funkce pro všechny, kdo jezdí stejným modelem jako vy."
     },
     "stale_data": {
       "title": "{vin}: data vozidla se {age} h neaktualizovala",
       "description": "Poslední data, která vaše auto nahlásilo, byla zaznamenána zhruba **před {age} hodinami**, přestože samotné dotazování stále probíhá úspěšně. Můžou za tím být dvě věci: auto je nejspíš jen zaparkované a spí (normální stav — není třeba nic dělat), nebo jeho přísun dat podle EU Data Act vypršel a přestal dodávat čerstvé hodnoty.\n\nHodnoty, které teď vidíte, jsou poslední známé, ne aktuální. Pokud jste od té doby s autem jeli nebo ho připojili k nabíjení a toto upozornění nezmizí, nejspíš vypršel přísun dat: otevřete volkswagen.de → nastavení dat vašeho vozu a obnovte/znovu vyžádejte sdílení dat, nebo kanál přidejte znovu.\n\nToto upozornění zmizí samo ve chvíli, kdy dorazí čerstvější údaj."
+    },
+    "historical_timeout": {
+      "title": "{vin}: jednorázový historický export nebyl dokončen",
+      "description": "Jednorázový historický export vyžádaný pro toto auto nevytvořil soubor ve stanovené lhůtě. Portál VW pro tento požadavek nevrací žádný konečný stav, takže mohl být tiše zahozen. Požadavek byl vymazán — můžete jej vyžádat znovu nebo se podívat přímo do portálu."
+    },
+    "skoda_official_enrolled": {
+      "title": "Oficiální API Škoda — nyní jste automaticky zaregistrováni",
+      "description": "Dobrá zpráva: pomocí vašeho stávajícího přihlášení ke Škodě jsme pro vaše auto vytvořili oficiální klíč k API Škody, takže ho teď Home Assistant umí číst přes nový oficiální a trvalý kanál Škody — jako automatickou zálohu pro případ, že by běžné připojení někdy zlobilo. Protože je tento oficiální kanál omezený počtem požadavků (jen pár za hodinu), zůstává v pohotovosti a čte jen tehdy, když hlavní připojení nemůže — takže nic nezpomalí. Z vaší strany není potřeba nic dělat; berte to jen jako informaci a upozornění můžete zavřít."
+    },
+    "skoda_official_quota_full": {
+      "title": "Oficiální API Škoda — dosažen limit klíčů",
+      "description": "Pokusili jsme se pro vaše auto automaticky nastavit oficiální API Škoda, ale váš účet už má pro toto vozidlo maximum 5 API klíčů. Chcete-li ho používat, uvolněte v aplikaci MyŠkoda jedno místo (Nastavení → API klíče → smažte nepoužívaný) a znovu načtěte integraci, nebo v možnostech integrace ručně vložte existující klíč. Vše ostatní funguje dál jako dosud."
+    },
+    "skoda_official_multi_integration": {
+      "title": "Oficiální API Škody — používá ho i jiná integrace",
+      "description": "Na vašem účtu Škoda jsme našli víc klíčů k oficiálnímu API, než kolik jich vytvořila tato integrace — obvykle to znamená, že oficiální API Škody čte i druhá integrace nebo aplikace. To vůbec nevadí, jenže si dělí stejný malý limit požadavků na jedno auto, takže společný provoz může narazit na limit Škody dřív a v nejhorším případě může být účet dočasně — a časem i trvale — zablokován. Pokud obě nepotřebujete, odeberte v aplikaci MyŠkoda ten klíč k oficiálnímu API, který nepoužíváte (Nastavení → API klíče). Toto upozornění můžete zavřít."
     }
   },
   "services": {
@@ -2088,6 +2335,12 @@
     },
     "historical_portal_not_ready": {
       "message": "Portál EU Data Act ještě není připraven. Počkejte, až integrace po nastavení jednou provede dotaz, a poté zkuste historický export znovu."
+    },
+    "historical_disabled": {
+      "message": "Jednorázový historický export je momentálně vypnutý."
+    },
+    "historical_wedge_blocked": {
+      "message": "Pro toto auto už probíhá jednorázový export historie. Portál zpracovává vždy jen jeden takový požadavek, takže než si vyžádáte další, počkejte, až se ten aktuální dokončí (nebo vyprší)."
     }
   },
   "selector": {
@@ -2108,6 +2361,81 @@
         "start_ventilation": "Spustit větrání",
         "stop_ventilation": "Zastavit větrání"
       }
+    },
+    "skoda_official_mode": {
+      "options": {
+        "auto": "Automaticky (oba zdroje, přednost oficiálnímu)",
+        "prefer_official": "Preferovat oficiální API",
+        "failover": "Oficiální API jen jako záloha",
+        "official_only": "Pouze oficiální API",
+        "mysmob_only": "Pouze standardní kanál"
+      }
+    },
+    "read_priority": {
+      "options": {
+        "auto": "Automaticky (doporučeno)",
+        "prefer_website_authproxy": "Upřednostnit živá data z vw.de"
+      }
+    }
+  },
+  "triggers": {
+    "started_charging": {
+      "name": "Vozidlo zahájilo nabíjení",
+      "description": "Spustí se, když vozidlo zahájí nabíjení."
+    },
+    "stopped_charging": {
+      "name": "Vozidlo ukončilo nabíjení",
+      "description": "Spustí se, když vozidlo ukončí nabíjení."
+    },
+    "plugged_in": {
+      "name": "Vozidlo připojeno",
+      "description": "Spustí se, když je připojen nabíjecí kabel vozidla."
+    },
+    "unplugged": {
+      "name": "Vozidlo odpojeno",
+      "description": "Spustí se, když je odpojen nabíjecí kabel vozidla."
+    },
+    "locked": {
+      "name": "Vozidlo uzamčeno",
+      "description": "Spustí se, když se vozidlo uzamkne."
+    },
+    "unlocked": {
+      "name": "Vozidlo odemčeno",
+      "description": "Spustí se, když se vozidlo odemkne."
+    },
+    "started_preconditioning": {
+      "name": "Vozidlo zahájilo předklimatizaci",
+      "description": "Spustí se, když vozidlo zahájí předklimatizaci."
+    },
+    "stopped_preconditioning": {
+      "name": "Vozidlo ukončilo předklimatizaci",
+      "description": "Spustí se, když vozidlo ukončí předklimatizaci."
+    },
+    "charge_target_reached": {
+      "name": "Vozidlo dosáhlo cíle nabití",
+      "description": "Spustí se, když úroveň nabití vozidla dosáhne cílové hodnoty."
+    }
+  },
+  "conditions": {
+    "is_charging": {
+      "name": "Vozidlo nabíjí",
+      "description": "Zjišťuje, zda některé vozidlo právě nabíjí."
+    },
+    "is_plugged_in": {
+      "name": "Vozidlo je připojeno",
+      "description": "Zjišťuje, zda je připojen nabíjecí kabel některého vozidla."
+    },
+    "is_locked": {
+      "name": "Vozidlo je uzamčeno",
+      "description": "Zjišťuje, zda je některé vozidlo uzamčeno."
+    },
+    "is_preconditioning": {
+      "name": "Vozidlo předklimatizuje",
+      "description": "Zjišťuje, zda některé vozidlo právě předklimatizuje."
+    },
+    "is_charge_target_reached": {
+      "name": "Vozidlo dosáhlo cíle nabití",
+      "description": "Zjišťuje, zda úroveň nabití některého vozidla dosáhla cílové hodnoty nebo ji překročila."
     }
   }
 }

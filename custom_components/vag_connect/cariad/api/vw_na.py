@@ -17,7 +17,7 @@ from typing import Any
 
 from aiohttp import ClientConnectionError, ClientSession
 
-from .._util import drop_odometer_sentinel, first_not_none
+from .._util import drop_charge_sentinel, drop_odometer_sentinel, first_not_none
 from .._util import mask_vin as _mask_vin
 from .._util import safe_float, safe_int
 from ..models import VehicleData
@@ -730,9 +730,11 @@ class VWNAClient:
                     if isinstance(model, str) and model:
                         self._vin_to_model[vin] = model
                     vins.append(vin)
+                    # uuid (account-scoped vehicle id) + nickname (owner free-text)
+                    # are PII — log presence flags, not the raw values.
                     _LOGGER.debug(
-                        "VW NA: found VIN %s uuid=%s nickname=%s model=%s",
-                        _mask_vin(vin), uuid, nickname, model,
+                        "VW NA: found VIN %s (uuid set=%s, nickname set=%s) model=%s",
+                        _mask_vin(vin), bool(uuid), bool(nickname), model,
                     )
                 for value in node.values():
                     _collect(value)
@@ -816,7 +818,7 @@ class VWNAClient:
         except Exception as exc:  # noqa: BLE001
             _LOGGER.debug(
                 "VW NA privileges fetch errored for vin ***%s: %s",
-                vin[-6:], exc,
+                vin[-6:], type(exc).__name__,
             )
             return {}
         if not isinstance(data, dict):
@@ -1333,7 +1335,7 @@ class VWNAClient:
             #   currentChargeState (NOT chargingState)
             #   chargePower (NOT chargePower_kW)
             #   chargeSettings.targetSOCPercentage (NOT chargingSettings.targetSOC_pct)
-            d.charging_state    = (
+            d.charging_state    = drop_charge_sentinel(  # #923-sweep
                 v(charge, "chargingStatus", "currentChargeState")
                 or v(charge, "chargingStatus", "chargingState")
             )

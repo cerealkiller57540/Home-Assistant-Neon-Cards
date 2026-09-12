@@ -8,11 +8,10 @@ mqtt:
 serial:
   rtscts: false
   baudrate: 115200
-  port: >-
-    /dev/serial/by-id/usb-SONOFF_SONOFF_Dongle_Plus_MG24_8a95bf1a41a1ef11b789926661ce3355-if00-port0
+  port: /dev/serial/by-id/usb-SONOFF_SONOFF_Dongle_Plus_MG24_8a95bf1a41a1ef11b789926661ce3355-if00-port0
   adapter: ember
 advanced:
-  log_level: warning
+  log_level: info
   channel: 25
   network_key:
     - 51
@@ -69,14 +68,15 @@ devices:
     friendly_name: Détecteur presence
     retain: false
     icon: device_icons/6cd3dca250fd519d5d2a825e5ec08247.png
+    throttle: 5
   '0x180df9fffe54fe82':
     friendly_name: NodOn Capteur
     icon: device_icons/cc27932088e6b9eb9eb81fdd95a33151.png
   '0xa4c138084cabffff':
     friendly_name: Prise Chambre
-    energy_precision: 3
-    power_precision: 3
-    current_precision: 3
+    energy_precision: 2
+    power_precision: 2
+    current_precision: 2
     icon: device_icons/ea15b6649c61c2adbd967f387cdec98e.png
   '0xa4c138861cf3b197':
     friendly_name: Capteur vibrations
@@ -115,6 +115,9 @@ devices:
   '0xc02cedfffee885f9':
     friendly_name: Clim Chambre
     icon: device_icons/715d417a5f433274cd2564f244cf6f60.png
+    optimistic: false
+    homeassistant:
+      name: Clim Chambre
   '0x449fdafffe34178a':
     friendly_name: Capteur Portail
     icon: device_icons/bc979445f788bdcde7849429c40d2161.png
@@ -141,5 +144,12 @@ devices:
     optimistic: false
     homeassistant:
       name: Detecteur couloir chambre
+  '0xf044d3fffe1a91bc':
+    friendly_name: Capteur Baie Vitrée
+    optimistic: true
+    homeassistant:
+      name: Capteur Baie Vitrée
+  '0x98a316fffe797018':
+    friendly_name: Inter Cuisine
 availability:
   enabled: true

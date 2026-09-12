@@ -62,7 +62,9 @@ class NetgearSwitchConnector:
         self.host = host
 
         # initial values
-        self.switch_model = AutodetectedSwitchModel
+        # Instance, pas classe : coherent avec _set_instance_attributes_by_model,
+        # sinon has_led_switch()/has_reboot_button() cassent avant la detection.
+        self.switch_model = AutodetectedSwitchModel()
         self._page_fetcher = PageFetcher(host)
         self._page_parser = create_page_parser()
         self.ports = 0
@@ -111,11 +113,66 @@ class NetgearSwitchConnector:
         """Get offline mode status."""
         return self._page_fetcher.offline_mode
 
+    def _autodetect_model_snmp(self) -> type[AutodetectedSwitchModel] | None:
+        """Detect the model via SNMP sysDescr, without touching HTTP.
+
+        Le daemon HTTP du GS108T se degrade et disparait par periodes ; quand HA
+        redemarre pendant une de ces fenetres, l'autodetection HTML echoue et
+        l'entree ne monte pas du tout (SwitchModelNotDetectedError), alors que le
+        switch est parfaitement joignable en SNMP. On identifie donc le modele
+        par sysDescr en priorite : c'est plus fiable et ca coute 2 ms.
+        """
+        try:
+            import os
+            import sys
+
+            cc_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            if cc_dir not in sys.path:
+                sys.path.insert(0, cc_dir)
+            from snmp_client import snmp_get_sysdescr
+
+            descr = snmp_get_sysdescr(self.host)
+        except Exception:  # noqa: BLE001 - pas de SNMP -> on retombe sur le HTML
+            _LOGGER.debug(
+                "[autodetect_model] sysDescr SNMP indisponible", exc_info=True
+            )
+            return None
+
+        if not descr:
+            return None
+        # sysDescr du GS108Tv2 vaut "GS108Tv2" : on retient le nom de modele le
+        # PLUS LONG qui matche, sinon "GS108T" gagnerait sur "GS108Tv2" si les
+        # deux existaient un jour dans MODELS.
+        candidates = [
+            mdl_cls
+            for mdl_cls in MODELS
+            if mdl_cls().MODEL_NAME
+            and mdl_cls().MODEL_NAME.upper() in descr.upper()
+        ]
+        candidates.sort(key=lambda m: len(m().MODEL_NAME), reverse=True)
+        for mdl_cls in candidates:
+            self._set_instance_attributes_by_model(mdl_cls)
+            if not self.switch_model:
+                continue
+            self._page_parser = create_page_parser(self.switch_model.MODEL_NAME)
+            if hasattr(self._page_parser, "_snmp_host"):
+                self._page_parser._snmp_host = self.host
+            _LOGGER.info(
+                "[autodetect_model] modele %s identifie par SNMP (%s)",
+                self.switch_model.MODEL_NAME,
+                descr,
+            )
+            return self.switch_model
+        return None
+
     def autodetect_model(self) -> type[AutodetectedSwitchModel]:
         """Detect switch model from login page contents."""
         _LOGGER.debug(
             "[NetgearSwitchConnector.autodetect_model] called for IP=%s", self.host
         )
+        model = self._autodetect_model_snmp()
+        if model is not None:
+            return model
         for template in AutodetectedSwitchModel.AUTODETECT_TEMPLATES:
             response = None
             url = template["url"].format(ip=self.host)
@@ -177,7 +234,11 @@ class NetgearSwitchConnector:
     def _set_instance_attributes_by_model(
         self, switch_model: type[AutodetectedSwitchModel]
     ) -> None:
-        self.switch_model = switch_model
+        # switch_model est une CLASSE. has_led_switch()/has_reboot_button() sont des
+        # methodes d'instance : appelees sur la classe elles levent "missing 1 required
+        # positional argument: 'self'" et font sauter les plateformes switch et button.
+        # On garde donc une instance. Les attributs de classe restent accessibles.
+        self.switch_model = switch_model()
         self.ports = switch_model.PORTS
         self.poe_ports = switch_model.POE_PORTS
         self._previous_data = {
@@ -496,9 +557,55 @@ class NetgearSwitchConnector:
 
         return switch_data
 
+    def _get_switch_metadata_snmp(self) -> bool:
+        """Fill switch metadata from SNMP. Return True on success.
+
+        sysInfo.html n'apporte que des libelles (nom, serie, firmware) : rien de
+        vital. On prend ce que SNMP expose de standard (sysName, sysDescr) et on
+        laisse le reste vide plutot que d'inventer des OID Netgear non verifies.
+        """
+        snmp_host = getattr(self._page_parser, "_snmp_host", None) or self.host
+        try:
+            import os
+            import sys
+
+            cc_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            if cc_dir not in sys.path:
+                sys.path.insert(0, cc_dir)
+            from snmp_client import snmp_get_entity_info, snmp_get_sysinfo
+
+            info = snmp_get_sysinfo(snmp_host)
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("[_get_switch_metadata_snmp] echec SNMP", exc_info=True)
+            return False
+        if not info:
+            return False
+
+        # firmware et numero de serie viennent d'entPhysicalTable (index .1 = chassis),
+        # et valent exactement ce que l'ancien chemin HTTP remontait. Echec non fatal :
+        # le nom du switch suffit a monter l'integration.
+        try:
+            entity_info = snmp_get_entity_info(snmp_host)
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("[_get_switch_metadata_snmp] entPhysical KO", exc_info=True)
+            entity_info = {}
+
+        self._loaded_switch_metadata = {
+            "switch_ip": self.host,
+            "switch_name": info.get("sys_name") or self.switch_model.MODEL_NAME,
+            "switch_serial_number": entity_info.get("serial_number", ""),
+            # Pas d'equivalent SNMP : entPhysicalHardwareRev/FirmwareRev sont vides
+            # sur tous les index. Vide => sensor.py ne cree pas l'entite.
+            "switch_bootloader": "",
+            "switch_firmware": entity_info.get("firmware", ""),
+        }
+        return True
+
     def _get_switch_metadata(self) -> None:
         if not self.switch_model:
             self.autodetect_model()
+        if self._get_switch_metadata_snmp():
+            return
         page = self.fetch_page_from_templates(self.switch_model.SWITCH_INFO_TEMPLATES)
         if not page.content:
             return
@@ -514,6 +621,22 @@ class NetgearSwitchConnector:
         )
 
     def _get_port_statistics(self) -> dict[str, Any]:
+        # parse_port_statistics sait deja lire ifTable en SNMP, mais il recevait
+        # jusqu'ici une page HTML qu'il fallait charger d'abord : si le daemon
+        # HTTP etait tombe, l'exception partait AVANT que le SNMP soit atteint.
+        # On lui passe une reponse vide quand le SNMP est disponible.
+        if getattr(self._page_parser, "_snmp_host", None):
+            try:
+                return self._page_parser.parse_port_statistics(
+                    BaseResponse(), self.ports
+                )
+            except Exception:  # noqa: BLE001 - on retombe sur le HTTP, mais on le DIT
+                _LOGGER.warning(
+                    "[_get_port_statistics] lecture SNMP en echec sur %s, "
+                    "repli sur le HTTP",
+                    self.host,
+                    exc_info=True,
+                )
         response = self.fetch_page_from_templates(
             self.switch_model.PORT_STATISTICS_TEMPLATES
         )
@@ -706,14 +829,75 @@ class NetgearSwitchConnector:
         )
         return self._page_parser.parse_poe_port_status(response)
 
+    def _get_port_status_snmp(self) -> dict | None:
+        """Return port status read over SNMP, or None if unavailable.
+
+        Sortie au meme contrat que parse_port_status :
+        {port: {"status", "modus_speed", "connection_speed"}}.
+        Les valeurs doivent matcher PORT_STATUS_CONNECTED / PORT_MODUS_SPEED et
+        le mapping de vitesse plus bas ("1000M"/"100M"/"10M"), sinon les
+        capteurs tombent silencieusement a 0.
+        """
+        snmp_host = getattr(self._page_parser, "_snmp_host", None)
+        if not snmp_host:
+            return None
+        try:
+            import os
+            import sys
+
+            cc_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            if cc_dir not in sys.path:
+                sys.path.insert(0, cc_dir)
+            from snmp_client import snmp_get_if_table
+
+            community = getattr(self._page_parser, "_snmp_community", "public")
+            snmp = snmp_get_if_table(snmp_host, community, ports=self.ports)
+        except Exception:  # noqa: BLE001 - toute panne SNMP -> repli HTML
+            _LOGGER.debug(
+                "[_get_port_status_snmp] SNMP indisponible, repli sur le HTML",
+                exc_info=True,
+            )
+            return None
+
+        speed_labels = {10000000: "10M", 100000000: "100M", 1000000000: "1000M"}
+        status_by_port = {}
+        for port in range(1, self.ports + 1):
+            entry = snmp.get(port)
+            if entry is None:
+                return None
+            up = entry.get("oper_status") == 1
+            status_by_port[port] = {
+                "status": "UP" if up else "Down",
+                # ifAdminStatus (1=up, 2=down) : c'est l'etat PILOTABLE du port,
+                # distinct de oper_status qui dit seulement si un lien est etabli.
+                "admin_status": "on" if entry.get("admin_status") == 1 else "off",
+                # ifTable n'expose pas le mode d'autonegociation ; le GS108T est
+                # en Auto sur tous ses ports (constate sur la page web).
+                "modus_speed": "Auto",
+                "connection_speed": (
+                    speed_labels.get(entry.get("speed_bps", 0), "0") if up else "0"
+                ),
+            }
+        return status_by_port
+
     def _get_port_status(self) -> dict:
         switch_data = {}
-        response_portstatus = self.fetch_page_from_templates(
-            self.switch_model.PORT_STATUS_TEMPLATES
-        )
-        port_status = self._page_parser.parse_port_status(
-            response_portstatus, self.ports
-        )
+        # Le firmware 2010 du GS108T plante en GENERANT port_cfg.html : la page
+        # est tronquee au meme octet (11515) a chaque fois, en plein milieu de la
+        # ligne du port 3. Mesure le 01/09/2026 : 3 essais sur 3, deterministe.
+        # Firefox tolere le HTML tronque, requests leve une exception -> l'entree
+        # ne montait plus du tout. Le port 3 lui-meme est SAIN (SNMP : oper=up,
+        # 1000 Mb) : c'est le generateur HTML qui casse, pas le materiel.
+        # SNMP v2c repond en 2 ms sur le meme switch et est totalement
+        # independant du daemon HTTP -> on lit le statut des ports par ifTable.
+        port_status = self._get_port_status_snmp()
+        if port_status is None:
+            response_portstatus = self.fetch_page_from_templates(
+                self.switch_model.PORT_STATUS_TEMPLATES
+            )
+            port_status = self._page_parser.parse_port_status(
+                response_portstatus, self.ports
+            )
 
         for port_number in range(1, self.ports + 1):
             if len(port_status) == self.ports:
@@ -725,6 +909,11 @@ class NetgearSwitchConnector:
                 switch_data[f"port_{port_number}_modus_speed"] = (
                     port_status[port_number].get("modus_speed") in PORT_MODUS_SPEED
                 )
+                # Present uniquement par le chemin SNMP (absent du parsing HTML) :
+                # switch.py ne cree l'entite pilotable que si la cle existe.
+                admin = port_status[port_number].get("admin_status")
+                if admin is not None:
+                    switch_data[f"port_{port_number}_admin_status"] = admin
                 port_connection_speed = (
                     port_status[port_number].get("connection_speed").upper()
                 )

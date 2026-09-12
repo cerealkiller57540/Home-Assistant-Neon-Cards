@@ -371,6 +371,14 @@ class CariadBaseClient:
                 ("idk", {"hybrid_full": False}),
                 ("data_act_portal", {}),
             ]
+        elif self._brand.name == "volkswagen_commercial":
+            # #1316 — VW Commercial Vehicles (Nutzfahrzeuge). Native BFF/IDK is
+            # attestation-walled exactly like passenger VW, so go straight to the
+            # read-only EU-Data-Act portal (its state_brand routes to the
+            # commercial realm). Must NOT fall through to the ``else`` below —
+            # that arms IDK only, never the portal, and the car silently gets no
+            # data.
+            strategies = [("data_act_portal", {})]
         elif self._brand.name == "audi":
             strategies = [
                 ("idk", {"hybrid_full": False}),
@@ -565,6 +573,29 @@ class CariadBaseClient:
                 if not isinstance(getattr(self, "probe_outcomes", None), dict):
                     self.probe_outcomes = {}
                 self.probe_outcomes.update(_outc)
+            # Pre-flight durable-MBB eligibility from the relations read — surfaced
+            # in diagnostics next to the post-hoc mbb_no_legacy verdict. Copied up
+            # off the connector the same way; observability only, never gates.
+            _elig = getattr(connector, "mbb_eligibility", None)
+            if _elig:
+                if not isinstance(getattr(self, "mbb_eligibility", None), dict):
+                    self.mbb_eligibility = {}
+                self.mbb_eligibility.update(_elig)
+            # #1357 — surface the connector's captured RAW vw.de bodies (charging,
+            # the measurements-range probe, the SoH probe, …) in diagnostics.
+            # ``_capture_raw`` stores them VIN-stripped on the CONNECTOR, but the
+            # diagnostics export reads ``client.last_raw_responses`` — so without this
+            # merge the supplementary channel's raw bodies never reached the export
+            # and the probes' "raw body captured for the maintainer" promise silently
+            # didn't hold (a portal-primary reporter's diagnostics carried only the
+            # BFF probe). Keys are already namespaced (``vwde:…``) so they can't
+            # collide with the client's own scout captures; bodies are redacted by
+            # ``_scrub_raw`` at export time.
+            _raw = getattr(connector, "last_raw_responses", None)
+            if _raw:
+                if not isinstance(getattr(self, "last_raw_responses", None), dict):
+                    self.last_raw_responses = {}
+                self.last_raw_responses.update(_raw)
 
     async def _read_eu_portal(
         self, connector: Any, vin: str
@@ -659,8 +690,18 @@ class CariadBaseClient:
                     " the integration options; the primary channel is"
                     " unaffected.", type(err).__name__,
                 )
+                # NB: neither the raw ``err`` nor ``exc_info`` may appear here.
+                # The comment above is the reason — aiohttp.InvalidURL.__str__ puts
+                # the whole OAuth callback URL (``…#access_token=<JWT>`` → the user's
+                # email + a live token) in the message, and a traceback's final line
+                # renders that same __str__. DEBUG is exactly what a reporter pastes
+                # into an issue (cf. #1355), so class-name only — no secret, not even
+                # in beta.
                 _LOGGER.debug(
-                    "vw.de silent resume failure details: %s", err, exc_info=True,
+                    "vw.de silent resume failure details: %s"
+                    " (message + traceback withheld — the exception string can"
+                    " carry the OAuth callback token/email)",
+                    type(err).__name__,
                 )
                 await session.close()
                 return False
@@ -1023,7 +1064,13 @@ class CariadBaseClient:
             return
         try:
             fetcher = VehicleImageFetcher(self._session)
-            data = await fetcher.fetch_image_data(self._access_token, self._brand.name)
+            # Pass the account country (when the client can derive it) so the vgql
+            # returns the localised ``media`` model name — see graphql._locale_headers.
+            _country_getter = getattr(self, "_mbb_country_from_id_token", None)
+            _country = _country_getter() if callable(_country_getter) else None
+            data = await fetcher.fetch_image_data(
+                self._access_token, self._brand.name, country=_country,
+            )
             self._image_data = data
             if data:
                 _LOGGER.info(
@@ -1397,7 +1444,10 @@ class CariadBaseClient:
             try:
                 await self._refresh_tokens(stale_access_token=self._access_token)
             except Exception as _e:  # noqa: BLE001 — reactive 401 path still backs us up
-                _LOGGER.debug("proactive device_grant re-mint failed: %s", _e)
+                # class only — a raw aiohttp error's str() carries the request URL.
+                _LOGGER.debug(
+                    "proactive device_grant re-mint failed: %s", type(_e).__name__
+                )
         headers = kwargs.pop("headers", {})
         token_used = self._access_token
         headers["Authorization"] = f"Bearer {token_used}"
@@ -1458,7 +1508,8 @@ class CariadBaseClient:
                 return await self._request(
                     method, url, retry=retry, _attempt=_attempt + 1, **kwargs
                 )
-            raise APIError(0, url, f"transient: {type(err).__name__}: {err}") from err
+            # drop the raw {err} — it would sit in self.body; class name suffices.
+            raise APIError(0, url, f"transient: {type(err).__name__}") from err
 
     async def _refresh_tokens(
         self, *, for_command: bool = False, stale_access_token: str | None = None
@@ -1772,7 +1823,12 @@ class CariadBaseClient:
             stats["success"] = int(stats.get("success", 0)) + 1
         except Exception as err:  # noqa: BLE001
             stats["fail"] = int(stats.get("fail", 0)) + 1
-            stats["last_error"] = str(err)[:200]
+            # class + status only — this dict is surfaced in diagnostics, and a raw
+            # str(err) can carry a VIN-path URL / response body.
+            _st = getattr(err, "status", None)
+            stats["last_error"] = (
+                f"{type(err).__name__}" + (f" (HTTP {_st})" if _st else "")
+            )
             raise
 
     def _note_parser_job(self, job_name: str, *, present: bool) -> None:

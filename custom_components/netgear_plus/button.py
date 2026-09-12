@@ -11,6 +11,7 @@ from .netgear_entities import (
     NetgearButtonEntityDescription,
     NetgearPoEPowerCycleButtonEntity,
     NetgearRebootButtonEntity,
+    NetgearSnmpRebootButtonEntity,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,10 +29,31 @@ async def async_setup_entry(
     coordinator_switch_infos = config_entry.runtime_data.coordinator_switch_infos
 
     if gs_switch.api:
-        if gs_switch.api.switch_model.has_reboot_button():
+        # GS108T (SNMP pur) : le chemin HTTP has_reboot_button() n'est pas
+        # fiable sur ce firmware (cf. [[project_gs108t_http11_refuse]]).
+        # On bascule sur agentResetSystem (SNMP RW) des que le SNMP est actif.
+        snmp_active = bool(getattr(gs_switch.api._page_parser, "_snmp_host", None))  # noqa: SLF001
+
+        if snmp_active:
             _LOGGER.info(
                 "[button.async_setup_entry]"
-                " setting up Platform.BUTTON for Switch Reboot"
+                " setting up Platform.BUTTON for Switch Reboot (SNMP)"
+            )
+            entities.append(
+                NetgearSnmpRebootButtonEntity(
+                    coordinator=coordinator_switch_infos,
+                    hub=gs_switch,
+                    entity_description=NetgearButtonEntityDescription(
+                        key="snmp_reboot",
+                        name="Reboot Switch",
+                        device_class=ButtonDeviceClass.RESTART,
+                    ),
+                )
+            )
+        elif gs_switch.api.switch_model.has_reboot_button():
+            _LOGGER.info(
+                "[button.async_setup_entry]"
+                " setting up Platform.BUTTON for Switch Reboot (HTTP)"
             )
             entities.append(
                 NetgearRebootButtonEntity(

@@ -53,6 +53,16 @@ BINARY_DESCRIPTIONS: tuple[VagBinarySensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         icon="mdi:car-key",
     ),
+    # v4.7.8 (#1337) — Porsche Connect contract state. A lapsed contract leaves
+    # the car enumerated but every reading blank (@mps222, 3 cars) with nothing
+    # telling the user why; this names it. None (not reported) → no entity.
+    VagBinarySensorDescription(
+        key="connect_contract_active",
+        translation_key="connect_contract_active",
+        data_key="connect_contract_active",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        icon="mdi:file-certificate-outline",
+    ),
     VagBinarySensorDescription(
         key="windows_open",
         translation_key="windows_open",
@@ -959,6 +969,12 @@ _DATA_PRESENT_REQUIRED: frozenset[str] = frozenset({
 })
 
 
+# b13 — platinum parallel-updates rule: the coordinator's background poll
+# loop owns every API request, so entity updates need no throttling. HA reads
+# this MODULE-level constant (an entity attr is a no-op).
+PARALLEL_UPDATES = 0
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -1028,6 +1044,18 @@ async def async_setup_entry(
         # 4) Per-light sensors (v1.12.0 #91 leftover)
         for light_id in vehicle.get("lights_individual", {}):
             entities.append(VagLightSensor(coordinator, vin, light_id))
+        # 5) Per-source connectivity sensors — one per armed read channel, so a
+        # user can see which sources this car is connected to (active vs standby),
+        # incl. the Škoda official API (active live source + failover) (#1286).
+        # Cross-brand.
+        for token in (vehicle.get("channel_status") or {}):
+            entities.append(VagSourceConnectivitySensor(coordinator, vin, token))
+        # 6) #465 — automatable "data stale" binary (device_class=PROBLEM) for a
+        # car whose capture time can freeze while polls keep succeeding. Gated on a
+        # populated capture timestamp so brands that never carry one don't get a
+        # permanent "unknown" entity. Cross-brand (portal + Škoda-native).
+        if vehicle.get("last_seen_at") is not None:
+            entities.append(VagDataStaleSensor(coordinator, vin))
         return entities
 
     register_dynamic_spawner(entry, coordinator, async_add_entities, _build_for_vin)
@@ -1133,6 +1161,109 @@ class VagAbrpDataChangedSensor(VagConnectEntity, BinarySensorEntity):
             "last_upload_recorded": last is not None,
         }
         return attrs
+
+
+class VagSourceConnectivitySensor(VagConnectEntity, BinarySensorEntity):
+    """Connectivity indicator for ONE read channel (data source).
+
+    ON = the car is connected to that source, whether it is actively feeding values
+    or sitting on standby (e.g. the Škoda official API contributes as an active live
+    source on healthy cycles and also serves as the hard-failure failover). Answers
+    "which sources am I connected to",
+    per source, across every brand (#1286). The live detail — active vs standby, how
+    many of the car's readings this source provides, when it last contributed, and
+    for the EU Data Act portal its feed health — is exposed as attributes.
+    """
+
+    # Stay visible when the car's poll fails — a connectivity indicator that
+    # disappears exactly when connectivity drops is worse than useless.
+    _stay_available_on_poll_failure = True
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_icon = "mdi:transit-connection-variant"
+    _attr_translation_key = "data_source"
+
+    def __init__(
+        self, coordinator: VagConnectCoordinator, vin: str, token: str
+    ) -> None:
+        super().__init__(coordinator, vin, f"connectivity_{token}")
+        self._token = token
+        from ._channel_labels import channel_display_name  # noqa: PLC0415
+        self._attr_translation_placeholders = {"source": channel_display_name(token)}
+
+    def _status(self) -> dict[str, Any]:
+        cs = self._vehicle.get("channel_status")
+        if isinstance(cs, dict):
+            s = cs.get(self._token)
+            if isinstance(s, dict):
+                return s
+        return {}
+
+    @property
+    def is_on(self) -> bool | None:
+        s = self._status()
+        # No status entry (channel no longer armed) → None, which HA renders as
+        # state "unknown" (not "unavailable", which would need `available=False`,
+        # and not a misleading "off"/disconnected).
+        return bool(s.get("armed")) if s else None
+
+    def _platform_attributes(self) -> dict[str, Any] | None:
+        s = self._status()
+        if not s:
+            return None
+        if s.get("active"):
+            status = "active"
+        elif s.get("failover"):
+            status = "standby (failover)"
+        else:
+            status = "standby"
+        attrs: dict[str, Any] = {"status": status}
+        if s.get("active_values") is not None:
+            attrs["active_entities"] = s.get("active_values")
+            attrs["total_entities"] = s.get("total_values")
+        if s.get("last_active"):
+            attrs["last_active"] = s.get("last_active")
+        for k in ("portal_health", "minutes_since_last_snapshot"):
+            if s.get(k) is not None:
+                attrs[k] = s.get(k)
+        return attrs
+
+
+class VagDataStaleSensor(VagConnectEntity, BinarySensorEntity):
+    """#465 — True once the car's own data-capture time has frozen past the
+    stale-data threshold (the automatable twin of the stale-data Repair).
+
+    A poll can keep succeeding while the car's ``last_seen_at`` stops advancing — a
+    lapsed EU-DA feed presenting days-old data as live (cyrano330's ID.Buzz froze
+    ~44 h). ``portal_health``/``minutes_since_last_snapshot`` already expose this as
+    an enum/number; this adds a ``device_class=PROBLEM`` boolean a user can trigger
+    an automation on directly, brand-agnostic (also covers Škoda-native / BFF reads
+    that carry ``last_seen_at`` but no ``portal_health``)."""
+
+    # Stay visible when a poll fails — a staleness indicator that vanishes exactly
+    # when data goes stale would be worse than useless (mirrors the connectivity
+    # sensor).
+    _stay_available_on_poll_failure = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_translation_key = "data_stale"
+
+    def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
+        super().__init__(coordinator, vin, "data_stale")
+
+    @property
+    def is_on(self) -> bool | None:
+        val = self._vehicle.get("data_stale")
+        return bool(val) if val is not None else None
+
+    def _platform_attributes(self) -> dict[str, Any] | None:
+        v = self._vehicle
+        attrs: dict[str, Any] = {}
+        for k in ("minutes_since_last_snapshot", "portal_health", "last_snapshot_at"):
+            if v.get(k) is not None:
+                attrs[k] = v.get(k)
+        return attrs or None
 
 
 # Per-door binary sensors.

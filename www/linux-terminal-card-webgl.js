@@ -1,4 +1,4 @@
-/* ── linux-terminal-card-webgl v1.5 ──
+/* ── linux-terminal-card-webgl v1.9 ──
  * Variante WEBGL de linux-terminal-card : vrai verre CRT bombé rendu par shader.
  *
  * Desktop : le terminal (texte + barres + GLITCH le chat) est dessiné sur un canvas 2D
@@ -49,6 +49,42 @@
  *   Liseret de l'écran (bordure + glow) : suivait --rgb-primary-color du thème sans échappatoire.
  *   Nouvelle variable dédiée --ltc-frame (default: --ltc-uv) + col_frame en config pour la
  *   décoréler du thème — vide = comportement d'origine. .screen.crit garde la priorité (rouge).
+ *
+ * v1.6 (2026-08-24) : éditeur condensé — les groupes secondaires (CRT, écran injoignable,
+ *   couleurs, OS/MQTT, charge, temp/batteries/réseau, seuils, détournement de barres) passent
+ *   en <ha-expansion-panel> repliables ; seuls Général et En-tête restent ouverts par défaut.
+ *
+ * v1.7 (2026-08-24) : header canonique — mêmes réglages que neon-entities-card.js /
+ *   neon-climate-card-webgl.js (police, majuscules, épaisseur, espacement, italique, dégradé,
+ *   glow, flicker, couleur/taille icône). Portage fait sur les DEUX chemins de rendu (_render()
+ *   complet ET _applyLiveConfig(), le chemin "config live" qui évite de recréer le contexte
+ *   WebGL) pour rester synchro à la frappe dans l'éditeur. Vide partout = comportement
+ *   d'origine (rétro-compatible).
+ *
+ * v1.8 (2026-08-24) : fixes retour terrain sur le header canonique v1.7 —
+ *   (1) icône en double : un ancien mécanisme JS post-render (insertBefore d'un <ha-icon>)
+ *   coexistait avec l'icône ajoutée dans le template littéral, supprimé (le template suffit) ;
+ *   (2) swatches couleur systématiquement noirs : le picker natif <input type=color> recevait
+ *   du texte brut non-hex (placeholders type 'var(--primary-color)') dans son value= → invalide.
+ *   Ajout de _resolveColor() (sonde DOM + getComputedStyle, pattern copié de climate-webgl) pour
+ *   toujours donner au swatch un hex réel, appliqué aux 3 points d'alimentation (rendu, frappe,
+ *   _syncValues) ; (3) sélecteur de police muet : appel _select() avec label/key inversés,
+ *   écrivait dans une clé 'Police' jamais lue au lieu de 'header.font' ; (4) défauts épaisseur/
+ *   espacement pas alignés sur le goût de Chris pour cette card — fallback CSS 400→600 et
+ *   .05em→0.02em (placeholders éditeur synchronisés).
+ *
+ * v1.9 (2026-08-24) : 2 fixes supplémentaires sur le header canonique —
+ *   (1) le sélecteur de police (NEON_FONTS) ne chargeait jamais réellement la police choisie
+ *   (même dette repérée sur entities/climate/storey : seul Orbitron est en dur, parfois même pas)
+ *   → ajout de _loadGoogleFont(), <link> Google Fonts injecté dans le <head> du document, copié
+ *   du seul pattern qui marche vraiment dans la famille (neon-switch-card.js::_loadGoogleFont,
+ *   avec le encodeURIComponent(...).replace(/%20/g,'+') nécessaire pour les noms à espaces type
+ *   « Share Tech Mono »/« Bebas Neue ») ; (2) le glow de l'icône du header n'avait que 2 couches
+ *   de drop-shadow (pas de halo blanc central) alors que le glow du titre en a 4 (_neonGlow) →
+ *   les deux glowaient visiblement différemment. Icône alignée sur les mêmes 4 couches que le
+ *   canon climate-webgl/markdown (facteurs .2/.4/.8/1, vérifiés identiques dans les 2 fichiers).
+ *   Retour Chris « trop fort » : cause réelle = un drop-shadow(0 0 5px) câblé en dur et permanent
+ *   sur .hdr-icon (indépendant de hdr.glow) qui se cumulait avec les 4 couches → retiré.
  */
 (() => {
 
@@ -71,6 +107,33 @@ const CAT_PATH = 'M15.724 15.662h5.454v5.454h5.455v-5.454h5.457v-5.455h5.455v5.4
 const _catSvg = () => `<svg viewBox="0 0 51 46"><path fill="currentColor" d="${CAT_PATH}"/></svg>`;
 // Path2D du chat (viewBox 51×46) — pour le dessin canvas
 const _catPath2D = new Path2D(CAT_PATH);
+
+// Polices proposées dans l'éditeur pour le titre du header (canon commun aux cards néon —
+// cf neon-entities-card.js / neon-climate-card-webgl.js). Fallback CSS toujours présent
+// (var(--primary-font-family, 'Rajdhani', …)) si le chargement Google Fonts échoue (offline).
+const NEON_FONTS = [
+  'Orbitron','Rajdhani','Share Tech Mono','Exo 2','Roboto','Montserrat',
+  'Oswald','Bebas Neue','Inter','Poppins','Space Grotesk','Syne',
+  'DM Sans','Playfair Display','Cinzel',
+];
+// Charge la police choisie via un <link> Google Fonts injecté dans le <head> du document (pas
+// dans le shadowRoot — les fonts se chargent au niveau document, pas par instance de card). Cache
+// module-level partagé par toutes les instances. Pattern copié à l'identique de
+// neon-switch-card.js::_loadGoogleFont (cf skill ha-neon-css, piège "police choisie dans
+// l'éditeur silencieusement jamais chargée" — même dette constatée sur entities/climate/storey,
+// qui proposent NEON_FONTS mais ne chargent jamais que Orbitron en dur, voire rien).
+// ⚠️ Google Fonts veut des '+' pour les espaces dans le nom de famille, PAS '%20' —
+// encodeURIComponent seul aurait laissé la moitié des polices (« Share Tech Mono », « Bebas
+// Neue », « Space Grotesk », « DM Sans », « Playfair Display ») silencieusement introuvables.
+const _loadedFonts = new Set();
+function _loadGoogleFont(family){
+  if (!family || _loadedFonts.has(family)) return;
+  _loadedFonts.add(family);
+  const link = document.createElement('link');
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, '+')}:wght@400;600;700;900&display=swap`;
+  link.rel = 'stylesheet';
+  document.head.appendChild(link);
+}
 
 /* ── helpers ──────────────────────────────────────────────────────────── */
 function _num(v){ const n = parseFloat(v); return isNaN(n) ? null : n; }
@@ -355,12 +418,37 @@ class LinuxTerminalCardWebgl extends HTMLElement {
     const cfg = this._config;
     this._fx = this._readFx();
     this._tint = this._resolveTint();
-    // met à jour le header (titre/couleur) si présent
+    // met à jour le header (titre/couleur/typo/effets) si présent — mêmes réglages que _render()
     const hdr = cfg.header || {};
     const ht = this.shadowRoot.getElementById('hdr-title');
     if (ht) ht.textContent = hdr.title || cfg.title || 'Latitude 5420';
     const card = this.shadowRoot.querySelector('ha-card');
-    if (card && hdr.color) card.style.setProperty('--ltc-hdr-color', hdr.color);
+    if (card){
+      const hdrColor = hdr.color || 'var(--primary-color)';
+      card.style.setProperty('--ltc-hdr-color', hdrColor);
+      const setOrClear = (prop, val) => val ? card.style.setProperty(prop, val) : card.style.removeProperty(prop);
+      setOrClear('--ltc-hdr-size', hdr.title_size || '');
+      if (hdr.font) _loadGoogleFont(hdr.font);
+      setOrClear('--ltc-hdr-font', hdr.font ? `'${hdr.font}', var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif)` : '');
+      setOrClear('--ltc-hdr-weight', hdr.font_weight ?? '');
+      setOrClear('--ltc-hdr-spacing', hdr.letter_spacing || '');
+      setOrClear('--ltc-hdr-upper', hdr.uppercase === false ? 'none' : '');
+      setOrClear('--ltc-hdr-italic', hdr.italic ? 'italic' : '');
+      const glowColor = hdr.glow_color || hdrColor;
+      const glowSize  = parseFloat(hdr.glow_size) || 12;
+      const glow = (col, sz) => `0 0 ${Math.round(sz*0.2)}px #fff,0 0 ${Math.round(sz*0.4)}px ${col},0 0 ${Math.round(sz*0.8)}px ${col},0 0 ${sz}px ${col}`;
+      setOrClear('--ltc-hdr-shadow', hdr.title_shadow || (hdr.glow ? glow(glowColor, glowSize) : ''));
+      setOrClear('--ltc-hdr-grad', hdr.gradient ? `linear-gradient(90deg,${hdr.gradient_from || hdrColor},${hdr.gradient_to || 'var(--accent-color)'})` : '');
+      if (ht) ht.classList.toggle('grad', !!hdr.gradient);
+      setOrClear('--ltc-hdr-icon-color', hdr.icon_color || '');
+      setOrClear('--ltc-hdr-icon-size', hdr.icon_size || '');
+      setOrClear('--ltc-hdr-icon-glow', hdr.glow ? `drop-shadow(0 0 ${Math.round(glowSize*0.2)}px #fff) drop-shadow(0 0 ${Math.round(glowSize*0.4)}px ${glowColor}) drop-shadow(0 0 ${Math.round(glowSize*0.8)}px ${glowColor}) drop-shadow(0 0 ${glowSize}px ${glowColor})` : '');
+      setOrClear('--ltc-hdr-flicker', hdr.flicker ? 'ltc-hdr-flicker 3s ease-in-out infinite' : '');
+      // l'icône elle-même (présence/absence, mdi) exige de recréer le nœud — rare en usage live,
+      // pris en charge par le rendu complet (_render) déclenché aux changements structurels.
+      const hi = this.shadowRoot.querySelector('.hdr-icon');
+      if (hi && hdr.icon) hi.setAttribute('icon', hdr.icon);
+    }
     // force le re-dessin de la texture (nouvelle palette / fond)
     this._renderKey = null;
     this._rasterized = false;
@@ -558,19 +646,60 @@ class LinuxTerminalCardWebgl extends HTMLElement {
     // ci-dessus était INATTEIGNABLE sur un navigateur sans WebGL. Vérifié 2026-07-25.
     this._webgl ??= true;
 
+    // Header canonique (même moteur que neon-entities-card.js / neon-climate-card-webgl.js) :
+    // police/majuscules/épaisseur/espacement/italique/dégradé/glow/flicker/icône. Défauts
+    // conservés identiques à avant quand les nouveaux champs ne sont pas renseignés (pas de
+    // régression sur les configs existantes).
+    if (hdr.font) _loadGoogleFont(hdr.font);
+    const hdrFont = hdr.font
+      ? `'${hdr.font}', var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif)`
+      : '';
+    const hdrWeight  = hdr.font_weight ?? '';
+    const hdrSpacing = hdr.letter_spacing || '';
+    const hdrUpper   = hdr.uppercase === false ? 'none' : '';
+    const hdrItalic  = hdr.italic ? 'italic' : '';
+    const _neonGlow = (col, sz) => `0 0 ${Math.round(sz*0.2)}px #fff,0 0 ${Math.round(sz*0.4)}px ${col},0 0 ${Math.round(sz*0.8)}px ${col},0 0 ${sz}px ${col}`;
+    const hdrGlowColor = hdr.glow_color || hdrColor;
+    const hdrGlowSize  = parseFloat(hdr.glow_size) || 12;
+    const hdrShadow = hdr.title_shadow || (hdr.glow ? _neonGlow(hdrGlowColor, hdrGlowSize) : '');
+    const hdrGradFrom = hdr.gradient_from || hdrColor;
+    const hdrGradTo   = hdr.gradient_to   || 'var(--accent-color)';
+    const hdrGrad = hdr.gradient ? `linear-gradient(90deg,${hdrGradFrom},${hdrGradTo})` : '';
+    const hdrIconColor = hdr.icon_color || '';
+    const hdrIconSize  = hdr.icon_size || '';
+    // 4 couches, identique à _neonGlow() du titre ET au canon neon-markdown-card.js (facteurs
+    // pleins .2/.4/.8/1 vérifiés dans les 2 fichiers). Le "trop fort" signalé par Chris venait
+    // d'un drop-shadow(0 0 5px) permanent câblé en dur sur .hdr-icon (indépendant de hdr.glow),
+    // qui se cumulait avec ces 4 couches — retiré, .hdr-icon n'a plus que --ltc-hdr-icon-glow.
+    const hdrIconGlow = hdr.glow
+      ? `drop-shadow(0 0 ${Math.round(hdrGlowSize*0.2)}px #fff) drop-shadow(0 0 ${Math.round(hdrGlowSize*0.4)}px ${hdrGlowColor}) drop-shadow(0 0 ${Math.round(hdrGlowSize*0.8)}px ${hdrGlowColor}) drop-shadow(0 0 ${hdrGlowSize}px ${hdrGlowColor})`
+      : '';
+    const hdrFlickAnim = hdr.flicker ? 'ltc-hdr-flicker 3s ease-in-out infinite' : '';
+
     this.shadowRoot.innerHTML = `
       <style>${STYLES}
         ha-card{
           ${cardModBg ? '' : `background:${c.color_bg || '#0c0818'};`}
           --ltc-hdr-color:${hdrColor};
           ${hdr.title_size  ? `--ltc-hdr-size:${hdr.title_size};`     : ''}
-          ${hdr.title_shadow? `--ltc-hdr-shadow:${hdr.title_shadow};` : ''}
+          ${hdrShadow       ? `--ltc-hdr-shadow:${hdrShadow};`        : ''}
+          ${hdrFont         ? `--ltc-hdr-font:${hdrFont};`            : ''}
+          ${hdrWeight       ? `--ltc-hdr-weight:${hdrWeight};`        : ''}
+          ${hdrSpacing      ? `--ltc-hdr-spacing:${hdrSpacing};`      : ''}
+          ${hdrUpper        ? `--ltc-hdr-upper:${hdrUpper};`          : ''}
+          ${hdrItalic       ? `--ltc-hdr-italic:${hdrItalic};`        : ''}
+          ${hdrGrad         ? `--ltc-hdr-grad:${hdrGrad};`            : ''}
+          ${hdrIconColor    ? `--ltc-hdr-icon-color:${hdrIconColor};` : ''}
+          ${hdrIconSize     ? `--ltc-hdr-icon-size:${hdrIconSize};`   : ''}
+          ${hdrIconGlow     ? `--ltc-hdr-icon-glow:${hdrIconGlow};`   : ''}
+          ${hdrFlickAnim    ? `--ltc-hdr-flicker:${hdrFlickAnim};`    : ''}
           ${frameRgb ? `--ltc-frame:${frameRgb.join(',')};` : ''}
         }
       </style>
       <ha-card>
         <div class="hdr" id="hdr">
-          <span class="hdr-title" id="hdr-title">${_esc(hdr.title || c.title || 'Latitude 5420')}</span>
+          ${hdr.icon ? `<ha-icon class="hdr-icon" icon="${_esc(hdr.icon)}"></ha-icon>` : ''}
+          <span class="hdr-title${hdrGrad ? ' grad' : ''}" id="hdr-title">${_esc(hdr.title || c.title || 'Latitude 5420')}</span>
           <span class="hdr-pill" id="pwr">●</span>
         </div>
         ${this._webgl ? `
@@ -595,12 +724,6 @@ class LinuxTerminalCardWebgl extends HTMLElement {
         `}
       </ha-card>`;
 
-    if (hdr.icon){
-      const ico = document.createElement('ha-icon');
-      ico.setAttribute('icon', hdr.icon); ico.className = 'hdr-icon';
-      const h = this.shadowRoot.getElementById('hdr');
-      h.insertBefore(ico, h.firstElementChild);
-    }
     this._rendered = true;
 
     if (this._webgl){
@@ -714,7 +837,7 @@ class LinuxTerminalCardWebgl extends HTMLElement {
     // GLITCH le chat (état d'animation, dessiné dans la texture)
     this._cats = [];
     // DPR par défaut avant le 1er _resizeGl (évite NaN dans les uniforms)
-    this._dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this._dpr = LTC_IS_LOW_POWER ? 1 : Math.min(window.devicePixelRatio || 1, 2);
 
     // attendre les polices avant le 1er draw (sinon repli visuel). fillText ne DÉCLENCHE
     // PAS le chargement d'une police : fonts.ready seul peut se résoudre avant que
@@ -845,7 +968,7 @@ class LinuxTerminalCardWebgl extends HTMLElement {
     // largeur MESURÉE (dépend du layout/dashboard) ; hauteur CALCULÉE (source de vérité,
     // jamais le rect transitoire du panneau d'édition) -> jamais tronqué en preview.
     const cssH = this._wantedHeight();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = LTC_IS_LOW_POWER ? 1 : Math.min(window.devicePixelRatio || 1, 2);
     const W = Math.round(r.width * dpr), H = Math.round(cssH * dpr);
     if (W === this._W && H === this._H) return;
     this._W = W; this._H = H; this._dpr = dpr;
@@ -902,7 +1025,8 @@ class LinuxTerminalCardWebgl extends HTMLElement {
     if (!this._gl) return;
     const gl = this._gl, u = this._u;
     const nowT = performance.now();
-    if (this._lastGlFrame && nowT - this._lastGlFrame < 1000 / 30){
+    const capFps = LTC_IS_LOW_POWER ? 24 : 30;
+    if (this._lastGlFrame && nowT - this._lastGlFrame < 1000 / capFps){
       this._glRaf = requestAnimationFrame(() => this._loopGl());
       return;
     }
@@ -1462,9 +1586,13 @@ const STYLES = `
   .hdr{ display:flex; align-items:center; gap:9px; padding-bottom:9px; margin-bottom:10px; position:relative; }
   .hdr::after{ content:''; position:absolute; bottom:0; left:0; right:0; height:1px;
     background:linear-gradient(90deg, transparent, rgba(var(--ltc-uv),.55) 20%, rgba(var(--ltc-cy),.3) 50%, rgba(var(--ltc-uv),.55) 80%, transparent); }
-  .hdr-icon{ --mdc-icon-size:20px; color:var(--ltc-hdr-color); filter:drop-shadow(0 0 5px color-mix(in srgb, var(--ltc-hdr-color), transparent 20%)); flex-shrink:0; }
-  .hdr-title{ flex:1; font-family:var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif); font-size:var(--ltc-hdr-size,18px); letter-spacing:.05em;
-    text-transform:uppercase; color:var(--ltc-hdr-color); text-shadow:var(--ltc-hdr-shadow,0 0 8px color-mix(in srgb, var(--ltc-hdr-color), transparent 30%)); }
+  .hdr-icon{ --mdc-icon-size:var(--ltc-hdr-icon-size,var(--ltc-hdr-size,18px)); color:var(--ltc-hdr-icon-color,var(--ltc-hdr-color)); filter:var(--ltc-hdr-icon-glow,none); flex-shrink:0; animation:var(--ltc-hdr-flicker,none); }
+  .hdr-title{ flex:1; font-family:var(--ltc-hdr-font,var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif)); font-size:var(--ltc-hdr-size,18px);
+    font-weight:var(--ltc-hdr-weight,600); font-style:var(--ltc-hdr-italic,normal); letter-spacing:var(--ltc-hdr-spacing,0.02em);
+    text-transform:var(--ltc-hdr-upper,uppercase); color:var(--ltc-hdr-color); text-shadow:var(--ltc-hdr-shadow,0 0 8px color-mix(in srgb, var(--ltc-hdr-color), transparent 30%));
+    animation:var(--ltc-hdr-flicker,none); }
+  .hdr-title.grad{ background:var(--ltc-hdr-grad); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  @keyframes ltc-hdr-flicker { 0%,19%,21%,23%,25%,54%,56%,100%{opacity:1;} 20%,24%,55%{opacity:.6;} }
   .hdr-pill{ font-size:11px; line-height:1; }
   .hdr-pill.on{ color:rgb(var(--ltc-grn)); filter:drop-shadow(0 0 5px rgb(var(--ltc-grn))); animation:ltc-blink 2.4s infinite; }
   .hdr-pill.crit{ color:rgb(var(--ltc-red)); filter:drop-shadow(0 0 6px rgb(var(--ltc-red))); animation:ltc-blink .6s infinite; }
@@ -1628,11 +1756,12 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
   }
   _syncValues(){
     const c = this._config || {};
-    this.querySelectorAll('input[data-key]').forEach(inp => {
+    this.querySelectorAll('input[data-key], select[data-key]').forEach(inp => {
       if (document.activeElement === inp) return;
       const parts = inp.dataset.key.split('.');
       const v = parts.length === 2 ? (c[parts[0]] || {})[parts[1]] : c[inp.dataset.key];
-      if (inp.type === 'color'){ const hx = this._hexColor(v); if (hx) inp.value = hx; return; }
+      if (inp.type === 'checkbox'){ inp.checked = (v === true || v === 'true'); return; }
+      if (inp.type === 'color'){ const hx = this._hexColor(v) || (inp.dataset.ph ? this._resolveColor(inp.dataset.ph) : null); if (hx) inp.value = hx; return; }
       inp.value = (v != null) ? v : '';
     });
   }
@@ -1657,11 +1786,27 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
     if (!m) return '';
     return '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('');
   }
+  // Résout n'importe quelle valeur CSS couleur (var(--xxx), rgb(), nom CSS…) en hex réel via un
+  // sonde DOM + getComputedStyle — nécessaire pour que le picker natif <input type=color> (qui
+  // n'accepte QUE du #rrggbb) affiche une couleur cohérente au lieu de tomber sur noir quand la
+  // valeur/placeholder est une var CSS (ex: 'var(--primary-color)'). Pattern copié à l'identique
+  // de neon-climate-card-webgl.js.
+  _resolveColor(css){
+    try {
+      const probe = document.createElement('span');
+      probe.style.cssText = `color:${css};position:absolute;left:-9999px;top:-9999px`;
+      this.appendChild(probe);
+      const rgb = getComputedStyle(probe).color; probe.remove();
+      const m = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
+      return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+    } catch { return null; }
+  }
   _color(label, key, ph){
     const v = this._val(key);
+    const swatchHex = this._hexColor(v) || (ph ? this._resolveColor(ph) : null) || '#b482ff';
     return `<div class="field"><label>${_esc(label)}</label>
       <div class="color-row">
-        <input type="color" data-key="${_esc(key)}" value="${_esc(this._hexColor(v) || ph || '#b482ff')}" class="color-swatch"/>
+        <input type="color" data-key="${_esc(key)}" value="${_esc(swatchHex)}" data-ph="${_esc(ph || '')}" class="color-swatch"/>
         <input type="text" data-key="${_esc(key)}" value="${_esc(v)}" placeholder="${_esc(ph || '#b482ff')}" autocomplete="off" class="color-text"/>
       </div></div>`;
   }
@@ -1673,6 +1818,23 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
         <div class="icon-preview" data-preview="${_esc(key)}"></div>
       </div></div>`;
   }
+  _toggle(label, key, def){
+    const v = this._val(key);
+    const checked = v === '' ? !!def : (v === true || v === 'true');
+    return `<div class="field toggle-field"><label class="toggle-row">
+      <input type="checkbox" data-key="${_esc(key)}" data-bool="1" ${checked ? 'checked' : ''}/>
+      <span>${_esc(label)}</span></label></div>`;
+  }
+  _select(label, key, options, ph){
+    const v = this._val(key);
+    const opts = (options || []).map(opt => {
+      // accepte une string nue (ex: NEON_FONTS) ou un tuple [valeur, libellé]
+      const [ov, olbl] = Array.isArray(opt) ? opt : [opt, opt];
+      return `<option value="${_esc(ov)}" ${v === ov ? 'selected' : ''}>${_esc(olbl)}</option>`;
+    }).join('');
+    return `<div class="field"><label>${_esc(label)}</label>
+      <select data-key="${_esc(key)}"><option value="">${_esc(ph || '—')}</option>${opts}</select></div>`;
+  }
   _render(){
     this.innerHTML = `
       <style>
@@ -1680,10 +1842,14 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
         .grid{display:flex;flex-direction:column;gap:10px;padding:12px 0}
         .group{border:1px solid var(--divider-color,#333);border-radius:10px;padding:12px}
         .group-title{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--secondary-text-color);margin-bottom:10px}
+        ha-expansion-panel{display:block;--expansion-panel-content-padding:8px 12px 12px}
         .field{display:flex;flex-direction:column;gap:3px;margin-bottom:8px}
         label{font-size:12px;color:var(--secondary-text-color)}
-        input{padding:8px 10px;border:1px solid var(--primary-color,#777);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);font-size:13px;width:100%}
-        input:focus{outline:none;box-shadow:0 0 0 1px var(--primary-color)}
+        input,select{padding:8px 10px;border:1px solid var(--primary-color,#777);border-radius:7px;background:var(--card-background-color);color:var(--primary-text-color);font-size:13px;width:100%}
+        input:focus,select:focus{outline:none;box-shadow:0 0 0 1px var(--primary-color)}
+        .toggle-row{display:flex;align-items:center;gap:8px;cursor:pointer}
+        .toggle-row input[type=checkbox]{width:auto;padding:0;accent-color:var(--primary-color)}
+        .toggle-row span{font-size:12px;color:var(--secondary-text-color)}
         .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
         .icon-row{display:flex;gap:8px;align-items:center}
         .icon-row .icon-input{flex:1}
@@ -1698,21 +1864,21 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
         <div class="group"><div class="group-title">Général</div>
           ${this._text('Hôte (prompt)', 'host', 'chris@latitude')}
         </div>
-        <div class="group"><div class="group-title">Effet CRT (WebGL — desktop)</div>
+        <ha-expansion-panel outlined header="Effet CRT (WebGL — desktop)">
           <div class="hint">Vitre CRT rendue par shader. Sur iPad/mobile : repli CSS automatique.</div>
           <div class="row2">${this._text('Courbure (0–0.35)', 'crt_curve', '0')}${this._text('Aberration px', 'crt_aberration', '1.8')}</div>
           <div class="row2">${this._text('Scanlines (0–1)', 'crt_scanlines', '0.45')}${this._text('Bloom (0–1)', 'crt_bloom', '0.5')}</div>
           <div class="row2">${this._text('Flicker (0–0.2)', 'crt_flicker', '0.04')}${this._text('Grille RGB (0–1)', 'crt_mask', '0.35')}</div>
           <div class="row2">${this._text('Glitch burst (0–1)', 'crt_glitch', '0.7')}${this._text('Allumage CRT (1/0)', 'crt_boot', '1')}</div>
           <div class="row2">${this._text('Rémanence phosphore (0–1)', 'crt_persist', '0.6')}</div>
-        </div>
-        <div class="group"><div class="group-title">Écran « machine injoignable »</div>
+        </ha-expansion-panel>
+        <ha-expansion-panel outlined header="Écran « machine injoignable »">
           <div class="hint">Quand CPU et RAM sont tous les deux indisponibles : SIGNAL LOST / NO CARRIER, mauvaise réception. Défauts réglés à l'œil au banc d'essai.</div>
           <div class="row2">${this._text('Ondulation (0–5)', 'offline_warp', '1.0')}${this._text('Grain (0–20)', 'offline_noise', '6.0')}</div>
           <div class="row2">${this._text('Rafale (0–3)', 'offline_burst', '1.5')}${this._text('Période rafale (s)', 'offline_period', '8')}</div>
           <div class="row2">${this._text('RGB split (px)', 'offline_split', '8.5')}${this._text('Luminosité (0–1)', 'offline_dim', '0.46')}</div>
-        </div>
-        <div class="group"><div class="group-title">Couleurs écran</div>
+        </ha-expansion-panel>
+        <ha-expansion-panel outlined header="Couleurs écran">
           <div class="hint">Fond vide = dalle neutre sombre (va avec tous les thèmes). Couleurs vides = défauts cyan/vert Neo Tokyo.</div>
           ${this._color('Fond de dalle', 'screen_bg', '#0e0e13')}
           <div class="hint" style="margin-top:2px">Ex fond : #001208 vert phosphore · #120a00 ambre · #001018 cyan sombre</div>
@@ -1722,15 +1888,29 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
           <div class="row2">${this._color('Débit ↓', 'col_down', '#00e5ff')}${this._color('Débit ↑', 'col_up', '#c08cff')}</div>
           <div class="hint">Liseret vide = suit le thème (--rgb-primary-color) comme avant.</div>
           ${this._color('Liseret écran', 'col_frame', '#00e5ff')}
-        </div>
+        </ha-expansion-panel>
         <div class="group"><div class="group-title">En-tête</div>
           ${this._text('Titre', 'header.title', 'Latitude 5420')}
           ${this._icon('Icône', 'header.icon', 'mdi:laptop')}
           ${this._color('Couleur', 'header.color', '#b482ff')}
           ${this._text('Taille titre', 'header.title_size', '18px')}
-          ${this._text('Ombre titre (text-shadow)', 'header.title_shadow', '0 0 8px ...')}
+          ${this._select('Police', 'header.font', NEON_FONTS, '— thème HA —')}
+          ${this._toggle('Majuscules', 'header.uppercase', true)}
         </div>
-        <div class="group"><div class="group-title">Système / OS (reporter MQTT)</div>
+        <ha-expansion-panel outlined header="En-tête — effets avancés">
+          ${this._text('Ombre titre (text-shadow)', 'header.title_shadow', '0 0 8px ...')}
+          <div class="hint">Si renseignée, l'ombre remplace le glow ci-dessous.</div>
+          <div class="row2">${this._text('Épaisseur', 'header.font_weight', '600')}${this._text('Espacement', 'header.letter_spacing', '0.02em')}</div>
+          ${this._toggle('Italique', 'header.italic', false)}
+          ${this._toggle('Titre en dégradé', 'header.gradient', false)}
+          <div class="row2">${this._color('Dégradé — départ', 'header.gradient_from', 'var(--primary-color)')}${this._color('Dégradé — arrivée', 'header.gradient_to', 'var(--accent-color)')}</div>
+          ${this._toggle('Glow du titre', 'header.glow', false)}
+          <div class="row2">${this._text('Taille du glow', 'header.glow_size', '12')}${this._color('Couleur du glow', 'header.glow_color', 'var(--primary-color)')}</div>
+          ${this._toggle('Scintillement du titre', 'header.flicker', false)}
+          <div class="row2">${this._color("Couleur de l'icône", 'header.icon_color', 'défaut : couleur du titre')}${this._text("Taille de l'icône", 'header.icon_size', 'défaut : taille du titre')}</div>
+          <div class="hint">Mêmes réglages que sur les autres cards néon (entities/climate).</div>
+        </ha-expansion-panel>
+        <ha-expansion-panel outlined header="Système / OS (reporter MQTT)">
           ${this._entity('OS', 'os_entity')}
           ${this._entity('Kernel', 'kernel_entity')}
           ${this._entity('Uptime', 'uptime_entity')}
@@ -1739,28 +1919,28 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
           ${this._entity('Reboot requis (binary)', 'reboot_entity', 'binary_sensor.…')}
           ${this._entity('Process total', 'proc_entity')}
           ${this._text('Libellé du chiffre "process"', 'proc_label', 'proc')}
-        </div>
-        <div class="group"><div class="group-title">Charge</div>
+        </ha-expansion-panel>
+        <ha-expansion-panel outlined header="Charge">
           ${this._entity('CPU %', 'cpu_entity')}
           ${this._entity('GPU %', 'gpu_entity')}
           ${this._entity('Load average', 'load_entity')}
           ${this._text('Nb cœurs (pour load %)', 'load_cores', '8')}
           ${this._entity('RAM %', 'ram_entity')}
           ${this._entity('Disque %', 'disk_entity')}
-        </div>
-        <div class="group"><div class="group-title">Température / Batteries / Réseau</div>
+        </ha-expansion-panel>
+        <ha-expansion-panel outlined header="Température / Batteries / Réseau">
           ${this._entity('Température CPU', 'temp_entity')}
           ${this._entity('Batterie %', 'battery_entity')}
           ${this._entity('2e batterie % (optionnel)', 'battery_entity_2')}
           ${this._entity('Réseau ↓ (RX)', 'net_rx_entity')}
           ${this._entity('Réseau ↑ (TX)', 'net_tx_entity')}
-        </div>
-        <div class="group"><div class="group-title">Seuils d'alerte</div>
+        </ha-expansion-panel>
+        <ha-expansion-panel outlined header="Seuils d'alerte">
           <div class="row2">${this._text('Temp WARN °C', 'temp_warn', '65')}${this._text('Temp CRIT °C', 'temp_crit', '85')}</div>
           <div class="row2">${this._text('Batt WARN %', 'batt_warn', '25')}${this._text('Batt CRIT %', 'batt_crit', '10')}</div>
           <div class="row2">${this._text('Batt2 WARN %', 'batt2_warn', '25')}${this._text('Batt2 CRIT %', 'batt2_crit', '10')}</div>
-        </div>
-        <div class="group"><div class="group-title">Détournement des barres (label + seuils par slot)</div>
+        </ha-expansion-panel>
+        <ha-expansion-panel outlined header="Détournement des barres (label + seuils par slot)">
           <div class="hint">Renomme une barre et/ou change ses seuils sans toucher l'entité — utile pour brancher
             autre chose qu'attendu (ex : une batterie dans le slot GPU) sans fausse alerte à 85%.
             La logique reste "haut = mauvais" pour ces slots (CPU/GPU/LOAD/RAM/DSK/TEMP) — la batterie garde sa
@@ -1770,18 +1950,22 @@ class LinuxTerminalCardWebglEditor extends HTMLElement {
           <div class="row2">${this._text('Libellé LOAD', 'load_label', 'LOAD')}${this._text('Libellé RAM', 'ram_label', 'RAM')}</div>
           <div class="row2">${this._text('Libellé DSK', 'disk_label', 'DSK')}${this._text('Libellé TEMP', 'temp_label', 'TEMP')}</div>
           <div class="row2">${this._text('Libellé BATT', 'batt_label', 'BATT')}${this._text('Libellé BATT2', 'batt2_label', 'BATT2')}</div>
-        </div>
+        </ha-expansion-panel>
       </div>`;
-    this.querySelectorAll('input[data-key]').forEach(inp =>
+    this.querySelectorAll('input[data-key]:not([data-bool])').forEach(inp =>
       inp.addEventListener('input', () => {
         const val = inp.value.trim();
         this._set(inp.dataset.key, val);
         this.querySelectorAll(`input[data-key="${inp.dataset.key}"]`).forEach(t => {
           if (t === t.ownerDocument.activeElement || t === inp) return;
-          if (t.type === 'color'){ const hx = this._hexColor(val); if (hx) t.value = hx; }
+          if (t.type === 'color'){ const hx = this._hexColor(val) || (t.dataset.ph ? this._resolveColor(t.dataset.ph) : null); if (hx) t.value = hx; }
           else t.value = val;
         });
       }));
+    this.querySelectorAll('input[data-key][data-bool]').forEach(inp =>
+      inp.addEventListener('change', () => this._set(inp.dataset.key, inp.checked ? true : '')));
+    this.querySelectorAll('select[data-key]').forEach(sel =>
+      sel.addEventListener('change', () => this._set(sel.dataset.key, sel.value.trim())));
     this._refreshLists();
     this._bindIconPreviews();
   }
@@ -1820,7 +2004,7 @@ if (!window.customCards.some(c => c.type === 'linux-terminal-card-webgl')){
   });
 }
 
-console.info('%c 🐧 linux-terminal-card-webgl v1.4 %c CRT SHADER ',
+console.info('%c 🐧 linux-terminal-card-webgl v1.9 %c CRT SHADER ',
   'background:#6200EA;color:#fff;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
   'background:#040811;color:#00e5ff;padding:2px 4px;border-radius:0 3px 3px 0;');
 

@@ -54,6 +54,12 @@ from ._unexpected_keys import UnexpectedField, _VIN_RE
 # empty-body issues we saw in #409 and #412. 4000 raw → ~6000 encoded
 # leaves comfortable headroom.
 _GITHUB_BODY_MAX = 4000
+# Hard ceiling on the FINAL encoded issue URL. GitHub's backend 414s past ~8 KB,
+# but in practice a pre-filled link stopped being submittable well below that
+# (a 20-error acpp 401 report at ~7.7 KB couldn't be sent — browser/UI limits
+# bite lower than the server's). Cap conservatively: the full report is always
+# in Diagnostics, so trimming the pre-filled URL harder costs nothing.
+_GITHUB_URL_MAX = 6500
 
 # Repo where users land for crowd-sourced bug reports. Keeping this
 # constant means we can swap to a discussions URL later without touching
@@ -84,6 +90,20 @@ ISSUE_ID_ERROR_REPORTER = "error_reporter_findings"
 # …). It carries no value we surface (absence is already ``None``), and the leaf
 # match here catches every ``*.is_set`` in one entry, so no portal car keeps
 # getting prompted to file it. Stays Scout-visible in diagnostics like the rest.
+#
+# Re-examined against the full official V6.0 dictionary (2026-07-24) — every skip
+# is now GROUNDED as genuinely-unmappable, not merely "unknown", so none can be
+# promoted to a mapped entity:
+#   • scope_potential_total (3c691e30) — V6.0: "only interpreted by zFDI for
+#     vehicles of PPE platform"; an internal engineering TSS-ID (unit/type "-"),
+#     not a user-facing datum. Correctly stays unmapped.
+#   • is_set — envelope populated-flag; V6.0 has no standalone entry, it's plumbing.
+#   • c0bb1348 / d5dc7c87 — V6.0 gives EVERY nameable opening its own UUID (doors,
+#     tailgate, bonnet, sunroof, windows, tank flap a0736cf5, charge-plug flaps
+#     33bf521d/7e50ef29 …) yet still lists these two as bare "Opening status" with
+#     no body part — so even the complete dictionary can't say which opening they
+#     are. They remain Scout-visible on the generic ``open`` leaf; a reporter who
+#     can identify the physical opening on their car still gets us there.
 _SCOUT_REPAIR_SKIP_LEAVES: frozenset[str] = frozenset({"scope_potential_total", "is_set"})
 # Substring match on the (masked) sample: #1100's UUID annotation rides in the
 # value as ``... (uuid c0bb1348)``; keying on the UUID (not the eu_data_act.open
@@ -306,17 +326,39 @@ def github_issue_url(
 
     The URL is safe to feed straight into ``learn_more_url`` on a HA
     repair issue, or to print and copy to clipboard.
+
+    The cap is on the FINAL ENCODED url, not the raw body: url-encoding a
+    traceback-heavy body inflates it far more than the ~1.5x a prose body
+    costs (paths, ``^^^^`` carets, newlines, brackets and spaces all become
+    ``%XX``), so a raw-length cap alone could still produce an un-submittable
+    URL — a 20-error acpp 401 report did exactly that. We truncate on the raw
+    length first (cheap), then shrink until the encoded URL is safely under
+    GitHub's ~8 KB ceiling.
     """
-    if len(body) > body_max:
-        body = body[: body_max - 80] + (
-            "\n\n_… truncated — full report available via "
-            "Settings → Devices → VW Group Connect → Diagnostics._"
-        )
-    params: list[tuple[str, str]] = [("title", title), ("body", body)]
-    if labels:
-        params.append(("labels", ",".join(labels)))
-    qs = urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
-    return f"{repo_url.rstrip('/')}/issues/new?{qs}"
+    marker = (
+        "\n\n_… truncated — full report available via "
+        "Settings → Devices → VW Group Connect → Diagnostics._"
+    )
+
+    def _build(text: str) -> str:
+        params: list[tuple[str, str]] = [("title", title), ("body", text)]
+        if labels:
+            params.append(("labels", ",".join(labels)))
+        qs = urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
+        return f"{repo_url.rstrip('/')}/issues/new?{qs}"
+
+    truncated = len(body) > body_max
+    if truncated:
+        body = body[: body_max - len(marker)]
+    url = _build(body + (marker if truncated else ""))
+    # Encoded-length backstop: shrink the body geometrically until the whole
+    # URL fits under _GITHUB_URL_MAX. Converges in a few passes; the floor guard
+    # stops it if even a minimal body + a long title would overflow.
+    while len(url) > _GITHUB_URL_MAX and len(body) > 200:
+        body = body[: int(len(body) * 0.85)]
+        truncated = True
+        url = _build(body + marker)
+    return url
 
 
 # ---------------------------------------------------------------------------

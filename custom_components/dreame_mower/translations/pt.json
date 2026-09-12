@@ -137,6 +137,9 @@
       },
       "consumable_robot_health": {
         "name": "Estado de manutenção"
+      },
+      "rain_protection_end": {
+        "name": "Retoma do corte após a proteção contra chuva"
       }
     },
     "binary_sensor": {
@@ -166,6 +169,48 @@
     "number": {
       "cutting_height": {
         "name": "Altura de corte"
+      }
+    },
+    "switch": {
+      "charging_period": {
+        "name": "Período de carregamento"
+      },
+      "rain_protection": {
+        "name": "Proteção contra chuva"
+      },
+      "lift_alarm": {
+        "name": "Alarme de elevação"
+      },
+      "off_map_alarm": {
+        "name": "Alarme de saída do mapa"
+      },
+      "location_reporting": {
+        "name": "Localização em tempo real"
+      },
+      "anti_theft_pin_check": {
+        "name": "Verificação de PIN antes de desligar"
+      },
+      "edge_mowing_auto": {
+        "name": "Corte automático de bordo"
+      },
+      "edge_blade_offset": {
+        "name": "EdgeMaster"
+      },
+      "edge_mowing_safe": {
+        "name": "Corte seguro de bordas"
+      }
+    },
+    "time": {
+      "charging_period_start": {
+        "name": "Início do período de carregamento"
+      },
+      "charging_period_end": {
+        "name": "Fim do período de carregamento"
+      }
+    },
+    "select": {
+      "rain_delay": {
+        "name": "Espera após a chuva"
       }
     }
   }

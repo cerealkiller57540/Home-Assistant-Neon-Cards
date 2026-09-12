@@ -61,7 +61,8 @@
         "menu_options": {
           "reconfigure_connection": "Connection (IP address & port)",
           "reconfigure_auth": "Authentication (OAuth2 / PAT / SmartThings)",
-          "reconfigure_ip_control": "IP Control (reliable power & pairing)"
+          "reconfigure_ip_control": "IP Control (reliable power & pairing)",
+          "reconfigure_st_device": "SmartThings device (re-link after a repair)"
         }
       },
       "reauth_confirm": {
@@ -97,6 +98,14 @@
       "reconfigure_ip_pair": {
         "title": "Pair IP Control",
         "description": "Pairs the TV's IP Control interface.\n\nBefore continuing:\n1. The TV must be ON and in NORMAL viewing — not Art Mode.\n2. Enable IP Remote: Settings → All Settings → Connections → Network → Expert Settings → Enable IP Remote.\n\nAccept the authorization prompt on the TV when it appears. Current status: {status}."
+      },
+      "reconfigure_st_device": {
+        "title": "SmartThings device",
+        "description": "Select which SmartThings device this TV corresponds to.\n\nCurrently: **{current}**\n\nA TV that was repaired, reset, or removed and re-added in the SmartThings app gets a **new device id**, and the old one is refused with *Forbidden*. Re-selecting it here keeps your entities and history.",
+        "data": {
+          "st_devices": "SmartThings device",
+          "device_id": "SmartThings device ID"
+        }
       }
     },
     "error": {
@@ -108,6 +117,7 @@
       "st_device_used": "This SmartThings device is already configured.",
       "not_successful": "Could not connect to the TV. Ensure it's on and allow the connection when prompted.",
       "ip_control_pair_failed": "IP Control pairing failed. Make sure the TV is ON in normal viewing (not Art Mode) and IP Remote is enabled in Settings, then try again.",
+      "ip_control_unreachable": "Could not reach the TV on port 1516. Nothing is listening there: the TV's power state and the IP Remote setting are not the cause. Most likely this model has no IP Control server -- it is a Samsung feature absent from many TVs, and older ones in particular. Everything else in the integration works without it; only the backlight, colour tone, picture calibration and reboot entities need it.",
       "ip_control_no_host": "No TV host is configured for this entry."
     },
     "abort": {
@@ -122,7 +132,10 @@
       "reauth_successful": "Re-authentication successful.",
       "reauth_failed": "Re-authentication failed.",
       "reconfigure_successful": "Configuration updated.",
-      "ip_control_pair_successful": "IP Control paired successfully. The access token has been stored."
+      "ip_control_pair_successful": "IP Control paired successfully. The access token has been stored.",
+      "st_device_updated": "SmartThings device updated. The integration is reloading.",
+      "st_not_configured": "SmartThings is not configured for this TV.",
+      "st_device_missing": "No SmartThings device was selected."
     },
     "create_entry": {
       "default": "Successfully configured {name}"
@@ -195,7 +208,9 @@
           "use_mute_check": "Use Mute State for Power Detection",
           "dump_apps": "Debug: Dump Applications",
           "toggle_art_mode": "Toggle Art Mode on Power",
-          "st_poll_on_interval": "SmartThings poll interval when on (seconds)"
+          "st_poll_on_interval": "SmartThings interval when on (s)",
+          "ip_control_poll_interval": "IP Control interval (s)",
+          "content_list_interval": "Art content list refresh interval (s)"
         }
       },
       "save_exit": {
@@ -217,6 +232,7 @@
     "error": {
       "invalid_tv_list": "Invalid list format. Please use valid JSON format.",
       "ip_control_pair_failed": "Pairing failed. Make sure the TV is on and in normal viewing (not Art Mode), and that IP Remote is enabled, then try again.",
+      "ip_control_unreachable": "Could not reach the TV on port 1516 -- nothing is listening there. This model most likely does not support IP Control; the TV's state and the IP Remote setting are not the cause. Only the backlight, colour tone, picture calibration and reboot entities depend on it.",
       "ip_control_no_host": "No host address is configured for this TV."
     }
   },

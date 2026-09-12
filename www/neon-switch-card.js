@@ -241,7 +241,7 @@ const STYLES = `
 
   .hdr {
     display: flex; align-items: center; gap: 8px;
-    margin-bottom: 12px; padding-bottom: 10px;
+    margin-bottom: 10px; padding-bottom: 10px;
     position: relative;
   }
   .hdr::after {
@@ -256,7 +256,7 @@ const STYLES = `
   }
   /* ── bloc header canonique (nmc-icon-wrap / nmc-title, cf skill ha-neon-css) ── */
   .nmc-icon-wrap { display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:visible; }
-  .nmc-icon-wrap ha-icon { overflow:visible; }
+  .nmc-icon-wrap ha-icon { overflow:visible; display:flex; align-items:center; justify-content:center; }
   .nmc-title { flex: 1; overflow: visible; line-height: 1.2; }
 
   .chassis {
@@ -568,17 +568,17 @@ class NeonSwitchCard extends HTMLElement {
     if (hdr.font) NeonSwitchCard._loadGoogleFont(hdr.font);
     const tFontFamily = hdr.font ? `'${hdr.font}', var(--primary-font-family, sans-serif)` : 'var(--primary-font-family, sans-serif)';
     const tFontSize   = hdr.title_size || '16px';
-    const tFontWeight = hdr.font_weight ?? 700;
-    const tLetterSp   = hdr.letter_spacing || 'clamp(1px, 0.5cqi, 3px)';
+    const tFontWeight = hdr.font_weight ?? 600;
+    const tLetterSp   = hdr.letter_spacing || '0.02em';
     const tUppercase  = hdr.uppercase === false ? 'none' : 'uppercase';
     const tItalic     = hdr.italic ? 'italic' : 'normal';
     const tColor      = hdr.color || 'var(--primary-color)';
-    const tIconColor  = hdr.icon_color || tColor;
+    const tIconColor  = hdr.icon_color || 'rgba(var(--rgb-primary-text-color),0.85)';
     const tIconSize   = hdr.icon_size || '20px';
     const tGlowOn     = hdr.glow !== false;
-    const tGlowColor  = hdr.glow_color || tColor;
-    const tGlowSize   = hdr.glow_size || '10px';
-    const tGlowSizeN  = parseFloat(tGlowSize) || 10;
+    const tGlowColor  = hdr.glow_color || 'var(--primary-color, #00E8FF)';
+    const tGlowSize   = hdr.glow_size || '14px';
+    const tGlowSizeN  = parseFloat(tGlowSize) || 12;
     const tGlowShadow = tGlowOn
       ? `0 0 ${Math.round(tGlowSizeN*0.2)}px #fff, 0 0 ${tGlowSize} ${tGlowColor}, 0 0 calc(${tGlowSize} * 2) ${tGlowColor}`
       : 'none';
@@ -1276,30 +1276,24 @@ class NeonSwitchCardEditor extends HTMLElement {
     this._icon('header.icon', 'Icône (mdi)');
     this._color('header.color', 'Couleur titre', 'var(--primary-color)');
     this._text('header.title_size', 'Taille titre', '16px');
+    this._select('header.font', 'Police', NSW_FONTS, '— thème HA —');
+    this._toggle('header.uppercase', 'Majuscules', true);
     this._toggle('show_stats', 'Afficher les stats globales', false);
     this._toggle('card_mod_bg', 'Hériter du fond card-mod', true);
 
-    this._group('Typo avancée', false, () => {
-      this._select('header.font', 'Police', NSW_FONTS, '— thème HA —');
-      this._text('header.font_weight', 'Épaisseur', '700');
-      this._text('header.letter_spacing', 'Espacement', 'clamp(1px, 0.5cqi, 3px)');
-      this._toggle('header.uppercase', 'Majuscules', true);
+    this._group('Effets avancés du titre', false, () => {
+      this._text('header.font_weight', 'Épaisseur', '600');
+      this._text('header.letter_spacing', 'Espacement', '0.02em');
       this._toggle('header.italic', 'Italique', false);
-    });
-
-    this._group('Icône', false, () => {
-      this._color('header.icon_color', 'Couleur icône', 'défaut : couleur titre');
-      this._text('header.icon_size', 'Taille icône', '20px');
-    });
-
-    this._group('Effets néon', false, () => {
-      this._toggle('header.glow', 'Glow néon', true);
-      this._color('header.glow_color', 'Couleur glow', 'var(--primary-color)');
-      this._text('header.glow_size', 'Taille glow', '10px');
       this._toggle('header.gradient', 'Dégradé texte', false);
       this._color('header.gradient_from', 'Dégradé — départ', 'var(--primary-color)');
       this._color('header.gradient_to', 'Dégradé — arrivée', 'var(--accent-color)');
+      this._toggle('header.glow', 'Glow néon', true);
+      this._text('header.glow_size', 'Taille glow', '14');
+      this._color('header.glow_color', 'Couleur glow', 'var(--primary-color)');
       this._toggle('header.flicker', 'Flicker néon', false);
+      this._color('header.icon_color', 'Couleur icône', 'défaut : blanc cassé');
+      this._text('header.icon_size', 'Taille icône', '20px');
     });
 
     this._section('Ports');

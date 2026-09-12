@@ -149,13 +149,20 @@ import asyncio
 import json
 import aiohttp
 from datetime import datetime
-from ha_secrets import MISTRAL_KEY     # clé hors VCS (secrets.yaml -> module ha_secrets)
+from ha_secrets import MISTRAL_KEY, GEMINI_KEY     # clé hors VCS (secrets.yaml -> module ha_secrets)
 
 # Modèle de jugement. FALLBACK = bascule automatique si le principal sature (429),
 # voir _call_mistral. "small" = tier le moins cher, suffisant pour une décision JSON courte.
 MISTRAL_MODEL          = "mistral-small-2603"
 MISTRAL_MODEL_FALLBACK = "mistral-small-latest"
 MISTRAL_URL   = "https://api.mistral.ai/v1/chat/completions"
+# Fallback INTER-fournisseur (12/09/2026) : les 2 modèles Mistral ci-dessus partagent le
+# même compte/quota -> si Mistral entier est saturé (429 persistant), les rebasculer entre
+# eux ne sert à rien. Gemini est un compte/quota distinct, tenté en tout dernier recours
+# avant d'abandonner le cycle. Mêmes contraintes que Mistral : JSON forcé (responseMimeType),
+# temperature basse (décision quasi déterministe).
+GEMINI_FALLBACK_MODEL = "gemini-3.1-flash-lite-preview"
+GEMINI_FALLBACK_URL   = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
 
 # ── Entités HA (les "seams" du système) ──
 ENTITY_BIAS      = "number.ecodan_heatpump_auto_adaptive_setpoint_bias"  # SORTIE finale -> PAC
@@ -918,6 +925,52 @@ async def _maybe_shadow(planned_attrs, forecast, history, applied_bias, applied_
         log.warning(f"Shadow erreur (ignorée) : {e}")
 
 
+async def _call_gemini_fallback(context):
+    """Dernier recours si Mistral (les 2 modèles) est saturé. Compte/quota Gemini distinct
+    de Mistral -> a des chances de passer même quand Mistral entier est à genoux.
+    Même contrat que _call_mistral : renvoie le dict décision parsé (+ "_tokens"), ou lève
+    ValueError. Pas de retry ici (déjà tenté 3x côté Mistral avant d'arriver là) — un seul
+    essai, best-effort."""
+    url = GEMINI_FALLBACK_URL.format(model=GEMINI_FALLBACK_MODEL, key=GEMINI_KEY)
+    payload = {
+        "system_instruction": {"parts": [{"text": SYSTEM}]},
+        "contents": [{"parts": [{"text": context}]}],
+        "generationConfig": {
+            "temperature": 0.1, "maxOutputTokens": 300,
+            "responseMimeType": "application/json",
+        },
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url, json=payload, headers={"Content-Type": "application/json"},
+                timeout=aiohttp.ClientTimeout(total=30)
+            ) as resp:
+                raw = await resp.text()
+                status = resp.status
+    except Exception as e:
+        raise ValueError(f"Gemini fallback connexion echec : {e}")
+    if status != 200:
+        raise ValueError(f"Gemini fallback HTTP {status} : {raw[:500]}")
+    resp_data = json.loads(raw)
+    try:
+        text = resp_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        usage = resp_data.get("usageMetadata", {})
+        tok_in  = usage.get("promptTokenCount", "?")
+        tok_out = usage.get("candidatesTokenCount", "?")
+    except (KeyError, IndexError):
+        raise ValueError(f"Gemini fallback reponse inattendue : {raw[:500]}")
+    log.info(f"Gemini fallback tokens — in:{tok_in} out:{tok_out}")
+    start = text.find("{")
+    end   = text.rfind("}") + 1
+    if start == -1 or end == 0:
+        raise ValueError("Gemini fallback : pas de JSON : " + repr(text))
+    result = json.loads(text[start:end])
+    result["_tokens"] = {"in": tok_in, "out": tok_out}
+    result["_provider_fallback"] = "gemini"  # tracé dans le log pour audit
+    return result
+
+
 async def _call_mistral(context):
     """Appel de jugement principal. Renvoie le dict décision parsé (+ "_tokens"), ou lève
     ValueError si échec définitif (l'appelant log l'erreur et abandonne le cycle).
@@ -927,6 +980,10 @@ async def _call_mistral(context):
       - 429 (capacité) ou 5xx (serveur)   -> backoff 60·n s ; au 2e essai sur 429,
                                              bascule sur MISTRAL_MODEL_FALLBACK
       - erreur réseau/timeout             -> retry après 15 s
+    Si les 3 tentatives Mistral échouent sur 429/5xx (quota/compte saturé, pas juste le
+    modèle), tentative UNIQUE Gemini avant d'abandonner (voir _call_gemini_fallback) —
+    ajouté le 12/09/2026, les 2 modèles Mistral partagent le même quota donc rebasculer
+    entre eux ne protège pas contre un 429 sur le COMPTE entier.
     temperature=0.1 : décision quasi déterministe. response_format=json_object force le JSON."""
     payload = {
         "model": MISTRAL_MODEL,
@@ -965,7 +1022,11 @@ async def _call_mistral(context):
                 if attempt < 2:
                     await asyncio.sleep(wait)
                     continue
-                raise ValueError(f"Mistral {status} persistant : {raw[:200]}")
+                log.warning(f"Mistral {status} persistant après 3 tentatives — essai Gemini en dernier recours")
+                try:
+                    return await _call_gemini_fallback(context)
+                except ValueError as ge:
+                    raise ValueError(f"Mistral {status} persistant ; Gemini fallback aussi en echec : {ge}")
             break  # 200 — succès
         except ValueError:
             raise
@@ -975,7 +1036,11 @@ async def _call_mistral(context):
             if attempt < 2:
                 await asyncio.sleep(15)
                 continue
-            raise ValueError(f"Mistral connexion echec apres 3 tentatives : {e}")
+            log.warning("Mistral injoignable apres 3 tentatives — essai Gemini en dernier recours")
+            try:
+                return await _call_gemini_fallback(context)
+            except ValueError as ge:
+                raise ValueError(f"Mistral injoignable ; Gemini fallback aussi en echec : {ge}")
     if status != 200:
         raise ValueError(f"Mistral HTTP {status} : {raw[:500]}")
     resp_data = json.loads(raw)
@@ -1228,14 +1293,17 @@ async def heat_agent_run():
 
     # ══ CHEMIN 1 — Garde veille estivale (sortie la plus précoce, aucun I/O réseau) ══
     # PAC inactive + saison chaude + ext>=18 : rien à arbitrer. On applique le plan
-    # et on saute Mistral, SAUF 1 check/jour à 18h pour anticiper la fraîcheur nocturne.
+    # et on saute Mistral, SAUF 1 check/jour à 17h pour anticiper la fraîcheur nocturne.
+    # Décalé de 18h -> 17h le 12/09/2026 : le check unique tombait systématiquement
+    # dans le pic de charge Mistral du soir (429 quasi garanti à 18h). Voir aussi le
+    # fallback Gemini dans _call_mistral pour le jour où 17h serait aussi saturé.
     try:
         ext_temp = float(state.get("sensor.heat_pump_outdoor_temp_fused") or 15)
     except (ValueError, TypeError):
         ext_temp = 15.0
     pac_off = str(planned_attrs.get("compressor_freq", "0")) in ("0", "0.0", "None", "?")
-    if pac_off and now_dt.month in (5, 6, 7, 8, 9) and ext_temp >= 18 and now_dt.hour != 18:
-        log.info(f"Veille estivale : PAC off, ext={ext_temp}°C — skip Mistral (next check 18h)")
+    if pac_off and now_dt.month in (5, 6, 7, 8, 9) and ext_temp >= 18 and now_dt.hour != 17:
+        log.info(f"Veille estivale : PAC off, ext={ext_temp}°C — skip Mistral (next check 17h)")
         try:
             bias_plan = round(max(BIAS_MIN, min(BIAS_MAX, float(planned_attrs.get("state", 0)))), 2)
             actions = _set_bias(bias_plan, "plan", phase)

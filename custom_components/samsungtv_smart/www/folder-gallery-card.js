@@ -1237,15 +1237,23 @@ class FolderGalleryCard extends HTMLElement {
     if (!action.service && !action.perform_action) return;
 
     // Multi-frame upload routing.
-    // When the action is an upload, the gallery points at a local photo
+    // When the action is an upload and the gallery points at a local photo
     // source (folder not store/personal AND image not a SAM-/MY_ content id),
-    // and more than one Frame TV is present, ask the user which Frame to
-    // upload to instead of using the configured entity. Every other case
-    // keeps the original behaviour untouched.
+    // route to a Frame that is actually there rather than to whatever entity
+    // the YAML happens to name. Every other case keeps the original behaviour.
     if (this._isUploadAction(action) && this._isLocalPhotoSource(imageData)) {
       const frames = this._discoverFrames();
       if (frames.length > 1) {
         this._openFrameChooser(imageData, action, frames);
+        return;
+      }
+      if (frames.length === 1) {
+        // Exactly one Frame: use it. Discovery only lists TVs currently
+        // exposing art_mode_status, so a configured-but-unreachable TV drops
+        // out of the list -- and silently falling back to the configured
+        // entity sent uploads to a TV that was powered off or removed, with no
+        // chooser shown to reveal the mismatch.
+        this._dispatchAction(imageData, action, frames[0].entity_id);
         return;
       }
     }

@@ -86,7 +86,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from aiohttp import ClientSession
 
-from .._util import drop_odometer_sentinel
+from .._util import drop_charge_sentinel, drop_odometer_sentinel
 from ..models import VehicleData
 
 _LOGGER = logging.getLogger(__name__)
@@ -736,7 +736,9 @@ class DataActScraper:
                 _nested(charging, "chargingStatus", "value", "chargingState"),
             )
             if state is not None:
-                out.charging_state = state
+                _cs = drop_charge_sentinel(state)  # #923-sweep
+                if _cs is not None:
+                    out.charging_state = _cs
 
         # Measurements block - odometer, range, fuel.
         measurements = _safe_dict(parsed.get("measurements"))
@@ -829,22 +831,25 @@ class DataActScraper:
         deliver one. CSRF expires per-session so callers re-fetch
         before every POST that needs it.
 
-        v2.18.0 (#709) — every failure here used to return a bare None, and
-        the caller logged "no CSRF token - aborting" with no reason. That made
-        the whole kickoff undiagnosable: a reporter hands us a debug log and it
-        says the token is missing, without saying whether the portal answered
-        403 (session gone), 404 (the path moved), timed out, or simply started
-        naming the token something else. No CSRF means no data request, which
-        means no data at all — so this is the one failure we most need to be
-        able to read, and it was the one that told us the least.
+        v2.18.0 (#709) — every failure here used to return a bare None with no
+        reason, which made the kickoff undiagnosable: a reporter's log said the
+        token was missing without saying whether the portal answered 403 (session
+        gone), 404 (the path moved), timed out, or renamed the field. The detailed
+        logging below stays because that visibility is still worth having.
 
-        Worth knowing: _CSRF_TOKEN_PATH is an Adobe AEM endpoint
-        (/libs/granite/...). The portal is AEM-backed, so if VW ever moves off
-        it or renames the field, this goes silent for every single user at once
-        — and the log below is what would tell us which of those it was.
+        IMPORTANT (live-verified 2026-09-02): a missing token here NO LONGER
+        blocks anything, and the callers no longer abort on it. _CSRF_TOKEN_PATH
+        is an Adobe AEM endpoint (/libs/granite/...) that returns an empty body
+        with x-sky-isauth:0 for EVERY session — even a real logged-in browser — so
+        it never yields a token. The data-request POSTs (kickoff_custom_data_
+        request / kickoff_historical_export) do not need it: they go to the
+        /proxy_api/euda-apim layer, which authenticates via the session COOKIES (a
+        cookie-only POST with no CSRF header reaches the portal's own validation,
+        HTTP 400 "Invalid Duration", i.e. it authenticated). So the callers fetch
+        this best-effort and proceed regardless; a token is attached only if this
+        method ever starts returning one — forward-compat for a future portal
+        build that re-enables the Granite leg.
         """
-        from aiohttp import ClientTimeout  # noqa: PLC0415
-
         url = _PORTAL_BASE + _CSRF_TOKEN_PATH
         token, anonymous_at_aem = await self._csrf_get(url)
         if token is not None:
@@ -855,33 +860,71 @@ class DataActScraper:
             # warns about). Loading the page helps with neither, so stop here
             # and let the log above stand as the diagnosis.
             return None
-        # Empty body + anonymous at AEM: the AEM leg of the session is missing
-        # or lapsed while the proxy leg still works. Load the portal page once,
-        # exactly as a browser does, then retry. Best-effort — if the AEM leg
-        # cannot be revived from the cookies we hold, this simply fails again
-        # and the log above has already recorded why.
+        # Empty body + anonymous at AEM: the AEM leg of the session is missing or
+        # lapsed while the proxy leg still works. Revive it browser-style, then
+        # retry. Best-effort — if the AEM leg cannot be revived from the cookies we
+        # hold, this simply fails again and the log above has already recorded why.
+        #
+        # #1273 (steemandavid): the portal page GET can land HTTP 200 yet leave the
+        # AEM leg anonymous (x-sky-isauth stays 0) — loading /de/en/user.html alone
+        # does not complete the AEM SSO handoff on every account. So try TWO revive
+        # endpoints in turn — the user page, then the AEM permission-check service —
+        # re-fetching the token after each. _aem_revive_get logs the landing URL,
+        # the response's x-sky-isauth, and any Set-Cookie NAMES, so a reporter's
+        # diagnostics show exactly which leg (if any) completed the handoff.
         _LOGGER.debug(
             "CSRF token fetch: session is anonymous at the AEM layer — "
-            "loading %s once to try to revive it", _AEM_SESSION_PAGE_PATH,
+            "attempting to revive it (%s, then %s)",
+            _AEM_SESSION_PAGE_PATH, _AEM_PERMISSION_CHECK_PATH,
         )
+        for path in (_AEM_SESSION_PAGE_PATH, _AEM_PERMISSION_CHECK_PATH):
+            await self._aem_revive_get(path)
+            token, _ = await self._csrf_get(url)
+            if token is not None:
+                return token
+        return token
+
+    async def _aem_revive_get(self, path: str) -> None:
+        """Best-effort AEM-session revive: GET one portal path browser-style (follow
+        redirects) and log what it did — the landing URL, HTTP status, the response's
+        ``x-sky-isauth``, and the NAMES of any cookies it set. Never raises.
+
+        #1273 — loading the user page alone doesn't always complete the AEM SSO
+        handoff, so callers try more than one path. The Set-Cookie NAMES (values are
+        never logged) and the landing URL are what a reporter's diagnostics need to
+        show whether a leg actually re-authenticated the AEM tier, so the real fix
+        can be built from real data rather than guessed."""
+        from aiohttp import ClientTimeout  # noqa: PLC0415
+
         try:
             async with self._session.get(
-                _PORTAL_BASE + _AEM_SESSION_PAGE_PATH,
+                _PORTAL_BASE + path,
                 timeout=ClientTimeout(total=15),
                 allow_redirects=True,
             ) as page:
+                hdrs = getattr(page, "headers", {})
+                try:
+                    # getall is a CIMultiDict method (real aiohttp headers); the
+                    # {} fallback / a plain dict has no getall → AttributeError,
+                    # caught just below. type: ignore because mypy only sees the
+                    # dict arm of the union and can't know the guard handles it.
+                    cookie_names = [
+                        c.split("=", 1)[0].strip()
+                        for c in hdrs.getall("Set-Cookie", [])  # type: ignore[union-attr]
+                    ]
+                except (AttributeError, TypeError):
+                    cookie_names = []
                 _LOGGER.debug(
-                    "CSRF token fetch: portal page GET landed %s (HTTP %s)",
-                    str(page.url).split("?")[0][:100], page.status,
+                    "AEM revive GET %s → landed %s (HTTP %s) | x-sky-isauth=%s | "
+                    "set-cookie names: %s",
+                    path, str(page.url).split("?")[0][:100], page.status,
+                    hdrs.get("x-sky-isauth", "absent"),
+                    cookie_names or "none",
                 )
         except Exception as exc:  # noqa: BLE001
             _LOGGER.debug(
-                "CSRF token fetch: portal page GET raised %s: %s",
-                type(exc).__name__, exc,
+                "AEM revive GET %s raised %s", path, type(exc).__name__,
             )
-            return None
-        token, _ = await self._csrf_get(url)
-        return token
 
     async def _csrf_get(self, url: str) -> tuple[str | None, bool]:
         """One CSRF fetch → ``(token, anonymous_at_aem)``.
@@ -914,8 +957,8 @@ class DataActScraper:
                 data = await resp.json(content_type=None)
         except Exception as exc:  # noqa: BLE001
             _LOGGER.debug(
-                "CSRF token fetch: %s raised %s: %s",
-                _CSRF_TOKEN_PATH, type(exc).__name__, exc,
+                "CSRF token fetch: %s raised %s",
+                _CSRF_TOKEN_PATH, type(exc).__name__,
             )
             return None, False
         # ``token`` is the field the portal's own Granite clientlib reads.
@@ -985,7 +1028,8 @@ class DataActScraper:
         except DataActSessionExpiredError:
             raise
         except Exception as exc:  # noqa: BLE001
-            _LOGGER.debug("metadata/partial fetch failed: %s", exc)
+            # Class only — an aiohttp error's str() echoes the VIN-path URL.
+            _LOGGER.debug("metadata/partial fetch failed: %s", type(exc).__name__)
             return None
 
         # Payload shape captured 2026-06-03: either a list of request
@@ -1032,12 +1076,21 @@ class DataActScraper:
         import secrets as _secrets  # noqa: PLC0415
         from datetime import datetime, timedelta, timezone  # noqa: PLC0415
 
+        # The euda-apim data-request layer (Azure APIM behind /proxy_api) is
+        # authenticated by the portal SESSION COOKIES, not the Adobe-AEM Granite
+        # CSRF token. That AEM endpoint (_fetch_csrf_token → /libs/granite/csrf/
+        # token.json) returns an empty body with x-sky-isauth:0 for EVERY session,
+        # even a real logged-in browser (live-verified 2026-09-02) — so it can
+        # never yield a token, and the portal's own create call does not use one.
+        # Proof: a cookie-only POST with NO CSRF header reaches the portal's own
+        # Duration validation (HTTP 400 "Invalid Duration"), i.e. the request
+        # authenticated. Gating the kickoff on that always-empty token is why the
+        # auto-kickoff silently did nothing on every account (#709/#966): it
+        # aborted here before ever POSTing. Fetch it best-effort (a future portal
+        # build might expose it, and it is one cheap GET) but do NOT abort when it
+        # is absent; the POST below sends the header only when we actually have a
+        # token.
         csrf = await self._fetch_csrf_token()
-        if not csrf:
-            _LOGGER.debug(
-                "kickoff_custom_data_request: no CSRF token - aborting"
-            )
-            return None
 
         identifier = _secrets.token_hex(16)  # 32 chars
         now = datetime.now(timezone.utc).replace(microsecond=0)
@@ -1089,22 +1142,27 @@ class DataActScraper:
         url = _PORTAL_BASE + _CUSTOM_REQUEST_POST_PATH.format(vin=vin)
         for index, (duration, days) in enumerate(attempts):
             last = index == len(attempts) - 1
+            headers = {
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                # Required by the euda-apim layer (see metadata GET above);
+                # without it the POST 503s at the AEM edge. Fresh per attempt.
+                "traceId": uuid.uuid4().hex,
+            }
+            if csrf:
+                # Best-effort: the Granite CSRF clientlib would set this on a
+                # same-origin non-GET, but /libs/granite/csrf/token.json is
+                # anonymous for everyone, so this branch is currently unreachable.
+                # Sent only when actually present (never as an empty string) so a
+                # future portal build that starts issuing a token keeps working.
+                # ``X-CSRF-Token`` was ours, and is not a thing here.
+                headers["CSRF-Token"] = csrf
             try:
                 async with self._session.post(
                     url,
                     json=_body(duration, days),
                     timeout=ClientTimeout(total=30),
-                    headers={
-                        "Accept": "application/json",
-                        "Content-Type": "application/json",
-                        # The portal's own Granite CSRF clientlib sets exactly
-                        # this one header on every non-GET same-origin request.
-                        # ``X-CSRF-Token`` was ours, and is not a thing here.
-                        "CSRF-Token": csrf,
-                        # Required by the euda-apim layer (see metadata GET
-                        # above); without it the POST 503s at the AEM edge.
-                        "traceId": uuid.uuid4().hex,
-                    },
+                    headers=headers,
                 ) as resp:
                     if resp.status == 401:
                         raise DataActSessionExpiredError(
@@ -1140,10 +1198,16 @@ class DataActScraper:
                                 duration, resp.status, attempts[index + 1][0],
                             )
                             continue
-                        _LOGGER.warning(
+                        # b11 (#1273 steemandavid) — on an anonymous-AEM portal
+                        # session the active-request readback false-negatives even
+                        # when a feed is (or will be) live, so this is not reliably
+                        # an error. INFO, not WARNING, to avoid a false "no data
+                        # feed will start" alarm on accounts that are actually fine.
+                        _LOGGER.info(
                             "kickoff_custom_data_request: created (HTTP %s) but no "
-                            "active request appeared for VIN %s — no data feed will "
-                            "start until this is resolved.",
+                            "active request appeared on readback for VIN %s "
+                            "(expected on anonymous-portal sessions; a live feed "
+                            "may still deliver).",
                             resp.status, _mask_vin(vin),
                         )
                         return None
@@ -1151,25 +1215,43 @@ class DataActScraper:
                     if not last:
                         _LOGGER.info(
                             "kickoff_custom_data_request: portal rejected "
-                            "Duration=%r (HTTP %s), retrying with %r: %s",
+                            "Duration=%r (HTTP %s), retrying with %r "
+                            "(body %d bytes)",
                             duration, resp.status, attempts[index + 1][0],
-                            body_text[:200],
+                            len(body_text),
                         )
                         continue
-                    # WARNING, not INFO: a non-2xx here means the portal rejected
-                    # the request (e.g. a changed request format) → the car gets
-                    # NO data feed, silently. It must be visible so the next
+                    # b11 (#1273) — split severity by status. A 4xx is a genuine
+                    # request rejection (e.g. a changed request format) → the car
+                    # gets NO data feed, silently; keep it WARNING so the next
                     # portal-side format change doesn't go unnoticed for months.
-                    _LOGGER.warning(
-                        "kickoff_custom_data_request HTTP %s for VIN %s — no data "
-                        "feed will start until this is resolved: %s",
-                        resp.status, _mask_vin(vin), body_text[:300],
-                    )
+                    # A 5xx is usually the portal's one-active-request rule firing
+                    # when a request already exists but isn't readable back on an
+                    # anonymous-AEM session — not an actionable error, and it must
+                    # not cry "no data feed will start" on a live feed.
+                    if 400 <= resp.status < 500:
+                        _LOGGER.warning(
+                            "kickoff_custom_data_request HTTP %s for VIN %s — no "
+                            "data feed will start until this is resolved "
+                            "(body %d bytes)",
+                            resp.status, _mask_vin(vin), len(body_text),
+                        )
+                    else:
+                        _LOGGER.info(
+                            "kickoff_custom_data_request HTTP %s for VIN %s — a "
+                            "request likely already exists and isn't readable back "
+                            "on this portal session; a live feed may still "
+                            "deliver (body %d bytes)",
+                            resp.status, _mask_vin(vin), len(body_text),
+                        )
                     return None
             except DataActSessionExpiredError:
                 raise
             except Exception as exc:  # noqa: BLE001
-                _LOGGER.debug("kickoff_custom_data_request failed: %s", exc)
+                # Class only — str(exc) echoes the VIN-path request URL.
+                _LOGGER.debug(
+                    "kickoff_custom_data_request failed: %s", type(exc).__name__
+                )
                 return None
         # Every attempt now returns inside the loop (success via readback, or a
         # detected failure); this is only reached if the attempt list were empty.
@@ -1193,10 +1275,14 @@ class DataActScraper:
         from aiohttp import ClientTimeout  # noqa: PLC0415
         from datetime import datetime, timezone  # noqa: PLC0415
 
+        # Same story as kickoff_custom_data_request above: this POST goes to the
+        # same /proxy_api/euda-apim layer (requests/all), authenticated by the
+        # portal SESSION COOKIES — not the Adobe-AEM Granite CSRF token, which is
+        # anonymous/empty for every session (live-verified 2026-09-02). Fetch it
+        # best-effort but do NOT abort when it is absent; that abort silently
+        # blocked every one-time export too. The header below is sent only when a
+        # token actually exists.
         csrf = await self._fetch_csrf_token()
-        if not csrf:
-            _LOGGER.debug("kickoff_historical_export: no CSRF token - aborting")
-            return False
 
         # The browser sends millisecond precision (…:46.111Z); match it.
         now = datetime.now(timezone.utc)
@@ -1210,22 +1296,26 @@ class DataActScraper:
             "EmailFrequency": None,
         }
         url = _PORTAL_BASE + _ALL_REQUEST_POST_PATH.format(vin=vin)
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            # Origin is what the browser sends on this POST.
+            "Origin": _PORTAL_BASE,
+            # Required by the euda-apim edge; without it the POST 503s.
+            "traceId": uuid.uuid4().hex,
+        }
+        if csrf:
+            # Best-effort only — the AEM CSRF endpoint is anonymous for everyone,
+            # so this is currently unreachable; sent when present so a future
+            # portal build that issues a token keeps working. One header, matching
+            # the portal's own CSRF clientlib.
+            headers["CSRF-Token"] = csrf
         try:
             async with self._session.post(
                 url,
                 json=body,
                 timeout=ClientTimeout(total=30),
-                headers={
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                    # Origin is what the browser sends on this POST; CSRF/traceId
-                    # are carried defensively (the requests/partial POST proves
-                    # the AEM edge accepts them).
-                    "Origin": _PORTAL_BASE,
-                    # One header, matching the portal's own CSRF clientlib.
-                    "CSRF-Token": csrf,
-                    "traceId": uuid.uuid4().hex,
-                },
+                headers=headers,
             ) as resp:
                 if resp.status == 401:
                     raise DataActSessionExpiredError(
@@ -1234,14 +1324,18 @@ class DataActScraper:
                 if resp.status not in (200, 201, 202):
                     body_text = await resp.text(errors="replace")
                     _LOGGER.warning(
-                        "kickoff_historical_export HTTP %s for VIN %s: %s",
-                        resp.status, _mask_vin(vin), body_text[:300],
+                        "kickoff_historical_export HTTP %s for VIN %s "
+                        "(body %d bytes)",
+                        resp.status, _mask_vin(vin), len(body_text),
                     )
                     return False
         except DataActSessionExpiredError:
             raise
         except Exception as exc:  # noqa: BLE001
-            _LOGGER.debug("kickoff_historical_export failed: %s", exc)
+            # Class only — str(exc) echoes the VIN-path request URL.
+            _LOGGER.debug(
+                "kickoff_historical_export failed: %s", type(exc).__name__
+            )
             return False
 
         _LOGGER.info(

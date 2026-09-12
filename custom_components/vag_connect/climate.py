@@ -20,8 +20,11 @@ MIN_TEMP = 16.0
 MAX_TEMP = 30.0
 TEMP_STEP = 0.5
 
-# Climatisation state values that mean "active"
-_ACTIVE_STATES = {"HEATING", "COOLING", "VENTILATION"}
+
+# b13 — platinum parallel-updates rule: the coordinator's background poll
+# loop owns every API request, so entity updates need no throttling. HA reads
+# this MODULE-level constant (an entity attr is a no-op).
+PARALLEL_UPDATES = 0
 
 
 async def async_setup_entry(
@@ -74,8 +77,22 @@ class VagClimate(VagConnectEntity, ClimateEntity):
 
     @property
     def hvac_mode(self) -> HVACMode:
+        # b7 (grounded audit P0-1) — the VW-EU/SEAT/CUPRA parsers store
+        # b9 regression fix — derive from the parser-computed
+        # ``climatisation_active`` boolean, the single source of truth every brand
+        # sets alongside ``climatisation_state`` (with full knowledge of that
+        # brand's state vocabulary). The b7 case-folded deny-list
+        # (``state not in ("off","stopped","")``) read HEAT_COOL for TERMINAL /
+        # no-data states — Škoda-official ``COMPLETED``/``UNKNOWN``, SEAT/CUPRA
+        # ``unsupported`` — where the binary sensor + switch correctly read off,
+        # re-introducing the exact climate↔switch contradiction b7 set out to
+        # remove. Prefer the boolean; fall back to the state deny-list only if a
+        # channel ever leaves ``climatisation_active`` unset.
+        active = self._vehicle.get("climatisation_active")
+        if active is not None:
+            return HVACMode.HEAT_COOL if active else HVACMode.OFF
         state = self._vehicle.get("climatisation_state")
-        if state and state in _ACTIVE_STATES:
+        if state and str(state).lower() not in ("off", "stopped", ""):
             return HVACMode.HEAT_COOL
         return HVACMode.OFF
 

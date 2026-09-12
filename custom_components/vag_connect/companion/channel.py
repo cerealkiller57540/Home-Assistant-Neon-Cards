@@ -26,7 +26,12 @@ import logging
 import time
 from typing import Callable
 
-from .presets import ACTION_TO_COMMAND, ActionSelector, BrandPreset
+from .presets import (
+    ACTION_TO_COMMAND,
+    ActionSelector,
+    BrandPreset,
+    NavReadSelector,
+)
 from .screen import (
     UiNode,
     find_action_node,
@@ -34,9 +39,12 @@ from .screen import (
     find_overlay,
     find_rate_limit_banner,
     find_sync_age,
+    has_anchor,
     parse_ui_dump,
     read_fields,
     read_selectors,
+    screen_bounds,
+    tap_point_for,
 )
 from .transport import CompanionTransportError, NetworkAdbTransport
 
@@ -53,6 +61,13 @@ _RATE_LIMIT_BACKOFF_S = 12 * 3600  # 12 h after a rate-limit banner. Uses wall
                                    # clock so it can be PERSISTED across restarts
                                    # (ckomma #21: an account lockout must NOT be
                                    # cleared by a restart the way a TCP blip is)
+_SETTLE_MAX_DUMPS = 2              # dumps spent waiting for a Compose screen to
+                                   # stop changing after a tap: one to read it,
+                                   # one to confirm it stopped moving (v4.4.0).
+                                   # Kept deliberately tight — over ADB a
+                                   # uiautomator dump is a round trip of a
+                                   # second or more, so a four-step walk would
+                                   # otherwise spend half a minute dumping.
 _NAV_READ_INTERVAL_S = 900.0       # C9: a forward-nav READ (into charge detail)
                                    # runs at most every 15 min, NOT every poll —
                                    # it taps the app, so it stays infrequent and
@@ -74,6 +89,7 @@ class CompanionChannel:
         time_fn: Callable[[], float],
         wall_clock_fn: Callable[[], float] | None = None,
         read_charge_detail: bool = False,
+        nav_opt_ins: "frozenset[str] | set[str] | None" = None,
     ) -> None:
         self._t = transport
         self._preset = preset
@@ -82,6 +98,14 @@ class CompanionChannel:
         # OFF by default until a user opts in (and until the flow is confirmed on
         # a real device). Off ⇒ the read path never taps forward at all.
         self._read_charge_detail = read_charge_detail
+        # v4.4.0 — nav paths are grouped, and every group has its own opt-in, so
+        # enabling the one-tap charge-detail read never starts a three-tap walk
+        # through the navigation screens. ``read_charge_detail`` remains the
+        # spelling of the original C9 group.
+        opt_ins = set(nav_opt_ins or ())
+        if read_charge_detail:
+            opt_ins.add("charge_detail")
+        self._nav_opt_ins = frozenset(opt_ins)
         # Wall clock (unix seconds) for the rate-limit backoff only, because that
         # one must be persistable across restarts; ``_now`` (monotonic) is right
         # for the in-session failure cooldown. Injected for tests.
@@ -127,10 +151,19 @@ class CompanionChannel:
         allowed even when command entities are quarantined.
         """
         return (
-            self._read_charge_detail
+            bool(self._nav_opt_ins)
             and bool(self._version_ok)
             and not self._is_rate_limited()
         )
+
+    def _nav_allowed(self, nav: "NavReadSelector") -> bool:
+        """Whether this specific nav path's own opt-in is on.
+
+        Each path is separately opted into (``charge_detail``, ``vehicle_health``,
+        ``climate_detail``, ``parking_position``): a deeper walk taps the app
+        more, so it must never ride along on a shallower opt-in.
+        """
+        return nav.opt_in in self._nav_opt_ins and bool(nav.path)
 
     def _nav_due(self) -> bool:
         """True when a nav-read has never run or the cadence window elapsed."""
@@ -284,10 +317,13 @@ class CompanionChannel:
         """
         self._last_nav_at = self._now()
         for nav in self._preset.nav_reads:
+            if not self._nav_allowed(nav):
+                continue  # this path's own opt-in is off
             if all(fields.get(v.target) is not None for v in nav.values):
                 continue  # nothing to fetch from this detail
+            walked = 0
             try:
-                detail = await self._open_detail(nav.tile)
+                detail, walked = await self._walk_to_detail(nav.path)
                 if detail is not None:
                     for key, val in read_selectors(detail, nav.values).items():
                         fields.setdefault(key, val)
@@ -298,45 +334,155 @@ class CompanionChannel:
                     self._preset.brand, nav.name,
                 )
             finally:
-                await self._return_to_overview()
+                # Back out exactly as far as we actually walked. A path that
+                # stopped early (a step not on screen) must not press BACK for
+                # taps it never made, or it would leave the app somewhere behind
+                # the overview for the next poll.
+                await self._return_to_overview(min(walked, nav.back_presses))
 
-    async def _open_detail(self, tile: ActionSelector) -> list[UiNode] | None:
-        """Tap a tile to open its detail screen and return the parsed detail.
+    async def _walk_to_detail(
+        self, steps: "tuple[ActionSelector, ...]"
+    ) -> tuple[list[UiNode] | None, int]:
+        """Tap an ordered path of controls and return (detail_nodes, taps_made).
 
-        Returns None (without tapping) when the tile is not on the current
-        screen, so we never tap into the dark. Clears overlays before and after.
+        Stops without tapping as soon as a step is not on the current screen, so
+        we never tap into the dark on a layout that moved; the caller backs out
+        by however many taps actually happened. Overlays are cleared before
+        every step and after the last one.
         """
-        nodes, cleared = await self._dump_and_clear_overlays()
-        if not cleared:
-            return None
-        node = find_node_for(nodes, tile)
-        if node is None or node.tap_point is None:
-            return None
-        x, y = node.tap_point
-        await self._t.tap(x, y)
-        detail, cleared = await self._dump_and_clear_overlays()
-        return detail if cleared else None
+        taps = 0
+        detail: list[UiNode] | None = None
+        # What the previous step already settled, so a step never dumps a
+        # screen its predecessor just finished reading.
+        pending: str | None = None
+        for step in steps:
+            nodes, cleared = await self._dump_and_clear_overlays(pending)
+            pending = None
+            if not cleared:
+                return None, taps
+            if step.scroll_first and find_node_for(nodes, step) is None:
+                # The MEB overview keeps Vehicle Health and Settings below the
+                # fold. Scroll once, then look again; a control that is still
+                # absent stops the walk as usual.
+                nodes = await self._scroll_up(nodes)
+            node = find_node_for(nodes, step)
+            point = tap_point_for(node, step.tap_fraction) if node is not None else None
+            if point is None:
+                _LOGGER.debug(
+                    "companion %s: nav step '%s' is not on the current screen; "
+                    "stopping the walk here rather than tapping blind",
+                    self._preset.brand, step.action,
+                )
+                return None, taps
+            await self._t.tap(*point)
+            taps += 1
+            # A Compose screen renders in stages, so the tree right after a tap
+            # is routinely half-built. Wait for it to stop changing before the
+            # next step reads it, or a step lands on a screen that has moved.
+            pending = await self._settle()
+        detail, cleared = await self._dump_and_clear_overlays(pending)
+        return (detail if cleared else None), taps
 
-    async def _return_to_overview(self) -> None:
-        """BACK out of a detail screen so the next plain read sees the overview.
+    async def _scroll_up(self, nodes: list[UiNode]) -> list[UiNode]:
+        """Swipe the current screen up by half a display, best-effort.
 
-        Bounded and failure-soft: a transport blip here must not turn a good
+        Expressed in fractions of the screen the phone actually reports, so it
+        does not depend on the display the flow was first written against. A
+        transport without ``swipe`` (or a screen we cannot measure) simply
+        leaves the tree as it was.
+        """
+        box = screen_bounds(nodes)
+        swipe = getattr(self._t, "swipe", None)
+        if box is None or swipe is None:
+            return nodes
+        left, top, right, bottom = box
+        mid_x = (left + right) // 2
+        height = bottom - top
+        try:
+            await swipe(
+                mid_x, top + int(height * 0.80),
+                mid_x, top + int(height * 0.35),
+                500,
+            )
+        except CompanionTransportError:
+            return nodes
+        scrolled, cleared = await self._dump_and_clear_overlays()
+        return scrolled if cleared else nodes
+
+    async def _settle(self) -> str | None:
+        """Dump until the tree stops changing, and hand the result back.
+
+        Returns the settled XML so the caller can read the screen it just
+        waited for instead of dumping it a third time. That matters on ADB,
+        where every dump is a round trip: re-reading what we already have is
+        the difference between a walk that takes a few seconds and one that
+        takes most of a minute.
+        """
+        previous: str | None = None
+        for _ in range(_SETTLE_MAX_DUMPS):
+            try:
+                current = await self._t.dump_ui()
+            except CompanionTransportError:
+                return previous
+            if current == previous:
+                return current
+            previous = current
+        return previous
+
+    async def _return_to_overview(self, presses: int = 1) -> None:
+        """Walk back to the overview so the next plain read sees the main screen.
+
+        v4.4.0 — prefer the app's OWN up/close control over Android's global
+        BACK wherever the preset names one. Global BACK is not bounded by the
+        app: from a shallow navigation stack (or from the share sheet at the
+        end of the position walk) it can leave the app entirely, and the next
+        poll then finds a launcher instead of a car. Tapping the app's own
+        close button cannot do that.
+
+        Stops early once the overview's anchor is on screen, so a path that
+        came back on its own does not get pressed past it. Bounded and
+        failure-soft throughout: a transport blip here must not turn a good
         read into an error.
         """
-        try:
-            await self._t.key_back()
-        except CompanionTransportError:
-            pass
+        for _ in range(max(0, presses)):
+            try:
+                nodes, _cleared = await self._dump_and_clear_overlays()
+            except CompanionTransportError:
+                return
+            if self._preset.screen_anchor is not None and has_anchor(
+                nodes, self._preset
+            ):
+                return
+            up_point: tuple[int, int] | None = None
+            for spec in self._preset.up_controls:
+                candidate = find_node_for(nodes, spec)
+                if candidate is not None and candidate.tap_point is not None:
+                    up_point = candidate.tap_point
+                    break
+            try:
+                if up_point is not None:
+                    await self._t.tap(*up_point)
+                else:
+                    await self._t.key_back()
+            except CompanionTransportError:
+                return
 
-    async def _dump_and_clear_overlays(self) -> tuple[list[UiNode], bool]:
+    async def _dump_and_clear_overlays(
+        self, known_xml: str | None = None
+    ) -> tuple[list[UiNode], bool]:
         """Dump the screen; if a known overlay is up, BACK past it and re-dump.
 
         v2.26.0 (ckomma #8/#13/#20). Returns (parsed_nodes, cleared). ``cleared``
         is False when an overlay is still present after the capped retries, so
         the caller can decline to read/tap the wrong screen. BACK-only, so this
         is safe to run on the read-only brands too.
+
+        v4.4.0 — ``known_xml`` lets a caller that has just settled a screen pass
+        what it already read instead of paying for another dump. Overlay
+        handling is unchanged: if one turns out to be up, it is dismissed and
+        the screen re-read as before.
         """
-        xml = await self._t.dump_ui()
+        xml = known_xml if known_xml is not None else await self._t.dump_ui()
         for _ in range(_OVERLAY_MAX_DISMISS):
             nodes = parse_ui_dump(xml)
             overlay = find_overlay(nodes, self._preset)

@@ -58,6 +58,14 @@
       "reauth_confirm": {
         "title": "Re-authentication Required",
         "description": "Your SmartThings authentication has expired. Click Submit to sign in again."
+      },
+      "reconfigure_st_device": {
+        "title": "Dispositivo SmartThings",
+        "description": "Seleziona il dispositivo SmartThings corrispondente a questo TV.\n\nAttualmente: **{current}**\n\nUn TV riparato, ripristinato, oppure rimosso e riaggiunto nell'app SmartThings riceve un **nuovo identificativo**, e quello precedente viene rifiutato con *Forbidden*. Riselezionarlo qui mantiene le tue entità e la cronologia.",
+        "data": {
+          "st_devices": "Dispositivo SmartThings",
+          "device_id": "ID dispositivo SmartThings"
+        }
       }
     },
     "error": {
@@ -79,7 +87,10 @@
       "missing_scopes": "The granted permissions are insufficient. Please ensure you grant all requested permissions.",
       "reauth_account_mismatch": "The account used for re-authentication doesn't match the original account.",
       "reauth_successful": "Re-authentication successful.",
-      "reauth_failed": "Re-authentication failed."
+      "reauth_failed": "Re-authentication failed.",
+      "st_device_updated": "Dispositivo SmartThings aggiornato. L'integrazione si sta ricaricando.",
+      "st_not_configured": "SmartThings non è configurato per questo TV.",
+      "st_device_missing": "Nessun dispositivo SmartThings selezionato."
     },
     "create_entry": {
       "default": "Successfully configured {name}"
@@ -151,7 +162,9 @@
           "use_mute_check": "Utilizza lo stato di volume muto per identificare false accensioni",
           "dump_apps": "Mostra lista apps nel file di log all'avvio (se possibile)",
           "toggle_art_mode": "Pulsante di accensione passa a art mode (solo per Frame TV)",
-          "st_poll_on_interval": "Intervallo di polling SmartThings a TV accesa (secondi)"
+          "st_poll_on_interval": "Intervallo SmartThings a TV accesa (s)",
+          "content_list_interval": "Intervallo di aggiornamento elenco opere (s)",
+          "ip_control_poll_interval": "Intervallo IP Control (s)"
         }
       },
       "save_exit": {
@@ -161,7 +174,8 @@
     "error": {
       "invalid_tv_list": "Formato not valido. Controlla la documentazione",
       "ip_control_no_host": "Nessun indirizzo host è configurato per questo televisore.",
-      "ip_control_pair_failed": "Associazione non riuscita. Assicurati che il televisore sia acceso e in visualizzazione normale (non in modalità Arte) e che IP Remote sia abilitato, quindi riprova."
+      "ip_control_pair_failed": "Associazione non riuscita. Assicurati che il televisore sia acceso e in visualizzazione normale (non in modalità Arte) e che IP Remote sia abilitato, quindi riprova.",
+      "ip_control_unreachable": "Impossibile raggiungere il TV sulla porta 1516: nessun servizio è in ascolto. Lo stato del TV e l'impostazione IP Remote non sono quindi la causa. Con ogni probabilità questo modello non supporta IP Control. Solo le entità retroilluminazione, tonalità colore, calibrazione immagine e riavvio dipendono da esso."
     }
   },
   "application_credentials": {

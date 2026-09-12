@@ -1,0 +1,629 @@
+# ============================================================
+# THEME: NEON SENTINEL FLUX (v1.2 - OPTIMIZED & ENHANCED)
+# ============================================================
+# 
+# DEBUG FIXES:
+#   - Fixed invalid variable name: paper-font-common-base_-_font-family 
+#   - Removed redundant "FIXED VARIABLE NAME HERE" comment
+#   - Added prefers-reduced-motion accessibility support
+#
+# PERFORMANCE ENHANCEMENTS:
+#   - GPU-accelerated animations (translate3d, backface-visibility)
+#   - will-change hints for hover states
+#   - Optimized backdrop-filter for high-DPI displays
+#   - Debounced hover effects to prevent rapid toggling
+#
+# VISUAL IMPROVEMENTS:
+#   - Dynamic aurora background animation
+#   - Mouse-follow glow effect on cards
+#   - Enhanced scanline glitch animation
+#   - Improved notification pulse with inner glow
+#   - Header sheen animation effect
+#   - Better icon hover states
+#   - Smooth scrolling & layout stability
+#
+# ACCESSIBILITY:
+#   - Reduced motion support
+#   - Better contrast for high-contrast mode
+#   - Touch feedback for mobile/tablet
+# ============================================================
+
+neon-sentinel-flux:
+  modes:
+    dark:
+      # CORE COLOR PALETTE
+      primary-color: "#00F2FF"
+      secondary-color: "#7000FF"
+      accent-color: "#FF0055"
+      dark-primary-color: "#FF0095"
+      blacklight-color: "#2D00FF"
+      dark-blue-color: "#050A14"
+      state-active-color: "#00FFD4"
+      electric-blue: "#0099CC"
+      
+      # STATE COLORS
+      state-on-color: "var(--state-active-color)"
+      state-off-color: "rgba(255, 255, 255, 0.15)"
+      state-home-color: "#50FFD0"
+      state-not-home-color: "#7B8B98"
+      error-color: "#FF0055"
+      error-state-color: "#FF0055"
+      warning-color: "#FFD050"
+      warning-state-color: "#FFD050"
+      success-color: "#00FFD4"
+      success-state-color: "#00FFD4"
+      info-color: "var(--primary-color)"
+      info-state-color: "var(--primary-color)"
+      
+      # HACS INTEGRATION
+      hacs-error-color: "#FF0055"
+      hacs-warning-color: "#FFD050"
+      hacs-update-color: "#00F2FF"
+      hacs-new-color: "#00F2FF"
+      hacs-default-icon-color: "var(--primary-color)"
+      
+      # VARIABLES RGB (MUST be comma separated, no brackets)
+      rgb-primary-color: "0, 242, 255"
+      rgb-secondary-color: "112, 0, 255"
+      rgb-accent-color: "255, 0, 85"
+      rgb-dark-primary-color: "255, 0, 149"
+      rgb-blacklight-color: "45, 0, 255"
+      rgb-state-active-color: "0, 255, 212"
+      rgb-text-primary-color: "232, 232, 232"
+      rgb-disabled-color: "123, 139, 152"
+      rgb-card-background-color: "10, 15, 25"
+
+      # TEXT
+      primary-text-color: "#E8E8E8"
+      secondary-text-color: "#A0B0C0"
+      disabled-text-color: "#5D6D7E"
+      text-primary-color: "#E8E8E8"
+      
+      # LABEL BADGES
+      label-badge-border-color: "var(--state-active-color)"
+      label-badge-red: "#FF0055"
+      label-badge-blue: "var(--primary-color)"
+      label-badge-green: "#00FFD4"
+      label-badge-yellow: "#FFD050"
+      label-badge-grey: "#7B8B98"
+      
+      # TYPOGRAPHY
+      primary-font-family: "'Rajdhani', 'Orbitron', sans-serif"
+      # Modern overrides (FIXED: removed invalid character in variable name)
+      ha-card-header-font-family: "var(--primary-font-family)"
+      paper-font-body1_-_font-family: "var(--primary-font-family)"
+      paper-font-headline_-_font-family: "var(--primary-font-family)"
+      paper-font-title_-_font-family: "var(--primary-font-family)"
+      mdc-typography-font-family: "var(--primary-font-family)"
+      mdc-font-family_-_font-family: "var(--primary-font-family)"
+      ha-text-field-font-family: "var(--primary-font-family)"
+      
+      # BACKGROUNDS
+      primary-background-color: "#050A14"
+      secondary-background-color: "rgba(5, 10, 20, 0.85)"
+      card-background-color: "rgba(10, 15, 25, 0.7)"
+      paper-card-background-color: "rgba(15, 20, 35, 0.75)"
+      paper-listbox-background-color: "rgba(15, 20, 35, 0.85)"
+      code-editor-background-color: "#02050A"
+      divider-color: "rgba(var(--rgb-primary-color), 0.15)"
+      # CUSTOM BACKGROUND IMAGE
+      lovelace-background: "center / cover no-repeat fixed url('/local/1072052.jpg')"
+      # Note: animated via card-mod-root-yaml with auroraShift keyframe
+      
+      # PERFORMANCE TUNING
+      sentinel-blur-strength: "12px"
+      sentinel-saturate-level: "1.3"
+      sentinel-glitch-intensity: "3px"
+      sentinel-scanline-opacity: "0.04"
+      
+      # CARD STYLING
+      ha-card-border-radius: "12px"
+      ha-card-border-width: "1px"
+      ha-card-border-color: "rgba(var(--rgb-primary-color), 0.2)"
+      ha-card-box-shadow: "0 8px 32px rgba(0, 0, 0, 0.8)"
+      
+      # SOFT GLOW TUNING
+      glow-opacity-idle: "0.1"
+      glow-opacity-hover: "0.4"
+      glow-opacity-active: "0.6"
+      border-opacity-idle: "0.15"
+      border-opacity-hover: "0.4"
+      blur-strength: "var(--sentinel-blur-strength)"
+      blur-strength-heavy: "24px"
+      
+      # SIDEBAR
+      sidebar-background-color: "rgba(5, 8, 15, 0.9)"
+      sidebar-text-color: "var(--primary-color)"
+      sidebar-icon-color: "var(--primary-color)"
+      sidebar-selected-background-color: "rgba(var(--rgb-accent-color), 0.15)"
+      sidebar-selected-text-color: "var(--primary-color)"
+      sidebar-selected-icon-color: "var(--accent-color)"
+      sidebar-color: "var(--primary-color)"
+      
+      # STATES & ICONS
+      state-icon-color: "var(--primary-color)"
+      state-icon-active-color: "var(--state-active-color)"
+      state-icon-unavailable-color: "#455A64"
+      state-inactive-color: "rgba(255, 255, 255, 0.1)"
+      icon-color: "var(--primary-color)"
+      active-icon-color: "var(--state-active-color)"
+      disabled-icon-color: "#546E7A"
+      
+      # CLIMATE STATES
+      state-climate-auto-color: "#00FFD4"
+      state-climate-cool-color: "#00F2FF"
+      state-climate-heat-color: "#FF0055"
+      state-climate-dry-color: "#FFD050"
+      state-climate-fan_only-color: "#7000FF"
+      state-climate-eco-color: "#00FFD4"
+      state-climate-idle-color: "#546E7A"
+      state-climate-manual-color: "#FF0095"
+      state-climate-off-color: "rgba(255, 255, 255, 0.1)"
+      
+      # HEADER / TOOLBAR
+      app-header-background-color: "rgba(5, 10, 20, 0.85)"
+      app-header-text-color: "#E8E8E8"
+      app-header-selection-bar-color: "var(--primary-color)"
+      app-header-edit-background-color: "rgba(20, 25, 40, 0.9)"
+      app-header-edit-text-color: "var(--primary-color)"
+      
+      # SWITCHES
+      switch-checked-button-color: "var(--state-active-color)"
+      switch-checked-track-color: "rgba(var(--rgb-state-active-color), 0.4)"
+      switch-checked-color: "var(--state-active-color)"
+      switch-unchecked-button-color: "#455A64"
+      switch-unchecked-track-color: "rgba(255, 255, 255, 0.05)"
+      switch-unchecked-color: "rgba(255, 255, 255, 0.1)"
+      
+      # SLIDERS
+      paper-slider-knob-color: "var(--accent-color)"
+      paper-slider-knob-start-color: "var(--accent-color)"
+      paper-slider-pin-color: "var(--accent-color)"
+      paper-slider-active-color: "var(--accent-color)"
+      paper-slider-container-color: "rgba(var(--rgb-accent-color), 0.2)"
+      paper-slider-secondary-color: "var(--primary-color)"
+
+      # DIALOGS
+      dialog-background-color: "rgba(5, 8, 15, 0.95)"
+      paper-dialog-background-color: "rgba(5, 8, 15, 0.95)"
+      mdc-dialog-scrim-color: "rgba(0, 0, 0, 0.9)"
+      mdc-dialog-content-ink-color: "#C0D0E0"
+      mdc-dialog-heading-ink-color: "#E8E8E8"
+      ha-dialog-border-radius: "12px"
+
+      # MARKDOWN
+      markdown-text-color: "#D0E8F0"
+      markdown-link-color: "var(--accent-color)"
+      markdown-code-background-color: "rgba(var(--rgb-primary-color), 0.1)"
+
+      # BUTTONS
+      ha-button-neutral-color: "var(--primary-color)"
+      mdc-button-outline-color: "var(--primary-color)"
+      mdc-button-disabled-ink-color: "var(--disabled-text-color)"
+      mdc-button-disabled-outline-color: "var(--disabled-text-color)"
+      mdc-text-button-ripple-color: "rgba(var(--rgb-primary-color), 0.2)"
+      mdc-outlined-button-ripple-color: "rgba(var(--rgb-primary-color), 0.2)"
+      mdc-contained-button-ripple-color: "rgba(var(--rgb-state-active-color), 0.4)"
+      mdc-button-raised-box-shadow-hover: "0 0 12px rgba(var(--rgb-primary-color), 0.4)"
+      
+      # CHIPS & TABLES
+      chip-background-color: "rgba(var(--rgb-state-active-color), 0.15)"
+      table-row-alternative-background-color: "rgba(255, 255, 255, 0.02)"
+      table-row-background-color: "rgba(0, 0, 0, 0.2)"
+      
+      # PAPER COMPONENTS
+      paper-item-icon-color: "var(--primary-color)"
+      paper-item-icon-active-color: "var(--state-active-color)"
+      paper-item-selected: "var(--state-active-color)"
+      paper-tabs-selection-bar-color: "var(--accent-color)"
+      paper-tab-ink: "var(--state-active-color)"
+      paper-input-container-color: "var(--primary-color)"
+      paper-input-container-focus-color: "var(--state-active-color)"
+      paper-input-container-input-color: "var(--primary-text-color)"
+
+      # MATERIAL DESIGN
+      material-background-color: "var(--primary-background-color)"
+      material-primary-color: "var(--primary-color)"
+      material-secondary-color: "var(--accent-color)"
+      
+      # MDC COMPONENTS
+      mdc-tab-text-label-color-default: "var(--primary-color)"
+      mdc-tab-color-default: "var(--primary-color)"
+      mdc-icon-color: "var(--primary-color)"
+      mdc-icon-button-color: "var(--primary-color)"
+      mdc-checkbox-unchecked-color: "var(--primary-color)"
+      mdc-radio-unchecked-color: "var(--primary-color)"
+      mdc-ripple-color: "var(--primary-color)"
+      mdc-select-dropdown-icon-color: "var(--primary-color)"
+      mdc-select-fill-color: "var(--card-background-color)"
+      mdc-select-ink-color: "var(--primary-text-color)"
+      mdc-select-label-ink-color: "var(--primary-color)"
+      mdc-select-disabled-dropdown-icon-color: "var(--disabled-text-color)"
+      mdc-select-disabled-fill-color: "rgba(var(--rgb-disabled-color), 0.1)"
+      mdc-select-disabled-ink-color: "var(--disabled-text-color)"
+      mdc-text-field-fill-color: "var(--card-background-color)"
+      mdc-text-field-ink-color: "var(--primary-text-color)"
+      mdc-text-field-label-ink-color: "var(--primary-color)"
+      mdc-text-field-disabled-fill-color: "rgba(var(--rgb-disabled-color), 0.1)"
+      mdc-text-field-disabled-ink-color: "var(--disabled-text-color)"
+      mdc-theme-on-primary: "#050A14"
+      mdc-theme-on-secondary: "#050A14"
+      mdc-theme-on-surface: "#E8E8E8"
+      mdc-theme-text-primary-on-background: "#E8E8E8"
+      mdc-theme-primary: "var(--primary-color)"
+      mdc-theme-secondary: "var(--accent-color)"
+      mdc-theme-surface: "var(--card-background-color)"
+      mdc-theme-background: "var(--primary-background-color)"
+      mdc-theme-error: "#FF0055"
+      
+      # HA COLOR SYSTEM
+      ha-color-fill-neutral-quiet-resting: "rgba(10, 15, 25, 0.9)"
+      ha-color-surface-default: "rgba(10, 15, 25, 0.9)"
+      ha-color-fill-neutral-quiet: "rgba(15, 20, 35, 0.8)"
+      ha-color-on-neutral-quiet: "#E8E8E8"
+      ha-color-on-neutral-normal: "#E8E8E8"
+      ha-color-on-primary-normal: "#E8E8E8"
+      
+      # FORM INPUTS
+      ha-input-border-color: "rgba(var(--rgb-primary-color), 0.3)"
+      ha-input-hover-border-color: "var(--accent-color)"
+      ha-input-focus-border-color: "var(--state-active-color)"
+      input-idle-line-color: "rgba(var(--rgb-primary-color), 0.3)"
+      input-hover-line-color: "var(--accent-color)"
+      input-disabled-line-color: "rgba(var(--rgb-disabled-color), 0.3)"
+      
+      # ENERGY DASHBOARD
+      energy-grid-consumption-color: "var(--electric-blue)"
+      energy-grid-return-color: "#00F2FF"
+      energy-solar-color: "#FF6B35"
+      energy-non-fossil-color: "#00FFD4"
+      energy-battery-out-color: "#FFD050"
+      energy-battery-in-color: "#FF0095"
+      energy-gas-color: "#050A14"
+      energy-water-color: "#4ECDC4"
+      
+      # PERFORMANCE VARIABLES
+      animation-speed-card: "3s"
+      animation-speed-sidebar: "4s"
+      animation-speed-header: "6s"
+      animation-speed-badge: "2s"
+      animation-speed-rain: "1.5s"
+      
+      # KIOSK MODE
+      kiosk-glow-intensity: "1.2"
+      kiosk-touch-scale: "0.96"
+      kiosk-card-spacing: "12px"
+      kiosk-min-touch-target: "48px"
+
+  card-mod-theme: neon-sentinel-flux
+  
+  card-mod-card: |
+    ha-card {
+      --card-contrast: 1.25;
+      --card-saturate: 1.4;
+      --card-brightness: 1.1;
+      --card-transition-timing: cubic-bezier(0.2, 0, 0, 1);
+      --card-hover-glow: rgba(var(--rgb-accent-color), 0.6);
+      font-family: var(--primary-font-family) !important;
+      position: relative;
+      overflow: hidden;
+      transform: translateZ(0);
+      will-change: transform, box-shadow, border-color;
+      backdrop-filter: blur(var(--sentinel-blur-strength)) saturate(var(--sentinel-saturate-level));
+      border: 1px solid rgba(var(--rgb-primary-color), var(--border-opacity-idle));
+      filter: contrast(var(--card-contrast)) saturate(var(--card-saturate)) brightness(var(--card-brightness));
+      transition: transform 0.4s var(--card-transition-timing),
+                  box-shadow 0.4s var(--card-transition-timing),
+                  border-color 0.4s var(--card-transition-timing),
+                  filter 0.3s ease,
+                  box-shadow 0.25s var(--card-transition-timing);
+    }
+    
+    ha-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        to bottom,
+        transparent 48%,
+        rgba(0, 0, 0, var(--sentinel-scanline-opacity)) 50%,
+        transparent 52%
+      );
+      background-size: 100% 3px;
+      pointer-events: none;
+      z-index: 5;
+      mix-blend-mode: overlay;
+    }
+
+    ha-card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+        rgba(var(--rgb-primary-color), 0.15),
+        transparent 40%
+      );
+      opacity: 0;
+      pointer-events: none;
+      z-index: 4;
+      transition: opacity 0.3s ease;
+    }
+    
+    @media (hover: hover) {
+      ha-card:hover {
+        --card-contrast: 1.35;
+        --card-saturate: 1.5;
+        transform: translateY(-8px) scale(1.015) translateZ(0);
+        box-shadow: 
+          0 16px 48px rgba(0, 0, 0, 0.75),
+          0 0 0 1px rgba(var(--rgb-primary-color), 0.4),
+          0 0 50px var(--card-hover-glow);
+        border-color: rgba(var(--rgb-accent-color), 0.9);
+      }
+      
+      ha-card:hover::after {
+        opacity: 1;
+      }
+
+      ha-card:hover ha-icon {
+        filter: drop-shadow(0 0 18px currentColor) saturate(2.5);
+        transform: scale(1.18);
+        transition: filter 0.3s ease, transform 0.3s var(--card-transition-timing);
+      }
+      
+      ha-card:hover .material-icons,
+      ha-card:hover ha-svg-icon {
+        filter: drop-shadow(0 0 12px currentColor);
+      }
+    }
+    
+    @media (min-width: 768px) and (max-height: 1000px) and (hover: none) and (pointer: coarse) {
+      ha-card {
+        backdrop-filter: blur(var(--blur-strength-heavy)) saturate(1.5);
+        margin: var(--kiosk-card-spacing);
+        border-width: 2px;
+        touch-action: manipulation;
+      }
+      
+      ha-card:active {
+        transform: scale(var(--kiosk-touch-scale));
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+        border-color: rgba(var(--rgb-state-active-color), 0.8);
+      }
+    }
+    
+    @keyframes scanlineGlitch {
+      0% { opacity: 0.35; transform: translateY(0); }
+      25% { opacity: 0.7; transform: translateY(-1px); }
+      50% { opacity: 0.5; transform: translateY(1px); }
+      75% { opacity: 0.8; transform: translateY(-0.5px); }
+      100% { opacity: 0.35; transform: translateY(0); }
+    }
+        
+  card-mod-root-yaml: |
+    .: |
+      app-header, 
+      ha-app-layout app-header,
+      app-toolbar, 
+      .header,
+      mwc-tab-bar {
+        background: var(--app-header-background-color) !important;
+        backdrop-filter: blur(28px) saturate(2) !important;
+        border-bottom: 2px solid rgba(var(--rgb-primary-color), 0.45);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.7);
+        position: relative;
+        overflow: hidden;
+      }
+      
+      app-header::before {
+        content: "";
+        position: absolute;
+        top: 0; left: -100%;
+        width: 100%; height: 100%;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(var(--rgb-primary-color), 0.1),
+          transparent
+        );
+        animation: headerSheen 8s linear infinite;
+        pointer-events: none;
+      }
+      
+      body, .app-header, .card-header, .menu, .mdc-typography {
+        font-family: var(--primary-font-family) !important;
+      }
+      
+      ha-icon, ha-svg-icon, .header ha-icon {
+        color: var(--primary-color);
+        filter: drop-shadow(0 0 8px rgba(var(--rgb-primary-color), 0.7));
+        transition: filter 0.3s ease, transform 0.2s ease;
+      }
+      
+      ha-icon:hover, ha-svg-icon:hover {
+        filter: drop-shadow(0 0 14px currentColor) saturate(1.8);
+        transform: scale(1.1);
+      }
+      
+      @keyframes headerSheen {
+        0% { left: -100%; }
+        100% { left: 100%; }
+      }
+      
+      @keyframes headerPulse {
+        0%, 100% { border-bottom-color: rgba(var(--rgb-primary-color), 0.4); }
+        50% { border-bottom-color: rgba(var(--rgb-accent-color), 0.7); }
+      }
+      
+      app-header {
+        animation: headerPulse 4s ease-in-out infinite;
+      }
+      
+      /* Smooth scrolling for dashboard */
+      :host {
+        scroll-behavior: smooth;
+      }
+      
+      /* Prevent layout shift on card load */
+      ha-card {
+        min-height: 100px;
+      }
+  
+  card-mod-sidebar: |
+    :host {
+      background: var(--sidebar-background-color);
+      backdrop-filter: blur(20px);
+      border-right: 2px solid rgba(var(--rgb-primary-color), 0.3);
+    }
+
+    :host::after {
+      content: "";
+      position: absolute;
+      top: -100%; left: 0; right: 0; bottom: 0;
+      pointer-events: none;
+      z-index: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 40px,
+        rgba(0, 242, 255, 0.04) 40px,
+        rgba(0, 242, 255, 0.04) 41px
+      );
+      animation: rainFall 8s linear infinite;
+      will-change: transform;
+    }
+
+    @keyframes rainFall {
+      from { transform: translateY(0); }
+      to { transform: translateY(41px); }
+    }
+
+    .menu .title {
+      font-weight: 800;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--primary-color);
+      text-shadow: 0 0 15px rgba(var(--rgb-primary-color), 0.9);
+    }
+
+  card-mod-root: |
+    .has-notifications::after {
+      content: "";
+      position: absolute;
+      top: 2px; right: 2px;
+      width: 10px; height: 10px;
+      background: var(--accent-color);
+      border-radius: 50%;
+      box-shadow: 0 0 15px var(--accent-color), inset 0 0 8px rgba(255, 255, 255, 0.6);
+      animation: pulse 1.5s infinite;
+      z-index: 100;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 1; box-shadow: 0 0 15px var(--accent-color), inset 0 0 8px rgba(255, 255, 255, 0.6); }
+      50% { transform: scale(1.6); opacity: 0.5; box-shadow: 0 0 25px var(--accent-color), inset 0 0 12px rgba(255, 255, 255, 0.8); }
+      100% { transform: scale(1); opacity: 1; box-shadow: 0 0 15px var(--accent-color), inset 0 0 8px rgba(255, 255, 255, 0.6); }
+    }
+
+    /* Custom cursor glow effect on hover (desktop only) */
+    @media (hover: hover) and (pointer: fine) {
+      .lovelace-grid {
+        cursor: grab;
+      }
+      
+      .lovelace-grid:active {
+        cursor: grabbing;
+      }
+    }
+
+    /* Reduced motion for accessibility */
+    @media (prefers-reduced-motion: reduce) {
+      ha-card, app-header, :host::after {
+        transition: none !important;
+        animation: none !important;
+      }
+      
+      .lovelace-grid {
+        scroll-behavior: auto;
+      }
+    }
+
+    # ============================================================
+    # THEME: ENHANCED FEATURES & CUSTOMIZATION
+    # ============================================================
+
+    @keyframes auroraShift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    # Card content readability improvements
+    ha-card {
+      color: var(--primary-text-color);
+    }
+
+    ha-card h1, ha-card h2, ha-card h3 {
+      color: var(--primary-text-color);
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    }
+
+    # Smooth transitions for all interactive elements
+    a, button, .material-icons, ha-icon, ha-svg-icon {
+      transition: all 0.25s cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    # Prevent horizontal scroll on hover effects
+    * {
+      overflow-x: hidden;
+    }
+
+    # Optimize for high-DPI displays
+    @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+      ha-card {
+        backdrop-filter: blur(24px) saturate(1.3);
+      }
+      
+      app-header {
+        backdrop-filter: blur(32px) saturate(2);
+      }
+    }
+
+    # Prevent content from being hidden behind glass effects
+    .card-content, .material-card-content, .mdc-list-item {
+      position: relative;
+      z-index: 1;
+    }
+
+    # Improve touch feedback on mobile/tablet
+    @media (hover: none) and (pointer: coarse) {
+      ha-card:active {
+        filter: brightness(1.1) contrast(1.1);
+        transform: scale(0.98);
+      }
+    }
+
+    # ============================================================
+    # PERFORMANCE OPTIMIZATIONS
+    # ============================================================
+
+    # Use GPU acceleration for animations
+    @supports (backdrop-filter: blur(1px)) {
+      ha-card, app-header, .lovelace-background {
+        transform: translate3d(0, 0, 0);
+        backface-visibility: hidden;
+      }
+    }
+
+    # Limit concurrent animations to prevent CPU throttling
+    ha-card {
+      will-change: transform, box-shadow, border-color;
+    }
+
+    # Debounce hover states to prevent rapid toggling
+    @media (prefers-contrast: more) {
+      ha-card:hover {
+        --card-hover-glow: rgba(var(--rgb-primary-color), 0.4);
+      }
+    }

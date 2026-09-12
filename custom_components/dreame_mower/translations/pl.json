@@ -137,6 +137,9 @@
       },
       "consumable_robot_health": {
         "name": "Stan konserwacji"
+      },
+      "rain_protection_end": {
+        "name": "Wznowienie koszenia po ochronie przed deszczem"
       }
     },
     "binary_sensor": {
@@ -166,6 +169,48 @@
     "number": {
       "cutting_height": {
         "name": "Wysokość koszenia"
+      }
+    },
+    "switch": {
+      "charging_period": {
+        "name": "Okres ładowania"
+      },
+      "rain_protection": {
+        "name": "Ochrona przed deszczem"
+      },
+      "lift_alarm": {
+        "name": "Alarm podniesienia"
+      },
+      "off_map_alarm": {
+        "name": "Alarm opuszczenia mapy"
+      },
+      "location_reporting": {
+        "name": "Lokalizacja w czasie rzeczywistym"
+      },
+      "anti_theft_pin_check": {
+        "name": "Sprawdzanie kodu PIN przed wyłączeniem"
+      },
+      "edge_mowing_auto": {
+        "name": "Automatyczne koszenie krawędzi"
+      },
+      "edge_blade_offset": {
+        "name": "EdgeMaster"
+      },
+      "edge_mowing_safe": {
+        "name": "Bezpieczne koszenie krawędzi"
+      }
+    },
+    "time": {
+      "charging_period_start": {
+        "name": "Początek okresu ładowania"
+      },
+      "charging_period_end": {
+        "name": "Koniec okresu ładowania"
+      }
+    },
+    "select": {
+      "rain_delay": {
+        "name": "Opóźnienie po deszczu"
       }
     }
   }

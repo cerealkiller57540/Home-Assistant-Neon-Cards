@@ -61,7 +61,8 @@
         "menu_options": {
           "reconfigure_connection": "Connexion (adresse IP et port)",
           "reconfigure_auth": "Authentification (OAuth2 / PAT / SmartThings)",
-          "reconfigure_ip_control": "IP Control (alimentation fiable et appairage)"
+          "reconfigure_ip_control": "IP Control (alimentation fiable et appairage)",
+          "reconfigure_st_device": "Appareil SmartThings (réassocier après une réparation)"
         }
       },
       "reauth_confirm": {
@@ -97,6 +98,14 @@
       "reconfigure_ip_pair": {
         "title": "Appairer IP Control",
         "description": "Appaire l'interface IP Control de la TV.\n\nAvant de continuer :\n1. La TV doit être allumée en mode normal — pas en mode Art.\n2. Activez IP Remote : Paramètres → Tous les paramètres → Connexions → Réseau → Paramètres experts → Activer IP Remote.\n\nAcceptez la demande d'autorisation sur la TV quand elle apparaît. Statut actuel : {status}."
+      },
+      "reconfigure_st_device": {
+        "title": "Appareil SmartThings",
+        "description": "Sélectionnez l'appareil SmartThings correspondant à ce téléviseur.\n\nActuellement : **{current}**\n\nUn téléviseur réparé, réinitialisé, ou supprimé puis rajouté dans l'application SmartThings reçoit un **nouvel identifiant**, et l'ancien est refusé avec *Forbidden*. Le resélectionner ici conserve vos entités et votre historique.",
+        "data": {
+          "st_devices": "Appareil SmartThings",
+          "device_id": "Identifiant de l'appareil SmartThings"
+        }
       }
     },
     "error": {
@@ -108,6 +117,7 @@
       "st_device_used": "Cet appareil SmartThings est déjà configuré.",
       "not_successful": "Impossible de créer une connexion WebSocket avec cette télévision Samsung.",
       "ip_control_pair_failed": "Échec de l'appairage IP Control. Assurez-vous que la TV est allumée en mode normal (pas en mode Art) et que IP Remote est activé dans les Paramètres, puis réessayez.",
+      "ip_control_unreachable": "Impossible de joindre le téléviseur sur le port 1516 : rien n'écoute à cette adresse. L'état du téléviseur et le réglage IP Remote ne sont donc pas en cause. Ce modèle ne prend probablement pas en charge IP Control. Seules les entités rétroéclairage, tonalité des couleurs, calibration de l'image et redémarrage en dépendent.",
       "ip_control_no_host": "Aucun hôte TV n'est configuré pour cette entrée."
     },
     "abort": {
@@ -122,7 +132,10 @@
       "reauth_successful": "Ré-authentification réussie.",
       "reauth_failed": "Échec de la ré-authentification.",
       "reconfigure_successful": "Configuration mise à jour.",
-      "ip_control_pair_successful": "IP Control appairé avec succès. Le jeton d'accès a été enregistré."
+      "ip_control_pair_successful": "IP Control appairé avec succès. Le jeton d'accès a été enregistré.",
+      "st_device_updated": "Appareil SmartThings mis à jour. L'intégration se recharge.",
+      "st_not_configured": "SmartThings n'est pas configuré pour ce téléviseur.",
+      "st_device_missing": "Aucun appareil SmartThings sélectionné."
     },
     "create_entry": {
       "default": "{name} configuré avec succès"
@@ -194,7 +207,9 @@
           "use_mute_check": "Utiliser l'état muet pour détecter l'alimentation",
           "dump_apps": "Debug : exporter la liste des applications",
           "toggle_art_mode": "Bouton d'alimentation bascule vers le mode Art",
-          "st_poll_on_interval": "Intervalle d'interrogation SmartThings quand la TV est allumée (secondes)"
+          "st_poll_on_interval": "Intervalle SmartThings, TV allumée (s)",
+          "ip_control_poll_interval": "Intervalle IP Control (s)",
+          "content_list_interval": "Intervalle de rafraîchissement de la liste d'œuvres (s)"
         }
       },
       "save_exit": {
@@ -204,6 +219,7 @@
     "error": {
       "invalid_tv_list": "Format invalide. Veuillez utiliser le format JSON valide.",
       "ip_control_pair_failed": "Échec de l'appairage. Vérifiez que le téléviseur est allumé en visionnage normal (pas en mode Art) et que IP Remote est activé, puis réessayez.",
+      "ip_control_unreachable": "Impossible de joindre le téléviseur sur le port 1516 : rien n'écoute à cette adresse. L'état du téléviseur et le réglage IP Remote ne sont donc pas en cause. Ce modèle ne prend probablement pas en charge IP Control. Seules les entités rétroéclairage, tonalité des couleurs, calibration de l'image et redémarrage en dépendent.",
       "ip_control_no_host": "Aucune adresse hôte n'est configurée pour ce téléviseur."
     }
   },

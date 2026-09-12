@@ -84,24 +84,34 @@ class AtmoFranceDataApi:
         try:
             result = await self._session.get(url, headers=headers)
             json = await result.json()
-            _LOGGER.debug("Got response %s ", json)
+        except (ClientError, TimeoutError) as err:
+            _LOGGER.error(
+                "Failed to get data for INSEE %s: %s", insee_code, err)
+            return None
+        _LOGGER.debug("Got response %s ", json)
+        _LOGGER.debug(
+            "Extracting data for INSEE %s and date %s", insee_code, today)
+        features = json.get("features") if isinstance(json, dict) else None
+        if features is None:  # unexpected payload (error page, quota, ...)
+            _LOGGER.error(
+                "Unexpected response from AtmoFrance API for INSEE %s: %s",
+                insee_code,
+                json,
+            )
+            return None
+        if len(features) > 0:  # At least one result
+            self._data = json
             _LOGGER.debug(
-                "Extracting data for INSEE %s and date %s", insee_code, today)
-            if len(json["features"]) > 0:  # At least one result
-                self._data = json
-                _LOGGER.debug(
-                    "Got data for INSEE %s and date > %s: %s",
-                    insee_code,
-                    today,
-                    self._data,
-                )
-            else:  # no result
-                self._data = None
-                _LOGGER.warning(
-                    "No data for INSEE %s and date %s", insee_code, today)
-            return json["features"]
-        except ClientError as err:
-            return err
+                "Got data for INSEE %s and date > %s: %s",
+                insee_code,
+                today,
+                self._data,
+            )
+        else:  # no result
+            self._data = None
+            _LOGGER.warning(
+                "No data for INSEE %s and date %s", insee_code, today)
+        return features
 
     def get_key_value(self, key, shift: int = 0):
         """Get value for the given key in JSON Data for a given date based on shift from today"""

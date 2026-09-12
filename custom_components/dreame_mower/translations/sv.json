@@ -137,6 +137,9 @@
       },
       "consumable_robot_health": {
         "name": "Underhållsstatus"
+      },
+      "rain_protection_end": {
+        "name": "Klippning återupptas efter regnskydd"
       }
     },
     "binary_sensor": {
@@ -166,6 +169,48 @@
     "number": {
       "cutting_height": {
         "name": "Klipphöjd"
+      }
+    },
+    "switch": {
+      "charging_period": {
+        "name": "Laddningsperiod"
+      },
+      "rain_protection": {
+        "name": "Regnskydd"
+      },
+      "lift_alarm": {
+        "name": "Lyftlarm"
+      },
+      "off_map_alarm": {
+        "name": "Larm utanför kartan"
+      },
+      "location_reporting": {
+        "name": "Position i realtid"
+      },
+      "anti_theft_pin_check": {
+        "name": "PIN-kontroll före avstängning"
+      },
+      "edge_mowing_auto": {
+        "name": "Automatisk kantklippning"
+      },
+      "edge_blade_offset": {
+        "name": "EdgeMaster"
+      },
+      "edge_mowing_safe": {
+        "name": "Säker kantklippning"
+      }
+    },
+    "time": {
+      "charging_period_start": {
+        "name": "Laddningsperiodens start"
+      },
+      "charging_period_end": {
+        "name": "Laddningsperiodens slut"
+      }
+    },
+    "select": {
+      "rain_delay": {
+        "name": "Väntetid efter regn"
       }
     }
   }

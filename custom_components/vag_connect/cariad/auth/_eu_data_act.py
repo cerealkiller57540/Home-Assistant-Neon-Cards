@@ -32,13 +32,14 @@ import asyncio
 import io
 import json
 import logging
+import os
 import re
 import uuid
 import zipfile
 from collections.abc import Callable
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 from aiohttp import ClientConnectionError, ClientSession, ClientTimeout
 
@@ -75,6 +76,23 @@ _PORTAL_REDIRECT_URI = f"{_PORTAL_BASE}/login"
 #   - CUPRA/SEAT: f85e5b69 — from the community EUDA constants, scope
 #     "openid profile cars". Both client+state combos handshake-verified
 #     (302 → signin).
+# Load-balancer / infrastructure cookies the portal sets on its OWN domain even
+# for an ANONYMOUS session. An authenticated cookie session also carries a real
+# session cookie here; if the portal-domain jar holds ONLY these, the login never
+# authenticated (the #1340 shape). (#1340 login-success hardening)
+_PORTAL_INFRA_COOKIES: frozenset[str] = frozenset({"affinity"})
+
+
+def _domain_covers_host(cookie_domain: str, host: str) -> bool:
+    """True if a cookie scoped to *cookie_domain* would be sent to *host* — the
+    cookie's domain is the host itself OR a parent of it. A bare substring test
+    misses a PARENT-domain cookie (e.g. ``.drivesomethinggreater.com`` for host
+    ``eu-data-act.drivesomethinggreater.com``) and would then false-flag a real
+    authenticated session as anonymous. (#1340 login-success hardening)
+    """
+    d = (cookie_domain or "").lstrip(".")
+    return bool(d) and (host == d or host.endswith("." + d))
+
 # Brands not listed fall back to the VW entry with a brand-derived state
 # suffix; account-level verification for those follows in a later release.
 _EUDA_VW = {
@@ -86,12 +104,27 @@ _EUDA_CUPRA_SEAT = {
     "client_id": "f85e5b69-e3b2-43aa-9c0d-1b7d0e0b576f@apps_vw-dilab_com",
     "scope": "openid profile cars",
 }
+# #1340 (@cyrano330) — Audi, Škoda and Bentley each have their OWN EU Data Act
+# portal OIDC client. Reusing the VW client made login "succeed" (it lands on the
+# portal host) while leaving the session ANONYMOUS, so every proxy_api data read
+# 401'd. Each id is grounded from the portal's per-brand login redirect — the
+# authorize call for that brand 302s to identity.vwgroup.io/signin-service/<id> —
+# and is the same id every other EU-Data-Act reader uses.
+_EUDA_AUDI_CLIENT_ID = "cc29b87a-5e9a-4362-aecf-5adea6b01bbb@apps_vw-dilab_com"
+_EUDA_SKODA_CLIENT_ID = "3ea88bf9-1d4e-4a68-b3ad-4098c1f1d246@apps_vw-dilab_com"
+_EUDA_BENTLEY_CLIENT_ID = "d38aac0f-3d89-4a63-8538-b75b31322c7b@apps_vw-dilab_com"
 _EUDA_BRANDS: dict[str, dict[str, str]] = {
     "volkswagen": _EUDA_VW,
+    # #1316 — VW Commercial Vehicles (Nutzfahrzeuge): SAME portal client as
+    # passenger VW, only the state_brand differs. Must be explicit — the unknown-
+    # brand fallback (~L3489) would build "VOLKSWAGEN_COMMERCIAL" (brand.upper()),
+    # missing the "_VEHICLES" suffix the live-confirmed state needs (2026-09-02).
+    "volkswagen_commercial": {**_EUDA_VW, "state_brand": "VOLKSWAGEN_COMMERCIAL_VEHICLES"},
     "cupra": {**_EUDA_CUPRA_SEAT, "state_brand": "CUPRA"},
     "seat": {**_EUDA_CUPRA_SEAT, "state_brand": "SEAT"},
-    "skoda": {**_EUDA_VW, "state_brand": "SKODA"},
-    "audi": {**_EUDA_VW, "state_brand": "AUDI"},
+    "skoda": {**_EUDA_VW, "client_id": _EUDA_SKODA_CLIENT_ID, "state_brand": "SKODA"},
+    "audi": {**_EUDA_VW, "client_id": _EUDA_AUDI_CLIENT_ID, "state_brand": "AUDI"},
+    "bentley": {**_EUDA_VW, "client_id": _EUDA_BENTLEY_CLIENT_ID, "state_brand": "BENTLEY"},
 }
 
 _VEHICLES_PATH = "/proxy_api/consent/me/vehicles"
@@ -138,7 +171,56 @@ _TRANSIENT_STATUSES = (400, 404, 410, 429, 500, 502, 503, 504)
 # stable state and return "no data" immediately, so we don't add latency to
 # the common not-set-up case.
 _RETRIABLE_STATUSES = frozenset({500, 502, 503, 504})
+# #465 observability — of the soft-transient statuses, these mean the PORTAL is
+# erroring/throttling (a VW-side outage → portal_health "portal_error"), as opposed
+# to 400/404/410 which mean "the data request isn't provisioned / no delivery yet"
+# (→ "delivery_not_ready"). Splitting them keeps a normal wait from reading as a fault.
+_PORTAL_OUTAGE_STATUSES = frozenset({429, 500, 502, 503, 504})
 _PORTAL_RETRY_DELAYS = (3.0, 6.0)  # backoff (s) before giving up on a soft call
+# On a transient download error we fall back to the next-older listed dataset
+# (TommiG1 loops the listing newest→oldest). Capped so a full-portal outage where
+# every file 5xxs cannot turn one poll into many hammering requests.
+_MAX_DATASET_FALLBACK = 3
+
+
+def _request_start_date(meta: Any, identifier: str) -> str | None:
+    """ISO ``StartDate`` of the metadata descriptor whose Identifier matches
+    ``identifier`` — i.e. WHEN that data request was created — or None.
+
+    Tolerant of the portal's two real shapes: a list of descriptors (the 15-min
+    metadata) and the bare-dict "all"/legacy dialect. Only a string StartDate is
+    returned; anything else yields None so a diagnostic sensor stays blank rather
+    than showing junk.
+    """
+    def _sd(node: Any) -> str | None:
+        if not isinstance(node, dict):
+            return None
+        ident = (
+            node.get("Identifier")
+            or node.get("identifier")
+            or node.get("dataRequestId")
+        )
+        if identifier and ident and str(ident) == str(identifier):
+            sd = (
+                node.get("StartDate")
+                or node.get("startDate")
+                or node.get("start_date")
+            )
+            return sd if isinstance(sd, str) and sd else None
+        return None
+
+    hit = _sd(meta)  # direct descriptor / bare-dict "all"
+    if hit:
+        return hit
+    seq: Any = meta
+    if isinstance(meta, dict):
+        seq = meta.get("items") or meta.get("requests") or meta.get("data") or []
+    if isinstance(seq, list):
+        for node in seq:
+            hit = _sd(node)
+            if hit:
+                return hit
+    return None
 
 
 # ── HTML / templateModel parsing (community-proven mechanics) ──────────────
@@ -309,19 +391,43 @@ def _login_error(html: str) -> str | None:
     return str(err) if err else None
 
 
-def _safe_url(url: str) -> str:
-    """Return host+path of *url* with the query string STRIPPED.
+_URL_UUID_RE = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
 
-    Query strings on the signin-service flow carry ``relayState`` / ``code``
-    / login tokens — never log them. This yields only the part that is safe
-    to log (host + path) so #527 reporters' real failure step can be pinned
-    from a debug log without leaking secrets.
+
+def _safe_url(url: str) -> str:
+    """Return host+path of *url* with the query AND fragment STRIPPED and any
+    UUID-shaped PATH segment masked.
+
+    Query/fragment on the signin-service flow carry ``relayState`` / ``code`` /
+    login tokens, and the consent grant page carries the account UUID as a **path**
+    segment (``/signin-service/v1/consent/users/<uuid>/…``) — never log any of it.
+    This yields only the part that is safe to log (host + path, UUIDs masked) so
+    #527 reporters' real failure step can be pinned from a debug log without
+    leaking secrets. (#1355 — a bare host+path leaked the path UUID.)
     """
     try:
         p = urlparse(url)
-        return f"{p.netloc}{p.path}"
+        return _URL_UUID_RE.sub("<uuid>", f"{p.netloc}{p.path}")
     except Exception:  # noqa: BLE001
         return "<unparseable-url>"
+
+
+_VIN_RE = re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b")
+
+
+def _safe_api_url(url: str) -> str:
+    """Like :func:`_safe_url`, but ALSO masks the 17-char VIN path segment.
+
+    The proxy_api data paths embed the full VIN (and a data-request identifier
+    UUID) as PATH segments — ``/…/vehicles/<VIN>/<identifier>/download``.
+    ``_safe_url`` strips the query and masks the UUID identifier, but a VIN is
+    not UUID-shaped and would survive. This masks it too, so neither the VIN
+    nor the request identifier reaches a log line or an exception message a
+    tester copy-pastes. (#1355)
+    """
+    return _VIN_RE.sub("<vin>", _safe_url(url))
 
 
 # v2.15.4 (#527) — interstitial markers. The portal login lands on the
@@ -360,6 +466,19 @@ _RATELIMIT_MARKERS = ("too-many", "rate-limit", "ratelimit", "throttl")
 # for when auto-accept does not complete the login.
 _GENERIC_CONSENT_MARKERS = ("/signin-service/v1/consent/", "/consent/users/")
 _GENERIC_CONSENT_PAGETYPES = ("consent",)
+
+# #1234 (@eddieari, ID.7 GTX) — pageTypes that must NOT be bucketed as
+# "invalid_credentials". A genuine wrong password re-renders a login step WITH a
+# password errorCode (caught by the cred_codes branch below); these are different
+# failure modes and telling the user to "check your password" sends them down the
+# wrong path. Confirmed live: the same, re-verified credentials cycled through
+# loginIdentifier / loginAuthenticate (status 200) and browserFeaturesMissingError
+# / generalErrorBranded (400) across polls — the IDP was blocking the automated
+# login, not rejecting the password.
+#   • login-flow STEP pages re-served at status 200 = the flow never completed
+_LOGIN_FLOW_STEP_PAGETYPES = ("loginidentifier", "loginauthenticate")
+#   • the IDP's own block/error pages (browser-feature / bot detection, generic)
+_NONCRED_ERROR_PAGETYPES = ("browserfeaturesmissingerror", "generalerrorbranded")
 
 
 def _is_generic_consent_page(
@@ -417,6 +536,14 @@ def classify_portal_login_failure(
 
     blob = f"{haystack} {str(err_code).lower()} {str(page_type).lower()}"
 
+    # #1234 — a DEBUG line at the classification point itself. The failure path
+    # used to emit only the caller's single WARNING with no preceding DEBUG, so a
+    # reporter who enabled debug logging saw nothing about WHY it was classified.
+    _LOGGER.debug(
+        "EU-DA portal login classify: pageType=%r errorCode=%r url=%s",
+        str(page_type)[:80], str(err_code)[:80], _safe_url(landing_url),
+    )
+
     # 1. Interstitials we recognise — reuse the main-chain exceptions.
     if any(m in blob for m in _TC_MARKERS):
         log_ctx.setdefault("classified", "terms_and_conditions")
@@ -469,6 +596,35 @@ def classify_portal_login_failure(
             PortalInteractionRequiredError(f"portal error {err_code}"),
             log_ctx,
         )
+
+    # 2b. #1234 — a login-flow STEP page or an IDP block/error page, WITHOUT a
+    #     password errorCode (those are caught above). These are not a wrong
+    #     password: the flow simply never completed, or the IDP blocked the
+    #     automated login. Surface the real reason instead of "check your
+    #     password" so the reporter isn't sent to re-enter correct credentials.
+    #     GUARD: only when there is NO credential errorCode — a genuine wrong
+    #     password re-renders the authenticate step WITH ``password_invalid``
+    #     (err_code_l is in cred_codes), and that must still be invalid_credentials.
+    _page_l = str(page_type).lower()
+    if err_code_l not in cred_codes:
+        if _page_l in _LOGIN_FLOW_STEP_PAGETYPES:
+            log_ctx.setdefault("classified", "portal_interaction_required")
+            return (
+                PortalInteractionRequiredError(
+                    f"login flow did not complete — the IDP re-served the "
+                    f"{page_type} step (not a wrong password)"
+                ),
+                log_ctx,
+            )
+        if _page_l in _NONCRED_ERROR_PAGETYPES:
+            log_ctx.setdefault("classified", "portal_interaction_required")
+            return (
+                PortalInteractionRequiredError(
+                    f"VW login was blocked before the password could be checked "
+                    f"({page_type})"
+                ),
+                log_ctx,
+            )
 
     # 3. Genuine bad-credential re-render (or no machine-readable reason at
     #    all): let the caller raise the credential catch-all.
@@ -602,6 +758,26 @@ _MAPPED_UUIDS: frozenset[str] = frozenset({
     "153e8c40-4c6c-3c17-a11b-0ecc35d55b81",  # range (primary per openWB — we lacked it)
     "41c0805c-43e5-313e-9dfb-356cb8d20f7c",  # odometer (primary per openWB)
     "30cc36fd-71ca-3c09-9296-e94ebd47bd2b",  # odometer fallback
+})
+
+# #1195 (hangout6690, ID.3) — the EU Data Act portal ships TWO
+# ``battery_state_report.soc`` points under DIFFERENT content-UUIDs: the live SoC
+# and a "SoC at charge start" snapshot (confirmed against the official EU Data Act
+# data dictionary, Continuous Data V6.0). The charge-start leaf is only updated —
+# and re-stamped with a fresh capture time — when a charging session BEGINS, so
+# the freshness resolver lets its stale value win the live SoC right after a
+# charge starts (his car: charge-start 37% beating the live 24%). These UUIDs are
+# the known charge-start-SoC datums; the walker remaps them onto a distinct leaf
+# so they never compete for the live ``battery_state_report.soc``. The live SoC
+# UUID (506cb83e) keeps the canonical leaf and wins. More UUIDs can be added here
+# as reporters surface them; inert for any car that never ships this UUID.
+_CHARGE_START_SOC_UUIDS: frozenset[str] = frozenset({
+    "93b55324-6628-36df-8f76-8eba797fc59c",  # "SoC at charge start" (#1195)
+    # #1380 (hangout6690) — his ID.3 ships two MORE charge-start-SoC UUIDs under
+    # the same battery_state_report.soc leaf; a file that carries only one of
+    # these (no live 506cb83e) otherwise re-latched the stale charge-start value.
+    "7bddd5e7-43a4-3878-bd63-9502782f77a5",  # "SoC at charge start" (#1380)
+    "bd4b6d50-b574-31e6-8141-8787ca5fec8c",  # "SoC at charge start" (#1380)
 })
 
 # #1022 — charge_power is emitted under the SAME dataFieldName
@@ -895,6 +1071,20 @@ def _walk_fields(
                         break
             # data-point shape: {dataFieldName|name: X, value: Y}
             fname = node.get("dataFieldName") or node.get("name")
+            # #1195 — a battery_state_report.soc point keyed by a known
+            # "SoC at charge start" UUID must NOT feed the live-SoC pool (its stale
+            # value is re-stamped fresh at charge start and would out-freshen the
+            # live reading). Remap it onto a distinct leaf: the value is still kept
+            # (never suppressed), just no longer mistaken for the live SoC, so the
+            # live battery_state_report.soc (UUID 506cb83e) wins cleanly.
+            _sc_key = node.get("key")
+            if (
+                isinstance(fname, str)
+                and fname.strip().lower() == "battery_state_report.soc"
+                and isinstance(_sc_key, str)
+                and _sc_key.strip().lower() in _CHARGE_START_SOC_UUIDS
+            ):
+                fname = "battery_state_report.soc_at_charge_start"
             if fname is not None and "value" in node:
                 add(fname, node.get("value"), ts, ts_real, ts_inh)
                 # v2.17.4/v2.17.5 — when the leaf name is a GENERIC token, also key
@@ -1059,6 +1249,41 @@ def _to_float(raw: str | None) -> float | None:
 def _to_int(raw: str | None) -> int | None:
     f = _to_float(raw)
     return int(f) if f is not None else None
+
+
+def _parse_pers_location(value: Any) -> tuple[float | None, float | None]:
+    """#1378/#923 — parse the MEB portal ``persLocation`` leaf into a validated
+    ``(lat, lon)``. Škoda Elroq (and other MEB cars) DO ship the vehicle position
+    in the continuous feed under ``persLocation`` = ``"[50.799918, 4.408567]"`` —
+    the sample #923 was waiting for (the position module's docstring assumed the
+    continuous feed carried none). Returns ``(None, None)`` unless the value is a
+    two-element numeric pair inside real-world bounds and not the null-island
+    ``0,0`` sentinel — so a malformed value, a charging/destination coordinate, or
+    a placeholder can never be mistaken for the car's position. Conservative by
+    design: it only trusts a well-formed, in-range pair.
+    """
+    pair: Any = value
+    if isinstance(value, str):
+        s = value.strip()
+        try:
+            pair = json.loads(s)
+        except (ValueError, TypeError):
+            parts = [p.strip() for p in s.strip("[]").split(",")]
+            pair = parts if len(parts) == 2 else None
+    if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+        return (None, None)
+    try:
+        lat = float(pair[0])
+        lon = float(pair[1])
+    except (ValueError, TypeError):
+        return (None, None)
+    if (
+        -90.0 <= lat <= 90.0
+        and -180.0 <= lon <= 180.0
+        and not (lat == 0.0 and lon == 0.0)
+    ):
+        return (lat, lon)
+    return (None, None)
 
 
 def _dur_to_min(raw: str | None) -> int | None:
@@ -1276,6 +1501,12 @@ _ENVELOPE_NOISE_LEAVES: frozenset[str] = frozenset({
 _ENVELOPE_UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 )
+# Unanchored — masks a UUID embedded ANYWHERE in a string (e.g. the IDP session
+# cookies literally NAMED ``s_<uuid>`` / ``d_<uuid>``, where the UUID is in the
+# name itself). Used by the redacted 401 auth-state dump (#1340).
+_EMBEDDED_UUID_RE = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
 
 
 def _is_envelope_noise(key: str) -> bool:
@@ -1463,6 +1694,12 @@ def map_dataset_to_vehicle_data(
         else None
     )
 
+    # v4.7.8 (#1195/#1380) — the charge-report SoC leaf the walker splits off
+    # (the SoC at the last charge start/stop report, NOT live). Surfaced as its
+    # own reading so the Scout stops re-reporting it as "undiscovered" on every
+    # poll (11 auto-issues in one day) — Scout policy: map, never suppress.
+    d.battery_soc_charge_report = _to_int(first("battery_state_report.soc_at_charge_start"))
+
     # #465 — SoC is the one field observed to ship under disagreeing aliases
     # (a stale 57 vs the fresh 81); resolve it by capture time, not list order.
     _leaf_soc = _to_int(first_freshest("battery_state_report.soc", "soc", "stateOfChargeInPercent",
@@ -1540,6 +1777,77 @@ def map_dataset_to_vehicle_data(
         # v3.0.2 (#1122) — _GLOBAL_SENTINELS drops the RAW uint32 sentinel here,
         # but not its 0.1-km-scaled form (429_496_729); the shared guard does.
         d.odometer_km = drop_odometer_sentinel(odo)
+
+    # #1378/#923 — MEB portal cars (Skoda Elroq …) ship the vehicle position in
+    # the CONTINUOUS feed under ``persLocation`` ("[lat, lon]") — the sample #923
+    # had been waiting for. Parse it defensively (validated pair, in-range, not
+    # 0/0; a charging/destination coord or a placeholder can't pass) and map the
+    # companion ``heading``. Cars that don't ship persLocation are unaffected —
+    # their position keeps coming from the brand-native parkingposition path.
+    _pers_lat, _pers_lon = _parse_pers_location(first("persLocation"))
+    if _pers_lat is not None and _pers_lon is not None:
+        d.latitude = _pers_lat
+        d.longitude = _pers_lon
+        # Pair the coordinates with THEIR OWN capture time, exactly like the
+        # brand-native / vw.de position writers. Without it a multi-channel merge
+        # (e.g. a prefer-vw.de or prefer-eu-data car, #1376) would gap-fill
+        # position_captured_at from a DIFFERENT channel's fix and misjudge the
+        # persLocation pin's staleness.
+        if field_ts and "persLocation" in field_ts:
+            _pos_iso = _epoch_or_iso(str(field_ts["persLocation"]))
+            if _pos_iso:
+                d.position_captured_at = _pos_iso
+    _heading = _to_int(first("heading"))
+    if _heading is not None and 0 <= _heading <= 360:
+        d.heading = _heading % 360
+
+    # #1378 (Škoda Elroq) — short-term (recent) average electric consumption. The
+    # portal ships it WITH a unit ("15.8 kWh/100km"), so take the leading number.
+    # Only trust it as an ELECTRIC figure when the unit says so (kWh/Wh); a PHEV
+    # that ships this leaf as a fuel value (l/100km) must not be mislabelled into
+    # the electric sensor. Distinct from the per-trip average; feeds its own sensor.
+    _stc_raw = str(first("shortTermAverageConsumption") or "")
+    _stc_parts = _stc_raw.split()
+    _stc = _to_float(_stc_parts[0]) if _stc_parts else None
+    _stc_unit = _stc_parts[1].lower() if len(_stc_parts) > 1 else ""
+    if _stc is not None and _stc >= 0:
+        if "wh" in _stc_unit:
+            d.short_term_avg_electric_consumption_kwh_100km = _stc
+        elif _stc_unit.startswith("l"):
+            # v4.7.8 — the data dictionary names this leaf "short term FUEL
+            # consumption", so l/100km is its DOCUMENTED shape, not an edge case.
+            # v4.7.6 consumed it here and then dropped it (a Scout no-suppression
+            # violation on every ICE/PHEV car); it gets its own fuel sensor.
+            d.short_term_avg_fuel_consumption_l_100km = _stc
+
+    # #1375 (Audi S6 TDI) — SCR/AdBlue engine-start counter (diagnostic).
+    # v4.7.8 — per the dictionary "<=13 number of restarts, ==14 driveability,
+    # ==15 no_driveability": 14/15 are STATUS codes, not a count. Recording
+    # them as a TOTAL_INCREASING value made HA's statistics see a meter reset
+    # when the real count came back; only the count range is a count.
+    _scr = _to_int(first("scr_number_of_engine_starts"))
+    if _scr is not None and 0 <= _scr <= 13:
+        d.engine_starts_count = _scr
+
+    # #1378 — ``tripId`` is a per-trip UUID (identifier only, no sensor value).
+    # Consume it so the Scout stops re-reporting it as an "undiscovered field"
+    # every poll; it is metadata, not a suppressed reading.
+    first("tripId")
+
+    # v4.7.8 (#1396, CUPRA Raval) — anti-theft alarm reason (``dwa`` = Diebstahl-
+    # warnanlage), e.g. "ALARM_REASON_DRIVERSDOOROPEN". Kept verbatim: the enum
+    # set is not documented, so no value is rewritten or dropped.
+    _dwa = first("dwa_alarm_reason")
+    if _dwa is not None and str(_dwa).strip():
+        d.alarm_reason = str(_dwa).strip()
+
+    # v4.7.8 (#1396, CUPRA Raval) — a bare ``data`` leaf carrying a base64 DER
+    # packet. Decoded it holds two GeneralizedTime stamps ten minutes apart plus
+    # small counters — an export ENVELOPE (poll window), not a vehicle reading;
+    # the same class as the v2.18.1 envelope carve-out (tripId precedent).
+    # Consumed so the Scout stops re-reporting it every poll; nothing here is a
+    # value a sensor could show. Revisit if a decoded shape ever carries data.
+    first("data")
 
     # #465 (zdravac) — vehicleIsStandingStill (dict UUID 0010398f-5fda-39af-9e7a-
     # 25db8c2e623a, cluster "Parking Data", boolean "current motion state").
@@ -1730,7 +2038,12 @@ def map_dataset_to_vehicle_data(
             "charging", "chargingacactive", "chargingdcactive",
             "charginghvbattery", "active",
         )
-        d.charging_state = _shorten_enum(cs)
+        # #923-sweep — never publish the no-reading sentinel; is_charging above
+        # is derived from raw cs and is unaffected. Assign only a real value so a
+        # sentinel can't clobber a good reading from another channel.
+        _cs_clean = drop_charge_sentinel(_shorten_enum(cs))
+        if _cs_clean is not None:
+            d.charging_state = _cs_clean
 
     else:
         # v2.18.0 (#702) — the Touareg-era legacy export reports charging as a
@@ -2115,6 +2428,14 @@ def map_dataset_to_vehicle_data(
     _tail_open = _to_int(first("open_state_tailgate"))
     if _tail_open in (2, 3) and d.trunk_open is None:
         d.trunk_open = _tail_open == 2
+    # #1293 (@MirkoKas, VW) — the boolean ``trunk.open`` dialect (dotted spelling,
+    # exactly like ``trunk.locked`` above): "true" = trunk open. Distinct from the
+    # numeric ``open_state_tailgate`` enum and the UUID fallback below — a VW
+    # portal was sending only this dotted string, so trunk_open stayed unset. Use
+    # the dotted key (never the bare ``open``) so it can't collide with a door.
+    _trunk_o = first("trunk.open", "trunk_open")
+    if _trunk_o is not None and d.trunk_open is None:
+        d.trunk_open = str(_trunk_o).strip().lower() in ("true", "open", "1")
     _bonnet_open = _to_int(first("open_state_front_engine_bonnet"))
     if _bonnet_open in (2, 3) and d.hood_open is None:
         d.hood_open = _bonnet_open == 2
@@ -2626,8 +2947,13 @@ def map_dataset_to_vehicle_data(
     # car that ships the flat dict-name key surfaced it unmapped. Add the dotted
     # alias FIRST (mirrors the charge_mode pattern above) so both the report-
     # shaped and bare-leaf spellings resolve onto the same existing entity.
-    _cscn = first("charging_state_report.charging_scenario",
-                  "charging_scenario", "chargingScenario")
+    # #923-sweep — drop the no-reading sentinel at the source so a bare/prefixed
+    # 'invalid' never reaches the sensor (and the _ACTIVE side-effect below stays
+    # correct: INVALID is idle by the dictionary's own semantics).
+    _cscn = drop_charge_sentinel(
+        first("charging_state_report.charging_scenario",
+              "charging_scenario", "chargingScenario")
+    )
     if _cscn is not None:
         d.charging_scenario = _shorten_enum(_cscn)
         # #632 (@gr6803, CUPRA) — this portal firmware ships charging_scenario but
@@ -2650,11 +2976,12 @@ def map_dataset_to_vehicle_data(
     if _icas is not None:
         d.immediate_charge_action_state = _shorten_enum(_icas)
 
-    _pcr = first(
+    # #923-sweep — sentinel-guard at the source (bare + prefixed 'invalid').
+    _pcr = drop_charge_sentinel(first(
         "profile_charge_reason", "charge_reason",
         # v2.26.0 (#978) — the container-qualified spelling the portal also ships.
         "charging_state_report.profile_charge_reason",
-    )
+    ))
     if _pcr is not None:
         d.profile_charge_reason = _shorten_enum(_pcr)
 
@@ -2753,7 +3080,7 @@ def map_dataset_to_vehicle_data(
 
     # ── v2.15.2 — EU Data Act portal "charger detail" fields (#513 Scout) ────
     # All additive, guarded, EU-Data-Act-dialect only.
-    _eps = first("external_power_supply_state")
+    _eps = drop_charge_sentinel(first("external_power_supply_state"))  # #923-sweep
     if _eps is not None:
         d.external_power_supply_state = _shorten_enum(_eps)
 
@@ -2761,9 +3088,15 @@ def map_dataset_to_vehicle_data(
     if _eflow is not None:
         d.energy_flow_active = str(_eflow).lower() in ("on", "true", "1", "active")
 
-    _creason = first("charging_reason_trigger")
+    # #923 (@naked-head) — the portal ships a bare 'invalid' here on cars that
+    # don't expose a charging reason (MQB-schema residue), the same junk the
+    # charge_type path already drops. Screen it before AND after the enum
+    # shortening, since it can also arrive prefixed (CHARGING_REASON_INVALID).
+    _creason = drop_charge_sentinel(first("charging_reason_trigger"))
     if _creason is not None:
-        d.charging_reason = _shorten_enum(_creason)
+        _creason_short = drop_charge_sentinel(_shorten_enum(_creason))
+        if _creason_short is not None:
+            d.charging_reason = _creason_short
 
     # charging_state_error_code — "0"/"0.0"/"#0" are the "no error" sentinels → None.
     # v2.15.3: normalise numerically so a float-typed "0.0" is also dropped.
@@ -2777,7 +3110,10 @@ def map_dataset_to_vehicle_data(
         if _cerrs and _cerrs != "#0" and _cerrn != 0:
             d.charging_error_code = _cerrs
 
-    _rtts = first("remaining_charging_time_target_soc")
+    # #923 — 'unsupported' is a no-reading sentinel here (a real value is a
+    # minutes count); drop it so the target-SoC time sensor reads unavailable
+    # rather than the literal word. Non-string values pass through untouched.
+    _rtts = drop_charge_sentinel(first("remaining_charging_time_target_soc"))
     if _rtts is not None:
         d.remaining_time_target_soc = _rtts
 
@@ -2829,7 +3165,8 @@ def map_dataset_to_vehicle_data(
     if _cbt is not None:
         d.charge_bulk_threshold_pct = _cbt
     # charge_rate_unit — LOW, disabled-by-default companion enum for the rate.
-    _cru = first("battery_state_report.charge_rate_unit", "charge_rate_unit")
+    _cru = drop_charge_sentinel(  # #923-sweep
+        first("battery_state_report.charge_rate_unit", "charge_rate_unit"))
     if _cru is not None:
         d.charge_rate_unit = _shorten_enum(_cru)
 
@@ -2990,6 +3327,31 @@ def map_dataset_to_vehicle_data(
         if _tpr is not None:
             setattr(d, _attr, _tpr)
 
+    # E'''. #528/#538 — TPMS system-type. Classify the RAW actual-pressure family
+    # via ``fields.get`` (read-only — does NOT touch the ``used`` set, so the
+    # sentinel-consume bookkeeping the E' loop already did is untouched, and the
+    # "1"s stay Scout-silent). ``first()`` can't be used here: it drops the "1"
+    # sentinel to None. Any corner >1 is a genuine reading ("measured"); else any
+    # corner ==1 is an indirect/no-numeric TPMS ("indirect"); all-0/absent → None
+    # so no phantom entity spawns.
+    _tpms_present = [
+        _v for _v in (
+            _to_int(fields.get(_n))
+            for _n in (
+                "tyre_pressure_actual_front_left",
+                "tyre_pressure_actual_front_right",
+                "tyre_pressure_actual_rear_left",
+                "tyre_pressure_actual_rear_right",
+                "tyre_pressure_actual_spare_tyre",
+            )
+        ) if _v is not None
+    ]
+    if _tpms_present:
+        if any(_v > 1 for _v in _tpms_present):
+            d.tpms_status = "measured"
+        elif any(_v == 1 for _v in _tpms_present):
+            d.tpms_status = "indirect"
+
     # F. Lights / energy / misc.
     # parking_lights (plural enum): 0=unsup 1=invalid 2=off 3=left 4=right 5=both.
     _plights = _to_int(first("parking_lights"))
@@ -2997,9 +3359,16 @@ def map_dataset_to_vehicle_data(
         d.parking_lights_state = {
             2: "off", 3: "left", 4: "right", 5: "both",
         }.get(_plights)
-    # bem_level — auxiliary/12V battery energy management level (%).
+    # bem_level — auxiliary/12V battery energy management level (%). Across every
+    # captured diagnostic (53 vehicles, combustion + PHEV) this leaf only ever
+    # arrives as 0 — a "no reading" placeholder, never a real 12V charge (a car
+    # that can still report telemetry is never at a true 0%). Left through, the
+    # BATTERY-device-class sensor publishes 0% and fires Home Assistant's
+    # low-battery notifications on cars with no HV pack at all (#923, dtech77pl's
+    # petrol Arteon "battery 0%"). Treat 0 as the unsupported-field sentinel; a
+    # genuine non-zero reading (if a car ever ships one) still comes through.
     _bem = _to_int(first("bem_level"))
-    if _bem is not None:
+    if _bem:
         d.aux_battery_energy_pct = _bem
     # bem_alert_time — 12V battery BEM level-2 pre-warning alert time. #897
     # (SparkyDan555) carried an absolute ISO timestamp, but the dict type is
@@ -3014,10 +3383,18 @@ def map_dataset_to_vehicle_data(
         _bem_num = _to_float(_bem_raw)
         if _bem_num is None or _bem_num >= 1_000_000_000:
             d.aux_battery_bem_alert_at = _epoch_or_iso(_bem_raw)
-    # active_warnings_in_instrument_cluster_feff_filtered — RAW hex/interpreted
-    # bitmask only. Do NOT attempt an enum decode we can't verify; surface the
-    # raw value as a disabled-by-default diagnostic.
-    _warn = first("active_warnings_in_instrument_cluster_feff_filtered")
+    # active_warnings_in_instrument_cluster_* — RAW hex/interpreted bitmask only.
+    # Do NOT attempt an enum decode we can't verify; surface the raw value as a
+    # disabled-by-default diagnostic. VW ships this under several mask-suffix
+    # variants (_feff_filtered, _fff, _0001[_filtered]) depending on the car — a VW
+    # ID.4 reports `_fff` where we previously only read `_feff_filtered` (#1358
+    # Scout) — so read whichever variant is present (first-freshest wins).
+    _warn = first(
+        "active_warnings_in_instrument_cluster_feff_filtered",
+        "active_warnings_in_instrument_cluster_fff",
+        "active_warnings_in_instrument_cluster_0001_filtered",
+        "active_warnings_in_instrument_cluster_0001",
+    )
     if _warn is not None:
         d.dashboard_warnings_raw = str(_warn)
     # #901 (Mezzo1973, volkswagen) — best-effort LOW-confidence mapping of four
@@ -3237,16 +3614,47 @@ def map_dataset_to_vehicle_data(
     # start_stop_action — dict type=string, "Indicates the action related to
     # charging". No dict-listed enum values → no confirmed prefix; _shorten_enum
     # passes unprefixed values through unchanged (so it is safe to apply).
-    _ssa = first("start_stop_action")
+    _ssa = drop_charge_sentinel(first("start_stop_action"))  # #923-sweep
     if _ssa is not None and d.start_stop_action is None:
         d.start_stop_action = _shorten_enum(_ssa)
 
     # start_stop_modification — dict type=string, "Contains the detail related
     # to start stop modification". Distinct field from start_stop_action; no
     # dict-listed enum → _shorten_enum passes unprefixed values through.
-    _ssm = first("start_stop_modification")
+    _ssm = drop_charge_sentinel(first("start_stop_modification"))  # #923-sweep
     if _ssm is not None and d.start_stop_modification is None:
         d.start_stop_modification = _shorten_enum(_ssm)
+
+    # #1316 (EcksteinU, VW T6.1 Kombi 2.0 TDI on the Nutzfahrzeuge feed) — a pure
+    # combustion car can pick up a PHANTOM electric_range_km: the portal ships more
+    # than one range figure (a headline ``range`` + the primary-engine range, or a
+    # spurious secondary), and the b14 range block above mirrors one onto
+    # electric_range_km when it is still None. That value would then cascade into
+    # has_battery/is_hybrid just below and grow a bogus "electric range" sensor.
+    # Suppress it when the car shows COMBUSTION evidence (fuel, CNG tank, or a
+    # combustion ``engine_type`` token) and NO GENUINE electric evidence — HV SoC,
+    # charging, an electric engine_type, or a POSITIVE secondary engine range.
+    # EcksteinU's diagnostic carried ``cruising_range_secondary_engine = 0``, so the
+    # test is a positive secondary (``bool(secondary_raw)``), not mere presence — a
+    # 0 is noise, not a second powertrain. Reclaim the phantom as the combustion
+    # range when that slot is empty, then clear it. BEV-safe: a BEV never reports
+    # fuel/CNG, so combustion-evidence is False and this is inert.
+    _combustion_evidence = (
+        has_fuel
+        or d.cng_level_pct is not None
+        or any(t in et for t in _COMBUSTION_TOKENS)
+    )
+    _electric_evidence = (
+        d.battery_soc is not None
+        or d.charging_state is not None
+        or bool(secondary_raw)
+        or any(t in et for t in _ELECTRIC_TOKENS)
+    )
+    if (_combustion_evidence and not _electric_evidence
+            and d.electric_range_km is not None):
+        if d.combustion_range_km is None:
+            d.combustion_range_km = d.electric_range_km
+        d.electric_range_km = None
 
     # b1/B3 — derive drivetrain from the data actually present (fixes the
     # #37 class: an EV like the e-up! showing only combustion entities, or a
@@ -3396,6 +3804,42 @@ class EUDataActConnector:
         # raw bytes ever touch the disk. Kept as a plain callback so the
         # connector stays Home-Assistant-free.
         self.on_raw_dataset: Callable[[str, bytes, str], None] | None = None
+        # --- Stage-0 observability (surfaced as diagnostic sensors via
+        # coordinator._enrich; #465/#1273). None/0 until the relevant event. ---
+        # _last_soft_status: HTTP status of the most recent soft _get_json that
+        # returned None, so get_vehicle_data can tell a 404 "not provisioned yet"
+        # (→ delivery_not_ready) apart from a 5xx/429 portal outage (→ portal_error).
+        self._last_soft_status: int | None = None
+        # StartDate (ISO-8601) of the currently-active data request — i.e. WHEN the
+        # portal data request was created. Refreshed each poll from the metadata.
+        self.data_request_started_at: str | None = None
+        # WHEN the portal last returned no usable data + HOW OFTEN it has this
+        # session; last_snapshot_at is the inverse (when a real dataset last parsed).
+        self.last_no_data_at: str | None = None
+        self.no_data_count: int = 0
+        self.last_snapshot_at: str | None = None
+
+    @staticmethod
+    def _now_iso() -> str:
+        """UTC now as an ISO-8601 string (the TIMESTAMP sensors parse this)."""
+        from datetime import datetime, timezone  # noqa: PLC0415
+
+        return datetime.now(timezone.utc).isoformat()
+
+    def _note_no_data(self, reason: str) -> None:
+        """Record a no-data poll outcome: reason + timestamp + running count.
+
+        Every early no-data return in ``get_vehicle_data`` funnels through here so
+        the diagnostic sensors (last no-data time / count) stay in one place.
+        """
+        self.last_no_data_reason = reason
+        self.last_no_data_at = self._now_iso()
+        self.no_data_count += 1
+
+    def _note_data_ok(self) -> None:
+        """Record a successful dataset poll: clear the reason, stamp the snapshot."""
+        self.last_no_data_reason = ""
+        self.last_snapshot_at = self._now_iso()
 
     def set_bearer(self, token: str) -> None:
         """Inject / refresh the device-grant access_token for Bearer mode.
@@ -3407,6 +3851,59 @@ class EUDataActConnector:
         self._bearer = token
         self.logged_in = True
         self.last_login_interaction = ""
+
+    async def _skip_marketing_consent_landing(
+        self, landing_url: str, headers: dict[str, str]
+    ) -> tuple[str, str, int] | None:
+        """Auto-continue past the OPTIONAL marketing-consent interstitial.
+
+        Port of ``idk._skip_marketing_consent`` (evcc PR #29980) to the EU Data
+        Act portal channel. The marketing-consent page's URL carries an OIDC
+        ``callback=`` param; following it completes the login on the "not now"
+        path — no marketing scopes granted, nothing accepted. Returns the new
+        ``(landing_url, html, status)`` on success, or ``None`` when the landing
+        is NOT a marketing page, carries no callback, or the follow fails — the
+        caller then falls through to the existing ``MarketingConsentError`` (safe,
+        no regression). The legal T&C page is intentionally NOT handled here — it
+        has no "not now" path and auto-accepting it would assert legal consent on
+        the user's behalf.
+        """
+        url_l = landing_url.lower()
+        if not any(m in url_l for m in _CONSENT_MARKERS):
+            return None
+        callback = parse_qs(urlparse(landing_url).query).get("callback", [""])[0]
+        if not callback:
+            _LOGGER.debug(
+                "EU Data Act portal: marketing-consent page at %s has no callback"
+                " — cannot auto-skip, leaving it to the classifier",
+                _safe_url(landing_url),
+            )
+            return None
+        cb_url = urljoin(landing_url, callback)
+        try:
+            async with self._session.get(
+                cb_url,
+                headers=headers,
+                allow_redirects=True,
+                timeout=ClientTimeout(total=_TIMEOUT_S),
+            ) as resp:
+                result = (str(resp.url), await resp.text(errors="replace"), resp.status)
+        except Exception as exc:  # noqa: BLE001
+            # No exc_info: an aiohttp client error's str() can embed the raw
+            # callback URL (code / relayState). Log only the exception TYPE. (#1355)
+            _LOGGER.debug(
+                "EU Data Act portal: marketing-consent auto-skip failed (%s)",
+                type(exc).__name__,
+            )
+            return None
+        # DEBUG, not INFO: this is a silent "not now" no-op the user can't act on
+        # (nothing granted, nothing accepted) and VW injects the page on many
+        # otherwise-normal logins — at INFO it would be recurring log noise.
+        _LOGGER.debug(
+            "EU Data Act portal: skipped optional marketing consent "
+            "(followed callback, granted no marketing scopes)"
+        )
+        return result
 
     @staticmethod
     def _is_consent_landing(landing_url: str, landing_html: str) -> bool:
@@ -3427,6 +3924,25 @@ class EUDataActConnector:
         )
         blob = f"{url_l}\n{landing_html.lower()}"
         return _is_generic_consent_page(landing_url, page_type, blob)
+
+    @staticmethod
+    def _is_terms_landing(landing_url: str, landing_html: str) -> bool:
+        """True if the post-credential landing is a legal terms-and-conditions wall.
+
+        Detected exactly the way the fallback classifier does (``_TC_MARKERS`` in
+        the URL/body, or a templateModel pageType of ``termsAndConditions``).
+        Distinct from the generic OAuth consent grant (``_is_consent_landing``) and
+        the marketing-consent interstitial — this is the account being asked to
+        accept UPDATED legal terms after a valid credential step.
+        """
+        blob = f"{landing_url}\n{landing_html}".lower()
+        if any(m in blob for m in _TC_MARKERS):
+            return True
+        model = _extract_template_model(landing_html) or {}
+        page_type = str(
+            model.get("template") or model.get("templateName") or ""
+        ).lower()
+        return "termsandconditions" in page_type
 
     async def _accept_consent_page(
         self, consent_url: str, consent_html: str
@@ -3494,6 +4010,61 @@ class EUDataActConnector:
         )
         return new_landing, new_html, new_status
 
+    async def _accept_terms_page(
+        self, terms_url: str, terms_html: str
+    ) -> tuple[str, str, int] | None:
+        """Scrape + POST the terms-and-conditions form to ACCEPT it.
+
+        v4.7.x — adopted from TommiG1/HA_VAG-EU-Data-Act, mirroring our own consent
+        auto-accept (#527). A genuine brand-own T&C interstitial after a valid
+        credential POST is the SAME Auth0 signin-service form as the consent grant
+        (hidden ``_csrf`` / ``relayState`` / ``hmac``); consent and T&C differ only
+        in the landing marker, so the accept is the same form-POST. The user has
+        already authenticated and configured the integration to read their OWN car's
+        data (EU Data Act, Art. 4), so accepting the updated terms completes the
+        flow the user asked for — exactly as the official app does.
+
+        Bounded: accept at most ONCE. If the form cannot be parsed (or the POST
+        fails), return ``None`` and let the caller fall through to the typed
+        ``TermsAndConditionsError`` Repair — and if the accept POST re-lands on a
+        T&C page, the caller's ``landed_failed`` classification raises the same
+        Repair, so there is never a silent loop (mirrors TommiG1's "raise if the
+        terms form appears twice"). The wrong-CLIENT T&C artefact (#1340) is already
+        eliminated at the source by the per-brand portal client_ids, so this only
+        ever clears a real, account-level T&C update.
+        """
+        fields, action = _login_fields(terms_html)
+        # Gate on the form's own anti-CSRF / continuation fields — without them
+        # this is not an acceptable T&C form and a POST would just 400.
+        if not ({"_csrf", "hmac", "relayState"} & set(fields)):
+            _LOGGER.debug(
+                "EU Data Act portal: T&C page at %s carried no form fields — "
+                "cannot auto-accept, leaving to classifier",
+                _safe_url(terms_url),
+            )
+            return None
+        accept_action = _resolve_action(terms_url, action)
+        try:
+            async with self._session.post(
+                accept_action, data=fields,
+                headers={"User-Agent": _USER_AGENT, "Referer": terms_url},
+                allow_redirects=True, timeout=ClientTimeout(total=_TIMEOUT_S),
+            ) as resp:
+                new_landing = str(resp.url)
+                new_html = await resp.text(errors="replace")
+                new_status = resp.status
+        except Exception as exc:  # noqa: BLE001 — best-effort accept
+            _LOGGER.debug(
+                "EU Data Act portal: T&C accept POST failed (%s) — leaving to "
+                "classifier", type(exc).__name__,
+            )
+            return None
+        _LOGGER.debug(
+            "EU Data Act portal: T&C accepted → landing=%s status=%s",
+            _safe_url(new_landing), new_status,
+        )
+        return new_landing, new_html, new_status
+
     async def login(self, email: str, password: str) -> None:
         """Run the OIDC code-flow login; portal backend sets cookies.
 
@@ -3536,7 +4107,13 @@ class EUDataActConnector:
             ):
                 pass
         except Exception as exc:  # noqa: BLE001
-            _LOGGER.debug("EU Data Act: priming GET failed (ignored): %s", exc)
+            # Class only, never str(exc) — an aiohttp error's message echoes the
+            # request URL. (Here it is the static portal base, but keep the sweep
+            # posture uniform so no future URL change re-opens a leak.)
+            _LOGGER.debug(
+                "EU Data Act: priming GET failed (ignored): %s",
+                type(exc).__name__,
+            )
 
         # 1. Start OIDC directly at the IDP (portal's own servlet 500s for
         #    non-browser clients). response_type=code; portal does the
@@ -3620,6 +4197,40 @@ class EUDataActConnector:
             if accepted is not None:
                 landing, landing_html, status = accepted
 
+        # 3c. Legal terms-and-conditions wall — auto-accept it, the same way we
+        # accept the OAuth consent grant above (adopted from TommiG1; consent and
+        # T&C are the SAME Auth0 form-POST, only the marker differs). The user has
+        # authenticated and asked the integration to read their own car's data, so
+        # accepting an updated-terms interstitial completes exactly the flow they
+        # requested. Bounded to ONE attempt: on a parse/POST failure or a re-render
+        # the ``landed_failed`` block below still raises the typed
+        # ``TermsAndConditionsError`` Repair, so there is no silent loop. (The
+        # wrong-CLIENT T&C artefact is already gone at the source via #1340's
+        # per-brand client_ids, so this only clears a genuine account-level T&C.)
+        if self._is_terms_landing(landing, landing_html):
+            _LOGGER.info(
+                "EU Data Act portal: terms-and-conditions page at %s — "
+                "auto-accepting (user already authenticated; mirrors the consent "
+                "grant + official-app behaviour)",
+                _safe_url(landing),
+            )
+            accepted = await self._accept_terms_page(landing, landing_html)
+            if accepted is not None:
+                landing, landing_html, status = accepted
+
+        # v4.6.0 — OPTIONAL marketing-consent interstitial. Distinct from the
+        # generic OAuth grant AND the legal T&C wall above (both of which we now
+        # auto-accept). VW randomly injects a
+        # marketing-consent page after a valid login; its URL carries an OIDC
+        # ``callback=`` that, when followed, completes the login WITHOUT granting
+        # marketing scopes (the "not now" path). Port of idk._skip_marketing_consent
+        # (evcc PR #29980) to the portal channel. Safe no-op: only fires on a
+        # detected marketing page that actually carries a callback — otherwise it
+        # returns None and we fall through to the existing MarketingConsentError.
+        skipped = await self._skip_marketing_consent_landing(landing, headers)
+        if skipped is not None:
+            landing, landing_html, status = skipped
+
         # A completed flow lands back on the portal host via
         # /services/callbacklogin. Anything else (HTTP >= 400, a
         # signin-service/'/error' re-render, or an off-host landing) is a
@@ -3678,11 +4289,119 @@ class EUDataActConnector:
             raise PortalInteractionRequiredError(
                 "login did not complete (unexpected landing page)"
             )
+        # Login-success hardening (#1340 @cyrano330): "landed on the portal host"
+        # is too weak — the portal's own login page is on the portal host too, so
+        # a wrong portal client id yields a clean "login succeeded" and a 401 one
+        # call later (exactly the #1340 disguise). In cookie mode an authenticated
+        # session leaves a real session cookie on the portal domain; if the jar
+        # holds ONLY the load balancer's cookie, the login never authenticated —
+        # surface the (soft, self-healing) portal repair here instead of a
+        # confusing downstream 401. Tight signature + env kill-switch, because
+        # this runs on every login.
+        if (
+            not self._bearer
+            and not os.getenv("VWEU_PORTAL_SESSION_CHECK_DISABLED")
+            and self._portal_session_is_anonymous()
+        ):
+            _LOGGER.warning(
+                "EU Data Act portal: landed on the portal host but the session "
+                "is anonymous — not authorised (#1340)."
+            )
+            raise PortalInteractionRequiredError(
+                "portal session not authorised (anonymous session)"
+            )
         self.logged_in = True
         self.last_login_interaction = ""  # #465/#1027 — recovered → clear Repair
         _LOGGER.info(
             "EU Data Act portal: login succeeded (read-only, ~15min cadence)"
         )
+
+    def _portal_session_is_anonymous(self) -> bool:
+        """#1340 hardening: True when the portal-domain cookie jar carries ONLY
+        infrastructure cookies (e.g. the load balancer's ``affinity``) — the
+        signature of a login that landed on the portal host without actually
+        authenticating. An authenticated cookie session also leaves a real
+        session cookie on the portal domain, which lands outside
+        ``_PORTAL_INFRA_COOKIES`` and makes this False.
+
+        Fails OPEN (returns False) if the jar can't be read — a hardening check
+        must never break a login on an edge case; the downstream 401 path still
+        catches a genuinely anonymous session.
+        """
+        try:
+            portal_host = urlparse(_PORTAL_BASE).netloc
+            portal_cookies = {
+                cookie.key
+                for cookie in getattr(self._session, "cookie_jar", ())
+                if _domain_covers_host(cookie.get("domain") or "", portal_host)
+            }
+        except Exception:  # noqa: BLE001 — never break login on a jar-read error
+            return False
+        return bool(portal_cookies) and portal_cookies <= _PORTAL_INFRA_COOKIES
+
+    def _debug_dump_auth_state_on_401(
+        self, url: str, sent_headers: dict[str, str], resp: Any
+    ) -> None:
+        """b13 (#1340 @cyrano330) — on a hard 401 from a proxy_api call, log a
+        REDACTED snapshot of HOW the request was authenticated, so a tester's
+        debug capture answers the open question behind the persistent portal 401:
+        did the GET go out authenticated-but-refused, or anonymous/stale?
+
+        Names + flags ONLY — never a token or cookie value; and the cookie NAME
+        itself is UUID-masked, because the IDP session cookies are named
+        ``s_<uuid>`` / ``d_<uuid>`` (the UUID lives in the name). Fires only when
+        debug logging is on, once per connector instance, and can never break the
+        request flow.
+        """
+        if not _LOGGER.isEnabledFor(logging.DEBUG):
+            return
+        if getattr(self, "_logged_401_auth_state", False):
+            # One VW-EU setup hits the portal from ~3 call sites; log the snapshot
+            # once so a pasted debug log stays readable (#1340 @cyrano330).
+            return
+        try:
+            mode = "bearer" if self._bearer else "cookie"
+            sent_authorization = "Authorization" in sent_headers
+            cookies: list[str] = []
+            # Derived fork-answer (#1340 @cyrano330): the cookies whose domain is
+            # the PORTAL host. ['affinity'] only = anonymous session (our bug);
+            # an auth cookie ('ath'/'access_token'/…) = authenticated-but-refused
+            # (a real portal-side problem). One field decides which.
+            portal_cookies: list[str] = []
+            portal_host = urlparse(_PORTAL_BASE).netloc
+            try:
+                for cookie in self._session.cookie_jar:
+                    name = _EMBEDDED_UUID_RE.sub("<uuid>", cookie.key)
+                    dom = cookie.get("domain") or "?"
+                    cookies.append(f"{name}@{dom}")
+                    if _domain_covers_host(dom, portal_host):
+                        portal_cookies.append(name)
+            except Exception:  # noqa: BLE001
+                cookies = ["<cookie jar unreadable>"]
+            resp_hdrs = getattr(resp, "headers", {})
+            www_auth = str(resp_hdrs.get("WWW-Authenticate", ""))
+            # Log ONLY the challenge SCHEME (the token before the first space:
+            # "Bearer"/"Basic"/…). The params that follow (realm / nonce /
+            # error_description) are free text — never log them. And the request
+            # URL goes through _safe_api_url so the VIN + identifier in the path
+            # are masked, not just the query stripped. (#1355)
+            www_auth_scheme = www_auth.split(" ", 1)[0] if www_auth else ""
+            _LOGGER.debug(
+                "EU Data Act 401 auth-state on %s: mode=%s sent_authorization=%s "
+                "session_cookies=%s portal_domain_cookies=%s "
+                "resp_www_authenticate_scheme=%r resp_set_cookie=%s "
+                "(#1340 diagnostic — names/flags only, no secret values)",
+                _safe_api_url(url), mode, sent_authorization, cookies or "<none>",
+                portal_cookies or "<none>", www_auth_scheme, "Set-Cookie" in resp_hdrs,
+            )
+            self._logged_401_auth_state = True
+        except Exception as exc:  # noqa: BLE001 — diagnostics must never break the flow
+            # Class only, not exc_info — this guards the 401-diagnostic builder,
+            # which has the VIN-path url + cookie names in scope; a traceback dump
+            # could surface them. The failure class is enough to debug the dumper.
+            _LOGGER.debug(
+                "EU Data Act 401 auth-state dump failed (%s)", type(exc).__name__
+            )
 
     async def _get_json(
         self,
@@ -3734,9 +4453,17 @@ class EUDataActConnector:
                             await asyncio.sleep(_PORTAL_RETRY_DELAYS[attempt])
                             continue
                         if soft and resp.status in _TRANSIENT_STATUSES:
+                            # Remember the status so a caller can tell a 404 "not
+                            # provisioned yet" (delivery_not_ready) from a 5xx/429
+                            # portal outage (portal_error).
+                            self._last_soft_status = resp.status
                             return None
+                        if resp.status == 401:
+                            self._debug_dump_auth_state_on_401(
+                                url, eff_headers, resp
+                            )
                         raise AuthenticationError(
-                            f"EU Data Act GET {url} → HTTP {resp.status}"
+                            f"EU Data Act GET {_safe_api_url(url)} → HTTP {resp.status}"
                         )
                     return await resp.json(content_type=None)
             except (TimeoutError, ClientConnectionError):
@@ -3775,6 +4502,41 @@ class EUDataActConnector:
 
         walk(payload)
         return vins
+
+    async def _download_dataset_raw(
+        self, vin: str, identifier: str, name: str, request_type: str,
+    ) -> tuple[bytes | None, bool, int | None]:
+        """Download ONE dataset ZIP by name. Returns ``(raw|None, transient, status)``.
+
+        ``(raw, False, 200)`` on success; ``(None, True, status)`` on a transient
+        outage status (5xx/429/404); ``(None, True, None)`` on a transport
+        timeout/disconnect. A non-transient ``>= 400`` (401/403 session-expired) is
+        raised as ``AuthenticationError``, exactly as the single-download path did —
+        so the caller's newest→oldest fallback only ever chases genuine outages,
+        never a dead session. This GET bypasses ``_get_json``, so the Bearer header
+        (v2.13.0) is merged in without clobbering the filename/type headers the
+        download endpoint requires.
+        """
+        dl_headers = {"filename": name, "type": request_type}
+        if self._bearer:
+            dl_headers["Authorization"] = f"Bearer {self._bearer}"
+        try:
+            async with self._session.get(
+                f"{_PORTAL_BASE}{_DOWNLOAD_PATH.format(vin=vin, identifier=identifier)}",
+                headers=dl_headers,
+                timeout=ClientTimeout(total=_TIMEOUT_S),
+            ) as resp:
+                if resp.status in _TRANSIENT_STATUSES:
+                    return None, True, resp.status
+                if resp.status >= 400:
+                    raise AuthenticationError(
+                        f"EU Data Act portal: download → HTTP {resp.status}"
+                    )
+                return await resp.read(), False, resp.status
+        except (TimeoutError, ClientConnectionError):
+            # v2.14.8 — a transport timeout/disconnect on the ZIP download is a
+            # portal hiccup, not a dead session; report it as transient.
+            return None, True, None
 
     async def get_vehicle_data(
         self, vin: str, request_type: str = "partial"
@@ -3828,7 +4590,7 @@ class EUDataActConnector:
                 or ""
             )
         if not identifier:
-            self.last_no_data_reason = "no_request"
+            self._note_no_data("no_request")
             _LOGGER.info(
                 "EU Data Act portal: no data-request yet for %s — enable the "
                 "continuous data request for this car on the VW data portal "
@@ -3837,24 +4599,34 @@ class EUDataActConnector:
                 vin[-6:],
             )
             return d
+        # #465 observability — record WHEN this data request was created (its
+        # StartDate) so a diagnostic sensor can show the active request's age.
+        self.data_request_started_at = _request_start_date(meta, identifier)
         # 2. list datasets → newest non-empty zip. Soft on transient 5xx:
         # during the VW outage this endpoint 500s constantly (#428-#431).
         # A 500 here is the portal misbehaving, not a dead session, so we
         # surface it as "no data this poll" (data_act_no_data notice) rather
         # than raising AuthenticationError and re-logging in pointlessly.
         # A genuine 401/403 still raises (→ session-expired path).
+        self._last_soft_status = None
         listing = await self._get_json(
             f"{_PORTAL_BASE}{_LIST_PATH.format(vin=vin, identifier=identifier)}",
             headers={"type": request_type},
             soft=True,
         )
         if listing is None:
-            self.last_no_data_reason = "empty"
+            # A 404/410 here means "no delivery yet" (delivery_not_ready); a
+            # 5xx/429 is a genuine VW-side outage (portal_error). _get_json records
+            # which on a soft miss, so a normal wait isn't mislabelled a fault.
+            self._note_no_data(
+                "portal_error"
+                if (self._last_soft_status or 0) in _PORTAL_OUTAGE_STATUSES
+                else "empty"
+            )
             _LOGGER.info(
-                "EU Data Act portal: data endpoint returned a transient error "
-                "for %s (most likely the ongoing VW-side portal outage). "
-                "Treating as no data this poll; will retry next cycle.",
-                vin[-6:],
+                "EU Data Act portal: dataset listing unavailable for %s "
+                "(HTTP %s); treating as no data this poll.",
+                vin[-6:], self._last_soft_status or "n/a",
             )
             return d
         files = listing if isinstance(listing, list) else listing.get("files", [])
@@ -3898,7 +4670,7 @@ class EUDataActConnector:
                 and f["name"].endswith(_NO_CONTENT_SUFFIX)
             )
             if _raw_n and _named == _raw_n and _nc == _raw_n:
-                self.last_no_data_reason = "no_content"
+                self._note_no_data("no_content")
                 _LOGGER.info(
                     "EU Data Act portal: %s has %d dataset file(s) this cycle but "
                     "all are 'no content' placeholders — the request is active, the "
@@ -3908,7 +4680,7 @@ class EUDataActConnector:
                     vin[-6:], _raw_n,
                 )
             else:
-                self.last_no_data_reason = "empty"
+                self._note_no_data("empty")
                 _LOGGER.debug(
                     "EU Data Act portal: no usable dataset files for %s yet "
                     "(raw=%d, named=%d, no_content=%d, listing=%s)",
@@ -3918,48 +4690,44 @@ class EUDataActConnector:
         # Newest by delivery ts when present; files without a ts sort below those
         # with one (-inf), and ties / a fully-tsless listing fall back to array
         # order (the original names[-1] behaviour).
-        newest = max(
-            cands, key=lambda c: (c[1] if c[1] is not None else float("-inf"), c[2])
-        )[0]
-        # 3. download ZIP → JSON. This GET bypasses _get_json, so the Bearer
-        # header (v2.13.0) must be merged in separately without clobbering the
-        # filename/type headers the download endpoint requires.
-        dl_headers = {"filename": newest, "type": request_type}
-        if self._bearer:
-            dl_headers["Authorization"] = f"Bearer {self._bearer}"
-        try:
-            async with self._session.get(
-                f"{_PORTAL_BASE}{_DOWNLOAD_PATH.format(vin=vin, identifier=identifier)}",
-                headers=dl_headers,
-                timeout=ClientTimeout(total=_TIMEOUT_S),
-            ) as resp:
-                if resp.status in _TRANSIENT_STATUSES:
-                    # Same outage story as the listing call — the ZIP download
-                    # 500s mid-outage. Don't burn the session; just skip this poll.
-                    self.last_no_data_reason = "empty"
-                    _LOGGER.info(
-                        "EU Data Act portal: dataset download returned a transient "
-                        "error (HTTP %s) for %s; treating as no data this poll.",
-                        resp.status, vin[-6:],
-                    )
-                    return d
-                if resp.status >= 400:
-                    raise AuthenticationError(
-                        f"EU Data Act portal: download → HTTP {resp.status}"
-                    )
-                raw = await resp.read()
-        except (TimeoutError, ClientConnectionError):
-            # v2.14.8 — same as the soft GETs: a transport timeout/disconnect on
-            # the ZIP download is a portal hiccup, not a dead session. Skip the
-            # poll instead of letting a raw TimeoutError bubble to the coordinator.
-            self.last_no_data_reason = "empty"
+        # 3. download ZIP → JSON, newest→oldest with a transient fallback. On a
+        # transient download error (5xx/429/timeout) we try the next-older listed
+        # dataset instead of skipping the whole poll (adopted from TommiG1, which
+        # loops the listing newest→oldest). A non-transient 401/403 still raises
+        # (session expired), and a parsed-but-EMPTY newest is NEVER overridden by an
+        # older dataset (only download outages fall back — we don't serve stale
+        # telemetry as fresh). Capped at _MAX_DATASET_FALLBACK so a full outage
+        # can't turn one poll into many hammering requests.
+        ranked = [
+            c[0] for c in sorted(
+                cands,
+                key=lambda c: (c[1] if c[1] is not None else float("-inf"), c[2]),
+                reverse=True,
+            )
+        ]
+        raw: bytes | None = None
+        chosen: str | None = None
+        saw_outage = False
+        for name in ranked[:_MAX_DATASET_FALLBACK]:
+            got, _transient, st = await self._download_dataset_raw(
+                vin, identifier, name, request_type
+            )
+            if got is not None:
+                raw, chosen = got, name
+                break
+            if st is not None and st in _PORTAL_OUTAGE_STATUSES:
+                saw_outage = True
+        if raw is None or chosen is None:
+            # Every attempted dataset returned a transient outage / timeout — same
+            # "don't burn the session, no data this poll" outcome as before.
+            self._note_no_data("portal_error" if saw_outage else "empty")
             _LOGGER.info(
-                "EU Data Act portal: dataset download timed out / disconnected "
-                "for %s; treating as no data this poll.",
-                vin[-6:],
+                "EU Data Act portal: all %d candidate dataset(s) returned a "
+                "transient error for %s; treating as no data this poll.",
+                min(len(ranked), _MAX_DATASET_FALLBACK), vin[-6:],
             )
             return d
-        payload = _unzip_json(raw, newest)
+        payload = _unzip_json(raw, chosen)
         field_ts: dict[str, float] = {}  # #529: resolved per-field capture ts
         field_syn: dict[str, set[str]] = {}  # v2.15.4: bare/qualified synonym map
         contested: dict[str, set[str]] = {}  # same capture time, disagreeing values
@@ -3972,9 +4740,9 @@ class EUDataActConnector:
         # raising) means no data this poll: flag it so the no-data notice fires,
         # and do NOT mark the vehicle online with a blank dataset.
         if not fields:
-            self.last_no_data_reason = "empty"
+            self._note_no_data("empty")
             return d
-        self.last_no_data_reason = ""
+        self._note_data_ok()
         d.no_data = False  # real dataset parsed → this is a genuine good poll
         d.connection_state = "online"
         # P1-5 — hand the RAW dataset ZIP to the opt-in diagnostic archive, but
@@ -3983,7 +4751,7 @@ class EUDataActConnector:
         # never disturb the poll, so it is fully guarded.
         if self.on_raw_dataset is not None:
             try:
-                self.on_raw_dataset(vin, raw, newest)
+                self.on_raw_dataset(vin, raw, chosen)
             except Exception:  # noqa: BLE001  # pragma: no cover - defensive
                 _LOGGER.debug("EU Data Act: raw-dataset archive hook failed")
         return map_dataset_to_vehicle_data(

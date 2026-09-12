@@ -23,6 +23,7 @@ from .const import (
     DOMAIN,
     FIRMWARE_POLL_INTERVAL_HOURS,
     ONLINE_POLL_INTERVAL_SECONDS,
+    RAIN_POLL_INTERVAL_SECONDS,
 )
 from .coordinator import DreameMowerCoordinator
 from .config_flow import DEVICE_TYPE_SWBOT
@@ -37,6 +38,8 @@ _MOWER_PLATFORMS = (
     Platform.SELECT,
     Platform.BUTTON,
     Platform.NUMBER,
+    Platform.SWITCH,
+    Platform.TIME,
 )
 _SWBOT_PLATFORMS = (
     Platform.SENSOR,
@@ -81,11 +84,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except Exception as ex:
             _LOGGER.warning("Initial consumable data fetch failed: %s", ex)
 
-    if coordinator.device_type != DEVICE_TYPE_SWBOT and coordinator.supports_cutting_height:
+    # Read the mowing preferences once: they carry the cutting heights and the
+    # edge mowing settings, and double as the probe that decides which of them
+    # the device offers.
+    if coordinator.device_type != DEVICE_TYPE_SWBOT:
         try:
-            await coordinator.async_fetch_cutting_heights()
+            await coordinator.async_fetch_mowing_preferences()
         except Exception as ex:
-            _LOGGER.warning("Initial cutting height fetch failed: %s", ex)
+            _LOGGER.warning("Initial mowing preference fetch failed: %s", ex)
+
+    # Read the settings record once: the charging period, rain protection and
+    # the anti-theft settings all live in it, and it doubles as the probe that
+    # decides which of them the device offers at all.
+    if coordinator.device_type != DEVICE_TYPE_SWBOT:
+        try:
+            await coordinator.async_fetch_device_settings()
+        except Exception as ex:
+            _LOGGER.warning("Initial device settings fetch failed: %s", ex)
 
     # Store coordinator in hass data
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
@@ -128,6 +143,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 hass,
                 _async_poll_online,
                 timedelta(seconds=ONLINE_POLL_INTERVAL_SECONDS),
+                cancel_on_shutdown=True,
+            )
+        )
+
+    # Retire a resume time that has passed: the mower reports the time it will
+    # work again when rain stops it, but nothing when that time simply runs out.
+    if coordinator.supports_rain_protection:
+        async def _async_poll_rain(now=None) -> None:
+            try:
+                await coordinator.async_fetch_rain_protection_end()
+            except Exception as ex:
+                _LOGGER.warning("Rain protection poll failed: %s", ex)
+
+        entry.async_on_unload(
+            async_track_time_interval(
+                hass,
+                _async_poll_rain,
+                timedelta(seconds=RAIN_POLL_INTERVAL_SECONDS),
                 cancel_on_shutdown=True,
             )
         )

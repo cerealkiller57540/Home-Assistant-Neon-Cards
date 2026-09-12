@@ -49,6 +49,7 @@ from .const import (
     DEFAULT_PORT,
     DOMAIN,
     WS_PREFIX,
+    ip_control_port,
 )
 from .token_notify import METHOD_IP_CONTROL, clear_token_problem, notify_token_problem
 
@@ -248,7 +249,12 @@ class SamsungTVIPControlBacklightNumber(NumberEntity):
             return None
         token = entry.data.get(CONF_IP_CONTROL_TOKEN)
         if self._ip_control is None or self._ip_control_token != token:
-            self._ip_control = SamsungIPControl(self.hass, self._host, token=token)
+            self._ip_control = SamsungIPControl(
+                self.hass,
+                self._host,
+                port=ip_control_port(entry.data),
+                token=token,
+            )
             self._ip_control_token = token
         return self._ip_control
 
@@ -398,6 +404,11 @@ class IPControlVideoCoordinator(DataUpdateCoordinator):
         self._host = host
         self._ip_control: SamsungIPControl | None = None
         self._ip_control_token: str | None = None
+        # Which fields the TV last reported, so a change is logged once instead
+        # of every poll. Without this the payload was never recorded anywhere,
+        # and a slider sitting "unavailable" gave no way to tell whether the TV
+        # omitted the field or returned it empty (#206).
+        self._logged_fields: tuple[str, ...] | None = None
 
     def _device_title(self) -> str:
         entry = self.hass.config_entries.async_get_entry(self._entry.entry_id)
@@ -412,7 +423,12 @@ class IPControlVideoCoordinator(DataUpdateCoordinator):
             return None
         token = entry.data.get(CONF_IP_CONTROL_TOKEN)
         if self._ip_control is None or self._ip_control_token != token:
-            self._ip_control = SamsungIPControl(self.hass, self._host, token=token)
+            self._ip_control = SamsungIPControl(
+                self.hass,
+                self._host,
+                port=ip_control_port(entry.data),
+                token=token,
+            )
             self._ip_control_token = token
         return self._ip_control
 
@@ -444,6 +460,34 @@ class IPControlVideoCoordinator(DataUpdateCoordinator):
 
         # Full read succeeded → the token is good; clear any prior problem.
         clear_token_problem(self.hass, self._entry.entry_id, METHOD_IP_CONTROL)
+        fields = tuple(sorted(data))
+        if fields != self._logged_fields:
+            missing = [
+                setting.field
+                for setting in IP_CONTROL_PICTURE_SETTINGS
+                if setting.field not in data
+            ]
+            # A field can be present and still leave its slider unavailable:
+            # the entity needs an int, and Samsung documents tint as an
+            # "R15"/"G15" token on some generations rather than a number. That
+            # case used to be indistinguishable from an absent field.
+            unparseable = []
+            for setting in IP_CONTROL_PICTURE_SETTINGS:
+                if setting.field not in data:
+                    continue
+                try:
+                    int(data[setting.field])
+                except (TypeError, ValueError):
+                    unparseable.append(f"{setting.field}={data[setting.field]!r}")
+            _LOGGER.debug(
+                "IP Control getVideoStates on %s returned %s "
+                "(absent: %s | present but not an integer: %s)",
+                self._host,
+                data,
+                ", ".join(missing) or "nothing",
+                ", ".join(unparseable) or "nothing",
+            )
+            self._logged_fields = fields
         return data
 
 

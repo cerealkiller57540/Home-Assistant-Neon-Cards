@@ -1,6 +1,8 @@
 """Constants for the samsungtv_smart integration."""
 
+from collections.abc import Mapping
 from enum import Enum
+from typing import Any
 
 
 class AppLoadMethod(Enum):
@@ -39,6 +41,7 @@ DATA_OPTIONS = "options"
 DATA_ENTRY_DATA = "entry_data"  # Snapshot of entry.data to detect data changes
 DATA_ART_API = "art_api"  # Shared Frame Art API instance
 DATA_ART_CACHE = "art_cache"  # Shared ArtIdentifyCache instance (per entry)
+DATA_IP_CONTROL_STATE_COORDINATOR = "ip_control_state_coordinator"
 CONF_IS_FRAME_TV = "is_frame_tv"  # Persisted flag: TV confirmed as Frame TV
 # V7: persisted capability flags for the dedicated brightness / colour-temp
 # WebSocket requests. On TVs that don't respond (e.g. Frame 2024) we learn
@@ -65,6 +68,20 @@ CONF_ST_POLL_ON_INTERVAL = "st_poll_on_interval"
 DEFAULT_ST_POLL_ON_INTERVAL = 30
 MIN_ST_POLL_ON_INTERVAL = 5
 MAX_ST_POLL_ON_INTERVAL = 600
+# IP Control (local JSON-RPC) poll cadence (seconds) for the read-only state
+# sensors: speaker, volume, mute, picture size/mode, sound mode, input source
+# and — when the tuner is the active input — the local channel number. This is
+# a LAN call to the TV with no cloud quota behind it, which is why it is a
+# separate setting from CONF_ST_POLL_ON_INTERVAL rather than sharing it: the
+# reason to slow SmartThings down (cloud rate limits) does not apply here.
+# The floor is deliberately low but not zero — old panels (e.g. the 2018 set of
+# issue #206) are slow to answer, and below ~5 s the requests start to overlap
+# the responses rather than making anything more responsive.
+CONF_IP_CONTROL_POLL_INTERVAL = "ip_control_poll_interval"
+DEFAULT_IP_CONTROL_POLL_INTERVAL = 10
+MIN_IP_CONTROL_POLL_INTERVAL = 5
+MAX_IP_CONTROL_POLL_INTERVAL = 600
+
 # Fixed SmartThings poll cadence (seconds) while the TV is OFF. A short
 # keepalive so a power-on is still picked up from the cloud as a backup to
 # the local WebSocket, without hammering the API during standby.
@@ -97,11 +114,15 @@ CONF_ART_IDENTIFY_PERSONAL = "art_identify_personal"
 
 ART_LLM_PROVIDERS = ("anthropic", "openai", "gemini")
 DEFAULT_ART_LLM_PROVIDER = "anthropic"
-# Sensible current defaults; user-overridable in the options.
+# Last-resort defaults, used ONLY when the provider's model list cannot be
+# read (no key yet, or the API is unreachable). The real default is picked
+# from the live list — see art_identify.async_pick_default_model — because a
+# pinned id eventually gets retired and breaks identification for everyone who
+# never touched the setting (issue #188).
 DEFAULT_ART_LLM_MODEL = {
     "anthropic": "claude-haiku-4-5",
-    "openai": "gpt-4o",
-    "gemini": "gemini-2.5-flash",
+    "openai": "gpt-4o-mini",
+    "gemini": "gemini-flash-latest",
 }
 
 # Cache TTLs (seconds). A successful identification never changes, so it is kept
@@ -185,6 +206,25 @@ CONF_IP_CONTROL_ART_MODE = "ip_control_art_mode"
 CONF_IP_CONTROL_MODEL_ID = "ip_control_model_id"
 CONF_IP_CONTROL_FW_VERSION = "ip_control_fw_version"
 
+# The port the TV answered on, learned at pairing time and reused afterwards.
+# Samsung moved this once: 1515 up to the 2019 models, 1516 from 2020 onwards
+# (documented by the RTI and Allonis control drivers). This integration was
+# built against 2024/2025 Frames, so it only ever tried 1516 — leaving older
+# sets looking unsupported when they simply listen elsewhere (#206).
+# Absent from entry.data on TVs paired before this was introduced, hence the
+# default: those all paired on 1516 by definition.
+CONF_IP_CONTROL_PORT = "ip_control_port"
+# Mirrors api.ipcontrol.DEFAULT_IP_CONTROL_PORT — kept here so the config layer
+# does not have to import the api layer. Ordered: the modern port is tried
+# first, since it covers every model this integration primarily targets.
+IP_CONTROL_PORTS = (1516, 1515)
+
+
+def ip_control_port(entry_data: Mapping[str, Any]) -> int:
+    """Return the IP Control port to use for a TV, from its entry data."""
+    return entry_data.get(CONF_IP_CONTROL_PORT) or IP_CONTROL_PORTS[0]
+
+
 # Authentication methods
 AUTH_METHOD_OAUTH = "oauth"
 AUTH_METHOD_PAT = "pat"
@@ -197,6 +237,10 @@ CONF_SCAN_APP_HTTP = "scan_app_http"
 
 DEFAULT_APP = "TV/HDMI"
 DEFAULT_PORT = 8001
+# Input source ids (casefolded) that mean "the built-in tuner", i.e. the only
+# inputs on which a tuner channel number is meaningful. Samsung reports the
+# tuner under several spellings depending on model and API.
+TUNER_INPUT_SOURCES = frozenset({"tv", "digitaltv", "dtv"})
 DEFAULT_SOURCE_LIST = {"TV": "KEY_TV", "HDMI": "KEY_HDMI"}
 DEFAULT_TIMEOUT = 6
 
@@ -211,6 +255,8 @@ RESULT_SUCCESS = "success"
 RESULT_WRONG_APIKEY = "wrong_api_key"
 
 SERVICE_SELECT_PICTURE_MODE = "select_picture_mode"
+SERVICE_START_HUE_SYNC = "start_hue_sync"
+SERVICE_STOP_HUE_SYNC = "stop_hue_sync"
 
 # Frame Art Extended Services
 SERVICE_ART_GET_ARTMODE = "art_get_artmode"

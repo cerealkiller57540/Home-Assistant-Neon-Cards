@@ -29,7 +29,13 @@ from .api.ipcontrol import (
     SamsungIPControlAuthError,
     SamsungIPControlError,
 )
-from .const import CONF_ENABLE_IP_CONTROL, CONF_IP_CONTROL_TOKEN, DATA_CFG, DOMAIN
+from .const import (
+    CONF_ENABLE_IP_CONTROL,
+    CONF_IP_CONTROL_TOKEN,
+    DATA_CFG,
+    DOMAIN,
+    ip_control_port,
+)
 from .token_notify import METHOD_IP_CONTROL, clear_token_problem, notify_token_problem
 
 _LOGGER = logging.getLogger(__name__)
@@ -114,7 +120,12 @@ class SamsungTVRebootButton(ButtonEntity):
                 "IP Control is not paired for this TV — re-pair via the "
                 "integration options first."
             )
-        client = SamsungIPControl(self.hass, self._host, token=token)
+        client = SamsungIPControl(
+            self.hass,
+            self._host,
+            port=ip_control_port(entry.data if entry else {}),
+            token=token,
+        )
         try:
             power = await client.async_get_power_state()
             if power == "powerOff":

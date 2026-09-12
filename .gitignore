@@ -36,3 +36,13 @@ logs/
 # Zigbee2MQTT runtime (logs + state, régénéré en continu, pas du code)
 zigbee2mqtt/log/
 zigbee2mqtt/state.json
+
+# Backups de debug ad-hoc (jamais du code à versionner, cf incident 279 fichiers 12/09)
+*.bak
+*.bak-*
+*.old
+*.safe
+clim_sniff.log
+
+# Cache image HA (snapshots générés, régénéré au runtime, pas du code)
+image/

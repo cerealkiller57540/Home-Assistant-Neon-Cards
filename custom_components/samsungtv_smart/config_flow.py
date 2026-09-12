@@ -10,7 +10,12 @@ from typing import Any, Dict
 import voluptuous as vol
 
 from homeassistant.components.binary_sensor import DOMAIN as BS_DOMAIN
-from homeassistant.config_entries import ConfigEntry, ConfigFlowResult, OptionsFlow
+from homeassistant.config_entries import (
+    SOURCE_RECONFIGURE,
+    ConfigEntry,
+    ConfigFlowResult,
+    OptionsFlow,
+)
 from homeassistant.const import (
     ATTR_DEVICE_ID,
     CONF_API_KEY,
@@ -77,6 +82,8 @@ from .const import (
     CONF_IP_CONTROL_ART_MODE,
     CONF_IP_CONTROL_FW_VERSION,
     CONF_IP_CONTROL_MODEL_ID,
+    CONF_IP_CONTROL_POLL_INTERVAL,
+    CONF_IP_CONTROL_PORT,
     CONF_IP_CONTROL_TOKEN,
     CONF_LOGO_OPTION,
     CONF_OAUTH_TOKEN,
@@ -99,13 +106,17 @@ from .const import (
     CONF_WOL_REPEAT,
     CONF_WS_NAME,
     DEFAULT_CONTENT_LIST_INTERVAL,
+    DEFAULT_IP_CONTROL_POLL_INTERVAL,
     DEFAULT_PORT,
     DEFAULT_ST_POLL_ON_INTERVAL,
     DOMAIN,
+    IP_CONTROL_PORTS,
     MAX_CONTENT_LIST_INTERVAL,
+    MAX_IP_CONTROL_POLL_INTERVAL,
     MAX_ST_POLL_ON_INTERVAL,
     MAX_WOL_REPEAT,
     MIN_CONTENT_LIST_INTERVAL,
+    MIN_IP_CONTROL_POLL_INTERVAL,
     MIN_ST_POLL_ON_INTERVAL,
     RESULT_ST_DEVICE_NOT_FOUND,
     RESULT_ST_DEVICE_USED,
@@ -156,6 +167,7 @@ ADVANCED_OPTIONS = [
     CONF_DUMP_APPS,
     CONF_EXT_POWER_ENTITY,
     CONF_PING_PORT,
+    CONF_IP_CONTROL_POLL_INTERVAL,
     CONF_ST_POLL_ON_INTERVAL,
     CONF_WOL_REPEAT,
     CONF_TOGGLE_ART_MODE,
@@ -223,8 +235,24 @@ class SamsungTVSmartOAuth2FlowHandler(
         return {"scope": "r:devices:* x:devices:*"}
 
     def _stdev_already_used(self, devices_id) -> bool:
-        """Check if a device_id is in HA config."""
+        """Check if a device_id is used by ANOTHER config entry.
+
+        The entry being reconfigured is skipped: when re-picking its own
+        SmartThings device, the candidate list must not exclude the device it
+        already points at, and a user re-selecting the same TV must not be told
+        it is "already used" by itself.
+        """
+        # NB: computed inline rather than via a helper. Home Assistant's
+        # ConfigFlow base class already owns the name `_reconfigure_entry_id`
+        # (a property that _get_reconfigure_entry reads), so defining a method
+        # of that name shadowed it and broke every reconfigure step with
+        # UnknownEntry, not just this one.
+        current = (
+            self.context.get("entry_id") if self.source == SOURCE_RECONFIGURE else None
+        )
         for entry in self._async_current_entries():
+            if entry.entry_id == current:
+                continue
             if entry.data.get(CONF_DEVICE_ID, "") == devices_id:
                 return True
         return False
@@ -672,6 +700,7 @@ class SamsungTVSmartOAuth2FlowHandler(
             menu_options=[
                 "reconfigure_connection",
                 "reconfigure_auth",
+                "reconfigure_st_device",
                 "reconfigure_ip_control",
             ],
         )
@@ -754,6 +783,89 @@ class SamsungTVSmartOAuth2FlowHandler(
             return await self._async_show_auth_form(errors=result)
         return self._apply_reconfigure_and_reload()
 
+    async def async_step_reconfigure_st_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Re-select which SmartThings device this entry points at.
+
+        The device id was previously written once, when the entry was created,
+        and never revisited. A TV that re-registers in SmartThings — after a
+        mainboard repair, or after being removed and re-added in the app — gets
+        a NEW id, so the stored one is refused with "Forbidden" forever and the
+        only way out was deleting and recreating the entry, losing entity ids
+        and history with it.
+        """
+        entry = self._get_reconfigure_entry()
+        self._api_key = entry.data.get(CONF_API_KEY)
+        if not self._api_key and entry.data.get(CONF_AUTH_METHOD) == AUTH_METHOD_OAUTH:
+            oauth_token = entry.data.get(CONF_OAUTH_TOKEN)
+            if isinstance(oauth_token, dict):
+                self._api_key = oauth_token.get("access_token")
+        if not self._api_key:
+            return self.async_abort(reason="st_not_configured")
+
+        if user_input is None:
+            # Ask the account what it has now. The current entry is excluded
+            # from the "already used" filter, so its own device stays listed.
+            result = await self._get_st_deviceid()
+            if result != RESULT_SUCCESS:
+                return self.async_show_form(
+                    step_id="reconfigure_st_device",
+                    data_schema=vol.Schema({vol.Required(CONF_DEVICE_ID): str}),
+                    errors={CONF_BASE: result},
+                    description_placeholders={
+                        "current": self._current_st_device(entry)
+                    },
+                )
+            if self._st_devices_schema:
+                return self.async_show_form(
+                    step_id="reconfigure_st_device",
+                    data_schema=self._st_devices_schema,
+                    description_placeholders={
+                        "current": self._current_st_device(entry)
+                    },
+                )
+            # Exactly one candidate: _get_st_deviceid already picked it, but
+            # confirm rather than rewrite the entry behind the user's back.
+            return self.async_show_form(
+                step_id="reconfigure_st_device",
+                data_schema=vol.Schema(
+                    {vol.Required(CONF_DEVICE_ID, default=self._device_id): str}
+                ),
+                description_placeholders={"current": self._current_st_device(entry)},
+            )
+
+        device_id = user_input.get(CONF_ST_DEVICE) or user_input.get(CONF_DEVICE_ID)
+        if not device_id:
+            return self.async_abort(reason="st_device_missing")
+        if self._stdev_already_used(device_id):
+            return self.async_show_form(
+                step_id="reconfigure_st_device",
+                data_schema=vol.Schema({vol.Required(CONF_DEVICE_ID): str}),
+                errors={CONF_BASE: RESULT_ST_DEVICE_USED},
+                description_placeholders={"current": self._current_st_device(entry)},
+            )
+
+        _LOGGER.info(
+            "SmartThings device for %s changed from %s to %s",
+            entry.title,
+            entry.data.get(CONF_DEVICE_ID) or "(none)",
+            device_id,
+        )
+        # Data-only update; the update listener schedules the reload, and
+        # CONF_DEVICE_ID is not in _NO_RELOAD_DATA_KEYS so the SmartThings
+        # client is rebuilt with the new id.
+        return self.async_update_and_abort(
+            entry,
+            data_updates={CONF_DEVICE_ID: device_id},
+            reason="st_device_updated",
+        )
+
+    @staticmethod
+    def _current_st_device(entry: ConfigEntry) -> str:
+        """Human-readable current device id, for the form description."""
+        return entry.data.get(CONF_DEVICE_ID) or "(none)"
+
     async def async_step_reconfigure_ip_control(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -816,7 +928,11 @@ class SamsungTVSmartOAuth2FlowHandler(
         Requires the TV ON in NORMAL viewing (not Art Mode) with "IP Remote"
         enabled (Settings -> Connections -> Network -> Expert Settings).
         """
-        from .api.ipcontrol import SamsungIPControl, SamsungIPControlError
+        from .api.ipcontrol import (
+            SamsungIPControl,
+            SamsungIPControlError,
+            SamsungIPControlTransportError,
+        )
 
         entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
@@ -827,9 +943,47 @@ class SamsungTVSmartOAuth2FlowHandler(
             if not host:
                 errors[CONF_BASE] = "ip_control_no_host"
             else:
-                client = SamsungIPControl(self.hass, host)
+                # Samsung moved the IP Control port once -- 1515 up to the
+                # 2019 models, 1516 from 2020 -- and we only ever knocked on
+                # 1516, so pre-2020 sets looked unsupported when they were
+                # merely listening elsewhere (#206). Only a transport failure
+                # moves on to the next port: any answer at all means the server
+                # is there and the failure lies elsewhere, so we must not retry
+                # and make the user accept two on-screen prompts.
+                client: SamsungIPControl | None = None
+                token = None
+                port = IP_CONTROL_PORTS[0]
+                transport_error: Exception | None = None
                 try:
-                    token = await client.async_pair()
+                    for candidate_port in IP_CONTROL_PORTS:
+                        client = SamsungIPControl(self.hass, host, port=candidate_port)
+                        try:
+                            token = await client.async_pair()
+                        except SamsungIPControlTransportError as ex:
+                            transport_error = ex
+                            _LOGGER.debug(
+                                "IP Control: nothing answered on %s:%s (%s)",
+                                host,
+                                candidate_port,
+                                ex,
+                            )
+                            continue
+                        port = candidate_port
+                        break
+                    if token is None:
+                        # No port answered: the TV state and the IP Remote
+                        # setting are irrelevant, so telling the user to check
+                        # them sends them chasing the wrong thing. Pairing waits
+                        # 30s for the on-screen prompt, so an instant failure
+                        # never reached it -- the model has no IP Control server.
+                        _LOGGER.warning(
+                            "IP Control pairing could not reach %s on any known "
+                            "port (%s): %s (the TV may not support IP Control)",
+                            host,
+                            ", ".join(str(p) for p in IP_CONTROL_PORTS),
+                            transport_error,
+                        )
+                        errors[CONF_BASE] = "ip_control_unreachable"
                 except SamsungIPControlError as ex:
                     _LOGGER.warning(
                         "IP Control pairing failed for %s: %s (TV must be ON in "
@@ -840,7 +994,10 @@ class SamsungTVSmartOAuth2FlowHandler(
                     )
                     errors[CONF_BASE] = "ip_control_pair_failed"
                 else:
-                    data_updates: dict[str, Any] = {CONF_IP_CONTROL_TOKEN: token}
+                    data_updates: dict[str, Any] = {
+                        CONF_IP_CONTROL_TOKEN: token,
+                        CONF_IP_CONTROL_PORT: port,
+                    }
                     try:
                         device_info = await client.async_get_device_information()
                     except SamsungIPControlError as ex:
@@ -1317,6 +1474,57 @@ class OptionsFlowHandler(OptionsFlow):
             ],
         )
 
+    async def _async_llm_model_selector(self, data):
+        """Model field: a live dropdown when the provider can be queried.
+
+        Falls back to free text when no key is stored yet or the provider is
+        unreachable — the field must never become un-fillable just because the
+        network is down. ``custom_value`` stays on so a model missing from the
+        list (brand new, or a fine-tune) can still be typed in.
+        """
+        from .art_identify import async_list_models  # noqa: PLC0415 - lazy
+
+        provider = data.get(CONF_ART_LLM_PROVIDER)
+        api_key = data.get(CONF_ART_LLM_API_KEY)
+        if not provider or not api_key:
+            return str
+
+        try:
+            models = await async_list_models(
+                async_get_clientsession(self.hass), provider, api_key
+            )
+        except Exception as ex:  # noqa: BLE001 - never block the form
+            _LOGGER.debug("Could not list %s models for the form: %s", provider, ex)
+            return str
+
+        if not models:
+            return str
+
+        current = data.get(CONF_ART_LLM_MODEL)
+        if current and current not in models:
+            # Keep a retired/pinned model selectable so the form shows the
+            # truth instead of silently swapping it for something else.
+            models = [current, *models]
+        return SelectSelector(
+            SelectSelectorConfig(
+                options=[SelectOptionDict(value=m, label=m) for m in models],
+                mode=SelectSelectorMode.DROPDOWN,
+                custom_value=True,
+            )
+        )
+
+    async def _async_pick_llm_model(self, data) -> str | None:
+        """Best model for the configured provider/key, or None if unknown."""
+        from .art_identify import async_pick_default_model  # noqa: PLC0415 - lazy
+
+        provider = data.get(CONF_ART_LLM_PROVIDER)
+        api_key = data.get(CONF_ART_LLM_API_KEY)
+        if not provider or not api_key:
+            return None
+        return await async_pick_default_model(
+            async_get_clientsession(self.hass), provider, api_key
+        )
+
     async def async_step_art_identify(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -1349,7 +1557,14 @@ class OptionsFlowHandler(OptionsFlow):
                 if value:
                     new_data[key] = value
                 elif key == CONF_ART_LLM_MODEL:
-                    new_data.pop(key, None)  # blank model -> fall back to default
+                    # Blank model: resolve the best model this key can
+                    # actually use, rather than pinning a constant that the
+                    # provider will eventually retire (issue #188).
+                    picked = await self._async_pick_llm_model(new_data)
+                    if picked:
+                        new_data[key] = picked
+                    else:
+                        new_data.pop(key, None)
             self.hass.config_entries.async_update_entry(entry, data=new_data)
             return await self.async_step_menu()
 
@@ -1374,7 +1589,7 @@ class OptionsFlowHandler(OptionsFlow):
             vol.Optional(
                 CONF_ART_LLM_MODEL,
                 default=data.get(CONF_ART_LLM_MODEL, ""),
-            ): str,
+            ): await self._async_llm_model_selector(data),
             vol.Required(
                 CONF_ART_IDENTIFY_PERSONAL,
                 default=data.get(CONF_ART_IDENTIFY_PERSONAL, False),
@@ -1549,6 +1764,19 @@ class OptionsFlowHandler(OptionsFlow):
                     vol.Clamp(
                         min=MIN_ST_POLL_ON_INTERVAL,
                         max=MAX_ST_POLL_ON_INTERVAL,
+                    ),
+                ),
+                vol.Required(
+                    CONF_IP_CONTROL_POLL_INTERVAL,
+                    default=options.get(
+                        CONF_IP_CONTROL_POLL_INTERVAL,
+                        DEFAULT_IP_CONTROL_POLL_INTERVAL,
+                    ),
+                ): vol.All(
+                    vol.Coerce(int),
+                    vol.Clamp(
+                        min=MIN_IP_CONTROL_POLL_INTERVAL,
+                        max=MAX_IP_CONTROL_POLL_INTERVAL,
                     ),
                 ),
             }

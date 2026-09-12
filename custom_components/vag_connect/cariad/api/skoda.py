@@ -27,12 +27,228 @@ from .._util import (
     safe_int,
     workshop_phone_from_contact,
 )
-from ..exceptions import AuthenticationError
+from ..exceptions import APIError, AuthenticationError
 from ..models import BRAND_SKODA, VehicleData
 from .base import CariadBaseClient
 
 _LOGGER = logging.getLogger(__name__)
 _BASE = "https://mysmob.api.connect.skoda-auto.cz"
+
+# Official public-API key management (mysmob BFF, RE'd from MyŠkoda 8.16 —
+# cz.myskoda.api.bff_public_api_keys.v2), path /api/v2/public-api-keys. Rides the
+# same mysmob Bearer this client already holds. POST creates a key (returns the
+# secret once), GET lists remaining quota per VIN, DELETE removes one by id. Keys
+# are VIN-bound; max 5 per VIN. Path inlined at each call site (literal, so the
+# Bruno drift-check resolves it) — kept here for documentation.
+# #1286 — plain alphanumeric + a single space, no parentheses/underscore. The
+# mysmob create-key POST 400s for real users (n3roGit + indigomejor); the backend
+# may validate the key ``name`` (charset/length), and the app's names are simple
+# user-typed strings, so keep ours conservative to remove that as a 400 cause.
+_OFFICIAL_KEY_NAME = "Home Assistant"
+# The key-management route is only exercised by the MyŠkoda app (v8.16+); spoof the
+# real app User-Agent on these calls so a possible min-app-version gate is satisfied
+# (verbatim from the 8.16 APK; MySkoda/Android/{versionName}/{versionCode}).
+_KEYGEN_USER_AGENT = "MySkoda/Android/8.16.0/260821007"
+# 1:1 with the app: the MyŠkoda "[bff-api-auth]" client attaches a full app-identity
+# header set on EVERY request (RE'd byte-for-byte from 8.16 br0/b.smali). The read
+# endpoints accept our token without it, but the key-management route (create/list/
+# delete) is stricter and 400s a request that omits these — the only app-vs-us
+# difference left after host/method/token/body were all confirmed identical. Every
+# value is client-generated (the installation-id is a locally-persisted UUID, not a
+# server-registered one; traceparent is random per request), so we reproduce them
+# exactly. Values verbatim from the APK.
+_KEYGEN_APP_VERSION_NAME = "8.16.0"
+_KEYGEN_APP_VERSION_CODE = "260821007"
+
+_COMBUSTION_ENGINE_TYPES = ("gasoline", "petrol", "diesel", "cng", "lpg")
+
+
+def _is_driving_from_readiness(readiness: Any) -> bool:
+    """Motion flag from the readiness block — always a concrete bool (#1310).
+
+    True only when the readiness block reports ``inMotion``; False for a missing
+    block, a missing/false ``inMotion``, or any non-dict. Assigned unconditionally
+    in ``get_status`` so the ``is_driving`` sensor never reverts to None (and gets
+    hidden) on a poll that momentarily omits the readiness block. ``_val`` for a
+    single key is a plain ``dict.get``, so this matches the prior inline expression."""
+    return isinstance(readiness, dict) and readiness.get("inMotion") is True
+
+
+def _software_update_from_readiness(readiness: Any) -> str | None:
+    """#1333 — the readiness block's software-update lifecycle value, verbatim.
+
+    Returns the raw enum string (e.g. ``"UPDATE_IN_PROGRESS"``) stripped, or None
+    when the block/field is absent or blank. Kept RAW (not enum-normalized) so a
+    plain string sensor surfaces any value we haven't catalogued yet rather than an
+    ENUM dropping it — the Scout "never suppress" policy. Pure + total for a unit
+    test that pins the extraction (mirrors ``_is_driving_from_readiness``)."""
+    if not isinstance(readiness, dict):
+        return None
+    val = readiness.get("softwareUpdateStatus")
+    return val.strip() if isinstance(val, str) and val.strip() else None
+
+
+def _primary_soc_or_none(
+    soc_i: int | None,
+    fuel_i: int | None,
+    engine_type: Any,
+    car_type: Any = None,
+) -> int | None:
+    """Decide whether ``primaryEngineRange.currentSoCInPercent`` is a real 12V SoC.
+
+    #1310 (indigomejor, gasoline Škoda): the backend mirrors the fuel level into
+    ``currentSoCInPercent`` on a combustion primary engine (captured equal at
+    100/100 and 41/41 with the fuel gauge matching), so a "SoC" that equals the
+    fuel level there is the fuel duplicated, not a 12V reading. Return ``None`` in
+    that case. Grounded across four archived Škoda diags (Octavia diesel 82==82,
+    Rapid gasoline 83==83, indigomejor gasoline 92==92, Superb iV PHEV 16==16 on
+    the combustion primary).
+
+    #1359 (Seccados, Enyaq iV80 BEV): on an ELECTRIC primary engine,
+    ``currentSoCInPercent`` IS the high-voltage traction-battery SoC — the exact
+    number the main EV battery sensor already shows — never a 12V reading. It was
+    being surfaced as the "12V Battery Power Level" sensor, so on a BEV that sensor
+    just mirrored the main battery. Detect it from the primary engine type OR the
+    car type (``carType == "electric"``): no archived BEV-Škoda diag exists to pin
+    which field the Enyaq populates, so keying on either is the safe ground. On a
+    PHEV the electric engine is the *secondary* range and ``carType`` is "hybrid",
+    so this never fires there — the combustion primary still goes through the fuel-
+    mirror guard above. Return ``None``, so the 12V level is only ever kept when it
+    is a genuinely distinct value on a combustion primary engine."""
+    if soc_i is None:
+        return None
+    et = str(engine_type or "").lower()
+    ct = str(car_type or "").lower()
+    if "electric" in et or et == "bev" or ct == "electric":
+        return None
+    if et in _COMBUSTION_ENGINE_TYPES and soc_i == fuel_i:
+        return None
+    return soc_i
+
+
+def _apply_trip_statistics(trip_stats: Any, d: VehicleData) -> None:
+    """Map the mysmob ``/trip-statistics`` response onto VehicleData (#1310).
+
+    The response is FLAT (fields at top level; no "overview" wrapper) and windowed
+    to the CURRENT WEEK (fetched with ``?offsetType=week&offset=0``), so
+    ``overallMileageInKm`` is this week's total — NOT a lifetime odometer — and is
+    deliberately NOT mapped into any ``lifetime_*`` field: it corrupted HA
+    long-term stats (a weekly value in a TOTAL_INCREASING sensor), and the true
+    total is already ``odometer_km``. ``last_trip_*`` come from the most-recent
+    per-DAY entry in ``detailedStatistics`` (myskoda StatisticsEntry), picked by
+    ISO ``date`` (lexical == chronological) since entries arrive unordered and the
+    entry has no ``tripEndTimestamp`` — only ``date``. ``overallCost`` feeds the
+    four ``trip_*_cost`` sensors."""
+    if not isinstance(trip_stats, dict):
+        return
+    overview = trip_stats.get("overview") or trip_stats
+    detailed = trip_stats.get("detailedStatistics")
+    if isinstance(detailed, list) and detailed:
+        last = max(
+            (e for e in detailed if isinstance(e, dict)),
+            key=lambda e: e.get("date") or "",
+            default=None,
+        )
+        if isinstance(last, dict):
+            last_km = last.get("mileageInKm")
+            if isinstance(last_km, (int, float)):
+                d.last_trip_distance_km = int(last_km)
+            last_time = last.get("travelTimeInMin")
+            if isinstance(last_time, (int, float)):
+                d.last_trip_duration_min = int(last_time)
+            last_fuel = last.get("averageFuelConsumption")
+            if isinstance(last_fuel, (int, float)):
+                d.last_trip_avg_fuel_consumption_l_100km = float(last_fuel)
+            last_elec = last.get("averageElectricConsumption")
+            if isinstance(last_elec, (int, float)):
+                d.last_trip_avg_electric_consumption_kwh_100km = float(last_elec)
+            last_speed = last.get("averageSpeedInKmph")
+            if isinstance(last_speed, (int, float)):
+                d.last_trip_avg_speed_kmh = int(last_speed)
+            last_date = last.get("date")
+            if isinstance(last_date, str) and last_date:
+                d.last_trip_timestamp = last_date
+    overall_cost = trip_stats.get("overallCost") or (
+        overview.get("overallCost") if isinstance(overview, dict) else None
+    )
+    if isinstance(overall_cost, dict):
+        def _cost(node: Any) -> float | None:
+            if isinstance(node, dict):
+                c = node.get("cost")
+                return float(c) if isinstance(c, (int, float)) else None
+            return float(node) if isinstance(node, (int, float)) else None
+
+        d.trip_total_cost = _cost(overall_cost.get("totalCost"))
+        d.trip_fuel_cost = _cost(overall_cost.get("fuelCost"))
+        d.trip_electricity_cost = _cost(overall_cost.get("electricityCost"))
+        d.trip_cng_cost = _cost(overall_cost.get("cngCost"))
+        for sub in (
+            overall_cost.get("totalCost"),
+            overall_cost.get("fuelCost"),
+            overall_cost.get("electricityCost"),
+        ):
+            if isinstance(sub, dict) and sub.get("costCurrency"):
+                d.trip_cost_currency = str(sub["costCurrency"])
+                break
+
+
+def _apply_single_trip(single_trips: Any, d: VehicleData) -> None:
+    """Fill the ``last_trip_*`` sensors from the mysmob single-trips endpoint (#1310).
+
+    The WEEK/MONTH/YEAR ``/trip-statistics`` overview returns a metric-HOLLOW
+    ``detailedStatistics`` on combustion cars (only a ``date``, no distance / speed /
+    consumption — indigomejor), so ``_apply_trip_statistics`` above could never
+    populate ``last_trip_*`` there. The ``/trip-statistics/{vin}/single-trips``
+    endpoint is the ONLY source carrying per-trip ``averageSpeedInKmph`` AND
+    ``averageFuelConsumption`` (RE'd from MyŠkoda 8.16 ``TripStatisticsApi`` /
+    ``SingleTripDto``). Response shape: ``{dailyTrips: [{date, trips: [SingleTripDto]}]}``.
+    Pick the most-recent trip (latest day ``date``, then latest ``endTime``) and fill
+    from it — a genuine per-trip record, not a per-day aggregate. Overrides the hollow
+    overview values when both are present (per-trip is the more accurate source).
+    """
+    if not isinstance(single_trips, dict):
+        return
+    daily = single_trips.get("dailyTrips")
+    if not isinstance(daily, list):
+        return
+    best_day = ""
+    best_key = ""
+    best: dict[str, Any] | None = None
+    for day in daily:
+        if not isinstance(day, dict):
+            continue
+        day_date = str(day.get("date") or "")
+        trips = day.get("trips")
+        if not isinstance(trips, list):
+            continue
+        for t in trips:
+            if not isinstance(t, dict):
+                continue
+            key = day_date + "T" + str(t.get("endTime") or t.get("startTime") or "")
+            if best is None or key > best_key:
+                best_key, best_day, best = key, day_date, t
+    if best is None:
+        return
+    _mi = best.get("mileageInKm")
+    if isinstance(_mi, (int, float)):
+        d.last_trip_distance_km = int(_mi)
+    _tt = best.get("travelTimeInMin")
+    if isinstance(_tt, (int, float)):
+        d.last_trip_duration_min = int(_tt)
+    _sp = best.get("averageSpeedInKmph")
+    if isinstance(_sp, (int, float)):
+        d.last_trip_avg_speed_kmh = int(_sp)
+    _fc = best.get("averageFuelConsumption")
+    if isinstance(_fc, (int, float)):
+        d.last_trip_avg_fuel_consumption_l_100km = float(_fc)
+    _ec = best.get("averageElectricConsumption")
+    if isinstance(_ec, (int, float)):
+        d.last_trip_avg_electric_consumption_kwh_100km = float(_ec)
+    _so = best.get("startMileageInKm")
+    if isinstance(_so, (int, float)):
+        d.last_trip_start_odometer_km = int(_so)
+    if best_day:
+        d.last_trip_timestamp = best_day
 
 # driving-range.carType enum values that are pure-combustion (no HV battery, no
 # plug). EVs report "electric", PHEVs "hybrid" — deliberately absent, so a plug-in
@@ -123,6 +339,231 @@ class SkodaClient(CariadBaseClient):
         # stops 403-hammering that endpoint. Empty on a fresh restart → charging is
         # attempted once, carType is learned, then skipped from poll 2 on.
         self._powertrain: dict[str, str] = {}
+        # Škoda OFFICIAL public-API client, armed opt-in (see
+        # arm_supplementary_official). None unless the user configured an API key.
+        # Consulted as an ACTIVE live source on every healthy poll (rate permitting)
+        # AND as the hard-failure failover. Rate-limited to 20 req/hour/key, so both
+        # read paths go through _official_read_rate_safe, which self-skips at quota.
+        self._supplementary_official: Any = None
+        # #1286 — Škoda official-API source mode, pushed by the coordinator from
+        # CONF_SKODA_OFFICIAL_MODE. Only "official_only" changes THIS client's read
+        # routing (get_status below); the other modes are enforced coordinator-side
+        # (merge / failover / auto-enrol gating). Default "auto".
+        self._official_mode: str = "auto"
+
+    def set_official_mode(self, mode: str) -> None:
+        """Set the Škoda official-API source mode (CONF_SKODA_OFFICIAL_MODE)."""
+        self._official_mode = str(mode or "auto")
+
+    def arm_supplementary_official(
+        self, api_key: str = "", keys_by_vin: dict[str, str] | None = None,
+    ) -> None:
+        """Arm the official Škoda public API (opt-in) as an active live source plus
+        hard-failure failover. Keys are vehicle-bound server-side, so
+        ``get_status(vin)`` is called per-VIN. ``keys_by_vin`` carries the
+        auto-enrolled per-VIN keys; ``api_key`` is the single manual-fallback key
+        (applied to any VIN without its own)."""
+        if not api_key and not keys_by_vin:
+            self._supplementary_official = None
+            return
+        from .skoda_official import SkodaOfficialClient  # noqa: PLC0415
+        self._supplementary_official = SkodaOfficialClient(
+            self._session, email="", password=api_key, spin=self._spin,
+            keys_by_vin=keys_by_vin,
+        )
+
+    async def _official_read_rate_safe(self, vin: str) -> "VehicleData | None":
+        """Shared body for the official public-API reads (failover + active
+        live-source). Honours the official channel's 20/hour/key budget: if the
+        server has told us we're out (RateLimit-Remaining 0, or a 429/503
+        Retry-After), skip the read until the window resets rather than breaching
+        the quota. Fail-soft: any error returns None so an official hiccup can
+        never itself sink the poll."""
+        off = self._supplementary_official
+        if off is None:
+            return None
+        if getattr(off, "over_rate_limit", False) is True:
+            return None
+        try:
+            return await off.get_status(vin)  # type: ignore[no-any-return]
+        except Exception:  # noqa: BLE001
+            return None
+
+    async def official_failover_read(self, vin: str) -> "VehicleData | None":
+        """Read one VIN via the official public API — the FAILOVER path, invoked
+        only when the primary channel hard-fails
+        (coordinator._revive_from_supplementary)."""
+        return await self._official_read_rate_safe(vin)
+
+    async def official_live_read(self, vin: str) -> "VehicleData | None":
+        """Read one VIN via the official public API on a HEALTHY cycle — the ACTIVE
+        live-source path (as opposed to official_failover_read). The official
+        manufacturer API is queried every poll (rate permitting) and its readings
+        are merged into the primary payload as an authoritative live source, rather
+        than being held back purely as a hard-failure failover."""
+        return await self._official_read_rate_safe(vin)
+
+    # -- official public-API key minting (mysmob BFF) -------------------------
+    # Auto-enrollment: mint the official X-API-Key from the user's existing mysmob
+    # login so an already-logged-in Škoda owner gets the durable official channel
+    # with zero effort. RE'd from MyŠkoda 8.16 (bff_public_api_keys.v2).
+
+    @property
+    def can_mint_official_key(self) -> bool:
+        """True only on a NATIVE mysmob login. The keygen POST needs the real mysmob
+        Bearer this client already holds; a portal-fallback entry holds a
+        cookie-session sentinel (strategy ``data_act_portal`` + ``_eu_portal`` set)
+        that would 401. Gate on: no portal connector + empty token strategy + a
+        non-empty access token.
+
+        #1286 — do NOT require a specific token prefix. The earlier ``ey`` (JWT)
+        check risked blocking a legitimate native token variant and silently
+        skipping enrolment; ``strategy == ""`` + ``_eu_portal is None`` already
+        establish the native login, and if the mint is nonetheless rejected it
+        fails soft and the ``skoda_official_keygen`` probe records the exact
+        status. Attempting-and-observing beats silently gating out."""
+        if getattr(self, "_eu_portal", None) is not None:
+            return False
+        tok = self._tokens
+        if tok is None or getattr(tok, "strategy", "") != "":
+            return False
+        at = getattr(tok, "access_token", "") or ""
+        return isinstance(at, str) and bool(at)
+
+    def _keygen_headers(self) -> dict[str, Any]:
+        """The MyŠkoda app's byte-for-byte app-identity header set for the official
+        api-keys management endpoint (create/list/delete). RE'd from 8.16
+        (br0/b.smali): the gateway 400s a key-management request that omits these,
+        even though the read endpoints accept the same Bearer without them. Every
+        value is client-generated so we can reproduce them exactly — a stable
+        per-instance installation id (a UUID, like the app's locally-persisted one),
+        the fixed app-version/platform, a device locale, and a fresh W3C traceparent
+        per call."""
+        import secrets  # noqa: PLC0415
+        import uuid  # noqa: PLC0415
+        install_id = getattr(self, "_keygen_install_id", "") or ""
+        if not install_id:
+            install_id = str(uuid.uuid4())
+            self._keygen_install_id = install_id
+        # X-DEVICE-LANGUAGE / X-DEVICE-COUNTRY mirror the app's Locale.getLanguage()
+        # and Locale.getCountry(): the coordinator feeds the HA instance locale
+        # (hass.config.language / .country) via _ha_language/_ha_country, and we
+        # normalize to the exact ISO forms the app sends — language ISO-639-1
+        # lower-case 2-letter (drop any region subtag, e.g. "en-GB" → "en"), country
+        # ISO-3166-1 alpha-2 upper-case. Fall back to a valid default when HA has none.
+        lang = str(getattr(self, "_ha_language", "") or "")
+        lang = lang.replace("_", "-").split("-", 1)[0].strip().lower()
+        if len(lang) != 2 or not lang.isalpha():
+            lang = "en"
+        ctry = str(getattr(self, "_ha_country", "") or "").strip().upper()
+        if len(ctry) != 2 or not ctry.isalpha():
+            ctry = "DE"
+        return {
+            "User-Agent": _KEYGEN_USER_AGENT,
+            "X-APP-VERSION-NAME": _KEYGEN_APP_VERSION_NAME,
+            "X-APP-VERSION-CODE": _KEYGEN_APP_VERSION_CODE,
+            "X-APP-PLATFORM": "Android",
+            "X-APP-INSTALLATION-ID": install_id,
+            "X-DEVICE-LANGUAGE": lang,
+            "X-DEVICE-COUNTRY": ctry,
+            "traceparent": f"00-{secrets.token_hex(16)}-{secrets.token_hex(8)}-00",
+        }
+
+    async def mint_api_key(
+        self, vin: str, name: str = _OFFICIAL_KEY_NAME
+    ) -> dict[str, Any] | None:
+        """Create an official public-API key for one VIN via the mysmob BFF, using
+        the existing login. Returns ``{id, key, name, validUntil}`` — the ``key``
+        secret is returned ONLY here, never on a later list — or None on any
+        failure (fail-soft: auto-enroll must never sink the poll). Spoofs the real
+        app User-Agent in case the route is app-version-gated.
+
+        Records a PII-free outcome label under ``probe_outcomes`` on every path
+        (``skoda_official_keygen``) so the integration diagnostics tell us what the
+        live mysmob key-mint route actually did — we RE'd it from the 8.16 app but
+        never ran it against the backend, so real-world outcomes come back as
+        probes. Only the HTTP status and the response's top-level KEY names are
+        recorded — never a body, VIN, or the key secret."""
+        if not self.can_mint_official_key or not vin:
+            return None
+        try:
+            body = await self._post(
+                f"{_BASE}/api/v2/public-api-keys",
+                # vin-first mirrors the app's reflective-Moshi field order (cosmetic,
+                # but keeps the request byte-identical); VIN canonical uppercase.
+                json={"vin": vin.strip().upper(), "name": name},
+                headers=self._keygen_headers(),
+            )
+        except APIError as err:
+            self.probe_outcomes["skoda_official_keygen"] = f"POST {err.status}"
+            _LOGGER.debug(
+                "official-API key mint failed for %s: HTTP %s", vin[-6:], err.status
+            )
+            return None
+        except Exception as err:  # noqa: BLE001
+            self.probe_outcomes["skoda_official_keygen"] = f"POST err:{type(err).__name__}"
+            _LOGGER.debug(
+                "official-API key mint failed for %s: %s", vin[-6:], type(err).__name__
+            )
+            return None
+        if isinstance(body, dict) and body.get("key"):
+            self.probe_outcomes["skoda_official_keygen"] = (
+                "POST 2xx key+validUntil" if body.get("validUntil") else "POST 2xx key"
+            )
+            return body
+        # 2xx but no key secret — record the shape (key NAMES only, no values).
+        shape = ",".join(sorted(body.keys())) if isinstance(body, dict) else "non-dict"
+        self.probe_outcomes["skoda_official_keygen"] = f"POST 2xx no-key [{shape}]"
+        return None
+
+    async def list_api_keys(self) -> dict[str, Any] | None:
+        """List official-API keys + remaining per-VIN quota (``maxKeys`` 5). Returns
+        the response dict (``{maxKeys, vehicleKeys:[{vin, keysRemaining}]}``) or
+        None. Returns no key secrets. Used to check quota before minting. Records a
+        PII-free ``skoda_official_keygen_list`` probe outcome (HTTP status + counts
+        only) so diagnostics show whether the live list route answers."""
+        if not self.can_mint_official_key:
+            return None
+        try:
+            body = await self._get(
+                f"{_BASE}/api/v2/public-api-keys",
+                headers=self._keygen_headers(),
+            )
+        except APIError as err:
+            self.probe_outcomes["skoda_official_keygen_list"] = f"GET {err.status}"
+            _LOGGER.debug("official-API key list failed: HTTP %s", err.status)
+            return None
+        except Exception as err:  # noqa: BLE001
+            self.probe_outcomes["skoda_official_keygen_list"] = (
+                f"GET err:{type(err).__name__}"
+            )
+            _LOGGER.debug("official-API key list failed: %s", type(err).__name__)
+            return None
+        if isinstance(body, dict):
+            vk = body.get("vehicleKeys")
+            self.probe_outcomes["skoda_official_keygen_list"] = (
+                f"GET 2xx maxKeys={body.get('maxKeys')} "
+                f"vins={len(vk) if isinstance(vk, list) else '?'}"
+            )
+            return body
+        self.probe_outcomes["skoda_official_keygen_list"] = "GET 2xx non-dict"
+        return None
+
+    async def delete_api_key(self, key_id: str) -> bool:
+        """Delete one official-API key by id (to free a slot before re-minting an
+        expired one). True on success. Only keys we minted are deletable — the list
+        endpoint returns no foreign ids."""
+        if not self.can_mint_official_key or not key_id:
+            return False
+        try:
+            await self._request(
+                "DELETE", f"{_BASE}/api/v2/public-api-keys/{key_id}",
+                headers=self._keygen_headers(),
+            )
+            return True
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("official-API key delete failed: %s", type(err).__name__)
+            return False
 
     @staticmethod
     def _sub_from_id_token(id_token: str | None) -> str | None:
@@ -174,8 +615,12 @@ class SkodaClient(CariadBaseClient):
             uid = data.get("id") if isinstance(data, dict) else None
             if isinstance(uid, str) and uid:
                 self._user_id = uid
-        except Exception:  # noqa: BLE001
-            _LOGGER.debug("Škoda: /v1/users user-id fetch failed", exc_info=True)
+        except Exception as exc:  # noqa: BLE001
+            # Class only — keep the sweep posture uniform (the URL is static today,
+            # but no exception string reaches a reporter's DEBUG log verbatim).
+            _LOGGER.debug(
+                "Škoda: /v1/users user-id fetch failed (%s)", type(exc).__name__
+            )
 
     async def authenticate(self, mfa_code: str | None = None) -> None:
         """Authenticate, then capture the account user-id for the push channel.
@@ -704,6 +1149,15 @@ class SkodaClient(CariadBaseClient):
                     await portal.login(self._email, self._password)
                 data = await portal.get_vehicle_data(vin)
             return data
+        # #1286 — "official_only" source mode: read the manufacturer public API as
+        # the PRIMARY source instead of the mysmob backend. Per-VIN degrade: if this
+        # car has no official key / the read is unavailable (rate-limited, quota,
+        # error), _official_read_rate_safe returns None and we fall through to the
+        # normal mysmob read rather than blanking the car.
+        if getattr(self, "_official_mode", "auto") == "official_only":
+            off = await self._official_read_rate_safe(vin)
+            if off is not None:
+                return off
         v = self._val
         d = VehicleData(vin=vin)
 
@@ -756,12 +1210,21 @@ class SkodaClient(CariadBaseClient):
             # Skoda app update. POST body w/ VIN-filter on the
             # charging.cariad.digital host.
             self.get_charging_statistics(vin),
+            # #1310 (indigomejor) — per-TRIP records. The WEEK/MONTH/YEAR overview
+            # above returns metric-hollow detailedStatistics on combustion cars, so
+            # last_trip_* never populated; the single-trips endpoint (SingleTripDto)
+            # is the only source with per-trip avg speed + fuel consumption. RE'd
+            # from MyŠkoda 8.16 TripStatisticsApi. timezone=GMT (myskoda's canonical
+            # value; the daily buckets don't matter — we take the newest trip).
+            self._get(
+                f"{_BASE}/api/v1/trip-statistics/{vin}/single-trips?timezone=GMT"
+            ),
             return_exceptions=True,
         )
         (
             status, charging, ac, parking, driving_range,
             maintenance, readiness, sw_update, widget, driving_score,
-            health_v1, trip_stats, charging_stats_v2,
+            health_v1, trip_stats, charging_stats_v2, single_trips,
         ) = results
 
         # v1.9.0 — Vehicle Data Scout opt-in. Stash raw responses keyed by
@@ -1040,6 +1503,13 @@ class SkodaClient(CariadBaseClient):
             _mca = v(settings, "maxChargeCurrentAcAmpere")
             if isinstance(_mca, (int, float)) and not isinstance(_mca, bool):
                 d.max_charge_current = float(_mca)
+            # b11 (#1343 n300home) — also capture the plain MAXIMUM/REDUCED enum
+            # so the Skoda charge-current SELECT still shows a value on cars that
+            # return no charging-profiles (its usual source stays empty then).
+            # The numeric sensor keeps using the ampere value above.
+            _mce = v(settings, "maxChargeCurrentAc")
+            if isinstance(_mce, str) and _mce.strip():
+                d.max_charge_current_enum = _mce
             # v1.26.0 Welle-6 (#173, scouts #143/#133) — cross-brand alias.
             # Skoda's autoUnlockPlugWhenCharged or AC-suffix variant.
             au_raw = v(settings, "autoUnlockPlugWhenCharged") or v(settings, "autoUnlockPlugWhenChargedAC")
@@ -1380,23 +1850,12 @@ class SkodaClient(CariadBaseClient):
                 driving_range, "secondaryEngineRange", "currentFuelLevelInPercent"
             )
             d.secondary_engine_fuel_level_pct = safe_int(sec_eng_fuel)
-            # v2.2.0 Phase 7 PR #1 — primaryEngineRange.currentSoCInPercent.
-            # On a gasoline car this is the 12V SoC (per #116 MavericklCS
-            # 2026-05-01 scout) — early-warning sensor for "modem can't
-            # keep itself awake". Defensive: missing key → field stays None.
-            primary_soc = v(
-                driving_range, "primaryEngineRange", "currentSoCInPercent"
-            )
-            d.primary_engine_soc_pct = safe_int(primary_soc)
-            # v2.2.1 Phase 8 PR #1 — alles-parsen strategy:
-            # primaryEngineRange.{engineType, currentFuelLevelInPercent}
-            # cross-brand reuse. engineType maps into existing
-            # `primary_engine_type` from PR #3 Phase 7 (CUPRA/SEAT) —
-            # zero-new-entity expanded coverage. fuelLevelInPercent is
-            # a new Skoda-only field (primary tank %), distinct vom
-            # existing `fuel_level` (measurements path) und mit dem
-            # bestehenden `secondary_engine_fuel_level_pct` als
-            # cross-brand sibling.
+            # v2.2.1 Phase 8 PR #1 — engineType + primary fuel level. Parsed
+            # FIRST so the 12V decision below can compare the SoC against them.
+            # engineType maps into existing `primary_engine_type` (cross-brand,
+            # CUPRA/SEAT). fuelLevelInPercent is the primary tank %, distinct from
+            # the measurements-path `fuel_level` and a sibling of the existing
+            # `secondary_engine_fuel_level_pct`.
             primary_eng_type = v(
                 driving_range, "primaryEngineRange", "engineType"
             )
@@ -1405,7 +1864,24 @@ class SkodaClient(CariadBaseClient):
             primary_fuel = v(
                 driving_range, "primaryEngineRange", "currentFuelLevelInPercent"
             )
-            d.primary_engine_fuel_level_pct = safe_int(primary_fuel)
+            fuel_i = safe_int(primary_fuel)
+            d.primary_engine_fuel_level_pct = fuel_i
+            # primaryEngineRange.currentSoCInPercent. The #116 scout read this as
+            # the 12V SoC on a gasoline car, but it was never verified — and #1310
+            # (indigomejor, gasoline Škoda) captured the backend sending the SAME
+            # number in currentSoCInPercent and currentFuelLevelInPercent (100/100
+            # full, 41/41 part-tank, fuel gauge matching). So on a combustion
+            # engine a "SoC" that equals the fuel level is just the fuel duplicated,
+            # NOT a 12V reading — don't surface it as one. And on a BEV (#1359,
+            # Enyaq iV80) the electric primary's SoC IS the HV battery, also not 12V.
+            # The guard keeps it only when it is a genuinely distinct value on a
+            # combustion engine.
+            soc_i = safe_int(
+                v(driving_range, "primaryEngineRange", "currentSoCInPercent")
+            )
+            d.primary_engine_soc_pct = _primary_soc_or_none(
+                soc_i, fuel_i, primary_eng_type, v(driving_range, "carType")
+            )
             # v2.2.1 Phase 8 PR #1 — carType (string enum diesel /
             # gasoline / electric / hybrid). Authoritative backend
             # classification der primary engine, distinct von den
@@ -1502,12 +1978,18 @@ class SkodaClient(CariadBaseClient):
             )
 
         # ── Connection status ────────────────────────────────────────────────
+        # is_driving (motion) — always a concrete bool for Škoda so the sensor is
+        # never hidden by the "hide empty" option when the readiness block is
+        # momentarily absent from a poll (#1310, indigomejor: readiness comes and
+        # goes, so is_driving flapped to None and the entity disappeared). Not
+        # driving is the safe default — a car with no motion signal is parked or
+        # asleep far more often than it's mid-drive with the block dropped.
+        d.is_driving = _is_driving_from_readiness(readiness)
         if isinstance(readiness, dict):
             unreachable = v(readiness, "unreachable")
             # When unreachable is unknown (None), assume reachable (True)
             # to avoid setting is_online to a falsy default.
             d.is_online = unreachable is None or unreachable is False
-            d.is_driving = v(readiness, "inMotion") is True
             # v2.2.0 Phase 7 PR #1 — Skoda-only ignition boolean from
             # the scout-silenced-but-unwired audit. Useful for
             # "lock when ignition off" automations.
@@ -1521,6 +2003,12 @@ class SkodaClient(CariadBaseClient):
             bplim = v(readiness, "batteryProtectionLimitOn")
             if isinstance(bplim, bool):
                 d.battery_protection_limit_on = bplim
+            # #1333 (Scout, Elroq) — readiness software-update lifecycle, verbatim
+            # (raw enum string) for a plain string sensor. Via the pure helper so a
+            # unit test can pin the extraction (mirrors is_driving).
+            d.readiness_software_update_status = _software_update_from_readiness(
+                readiness
+            )
 
         # ── carCapturedTimestamp → connection_state (v1.8.12 refactor) ────
         # v1.8.11 introduced this logic Skoda-only; v1.8.12 extracted the
@@ -1588,80 +2076,8 @@ class SkodaClient(CariadBaseClient):
         # with overall_average_fuel_consumption / overall_average_mileage /
         # overall_travel_time_in_min / overall_mileage_in_km + a
         # detailedStatistics list of per-period TripStatistics entries.
-        if isinstance(trip_stats, dict):
-            overview = trip_stats.get("overview") or trip_stats
-            if isinstance(overview, dict):
-                lifetime_km = (
-                    overview.get("overallMileageInKm")
-                    or overview.get("mileageInKm")
-                )
-                if isinstance(lifetime_km, (int, float)):
-                    d.lifetime_distance_km = int(lifetime_km)
-                avg_fuel = overview.get("overallAverageFuelConsumption")
-                if isinstance(avg_fuel, (int, float)):
-                    d.lifetime_avg_fuel_consumption_l_100km = float(avg_fuel)
-                avg_electric = (
-                    overview.get("overallAverageElectricConsumption")
-                    or overview.get("overallAverageElectricEngineConsumption")
-                )
-                if isinstance(avg_electric, (int, float)):
-                    d.lifetime_avg_electric_consumption_kwh_100km = float(avg_electric)
-            # last-trip from detailedStatistics[0]
-            detailed = trip_stats.get("detailedStatistics")
-            if isinstance(detailed, list) and detailed:
-                last = detailed[0]
-                if isinstance(last, dict):
-                    last_km = last.get("mileageInKm") or last.get("mileage")
-                    if isinstance(last_km, (int, float)):
-                        d.last_trip_distance_km = int(last_km)
-                    last_time = (
-                        last.get("travelTimeInMin")
-                        or last.get("travelTime")
-                    )
-                    if isinstance(last_time, (int, float)):
-                        d.last_trip_duration_min = int(last_time)
-                    last_fuel = last.get("averageFuelConsumption")
-                    if isinstance(last_fuel, (int, float)):
-                        d.last_trip_avg_fuel_consumption_l_100km = float(last_fuel)
-                    last_speed = last.get("averageSpeedInKmph")
-                    if isinstance(last_speed, (int, float)):
-                        d.last_trip_avg_speed_kmh = int(last_speed)
-                    last_ts = (
-                        last.get("tripEndTimestamp")
-                        or last.get("timestamp")
-                    )
-                    if isinstance(last_ts, str) and last_ts:
-                        d.last_trip_timestamp = last_ts
-
-            # v2.12.0 (myskoda PR #575 source-verified): overall_cost
-            # breakdown on the OverviewTrip. Each sub-cost is an object
-            # {cost, costCurrency, pricePerUnit}; we store the cost amounts +
-            # a single currency code (they share one currency). v2.15.3 wires
-            # these to four trip_*_cost diagnostic sensors (sensor.py), with the
-            # currency exposed as a per-sensor attribute.
-            overall_cost = trip_stats.get("overallCost") or (
-                overview.get("overallCost") if isinstance(overview, dict) else None
-            )
-            if isinstance(overall_cost, dict):
-                def _cost(node: Any) -> float | None:
-                    if isinstance(node, dict):
-                        c = node.get("cost")
-                        return float(c) if isinstance(c, (int, float)) else None
-                    return float(node) if isinstance(node, (int, float)) else None
-
-                d.trip_total_cost = _cost(overall_cost.get("totalCost"))
-                d.trip_fuel_cost = _cost(overall_cost.get("fuelCost"))
-                d.trip_electricity_cost = _cost(overall_cost.get("electricityCost"))
-                d.trip_cng_cost = _cost(overall_cost.get("cngCost"))
-                # Currency lives on whichever sub-cost is present.
-                for sub in (
-                    overall_cost.get("totalCost"),
-                    overall_cost.get("fuelCost"),
-                    overall_cost.get("electricityCost"),
-                ):
-                    if isinstance(sub, dict) and sub.get("costCurrency"):
-                        d.trip_cost_currency = str(sub["costCurrency"])
-                        break
+        _apply_trip_statistics(trip_stats, d)
+        _apply_single_trip(single_trips, d)
 
         # v2.11.0 (myskoda PR #586 source-verified): charging stats
         # from the replacement endpoint. monthSections[].entries[] each

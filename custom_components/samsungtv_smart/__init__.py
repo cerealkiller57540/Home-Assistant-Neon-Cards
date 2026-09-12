@@ -68,6 +68,7 @@ from .const import (
     CONF_DEVICE_NAME,
     CONF_ENABLE_IP_CONTROL,
     CONF_IP_CONTROL_ART_MODE,
+    CONF_IP_CONTROL_POLL_INTERVAL,
     CONF_LOAD_ALL_APPS,
     CONF_OAUTH_TOKEN,
     CONF_SCAN_APP_HTTP,
@@ -1308,12 +1309,14 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 # Options whose change adds/removes platforms or clients and therefore needs a
 # full reload (everything else is applied live via SIGNAL_CONFIG_ENTITY).
-# CONF_ST_POLL_ON_INTERVAL is included because the SmartThings power-sensor
-# coordinator fixes its update_interval at creation time; a reload re-creates it
-# with the new cadence (the media_player / selects read it live).
+# CONF_ST_POLL_ON_INTERVAL and CONF_IP_CONTROL_POLL_INTERVAL are included
+# because their coordinators fix update_interval at creation time; a reload
+# re-creates them with the new cadence (the media_player / selects read the
+# SmartThings one live).
 _RELOAD_OPTIONS = (
     CONF_ENABLE_IP_CONTROL,
     CONF_IP_CONTROL_ART_MODE,
+    CONF_IP_CONTROL_POLL_INTERVAL,
     CONF_ST_POLL_ON_INTERVAL,
 )
 

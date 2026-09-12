@@ -31,6 +31,16 @@
           "mfa_code": "6-stelliger Code aus E-Mail oder Authenticator-App"
         }
       },
+      "porsche_captcha": {
+        "title": "Captcha erforderlich",
+        "description": "Porsche verlangt die Lösung eines Captchas, um mit der Anmeldung fortzufahren.\n\n{captcha_img}\n\nLöse es einmal mit deiner besten Vermutung — wiederholte Fehlversuche haben bei Porsche schon zu Konto-Sperrungen wegen verdächtiger Aktivität geführt.\n\nDeine Eingabe geht ausschließlich an den Porsche-Anmeldedienst, nie an Dritte oder an dieses Projekt. Wenn das Bild nicht lädt oder du immer wieder Fehler bekommst, kannst du es melden: {report_url}",
+        "data": {
+          "captcha_code": "Captcha-Code"
+        },
+        "data_description": {
+          "captcha_code": "Gib die im Bild oben angezeigten Zeichen ein."
+        }
+      },
       "email_password": {
         "title": "Mit E-Mail + Passwort anmelden (Legacy)",
         "description": "Verbinde dein Fahrzeug mit Home Assistant. Wähle deine Marke und gib die Zugangsdaten aus der jeweiligen App ein.",
@@ -144,14 +154,31 @@
           "vin": "VIN (das in der App angezeigte Auto)",
           "spin": "S-PIN (optional)",
           "companion_use_addon": "Über das ADB-Bridge-Add-on verbinden",
-          "companion_addon_token": "Add-on-Token"
+          "companion_addon_token": "Add-on-Token",
+          "companion_use_relay": "Companion-Agent-App verwenden (das Handy ruft Home Assistant)",
+          "companion_agent_token": "Agent-Token"
         },
         "data_description": {
           "adb_host": "Die Adresse des Smartphones in deinem Netzwerk, z. B. 192.168.1.42.",
           "adb_port": "Normalerweise 5555 für ADB über Wi-Fi.",
           "vin": "Die 17-stellige VIN des in der App angezeigten Autos.",
           "companion_use_addon": "Aktiviere dies für ein Smartphone mit Android 11 oder neuer, das nur drahtloses Debugging bietet. Gib dann oben die Adresse des ADD-ONS statt die des Smartphones ein.",
-          "companion_addon_token": "Nur erforderlich, wenn du im Add-on api_token gesetzt hast."
+          "companion_addon_token": "Nur erforderlich, wenn du im Add-on api_token gesetzt hast.",
+          "companion_use_relay": "Aktivieren, wenn auf dem Handy die Companion-Agent-App läuft. Das Handy ruft dann Home Assistant an: kein ADB, kein Wireless Debugging und keine feste Handy-IP nötig — Adressfeld leer lassen.",
+          "companion_agent_token": "Das Zufalls-Token aus der Agent-App. Mindestens 32 Zeichen, und für jedes Fahrzeug ein eigenes."
+        }
+      },
+      "audi_mbb_fallback": {
+        "title": "Audi — Fernbefehle absichern (Reserve-Verbindung)",
+        "description": "Das richtet eine Reserve-Verbindung ein, damit die Fernbefehle deines Audi — Ver-/Entriegeln, Klima und Laden — weiterlaufen, falls Audi je ändert, wie sich die App anmeldet. Im Alltag ändert sich nichts: dein Audi nutzt seine normale Verbindung, die Reserve springt nur ein, wenn die normale keine Befehle mehr annimmt. Die Einrichtung braucht eine kurze Browser-Bestätigung (kein Passwort wird gespeichert). Wähle den Audi, den du schon per QR-/App-Login hinzugefügt hast. Funktioniert bei den meisten Benzin-, Diesel- und Plug-in-Hybrid-Audis; einige der neuesten reinen Elektromodelle werden nicht unterstützt und automatisch abgelehnt.",
+        "data": {
+          "entry_id": "Welcher Audi",
+          "mbb_vins": "Fahrzeug-ID (VIN) — meist leer lassen",
+          "spin": "S-PIN (nur für Ver-/Entriegeln nötig)"
+        },
+        "data_description": {
+          "mbb_vins": "Leer lassen, außer die Einrichtung fragt danach.",
+          "spin": "Deine Audi-S-PIN — der Code fürs Fern-Ver-/Entriegeln."
         }
       }
     },
@@ -167,19 +194,32 @@
       "portal_interaction_required": "Das EU-Data-Act-Portal benötigt eine einmalige Aktion in deinem Browser oder der Marken-App (z. B. AGB akzeptieren, Einwilligung bestätigen, Onboarding/Region-Auswahl abschließen), bevor der headless-Zugriff funktioniert. Das ist KEIN Passwort-Problem — öffne das Portal einmal im Browser, schließe die Abfrage ab und versuche es erneut.",
       "upstream_unavailable": "VW-Backend vorübergehend nicht erreichbar. Das ist ein Server-Problem bei VW, KEIN Anmeldefehler. Bitte 5–15 Minuten warten und nochmal versuchen. Die Integration NICHT neu konfigurieren.",
       "na_signin_attestation": "Deine E-Mail-Adresse und dein Passwort sind in Ordnung — Volkswagen North America blockiert diese Anmeldung inzwischen hinter einer Google-Geräte-Attestierung (Play Integrity), die nur die offizielle App auf einem echten Smartphone bestehen kann. Das Passwort erneut einzugeben hilft nicht; das ist eine serverseitige Sperre von VW, kein Problem mit deinen Zugangsdaten. (Verfolgt unter #1165.)",
+      "porsche_login_wall": "Deine E-Mail-Adresse und dein Passwort sind in Ordnung — die Anmeldung kam am Passwort-Schritt vorbei, landete danach aber auf einem Porsche-Captcha-/Zustimmungs-Bildschirm (bei manchen Konten auf my.porsche.com), den eine automatische Anmeldung nicht überwinden kann. Das Passwort erneut einzugeben hilft nicht; das ist eine Porsche-seitige Sperre, kein Problem mit deinen Zugangsdaten. Höchstens einmal versuchen — wiederholte Versuche haben schon zu Porsche-Konto-Sperrungen geführt. (Verfolgt unter #1337.)",
       "brand_not_dag_eligible": "Diese Marke unterstützt kein Browser-Login. Nutze stattdessen E-Mail + Passwort.",
       "skoda_qr_retired": "Škodas passwortloser (QR-)Login wurde von Volkswagen abgeschaltet und funktioniert nicht mehr. Geh zurück und wähle „E-Mail + Passwort (Legacy)“, dort dann Škoda auswählen und mit deiner MyŠkoda-E-Mail und deinem Passwort anmelden.",
+      "device_grant_retired": "Der App-Geräte-Login dieser Marke wurde vom Hersteller abgeschaltet und lässt sich nicht mehr automatisch abschließen — er verlangt jetzt eine On-Device-App-Verifizierung. Audi: Geh zurück und wähle „E-Mail + Passwort“, und richte dann das schreibgeschützte EU-Data-Act-Portal ein, das weiterhin funktioniert. Porsche: Es gibt noch keinen schreibgeschützten Fallback (verfolgt in #1337).",
       "still_waiting_browser": "Warte noch auf die Browser-Bestätigung. Öffne die URL oben, melde dich an, bestätige den Code und klick dann nochmal auf Senden.",
       "companion_cannot_connect": "Das Smartphone konnte per ADB nicht erreicht werden. Prüfe, ob es sich im Netzwerk befindet, ob ADB über Wi-Fi aktiviert ist und ob du die Debugging-Aufforderung bestätigt hast.",
       "companion_needs_addon": "Das sieht nach einem Android-11+-Telefon mit kabellosem Debugging aus, das die direkte Verbindung hier nicht nutzen kann (sie läuft über TLS + Pairing). Installiere das Add-on 'VW Group App ADB Bridge' (github.com/its-me-prash/vwgroup-app-adb-bridge) und verweise den Companion darauf. Ältere Telefone (Android 10 oder älter) verbinden sich hier direkt.",
       "companion_app_not_found": "Verbindung zum Smartphone hergestellt, aber die Marken-App ist darauf nicht installiert.",
-      "companion_unknown_brand": "Für diese Marke gibt es noch keine Begleit-Voreinstellung."
+      "companion_unknown_brand": "Für diese Marke gibt es noch keine Begleit-Voreinstellung.",
+      "companion_agent_token_too_short": "Das Agent-Token ist zu kurz. Füge das Zufalls-Token aus der Agent-App ein (mindestens 32 Zeichen).",
+      "companion_host_required": "Bitte die IP-Adresse des Handys eingeben — oder die Companion-Agent-Option aktivieren, wenn das Handy Home Assistant anruft.",
+      "missing_captcha": "Bitte gib die im Bild oben gezeigten Zeichen ein.",
+      "captcha_retry": "Bitte löse das oben gezeigte Captcha, um fortzufahren."
     },
     "abort": {
       "already_configured": "Dieses Konto ist bereits eingerichtet.",
       "reauth_successful": "Erneute Anmeldung erfolgreich.",
       "reconfigure_successful": "Konfiguration erfolgreich aktualisiert.",
-      "mbb_not_eligible": "Dein Fahrzeug ist für den dauerhaften MBB-Login nicht geeignet — das Backend meldet „Unknown user\". Das heisst, es ist ein neueres ID-/MEB-Modell (ID.3/4/5, e-up usw.), das nie im alten Car-Net/MBB-System registriert war — der dauerhafte Login + die Fernbefehle erreichen es daher nicht. Nutze für solche Fahrzeuge den EU-Data-Act-Kanal (oder den E-Mail-+-Passwort-Login). Der MBB-Login ist für ältere Car-Net-Autos (die meisten PHEV-/Verbrenner-Modelle)."
+      "mbb_not_eligible": "Dein Fahrzeug ist für den dauerhaften MBB-Login nicht geeignet — das Backend meldet „Unknown user\". Das heisst, es ist ein neueres ID-/MEB-Modell (ID.3/4/5, e-up usw.), das nie im alten Car-Net/MBB-System registriert war — der dauerhafte Login + die Fernbefehle erreichen es daher nicht. Nutze für solche Fahrzeuge den EU-Data-Act-Kanal (oder den E-Mail-+-Passwort-Login). Der MBB-Login ist für ältere Car-Net-Autos (die meisten PHEV-/Verbrenner-Modelle).",
+      "mbb_fallback_armed": "Reserve-Verbindung eingerichtet. Falls die normale Verbindung deines Audi je keine Fernbefehle mehr annimmt, wechseln Ver-/Entriegeln, Klima und Laden automatisch auf die Reserve. Im Alltag ändert sich nichts.",
+      "no_devicegrant_audi": "Kein passender Audi gefunden. Diese Reserve gilt nur für einen Audi, den du per QR-/App-Login hinzugefügt hast und der sie noch nicht hat. Füge deinen Audi zuerst so hinzu, dann komm hierher zurück.",
+      "porsche_login_wall": "Deine Zugangsdaten sind in Ordnung — die Anmeldung kam am Passwort-Schritt vorbei, blieb dann aber an einem Porsche-Captcha-/Zustimmungs-Bildschirm hängen, den sie nicht automatisch abschließen kann (auf my.porsche.com beobachtet). Das ist eine Porsche-seitige Sperre (verfolgt unter #1337), kein falsches Passwort. Nicht in einer Schleife wiederholen — wiederholte Versuche haben schon zu Porsche-Konto-Sperrungen geführt. Wenn möglich, melde es bitte, damit wir es beheben können (Diagnose anhängen): {report_url}",
+      "porsche_captcha_failed": "Das Captcha konnte nicht bestätigt werden und ist jetzt verbraucht. Bitte schließe diesen Dialog und starte die Porsche-Anmeldung neu, um ein frisches zu erhalten. Wenn möglich, melde es bitte, damit wir es beheben können (Diagnose anhängen): {report_url}",
+      "porsche_captcha_cooldown": "Zu viele Captcha-Versuche. Wiederholte Versuche können dazu führen, dass Porsche das Konto vorübergehend sperrt oder dein Netzwerk markiert – daher wurde hier gestoppt, um dein Konto zu schützen. Warte ein paar Minuten, bevor du es erneut versuchst. Wenn möglich, melde es bitte, damit wir es beheben können (Diagnose anhängen): {report_url}",
+      "reconfigure_failed": "Neukonfiguration fehlgeschlagen: Der Konfigurationseintrag wurde nicht gefunden. Bitte versuche es erneut.",
+      "reauth_failed": "Erneute Anmeldung fehlgeschlagen: Der Konfigurationseintrag wurde nicht gefunden. Bitte versuche es erneut."
     },
     "progress": {
       "awaiting_browser_login": "Öffne {verification_uri} in einem Browser, melde dich mit deinem Brand-ID-Konto an und bestätige den Code {user_code}.",
@@ -194,6 +234,7 @@
           "scan_interval": "Aktualisierungsintervall (Minuten)",
           "spin": "S-PIN",
           "battery_nominal_kwh": "Netto-Nennkapazität der Batterie (kWh, für Batteriezustand)",
+          "fuel_tank_capacity": "Tankgröße (Liter, für Tankfüllung %)",
           "enable_reverse_geocoding": "Adress-Auflösung (Parkposition)",
           "force_ppe_climate": "Audi PPE/PPC Klima-Body (Q6/A6 e-tron, RS e-tron GT Facelift, A3 2024+ PHEV)",
           "enable_push_mqtt": "Skoda Push-Updates (MQTT, EXPERIMENTELL)",
@@ -204,20 +245,27 @@
           "companion_wake_sleep": "Companion: Display zum Abfragen wecken, danach schlafen",
           "client_id_override": "OAuth client_id Override (Power-User)",
           "eu_data_act_auto_kickoff": "EU Data Act: Custom Data Request automatisch anlegen",
-          "supplementary_authproxy": "Volkswagen.de-Lesekanal hinzufügen (Daten zusammenführen)",
+          "supplementary_authproxy": "Volkswagen.de-Lesekanal hinzufügen oder aktualisieren (Daten zusammenführen)",
           "hide_empty_entities": "Entitäten ohne Daten ausblenden",
-          "supplementary_eu_portal": "EU-Data-Act-Portal-Lesekanal hinzufügen",
+          "supplementary_eu_portal": "EU-Data-Act-Portal-Lesekanal hinzufügen oder aktualisieren",
           "remove_supplementary_authproxy": "vw.de-Lesekanal entfernen",
           "remove_supplementary_eu_portal": "EU-Data-Act-Portal-Lesekanal entfernen",
-          "supplementary_tibber": "Tibber-Lesekanal hinzufügen (E-Auto-Ladedaten)",
+          "supplementary_tibber": "Tibber-Lesekanal hinzufügen oder aktualisieren (E-Auto-Ladedaten)",
           "remove_supplementary_tibber": "Tibber-Lesekanal entfernen",
           "abrp_enable": "ABRP-Telemetrie senden",
           "abrp_api_key": "ABRP-api_key (Entwicklerschlüssel)",
           "abrp_user_token": "ABRP-Token (pro Fahrzeug)",
           "keep_raw_datasets": "Rohe EU-Data-Act-Datensätze behalten (Diagnose)",
+          "auto_utility_meters": "Monatliche Zähler automatisch anlegen (geladene Energie, Kilometer)",
           "test_cohort": "Hilf mit, VW Group Connect zu verbessern (freiwillige Testgruppe)",
           "vweu_device_grant": "VW EU Two-Way hinzufügen — Befehle + Live-Daten (BETA)",
-          "remove_vweu_twoway": "VW EU Two-Way entfernen (zur\u00fcck zum vorherigen Kanal)"
+          "remove_vweu_twoway": "VW EU Two-Way entfernen (zurück zum vorherigen Kanal)",
+          "companion_read_vehicle_health": "Companion: Kilometerstand und Service aus dem Fahrzeugcheck lesen (navigiert in der App)",
+          "companion_read_climate_detail": "Companion: Solltemperatur und Außentemperatur lesen (navigiert in der App)",
+          "companion_read_parking_position": "Companion: Parkposition aus dem Teilen-Link der App lesen (navigiert in der App)",
+          "skoda_official_api_key": "Offizieller Škoda-API-Schlüssel — nutzt die offizielle Hersteller-API als Live-Datenquelle (und Failover)",
+          "clear_skoda_official_key": "Gespeicherten offiziellen Škoda-API-Schlüssel löschen (ein neuer wird automatisch erstellt, falls dein Login das unterstützt)",
+          "skoda_official_mode": "Škoda Offizielle-API-Quellenmodus"
         },
         "data_description": {
           "enable_reverse_geocoding": "Sendet GPS der Parkposition an OpenStreetMap Nominatim, um Straße/Stadt zu ermitteln. Standard: aus (Datenschutz).",
@@ -236,6 +284,7 @@
           "abrp_api_key": "Ein Entwickler-/Partnerschlüssel, den du bei iternio registrierst (wir liefern keinen). Identifiziert die Integration. Wird nie protokolliert.",
           "abrp_user_token": "Der 'Generic'-Token aus der ABRP-App: Einstellungen -> dein Auto -> Live Data. Wird nie protokolliert.",
           "keep_raw_datasets": "Nur auf dem EU-Data-Act-Portal-Kanal sinnvoll. Wenn aktiv, werden die letzten paar rohen Datensatz-ZIPs des Portals auf der Festplatte behalten (unter .storage, pro Fahrzeug und größenbegrenzt), damit sich ein falscher oder fehlender Wert aus genau den Bytes reproduzieren lässt, die dein Auto gesendet hat. Diese Dateien enthalten GPS, VIN und Telemetrie, deshalb ist die Option standardmäßig aus – schalte sie nur zur Fehlersuche ein.",
+          "auto_utility_meters": "Standardmäßig aus. Wenn aktiviert, legt die Integration Home-Assistant-utility_meter-Helfer an, die geladene Energie und Kilometer pro Kalendermonat summieren – je einer pro Fahrzeug. Die Option erscheint nur, wenn ein passender Quellsensor bereits vorhanden ist. Es sind dauerhafte Helfer: Beim Wiederausschalten werden keine neuen mehr erstellt, bereits angelegte bleiben aber bestehen – entferne diese unter Einstellungen → Geräte & Dienste → Helfer.",
           "test_cohort": "Standardmäßig aus. Wenn du das einschaltest, darf die Integration experimentelle Abfragen an deinem Auto ausprobieren — etwa den laufenden Versuch, den GPS-Standort für Volkswagen-EU-Fahrzeuge auszulesen — und dir hin und wieder eine wegklickbare Benachrichtigung zeigen, die dich bittet, eine Diagnosedatei zu teilen, damit eine neue Funktion für dein Modell bestätigt werden kann. Alles, was du teilst, wird automatisch anonymisiert, bevor es dein System verlässt: Weder VIN noch GPS, Tokens oder E-Mail sind je enthalten. So werden neue Funktionen für dein Auto und für alle freigeschaltet, die dasselbe Modell fahren — und du kannst es jederzeit wieder ausschalten.",
           "vweu_device_grant": "Nur Volkswagen, BETA. Fügt Zwei-Wege-Steuerung (Ver-/Entriegeln, Klima, Laden) und Live-CARIAD-Daten hinzu, indem du dich mit deiner Volkswagen ID anmeldest. Volkswagen stellt hier nur ein 1-Stunden-Token aus, deshalb wird dein Passwort gespeichert, um es automatisch zu erneuern — es wird nur an Volkswagens eigenen Login-Server gesendet und nie in Logs oder Diagnose geschrieben. Wenn du lieber kein Passwort speichern möchtest, nutze stattdessen die nur-lesenden Kanäle. Das Anhaken öffnet den Anmeldeschritt."
         }
@@ -291,8 +340,8 @@
         "title": "VW EU Two-Way (Befehle + Live-Daten, BETA)",
         "description": "**Experimentell, freiwillig — nur Volkswagen.** Fügt Zwei-Wege-Steuerung (Ver-/Entriegeln, Klima, Laden) und Live-CARIAD-Daten hinzu, indem du dich mit deiner Volkswagen ID anmeldest. Da Volkswagen auf diesem Weg nur ein 1-Stunden-Token ausstellt, wird dein Passwort **gespeichert**, damit die Integration es automatisch erneuern kann. Es wird nur an Volkswagens eigenen Login-Server gesendet und nie in Logs oder Diagnose geschrieben. Du möchtest kein Passwort speichern? Nutze stattdessen die nur-lesenden Kanäle. **Voraussetzung:** Deine Volkswagen ID muss Hauptnutzer des Fahrzeugs sein.",
         "data": {
-          "username": "Email Address",
-          "password": "Password"
+          "username": "E-Mail-Adresse",
+          "password": "Passwort"
         },
         "data_description": {
           "username": "Die E-Mail deines Volkswagen-ID- / myVolkswagen-Kontos.",
@@ -302,13 +351,14 @@
     },
     "error": {
       "abrp_credentials_required": "Zum Aktivieren von ABRP musst du sowohl den api_key als auch den Fahrzeug-Token eingeben.",
-      "invalid_auth": "Anmeldung fehlgeschlagen. Pr\u00fcfe E-Mail-Adresse und Passwort deiner Volkswagen ID.",
+      "invalid_auth": "Anmeldung fehlgeschlagen. Prüfe E-Mail-Adresse und Passwort deiner Volkswagen ID.",
       "cannot_connect": "Volkswagen konnte nicht erreicht werden. Bitte erneut versuchen.",
-      "vweu_mfa_unsupported": "Dieses Konto ben\u00f6tigt einen E-Mail- oder Authenticator-Code, den VW EU Two-Way noch nicht verarbeiten kann. Nutze stattdessen die nur-lesenden Kan\u00e4le.",
-      "vweu_no_bff_data": "Angemeldet, aber Volkswagen hat f\u00fcr dieses Auto auf dem modernen Backend noch keine Live-Daten geliefert. VW EU Two-Way wurde daher nicht aktiviert und dein aktueller Kanal bleibt unver\u00e4ndert. Bitte versuche es sp\u00e4ter erneut oder teile eine Diagnose, damit wir uns das ansehen k\u00f6nnen."
+      "vweu_mfa_unsupported": "Dieses Konto benötigt einen E-Mail- oder Authenticator-Code, den VW EU Two-Way noch nicht verarbeiten kann. Nutze stattdessen die nur-lesenden Kanäle.",
+      "vweu_no_bff_data": "Angemeldet, aber Volkswagen hat für dieses Auto auf dem modernen Backend noch keine Live-Daten geliefert. VW EU Two-Way wurde daher nicht aktiviert und dein aktueller Kanal bleibt unverändert. Bitte versuche es später erneut oder teile eine Diagnose, damit wir uns das ansehen können.",
+      "terms_and_conditions": "Nutzungsbedingungen müssen akzeptiert werden. Einmal in der App anmelden und bestätigen."
     },
     "abort": {
-      "not_volkswagen": "Dieser Kanal ist nur f\u00fcr Volkswagen verf\u00fcgbar.",
+      "not_volkswagen": "Dieser Kanal ist nur für Volkswagen verfügbar.",
       "vweu_twoway_vw_disabled": "Volkswagen hat den Login, den dieser Kanal nutzte, am 18.08.2026 abgeschaltet — er kann daher nicht mehr eingerichtet werden. Live-Daten laufen weiter über das EU-Data-Act-Portal, und ein dauerhafter Befehlskanal über das klassische Car-Net-Backend ist in der Beta — siehe Issue #584."
     }
   },
@@ -339,7 +389,33 @@
         "name": "Ladestatus"
       },
       "plug_state": {
-        "name": "Ladeanschluss"
+        "name": "Ladeanschluss",
+        "state": {
+          "connected": "Verbunden",
+          "disconnected": "Getrennt"
+        }
+      },
+      "portal_health": {
+        "name": "Portal-Feed-Zustand",
+        "state": {
+          "ok": "Live",
+          "waiting_for_portal_data": "Warte auf Portaldaten",
+          "empty_snapshots": "Leere Snapshots",
+          "delivery_not_ready": "Lieferung nicht bereit",
+          "portal_error": "Portal-Fehler",
+          "stale": "Veraltet"
+        }
+      },
+      "minutes_since_last_snapshot": {
+        "name": "Minuten seit letztem Snapshot"
+      },
+      "historical_export_state": {
+        "name": "Historischer Export",
+        "state": {
+          "pending": "Angefragt — wird erstellt",
+          "done": "Geliefert",
+          "timed_out": "Zeitüberschreitung"
+        }
       },
       "target_soc": {
         "name": "Ladeziel"
@@ -430,6 +506,9 @@
       },
       "last_trip_avg_speed_kmh": {
         "name": "Letzte Fahrt — Ø Geschwindigkeit"
+      },
+      "last_trip_duration_min": {
+        "name": "Letzte Fahrt — Fahrzeit"
       },
       "last_trip_avg_fuel_consumption_l_100km": {
         "name": "Letzte Fahrt — Ø Kraftstoffverbrauch"
@@ -532,6 +611,9 @@
       },
       "fuel_tank_capacity_liters": {
         "name": "Tankvolumen"
+      },
+      "fuel_level_liters": {
+        "name": "Tankfüllung (Liter)"
       },
       "climate_running_requests_count": {
         "name": "Klima-Anfragen offen"
@@ -1273,6 +1355,118 @@
       },
       "reminder_tyre_repair_kit": {
         "name": "Reifen-Reparaturset (Erinnerung)"
+      },
+      "exterior_color": {
+        "name": "Außenfarbe"
+      },
+      "engine_power": {
+        "name": "Motorleistung"
+      },
+      "engine_torque_nm": {
+        "name": "Drehmoment"
+      },
+      "engine_cylinders": {
+        "name": "Zylinder"
+      },
+      "engine_displacement_ccm": {
+        "name": "Hubraum"
+      },
+      "engine_code": {
+        "name": "Motorcode"
+      },
+      "fuel_type": {
+        "name": "Kraftstoff"
+      },
+      "data_captured_at": {
+        "name": "Datenstand"
+      },
+      "window_position_front_left": {
+        "name": "Fensterposition vorne links"
+      },
+      "window_position_front_right": {
+        "name": "Fensterposition vorne rechts"
+      },
+      "window_position_rear_left": {
+        "name": "Fensterposition hinten links"
+      },
+      "window_position_rear_right": {
+        "name": "Fensterposition hinten rechts"
+      },
+      "transmission": {
+        "name": "Getriebe"
+      },
+      "interior_color": {
+        "name": "Innenfarbe"
+      },
+      "drive_train": {
+        "name": "Antriebsart"
+      },
+      "csid": {
+        "name": "Kundendienst-ID"
+      },
+      "parked_since": {
+        "name": "Geparkt seit"
+      },
+      "last_trip_eco_score": {
+        "name": "EcoScore der letzten Fahrt"
+      },
+      "last_trip_intake_air_temp_c": {
+        "name": "Ansauglufttemperatur der letzten Fahrt"
+      },
+      "trip_count": {
+        "name": "Erfasste Fahrten"
+      },
+      "score_points_total": {
+        "name": "Fahrer-Score-Punkte"
+      },
+      "last_refuel_liters_added": {
+        "name": "Getankte Menge"
+      },
+      "last_refuel_tank_before_l": {
+        "name": "Tank vor Betankung"
+      },
+      "last_refuel_tank_after_l": {
+        "name": "Tank nach Betankung"
+      },
+      "last_refuel_odometer_km": {
+        "name": "Kilometerstand bei Betankung"
+      },
+      "data_request_created_at": {
+        "name": "Datenabruf angelegt"
+      },
+      "last_snapshot_at": {
+        "name": "Letzter Snapshot empfangen"
+      },
+      "last_no_data_at": {
+        "name": "Letzte Abfrage ohne Daten"
+      },
+      "no_data_count": {
+        "name": "Abfragen ohne Daten"
+      },
+      "tpms_status": {
+        "name": "Reifendruckkontrolle",
+        "state": {
+          "measured": "Gemessen (pro Rad)",
+          "indirect": "Indirekt (keine Druckwerte)"
+        }
+      },
+      "readiness_software_update_status": {
+        "name": "Software-Update-Status"
+      },
+      "short_term_avg_electric_consumption_kwh_100km": {
+        "name": "Kurzzeit-Durchschnittsverbrauch (elektrisch)"
+      },
+      "engine_starts_count": {
+        "name": "Motorstarts"
+      },
+      "short_term_avg_fuel_consumption_l_100km": {
+        "name": "Kurzzeit-Durchschnittsverbrauch Kraftstoff"
+      },
+      "battery_soc_charge_report": {
+        "name": "Akkustand (letzter Lade-Report)"
+      },
+      "alarm_reason": {
+        "name": "Alarmgrund"
       }
     },
     "binary_sensor": {
@@ -1578,6 +1772,15 @@
       },
       "marketing_consent_given": {
         "name": "Marketing-Zustimmung erteilt"
+      },
+      "data_source": {
+        "name": "Quelle: {source}"
+      },
+      "data_stale": {
+        "name": "Daten veraltet"
+      },
+      "connect_contract_active": {
+        "name": "Connect-Vertrag aktiv"
       }
     },
     "switch": {
@@ -1666,6 +1869,9 @@
       "data_act_request_button": {
         "name": "EU-Data-Act-Datenanfrage erstellen"
       },
+      "historical_export_button": {
+        "name": "Historischen Export anfragen"
+      },
       "companion_reset_button": {
         "name": "Companion-Verbindung zurücksetzen"
       }
@@ -1713,28 +1919,28 @@
     },
     "image": {
       "render_icon": {
-        "name": "3/4-Ansicht Icon"
+        "name": "3/4-Ansicht (Icon)"
       },
       "render_small": {
-        "name": "3/4-Ansicht Klein"
+        "name": "3/4-Ansicht (klein)"
       },
       "render_medium": {
-        "name": "3/4-Ansicht Mittel"
+        "name": "3/4-Ansicht (mittel)"
       },
       "render_side_sm": {
-        "name": "Seitenprofil Klein"
+        "name": "Seitenansicht (klein)"
       },
       "render_side_lg": {
-        "name": "Seitenprofil Groß"
+        "name": "Seitenansicht (groß)"
       },
       "render_angle_hd": {
-        "name": "3/4-Ansicht HD"
+        "name": "3/4-Ansicht (HD)"
       },
       "render_angle_lg": {
-        "name": "3/4-Ansicht Groß"
+        "name": "3/4-Ansicht (groß)"
       },
       "vehicle_render": {
-        "name": "Fahrzeug-Rendering"
+        "name": "Fahrzeug-Render"
       }
     },
     "lock": {
@@ -1777,9 +1983,34 @@
     }
   },
   "issues": {
+    "skoda_official_manual_key": {
+      "title": "Škoda offizielle API — API-Schlüssel hinzufügen",
+      "fix_flow": {
+        "step": {
+          "enter_key": {
+            "title": "MyŠkoda API-Schlüssel hinzufügen",
+            "description": "Home Assistant konnte für dieses Auto nicht automatisch einen offiziellen Škoda API-Schlüssel erstellen. Erstelle einen in der MyŠkoda App, wähle dann das Fahrzeug und füge den Schlüssel hier ein. Die automatische Erstellung läuft im Hintergrund weiter — das hier ist nur die manuelle Alternative.",
+            "data": {
+              "vin": "Fahrzeug",
+              "api_key": "MyŠkoda API-Schlüssel (beginnt mit msk_)"
+            }
+          }
+        },
+        "error": {
+          "key_required": "Bitte füge deinen MyŠkoda API-Schlüssel ein."
+        },
+        "abort": {
+          "entry_gone": "Dieser Integrationseintrag existiert nicht mehr."
+        }
+      }
+    },
+    "invalid_credentials": {
+      "title": "Anmeldung fehlgeschlagen — {brand}",
+      "description": "Home Assistant konnte sich nicht bei deinem {brand}-Konto anmelden — meist ein falsches oder geändertes Passwort, aber eine vorübergehende Sperre kann gleich aussehen.\n\nEinstellungen → Geräte & Dienste → VW Group Connect → ⋮ → Neu konfigurieren, um die Zugangsdaten erneut einzugeben."
+    },
     "vweu_twoway_disabled": {
       "title": "VW EU Two-Way: von Volkswagen abgeschaltet",
-      "description": "Am 18.08.2026 hat Volkswagen den Login abgeschaltet, den der VW-EU-Two-Way (modernes CARIAD-Backend) nutzte \u2014 der 1-Stunden-Token kann nicht mehr erneuert werden, die Befehle \u00fcber diesen Kanal sind gestoppt. Das ist eine Volkswagen-seitige \u00c4nderung \u2014 bei dir ist nichts falsch konfiguriert, und dein Konto ist nicht gef\u00e4hrdet (der Fehler passiert, bevor \u00fcberhaupt ein Passwort gesendet wird).\n\n**Deine Live-Daten laufen weiter** \u00fcber das EU-Data-Act-Portal, deine Sensoren sind also nicht betroffen.\n\n**F\u00fcr Zwei-Wege-Befehle (Ver-/Entriegeln, Klima, Laden):** ein dauerhafter Ersatz \u00fcber das klassische Car-Net-(MBB-)Backend \u2014 das Volkswagen NICHT abgeschaltet hat \u2014 ist jetzt in der Beta. Wie du ihn aktivierst und testest, steht in Issue #584.\n\nDen inaktiven Kanal kannst du jederzeit in den Integrations-Optionen entfernen (VW EU Two-Way \u2192 entfernen). Diese Meldung ist rein informativ; die Integration l\u00e4uft auf deinen Lese-Kan\u00e4len weiter.\n\n**Tipp:** aktiviere pro Auto immer nur EINEN Two-Way-Zugang gleichzeitig. VW drosselt und sperrt Konten zeitweise, wenn mehrere Apps es gleichzeitig bombardieren \u2014 dann kann selbst die offizielle VW-App das Auto nicht steuern, und genau das ist das Zeichen f\u00fcr eine Konto-Sperre, nicht die Integration."
+      "description": "Am 18.08.2026 hat Volkswagen den Login abgeschaltet, den der VW-EU-Two-Way (modernes CARIAD-Backend) nutzte — der 1-Stunden-Token kann nicht mehr erneuert werden, die Befehle über diesen Kanal sind gestoppt. Das ist eine Volkswagen-seitige Änderung — bei dir ist nichts falsch konfiguriert, und dein Konto ist nicht gefährdet (der Fehler passiert, bevor überhaupt ein Passwort gesendet wird).\n\n**Deine Live-Daten laufen weiter** über das EU-Data-Act-Portal, deine Sensoren sind also nicht betroffen.\n\n**Für Zwei-Wege-Befehle (Ver-/Entriegeln, Klima, Laden):** ein dauerhafter Ersatz über das klassische Car-Net-(MBB-)Backend — das Volkswagen NICHT abgeschaltet hat — ist jetzt in der Beta. Wie du ihn aktivierst und testest, steht in Issue #584.\n\nDen inaktiven Kanal kannst du jederzeit in den Integrations-Optionen entfernen (VW EU Two-Way → entfernen). Diese Meldung ist rein informativ; die Integration läuft auf deinen Lese-Kanälen weiter.\n\n**Tipp:** aktiviere pro Auto immer nur EINEN Two-Way-Zugang gleichzeitig. VW drosselt und sperrt Konten zeitweise, wenn mehrere Apps es gleichzeitig bombardieren — dann kann selbst die offizielle VW-App das Auto nicht steuern, und genau das ist das Zeichen für eine Konto-Sperre, nicht die Integration."
     },
     "two_factor_required": {
       "title": "Zwei-Faktor-Anmeldung erforderlich — {brand}",
@@ -1831,7 +2062,7 @@
     },
     "data_act_no_data": {
       "title": "EU-Data-Act-Portal: noch keine Fahrzeugdaten ({brand})",
-      "description": "Das EU-Data-Act-Portal hat sich für {brand} angemeldet, liefert aber noch keine Fahrzeugdaten.\n\nDie Integration legt die fortlaufende Datenanfrage automatisch für dich an, daher sind die üblichen Ursachen für einen leeren Feed:\n\n1. **Einwilligung zur Datenfreigabe für dieses Auto nicht erteilt.** Im Portal erteilst du die EU-Data-Act-Einwilligung zur Datenfreigabe einmalig pro Fahrzeug. Solange du das nicht tust, wird die Anfrage zwar angelegt, bleibt aber leer – das ist die häufigste Ursache.\n2. **Das Auto hat noch nichts Neues gesendet.** Ein neuer Datensatz wird erst veröffentlicht, nachdem das Auto gefahren, geladen oder ab-/aufgeschlossen wurde; eine brandneue Anfrage kann daher 15-60 Minuten (oder eine kurze Fahrt) brauchen, bis sie sich zu füllen beginnt.\n3. **Eine Störung auf VW-Seite.** VW meldet seit Ende Mai 2026 eine markenübergreifende Störung des EU-Data-Act-Portals; solange sie andauert, liefert das Portal für jedes Tool leere Daten und erholt sich nach und nach pro Marke.\n\n**Schnellster Check:** öffne `eu-data-act.drivesomethinggreater.com`, melde dich an und prüfe, ob (a) die Einwilligung zur Datenfreigabe für dieses Auto erteilt ist und (b) eine aktive fortlaufende (15-Minuten-)Datenanfrage mit allen angehakten Datenclustern besteht. Siehst du auch dort keine Daten, liegt es an VW – die Integration kann nichts tun, bis VW es wiederherstellt.\n\nDies ist die schreibgeschützte Portal-Beta – die Warnung verschwindet von selbst, sobald Daten ankommen."
+      "description": "Das EU-Data-Act-Portal hat sich für {brand} angemeldet, liefert aber noch keine Fahrzeugdaten.\n\nDie Integration versucht, die fortlaufende Datenanfrage automatisch für dich zu erstellen, aber bei manchen Konten hält das Portal die Browser-Sitzung anonym — und dann kann die automatische Anfrage (und der In-App-Button „EU-Data-Act-Datenanfrage erstellen\") nicht abgeschlossen werden, sodass du die Anfrage selbst im Portal erstellen musst. Die üblichen Ursachen für einen leeren Feed:\n\n1. **Eigentümerschaft/Nutzerschaft für dieses Auto nicht bestätigt.** Das Portal muss die Eigentümerschaft (oder Nutzerschaft) deines Fahrzeugs als bestätigt anzeigen. Falls nicht, bestätige sie dort zuerst — notwendig, aber allein nicht immer ausreichend.\n2. **Einwilligung zur Datenfreigabe für dieses Auto nicht erteilt.** Du erteilst die EU-Data-Act-Einwilligung zur Datenfreigabe einmalig pro Fahrzeug. Bis du das tust, bleibt die Anfrage leer.\n3. **Es existiert noch keine fortlaufende Anfrage.** Falls die automatische Erstellung nicht funktioniert hat, erstelle sie selbst: Füge im Portal eine benutzerdefinierte Datenanfrage (Custom Data Request) mit allen angehakten Clustern und einer Frequenz von 15 Minuten hinzu. **Lösche zuerst jede ältere Anfrage für genau dieses Auto** — das Portal erlaubt nur eine aktive Anfrage pro Fahrzeug, sodass eine ältere (z. B. eine monatliche) für dieses Auto die neue blockiert. Lösche nicht die Anfrage eines anderen Autos: Bei einem gemischten Konto aus Pkw und Nutzfahrzeugen behält jedes Auto seine eigene Anfrage in seinem eigenen Bereich (Pkw unter Volkswagen Personenkraftwagen, Transporter unter Volkswagen Nutzfahrzeuge). Die Integration übernimmt sie beim nächsten Abruf — kein Neustart nötig.\n4. **Das Auto hat noch nichts Neues gesendet.** Ein neuer Datensatz wird erst veröffentlicht, nachdem das Auto gefahren, geladen oder ver-/entriegelt wurde, daher kann es 15-60 Minuten (oder eine kurze Fahrt) dauern, bis sich eine neue Anfrage zu füllen beginnt.\n5. **Eine Störung auf VW-Seite.** VW hat eine markenübergreifende Störung des EU-Data-Act-Portals seit Ende Mai 2026 gemeldet; solange sie anhält, liefert das Portal für jedes Tool leere Daten und erholt sich Marke für Marke.\n6. **Oder füge den Lesekanal der volkswagen.de-Website hinzu.** In den Optionen der Integration kannst du den schreibgeschützten volkswagen.de-Website-Kanal als alternative Quelle hinzufügen: Er meldet sich auf der volkswagen.de-Website an (nicht am App-Backend, das den Headless-Login blockiert) und liefert für manche Autos Felder, die der Portal-Feed nicht hat. Dafür muss deine Volkswagen ID der bestätigte Hauptnutzer des Fahrzeugs sein.\n\n**Schnellste Prüfung:** Öffne `eu-data-act.drivesomethinggreater.com`, melde dich an und stelle sicher, dass (a) die Eigentümerschaft/Nutzerschaft bestätigt ist, (b) die Einwilligung zur Datenfreigabe für dieses Auto erteilt ist und (c) eine aktive fortlaufende (15-Minuten-)Datenanfrage mit allen angehakten Clustern existiert — erstelle sie selbst, falls keine vorhanden ist. Wenn du auch dort keine Daten siehst, liegt es an der VW-Seite — diese Integration kann nichts tun, bis VW es wiederherstellt.\n\nDies ist die schreibgeschützte Portal-Beta — die Warnung verschwindet von selbst, sobald Daten eintreffen."
     },
     "data_act_session_expired": {
       "description": "Das {brand}-Portal unter `eu-data-act.drivesomethinggreater.com` hat einen API-Aufruf für eine Custom Data Request mit HTTP 401 beantwortet – das bedeutet, die Sitzungs-Cookies sind abgelaufen. Das Portal unterstützt keine Token-Aktualisierung im Hintergrund, daher kann Home Assistant das nicht automatisch beheben.\n\n**Was zu tun ist:** Einstellungen → Geräte & Dienste → VW Group Connect → 3-Punkte-Menü → Neu konfigurieren → Zugangsdaten erneut eingeben. Beim nächsten Einrichtungsdurchlauf wird die Portal-Sitzung neu geöffnet und die Integration nimmt das Abfragen der aktiven Custom Data Request wieder auf.\n\nDiese Warnung verschwindet von selbst, sobald der nächste API-Aufruf des Portals erfolgreich ist.",
@@ -1867,11 +2098,27 @@
     },
     "test_cohort_share_request": {
       "title": "Hilf mit, eine neue Funktion zu bestätigen — teilst du dein Testergebnis?",
-      "description": "Danke, dass du bei der freiwilligen Test-Kohorte mitmachst. Dein Auto ist Teil eines oder mehrerer Experimente – zum Beispiel das Wiederherstellen der GPS-Position oder des Batterie-Gesundheitszustands (State of Health) für VW-EU-Fahrzeuge über den volkswagen.de-Kanal, oder das Erfassen, wie genau das Backend deines Autos auf einen Befehl antwortet. Um das Ergebnis über verschiedene Modelle und Plattformen hinweg zu bestätigen, würde es wirklich helfen, wenn du eine Diagnosedatei teilst: Geh zu Settings → Devices & Services → VW Group Connect → das Drei-Punkte-Menü → Download diagnostics und häng die Datei an das passende Tester-Issue auf GitHub an.\n\nDer Export wird vor dem Download automatisch anonymisiert – VIN, GPS, Tokens oder E-Mail sind nicht enthalten – du kannst ihn also bedenkenlos öffentlich posten. Du siehst das nur, weil du dich dafür entschieden hast; du kannst die Meldung ausblenden, und wenn du die Test-Kohorte in den Optionen der Integration wieder deaktivierst, hören diese Benachrichtigungen ganz auf. Danke, dass du mithilfst, Funktionen für alle freizuschalten, die dein Modell fahren."
+      "description": "Danke, dass du bei der freiwilligen Test-Kohorte mitmachst. Dein Auto ist Teil eines oder mehrerer Experimente – zum Beispiel das Wiederherstellen der GPS-Position oder des Batterie-Gesundheitszustands (State of Health) für VW-EU-Fahrzeuge über den volkswagen.de-Kanal, oder das Erfassen, wie genau das Backend deines Autos auf einen Befehl antwortet. Um das Ergebnis über verschiedene Modelle und Plattformen hinweg zu bestätigen, würde es wirklich helfen, wenn du eine Diagnosedatei teilst: Öffne das EIGENE Gerät deines Autos (Settings → Devices & Services → VW Group Connect → das Gerät, das nach deinem Auto benannt ist — nicht das Gerät namens VW Group Connect Settings, das nur Konfiguration und keine Fahrzeugdaten enthält) → das Drei-Punkte-Menü → Download diagnostics und häng diese Datei an das unten verlinkte Tracking-Issue an (#923).\n\nDer Export wird vor dem Download automatisch anonymisiert – VIN, GPS, Tokens oder E-Mail sind nicht enthalten – du kannst ihn also bedenkenlos öffentlich posten. Du siehst das nur, weil du dich dafür entschieden hast; du kannst die Meldung ausblenden, und wenn du die Test-Kohorte in den Optionen der Integration wieder deaktivierst, hören diese Benachrichtigungen ganz auf. Danke, dass du mithilfst, Funktionen für alle freizuschalten, die dein Modell fahren."
     },
     "stale_data": {
       "title": "{vin}: Fahrzeugdaten seit {age} h nicht mehr aktualisiert",
       "description": "Die letzten Daten, die dein Auto gemeldet hat, wurden vor etwa **{age} Stunden** erfasst – obwohl die Integration weiterhin erfolgreich abfragt. Dafür gibt es zwei mögliche Gründe: Entweder steht das Auto einfach geparkt und im Ruhezustand (völlig normal – da musst du nichts tun), oder sein Datenstrom nach dem EU Data Act ist ausgelaufen und liefert keine frischen Werte mehr.\n\nDie Werte, die du gerade siehst, sind die zuletzt bekannten – nicht die aktuellen. Wenn das Auto seitdem gefahren oder geladen wurde und diese Warnung bestehen bleibt, ist der Datenstrom höchstwahrscheinlich abgelaufen: Öffne volkswagen.de → die Dateneinstellungen deines Autos und erneuere die Datenfreigabe bzw. fordere sie neu an, oder füge den Kanal einfach noch einmal hinzu.\n\nDiese Warnung verschwindet automatisch, sobald ein aktuellerer Wert eintrifft."
+    },
+    "historical_timeout": {
+      "title": "{vin}: Einmaliger historischer Export nicht abgeschlossen",
+      "description": "Der angefragte einmalige historische Export für dieses Auto hat innerhalb der Client-Frist keine Datei erzeugt. Das VW-Portal liefert für diese Anfrage keinen Endzustand, sie wurde also möglicherweise still verworfen. Die Anfrage wurde zurückgesetzt — du kannst sie erneut anfragen oder direkt im Portal nachsehen."
+    },
+    "skoda_official_enrolled": {
+      "title": "Offizielle Škoda-API — du bist jetzt automatisch dabei",
+      "description": "Gute Nachricht: Wir haben mit deinem bestehenden Škoda-Login einen offiziellen Škoda-API-Schlüssel für dein Auto erstellt, sodass Home Assistant es jetzt über Škodas neuen, offiziellen und dauerhaften Kanal lesen kann — als automatisches Backup, falls die normale Verbindung mal schwächelt. Da dieser offizielle Kanal ratenbegrenzt ist (nur wenige Anfragen pro Stunde), bleibt er im Standby und liest nur, wenn deine Hauptverbindung nicht kann — er bremst also nichts. Von deiner Seite ist nichts zu tun; das ist nur ein Hinweis, den du schließen kannst."
+    },
+    "skoda_official_quota_full": {
+      "title": "Offizielle Škoda-API — Schlüssel-Limit erreicht",
+      "description": "Wir wollten Škodas offizielle API für dein Auto automatisch einrichten, aber dein Konto hat für dieses Fahrzeug bereits die maximal 5 API-Schlüssel. Um sie zu nutzen, gib in der MyŠkoda-App einen Platz frei (Einstellungen → API-Schlüssel → einen ungenutzten löschen) und lade die Integration neu — oder trage einen vorhandenen Schlüssel manuell in den Optionen ein. Alles andere läuft weiter wie bisher."
+    },
+    "skoda_official_multi_integration": {
+      "title": "Škoda Offizielle API — eine andere Integration nutzt sie auch",
+      "description": "Wir haben auf deinem Škoda-Konto mehr Offizielle-API-Schlüssel gefunden, als diese Integration erstellt hat — meist ein Zeichen, dass eine zweite Integration oder App ebenfalls die offizielle Škoda-API liest. Das ist grundsätzlich in Ordnung, aber beide teilen sich dasselbe kleine Anfrage-Budget pro Fahrzeug, sodass die kombinierte Nutzung das Rate-Limit von Škoda schneller erreichen und im schlimmsten Fall das Konto vorübergehend — oder irgendwann dauerhaft — sperren kann. Wenn du nicht beide brauchst, entferne den nicht genutzten Offizielle-API-Schlüssel in der MyŠkoda-App (Einstellungen → API-Schlüssel). Du kannst diesen Hinweis schließen."
     }
   },
   "selector": {
@@ -1891,6 +2138,21 @@
         "stop_aux_heating": "Standheizung stoppen",
         "start_ventilation": "Lüftung starten",
         "stop_ventilation": "Lüftung stoppen"
+      }
+    },
+    "skoda_official_mode": {
+      "options": {
+        "auto": "Automatisch (beide, offizielle bevorzugt)",
+        "prefer_official": "Offizielle API bevorzugen",
+        "failover": "Offizielle API nur als Notfall",
+        "official_only": "Nur offizielle API",
+        "mysmob_only": "Nur Standard-Kanal"
+      }
+    },
+    "read_priority": {
+      "options": {
+        "auto": "Automatisch (empfohlen)",
+        "prefer_website_authproxy": "Live-vw.de-Daten bevorzugen"
       }
     }
   },
@@ -2108,6 +2370,72 @@
     },
     "historical_portal_not_ready": {
       "message": "Das EU-Data-Act-Portal ist noch nicht bereit. Warte, bis die Integration nach der Einrichtung einmal abgefragt hat, und versuche den Verlaufsexport dann erneut."
+    },
+    "historical_disabled": {
+      "message": "Der einmalige historische Export ist derzeit deaktiviert."
+    },
+    "historical_wedge_blocked": {
+      "message": "Für dieses Fahrzeug läuft bereits ein einmaliger Verlaufsexport. Das Portal bearbeitet immer nur eine solche Anfrage gleichzeitig – warte deshalb, bis die aktuelle abgeschlossen ist (oder das Zeitlimit abläuft), bevor du eine neue anforderst."
+    }
+  },
+  "triggers": {
+    "started_charging": {
+      "name": "Fahrzeug hat Ladevorgang gestartet",
+      "description": "Wird ausgelöst, wenn ein Fahrzeug den Ladevorgang startet."
+    },
+    "stopped_charging": {
+      "name": "Fahrzeug hat Ladevorgang beendet",
+      "description": "Wird ausgelöst, wenn ein Fahrzeug den Ladevorgang beendet."
+    },
+    "plugged_in": {
+      "name": "Fahrzeug eingesteckt",
+      "description": "Wird ausgelöst, wenn das Ladekabel eines Fahrzeugs angeschlossen wird."
+    },
+    "unplugged": {
+      "name": "Fahrzeug ausgesteckt",
+      "description": "Wird ausgelöst, wenn das Ladekabel eines Fahrzeugs getrennt wird."
+    },
+    "locked": {
+      "name": "Fahrzeug verriegelt",
+      "description": "Wird ausgelöst, wenn ein Fahrzeug verriegelt wird."
+    },
+    "unlocked": {
+      "name": "Fahrzeug entriegelt",
+      "description": "Wird ausgelöst, wenn ein Fahrzeug entriegelt wird."
+    },
+    "started_preconditioning": {
+      "name": "Fahrzeug-Vorklimatisierung gestartet",
+      "description": "Wird ausgelöst, wenn ein Fahrzeug die Vorklimatisierung startet."
+    },
+    "stopped_preconditioning": {
+      "name": "Fahrzeug-Vorklimatisierung beendet",
+      "description": "Wird ausgelöst, wenn ein Fahrzeug die Vorklimatisierung beendet."
+    },
+    "charge_target_reached": {
+      "name": "Fahrzeug hat Ladeziel erreicht",
+      "description": "Wird ausgelöst, wenn der Ladestand eines Fahrzeugs sein Ziel erreicht."
+    }
+  },
+  "conditions": {
+    "is_charging": {
+      "name": "Ein Fahrzeug lädt",
+      "description": "Prüft, ob ein Fahrzeug gerade lädt."
+    },
+    "is_plugged_in": {
+      "name": "Ein Fahrzeug ist eingesteckt",
+      "description": "Prüft, ob das Ladekabel eines Fahrzeugs angeschlossen ist."
+    },
+    "is_locked": {
+      "name": "Ein Fahrzeug ist verriegelt",
+      "description": "Prüft, ob ein Fahrzeug verriegelt ist."
+    },
+    "is_preconditioning": {
+      "name": "Ein Fahrzeug klimatisiert vor",
+      "description": "Prüft, ob ein Fahrzeug gerade vorklimatisiert."
+    },
+    "is_charge_target_reached": {
+      "name": "Ein Fahrzeug hat sein Ladeziel erreicht",
+      "description": "Prüft, ob der Ladestand eines Fahrzeugs sein Ziel erreicht hat."
     }
   }
 }

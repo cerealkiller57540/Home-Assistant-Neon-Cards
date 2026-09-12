@@ -23,9 +23,15 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .cariad._util import json_safe_dict, mask_vin
-from .const import CONF_SUPPLEMENTARY_AUTHPROXY
+from .const import CONF_STRATEGY, CONF_SUPPLEMENTARY_AUTHPROXY
 from .coordinator import VagConnectCoordinator
 from .entity_base import VagConnectEntity
+
+
+# b13 — platinum parallel-updates rule: the coordinator's background poll
+# loop owns every API request, so entity updates need no throttling. HA reads
+# this MODULE-level constant (an entity attr is a no-op).
+PARALLEL_UPDATES = 0
 
 
 async def async_setup_entry(
@@ -48,7 +54,17 @@ async def async_setup_entry(
     # gets orphaned and eventually purged by HA, breaking maps/automations). If
     # that channel is configured we spawn the tracker regardless: it just reads
     # unavailable until a position returns after re-login, instead of vanishing.
-    supplementary_gps = bool(entry.data.get(CONF_SUPPLEMENTARY_AUTHPROXY))
+    #
+    # acpp (Audi plug&play OBD dongle, strategy "audi_acpp") has the SAME
+    # intermittency: the dongle only uploads a GPS fix from its last PARKED
+    # snapshot, so coordinates come and go between drives. Without an
+    # unconditional spawn the tracker never appears when the car is mid-drive at
+    # setup, and a registered one gets purged during a gap — so the car's location
+    # was never reliably bound to a tracker entity. Spawn it unconditionally for
+    # acpp too (reads unavailable between fixes rather than never binding).
+    supplementary_gps = bool(entry.data.get(CONF_SUPPLEMENTARY_AUTHPROXY)) or (
+        str(entry.data.get(CONF_STRATEGY, "")) == "audi_acpp"
+    )
 
     def _has_gps(vehicle: dict) -> bool:
         lat = vehicle.get("latitude")
@@ -139,6 +155,9 @@ class VagConnectTracker(VagConnectEntity, TrackerEntity):
             # user tell a position from a minute ago from one from yesterday
             # instead of having to trust that the marker is current.
             "position_captured_at",
+            # b9 — True only when the pin is a last-known position kept past the
+            # 24h freshness window; lets the map/automations flag a day-old fix.
+            "position_is_stale",
             "vehicle_state",
             "model",
             "model_year",

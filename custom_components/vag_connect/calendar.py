@@ -35,6 +35,10 @@ _CHARGE_FIELDS = (
 _SERVICE_FIELDS = (
     "service_due_at", "oil_service_at", "brake_fluid_change_due_at",
     "brake_pads_front_inspection_due_at", "brake_pads_rear_inspection_due_at",
+    # acpp plug&play — main inspection (HU/TÜV) + first registration + warranty.
+    "main_inspection_due_at", "registration_date", "warranty_until",
+    # connected-services (We Connect / Car-Net) licence expiry — cross-brand.
+    "subscription_expiry_at",
 )
 
 
@@ -57,6 +61,12 @@ def _parse_date(val: Any) -> date | None:
         return date.fromisoformat(val[:10])
     except ValueError:
         return None
+
+
+# b13 — platinum parallel-updates rule: the coordinator's background poll
+# loop owns every API request, so entity updates need no throttling. HA reads
+# this MODULE-level constant (an entity attr is a no-op).
+PARALLEL_UPDATES = 0
 
 
 async def async_setup_entry(
@@ -177,6 +187,10 @@ class VagServiceCalendar(VagConnectEntity, CalendarEntity):
             ("brake_fluid_change_due_at", "Brake fluid change"),
             ("brake_pads_front_inspection_due_at", "Front brake pads inspection"),
             ("brake_pads_rear_inspection_due_at", "Rear brake pads inspection"),
+            ("main_inspection_due_at", "Main inspection (HU / TÜV)"),
+            ("registration_date", "First registration"),
+            ("warranty_until", "Warranty ends"),
+            ("subscription_expiry_at", "Connected services subscription ends"),
         ):
             d = _parse_date(v.get(field))
             if d is not None:

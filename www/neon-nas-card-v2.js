@@ -112,6 +112,10 @@
       .map((x, i) =>
         i < 10
           ? `<rect class="nas-dot stat stat-off${i >= 8 ? " no-info" : ""}" data-stat="${i}" x="${x}" y="96" width="2" height="2"/>`
+            /* zone de survol invisible agrandie : le dot visuel reste 2×2, mais viser 2px réels
+               à l'écran est illusoire (viewBox 386 large) — cf skill ha-neon-css. */
+            /* SVG : le tooltip natif est un ENFANT <title>, pas un attribut title= */
+            + `<rect class="nas-dot-hit${i >= 8 ? " no-info" : ""}" data-stat="${i}" x="${x - 2}" y="93" width="6" height="6" fill="transparent"><title></title></rect>`
           : `<rect class="nas-dot" x="${x}" y="96" width="2" height="2" style="animation-duration: ${(Math.random() * 0.2 + 0.05).toFixed(2)}s; animation-delay: ${Math.random().toFixed(2)}s;"/>`
       )
       .join("")}
@@ -146,6 +150,24 @@
     constructor() {
       super();
       this.attachShadow({ mode: "open" });
+      /* flicker header canonique — initialisés AVANT tout _render() (cf skill ha-neon-css,
+         piège "animation:nmc-flicker undefined" si posé après) */
+      this._flickDur = 3.5 + Math.random() * 2;
+      this._flickOff = -2 + Math.random() * 2;
+    }
+
+    /* Charge une police Google Fonts à la demande, une seule fois par famille
+       (cache module-level partagé par toutes les instances). Cf skill ha-neon-css,
+       piège "police choisie dans l'éditeur silencieusement jamais chargée". */
+    static _loadGoogleFont(family) {
+      if (!family) return;
+      if (!NeonNasCard._loadedFonts) NeonNasCard._loadedFonts = new Set();
+      if (NeonNasCard._loadedFonts.has(family)) return;
+      NeonNasCard._loadedFonts.add(family);
+      const link = document.createElement("link");
+      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family).replace(/%20/g, '+')}:wght@400;600;700;900&display=swap`;
+      link.rel = "stylesheet";
+      document.head.appendChild(link);
     }
 
     setConfig(c) {
@@ -303,6 +325,51 @@
       }
     }
 
+    /* Pose/rafraîchit le tooltip natif d'un élément SVG.
+       ⚠️ En SVG, `title=` en ATTRIBUT est inerte (c'est du HTML) : le tooltip vient
+       d'un élément ENFANT <title>. Le survol d'un descendant remonte au <title> de
+       l'ancêtre le plus proche, donc un seul <title> sur le <g> couvre tout le groupe.
+       (neon-switch-card.js pose title= sur un <div>, d'où la différence.) */
+    _svgTitle(el, txt) {
+      let t = el.querySelector("title");
+      if (!t) {
+        t = document.createElementNS("http://www.w3.org/2000/svg", "title");
+        el.insertBefore(t, el.firstChild);
+      }
+      if (t.textContent !== txt) t.textContent = txt;
+    }
+
+    /* Tooltip natif d'un disque : baie + état lisible (élément <title> enfant, cf _svgTitle). */
+    _driveTitle(i) {
+      const pos = LED_POS[i];
+      const chassis = pos.row === "rx" ? "RX410" : "RS";
+      const bay = `${chassis} baie ${pos.idx}`;
+      const status = this._driveStatus(i);
+      const stateEnt = this._ent((this._config.drives || [])[i]);
+      const lbl = { ok: "Normal", warn: "Attention", err: "Défaut", unavail: "Indisponible" }[status];
+      return stateEnt && status !== "unavail" ? `${bay} — ${lbl} (${stateEnt.v})` : `${bay} — ${lbl}`;
+    }
+
+    /* Tooltip natif d'un dot de statut (title=) : label + valeur lisible.
+       Même pattern que _portTitle() dans neon-switch-card.js (cf skill ha-neon-css). */
+    _dotTitle(i) {
+      const d = (this._config.status_dots || [])[i];
+      if (!d) return "";
+      const status = this._statusDot(i);
+      if (status === "off") return `${d.label} — indisponible`;
+      const e = this._ent(d.entity);
+      const raw = e ? e.v : null;
+      let val;
+      if (d.type === "on_ok") val = raw === "on" ? "connecté" : "déconnecté";
+      else if (d.type === "problem") val = raw === "on" ? "défaut" : "OK";
+      else if (d.type === "activity") val = raw === "on" ? "actif" : "au repos";
+      else {
+        const unit = (e && e.a && e.a.unit_of_measurement) || "";
+        val = unit ? `${raw} ${unit}`.trim() : String(raw);
+      }
+      return `${d.label} — ${val}`;
+    }
+
     _fmtBytes(v, attrs) {
       if (v === null || v === undefined || v === "") return "—";
       const n = parseFloat(v);
@@ -329,6 +396,36 @@
       const ledOk = c.led_ok_color || CP_OK;
       const bg = cardModBg ? "transparent" : c.color_bg || CP_BG;
 
+      /* ── bloc header canonique — calcul des variables (cf skill ha-neon-css) ── */
+      const showHeader  = hdr.show !== false;
+      if (hdr.font) NeonNasCard._loadGoogleFont(hdr.font);
+      const tFontFamily = hdr.font ? `'${hdr.font}', var(--primary-font-family, sans-serif)` : 'var(--primary-font-family, sans-serif)';
+      const tFontSize   = hdr.title_size || '13px';
+      const tFontWeight = hdr.font_weight ?? 600;
+      const tLetterSp   = hdr.letter_spacing || '0.02em';
+      const tUppercase  = hdr.uppercase === false ? 'none' : 'uppercase';
+      const tItalic     = hdr.italic ? 'italic' : 'normal';
+      const tColor      = hdr.color || 'var(--primary-color)';
+      const tIconColor  = hdr.icon_color || 'rgba(var(--rgb-primary-text-color),0.85)';
+      const tIconSize   = hdr.icon_size || '18px';
+      const tGlowOn     = hdr.glow !== false;
+      const tGlowColor  = hdr.glow_color || 'var(--primary-color, #00E8FF)';
+      const tGlowSize   = hdr.glow_size || '14px';
+      const tGlowSizeN  = parseFloat(tGlowSize) || 14;
+      const tGlowShadow = tGlowOn
+        ? `0 0 ${Math.round(tGlowSizeN*0.2)}px #fff, 0 0 ${tGlowSize} ${tGlowColor}, 0 0 calc(${tGlowSize} * 2) ${tGlowColor}`
+        : 'none';
+      const tIconGlow = tGlowOn
+        ? `drop-shadow(0 0 ${Math.round(tGlowSizeN*0.2)}px #fff) drop-shadow(0 0 ${Math.round(tGlowSizeN*0.4)}px ${tGlowColor}) drop-shadow(0 0 ${Math.round(tGlowSizeN*0.8)}px ${tGlowColor}) drop-shadow(0 0 ${tGlowSizeN}px ${tGlowColor})`
+        : 'none';
+      const tGradOn     = !!hdr.gradient;
+      const tGradFrom   = hdr.gradient_from || tColor;
+      const tGradTo     = hdr.gradient_to || 'var(--accent-color)';
+      const tFlickOn    = !!hdr.flicker;
+      const tFlickAnim  = tFlickOn
+        ? `nmc-flicker ${this._flickDur}s ease-in-out ${this._flickOff}s infinite`
+        : 'none';
+
       this.shadowRoot.innerHTML = `
       <style>
         :host { display:block; }
@@ -346,15 +443,31 @@
           --nas-cy: var(--rgb-accent-color, 0,255,249);
           --nas-err-rgb: var(--rgb-error-color, 255,45,107);
           --gc-sat: ${(c.glitch && c.glitch.sat) || GLITCH.sat};
-          ${hdr.color ? `--nas-hdr-color: ${hdr.color};` : ""}
-          ${hdr.title_size ? `--nas-hdr-size: ${hdr.title_size};` : ""}
-          ${hdr.title_shadow ? `--nas-hdr-shadow: ${hdr.title_shadow};` : ""}
         }
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500&display=swap');
-
-        @keyframes hdr-glow {
-          0%,100% { text-shadow: 0 0 6px var(--nas-hdr-color, var(--primary-color)), 0 0 12px rgba(var(--nas-cy),.4); }
-          50%      { text-shadow: 0 0 10px var(--nas-hdr-color, var(--primary-color)), 0 0 22px rgba(var(--nas-cy),.7); }
+        .nmc-title {
+          font-family: ${tFontFamily};
+          font-size: ${tFontSize};
+          font-weight: ${tFontWeight};
+          letter-spacing: ${tLetterSp};
+          text-transform: ${tUppercase};
+          font-style: ${tItalic};
+          text-shadow: ${tGlowShadow};
+          animation: ${tFlickAnim};
+          ${tGradOn
+            ? `background: linear-gradient(90deg, ${tGradFrom}, ${tGradTo}); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;`
+            : `color: ${tColor};`}
+        }
+        .nmc-icon-wrap ha-icon, .nmc-icon-wrap svg {
+          color: ${tIconColor};
+          --mdc-icon-size: ${tIconSize};
+          filter: ${tIconGlow};
+        }
+        .nmc-icon-wrap ha-icon {
+          display: flex; align-items: center; justify-content: center;
+        }
+        @keyframes nmc-flicker {
+          0%, 18%, 22%, 25%, 53%, 57%, 100% { opacity: 1; filter: brightness(1); }
+          20%, 24%, 55% { opacity: .8; filter: brightness(1.4) contrast(1.2); }
         }
 
         .hdr {
@@ -373,39 +486,34 @@
             rgba(var(--nas-uv),.55) 80%,
             transparent);
         }
-        .hdr .ico {
-          display: inline-flex; align-items: center;
-          width:18px; height:18px;
-          color: var(--nas-hdr-color, var(--primary-color));
-          filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 4px var(--nas-hdr-color, var(--primary-color))) drop-shadow(0 0 8px var(--nas-hdr-color, var(--primary-color))) drop-shadow(0 0 10px var(--nas-hdr-color, var(--primary-color)));
-          flex-shrink: 0;
-          --mdc-icon-size: 18px;
-        }
-        .hdr .title {
-          flex:1;
-          font-family: 'Orbitron', var(--primary-font-family, 'Roboto'), sans-serif;
-          font-size: var(--nas-hdr-size, 13px);
-          letter-spacing: clamp(1px, 0.5cqi, 3px);
-          text-transform: uppercase;
-          color: var(--nas-hdr-color, var(--primary-color));
-          text-shadow: var(--nas-hdr-shadow, 0 0 6px var(--nas-hdr-color, var(--primary-color)));
-          animation: hdr-glow 3s ease-in-out infinite;
-        }
+        /* ── bloc header canonique (nmc-icon-wrap / nmc-title, cf skill ha-neon-css) ── */
+        .nmc-icon-wrap { display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:visible; }
+        .nmc-icon-wrap ha-icon, .nmc-icon-wrap svg { display:block; overflow:visible; }
+        .nmc-icon-wrap svg { width:18px; height:18px; }
+        .nmc-title { flex: 1; overflow: visible; }
         .hdr-badges {
-          display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+          display: flex; align-items: center; gap: 14px; flex-shrink: 0;
         }
-        /* health */
+        /* health — texte lumineux, pas de badge (cf .mw-stat-value, mova-mower-card) */
         .hdr .health {
-          font-family: 'Orbitron', var(--primary-font-family, 'Roboto'), sans-serif;
-          font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px;
-          border:1px solid currentColor; cursor:pointer; white-space:nowrap;
-          mix-blend-mode: screen;
-          display: inline-flex; align-items: center; line-height: 1;
+          font-family: var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif);
+          font-size:11px; font-weight:700; cursor:pointer; white-space:nowrap;
+          letter-spacing: 0.08em; text-transform: uppercase;
+          display: inline-flex; align-items: center; gap:5px; line-height: 1;
+          text-shadow: 0 0 1px #fff, 0 0 6px currentColor, 0 0 13px currentColor;
+        }
+        /* pastille = l'indicateur lumineux (le className est reecrit a chaque update
+           -> pseudo-element, surtout pas un span injecte) */
+        .hdr .health::before {
+          content: ''; width:6px; height:6px; border-radius:50%; flex-shrink:0;
+          background: currentColor;
+          box-shadow: 0 0 2px #fff, 0 0 6px currentColor, 0 0 14px currentColor;
         }
         .hdr .health.ok      { color:var(--nas-ok); }
         .hdr .health.warn    { color:var(--nas-warn); }
         .hdr .health.err     { color:var(--nas-err); }
-        .hdr .health.unavail { color:var(--nas-dim); }
+        .hdr .health.unavail { color:var(--nas-dim); text-shadow:none; }
+        .hdr .health.unavail::before { box-shadow:none; opacity:.5; }
 
         .nas-wrap { position:relative; width:100%; }
         .nas-wrap:hover .nas-dot {
@@ -467,6 +575,8 @@
         /* v2 : .nas-dot pilotés = dots de statut. Vert néon FIXE (#00FFAA, comme v1),
            indépendant de led_ok_color (qui peut être bleu). Glow net via drop-shadow. */
         .nas-dot.stat { animation: none; cursor: pointer; stroke-width: 0; }
+        .nas-dot-hit { cursor: pointer; }
+        .nas-dot-hit.no-info { cursor: default; }
         .nas-dot.stat.stat-ok  {
           fill: #00FFAA; opacity: 1;
           filter: drop-shadow(0 0 2px #00FFAA) drop-shadow(0 0 4px #00FFAA);
@@ -485,10 +595,7 @@
         .nas-grille { fill:#131619; }
         .nas-bay-frame { fill:#1e2228; }
         /* Profondeur des baies de disques */
-        .nas-bay-inner { 
-          fill: #050608; 
-          box-shadow: inset 0 0 5px #000; 
-        }
+        .nas-bay-inner { fill: url(#grad-bay-inner); }
         /* Les "notches" (encoches) et poignées */
         .nas-bay-notch, .nas-bay-label { 
           fill: #1a1e24; 
@@ -600,18 +707,21 @@
           font-size:11px; color: var(--nas-dim);
           letter-spacing:.06em; text-transform:uppercase;
         }
-        /* temp tile (header) — même style que health */
+        /* temp (header) — texte lumineux, pas de badge (cf .mw-stat-value) */
         .temp {
           display:inline-flex; align-items:center; gap:4px; line-height:1;
-          font-family: 'Orbitron', var(--primary-font-family, 'Roboto'), sans-serif;
-          font-size:10px; font-weight:700; padding:2px 8px; border-radius:6px;
-          border:1px solid currentColor;
+          font-family: var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif);
+          font-size:12px; font-weight:700;
           color:var(--nas-accent);
           font-variant-numeric:tabular-nums;
+          letter-spacing: 0.04em;
           cursor:pointer; white-space:nowrap;
-          mix-blend-mode: screen;
+          text-shadow: 0 0 1px #fff, 0 0 6px currentColor, 0 0 13px currentColor;
         }
-        .temp svg { width:10px; height:10px; flex-shrink:0; }
+        .temp svg {
+          width:11px; height:11px; flex-shrink:0;
+          filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 5px currentColor) drop-shadow(0 0 12px currentColor);
+        }
         .temp.hot  { color:var(--nas-err); }
         .temp.warm { color:var(--nas-warn); }
 
@@ -736,19 +846,21 @@
         /* iPad/mobile : on GARDE les LED de statut disque (info utile, pulse lent OK).
            v2 : les dots de statut (:not(.stat) exclu) restent lumineux ; les perforations
            déco gardent un flicker plus SOFT (ralenti) au lieu d'être figées. */
-        :host(.low-power) .hdr-title { animation: none; }
+        :host(.low-power) .nmc-title { animation: none !important; }
         :host(.low-power) .nas-dot:not(.stat) { animation: hdd-flicker 0.6s infinite !important; opacity: 1; }
       </style>
       <ha-card>
-        <div class="hdr" id="hdr">
+        ${showHeader ? `<div class="hdr" id="hdr">
+          <div class="nmc-icon-wrap" id="hdr-icon-wrap">
           ${
             hdr.icon
-              ? `<ha-icon class="ico" icon="${hdr.icon}"></ha-icon>`
-              : `<svg class="ico" viewBox="0 0 24 24" fill="currentColor">
+              ? ""
+              : `<svg viewBox="0 0 24 24" fill="currentColor">
                 <path d="M4 4h16v4H4V4zm0 6h16v4H4v-4zm0 6h16v4H4v-4zM7 6v.01M7 12v.01M7 18v.01"/>
                </svg>`
           }
-          <span class="title">${title}</span>
+          </div>
+          <span class="nmc-title" id="hdr-title">${title}</span>
           <div class="hdr-badges">
             <div class="temp" id="temp">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a3 3 0 00-3 3v10.27a5 5 0 106 0V5a3 3 0 00-3-3zm0 2a1 1 0 011 1v10.83l.4.29a3 3 0 11-2.8 0l.4-.29V5a1 1 0 011-1z"/></svg>
@@ -756,7 +868,7 @@
             </div>
             <span class="health" id="health"><span id="healthVal">—</span></span>
           </div>
-        </div>
+        </div>` : ''}
         <div class="nas-wrap">
           <svg class="nas" viewBox="0 82 386 72" xmlns="http://www.w3.org/2000/svg">
             <defs>
@@ -765,6 +877,11 @@
                 <stop offset="10%" style="stop-color:#12151a;stop-opacity:1" />
                 <stop offset="90%" style="stop-color:#0d0f12;stop-opacity:1" />
                 <stop offset="100%" style="stop-color:#050608;stop-opacity:1" />
+              </linearGradient>
+              <linearGradient id="grad-bay-inner" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" style="stop-color:#010203;stop-opacity:1" />
+                <stop offset="55%" style="stop-color:#040609;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#0b0e12;stop-opacity:1" />
               </linearGradient>
               <radialGradient id="grad-hole">
                 <stop offset="0%"   stop-color="#000000" />
@@ -786,8 +903,12 @@
               (p, i) => `
               <g class="drive-led" data-idx="${i}"
                  transform="translate(${p.x},${p.y})">
+                <!-- SVG : le tooltip natif est un ENFANT <title>, pas un attribut title= -->
+                <title></title>
                 <circle class="ring" r="2.5"/>
                 <circle class="dot"  r="1.25"/>
+                <!-- zone de survol/clic agrandie, invisible : le rendu visuel reste r=2.5 -->
+                <circle class="drive-hit" r="6" fill="transparent"/>
               </g>
             `
             ).join("")}
@@ -817,18 +938,23 @@
 
       // bind clicks
       this.shadowRoot.querySelectorAll(".drive-led").forEach((el) => {
+        const i = +el.dataset.idx;
+        this._svgTitle(el, this._driveTitle(i));
         el.addEventListener("click", () => {
-          const i = +el.dataset.idx;
           const id = (this._config.drives || [])[i];
           this._moreInfo(id);
         });
       });
-      // v2 : clic sur un dot de statut → more-info de son entité (sauf .no-info : lumière seule, ex. Download Station)
-      this.shadowRoot.querySelectorAll(".nas-dot.stat:not(.no-info)").forEach((el) => {
+      // v2 : clic sur la zone de survol d'un dot de statut → more-info (sauf .no-info : lumière seule, ex. Download Station)
+      this.shadowRoot.querySelectorAll(".nas-dot-hit:not(.no-info)").forEach((el) => {
         el.addEventListener("click", () => {
           const d = (this._config.status_dots || [])[+el.dataset.stat];
           if (d) this._moreInfo(d.entity);
         });
+        this._svgTitle(el, this._dotTitle(+el.dataset.stat));
+      });
+      this.shadowRoot.querySelectorAll(".nas-dot-hit.no-info").forEach((el) => {
+        this._svgTitle(el, this._dotTitle(+el.dataset.stat));
       });
       this.shadowRoot
         .getElementById("donut")
@@ -841,6 +967,13 @@
       this.shadowRoot
         .getElementById("health")
         .addEventListener("click", () => this._moreInfo(this._config.health_entity));
+      /* Icône header via createElement — jamais innerHTML */
+      if (showHeader && hdr.icon) {
+        const ico = document.createElement("ha-icon");
+        ico.setAttribute("icon", hdr.icon);
+        this.shadowRoot.getElementById("hdr-icon-wrap").appendChild(ico);
+      }
+
       this.shadowRoot
         .getElementById("btn-reboot")
         .addEventListener("click", () => this._confirm("reboot"));
@@ -1142,6 +1275,7 @@
         const i = +el.dataset.idx;
         el.classList.remove("ok", "warn", "err", "unavail");
         el.classList.add(this._driveStatus(i));
+        this._svgTitle(el, this._driveTitle(i));
       });
 
       // v2 : dots de statut (ex-perforations façade gauche)
@@ -1149,6 +1283,9 @@
         const i = +el.dataset.stat;
         el.classList.remove("stat-ok", "stat-err", "stat-off", "stat-active");
         el.classList.add("stat-" + this._statusDot(i));
+      });
+      this.shadowRoot.querySelectorAll(".nas-dot-hit").forEach((el) => {
+        this._svgTitle(el, this._dotTitle(+el.dataset.stat));
       });
 
       // health
@@ -1357,8 +1494,27 @@
     }
 
     // ── Helpers de champ (signatures FIXES — ne pas réinventer) ────────
-    _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; this.appendChild(d); return d; }
-    _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; this.appendChild(d); return d; }
+    _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; (this._appendTo || this).appendChild(d); return d; }
+    _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; (this._appendTo || this).appendChild(d); return d; }
+
+    // ── Groupe repliable (pattern canonique storey-battery-card-gl.js) ──
+    // Enveloppe un bloc de champs dans <ha-expansion-panel>. buildFn() appelle
+    // les helpers habituels (_section/_text/_color/...) qui s'appendent DEDANS
+    // via _appendTo — aucun changement requis sur les helpers.
+    // 🔴 L'état ouvert/fermé reste local au panneau (pas dans _config) : ne
+    // JAMAIS le lire/écrire via _set, sinon un config-changed le referme.
+    _group(title, expanded, buildFn) {
+      const panel = document.createElement('ha-expansion-panel');
+      panel.outlined = true;
+      panel.header = title;
+      if (expanded) panel.expanded = true;
+      (this._appendTo || this).appendChild(panel);
+      const prevAppendTo = this._appendTo;
+      this._appendTo = panel;
+      buildFn();
+      this._appendTo = prevAppendTo;
+      return panel;
+    }
 
     _text(key, label, ph = '') {
       const row = this._row(label);
@@ -1559,13 +1715,30 @@
     // ╚════════════════════════════════════════════════════════════════╝
     _schema() {
       this._section('Général');
+      this._toggle('header.show', 'Afficher le header', true);
       this._text('header.title', 'Titre', 'Rackstation');
       this._icon('header.icon', 'Icône (mdi)');
       this._color('header.color', 'Couleur titre', 'var(--primary-color)');
       this._text('header.title_size', 'Taille titre', '13px');
-      this._select('header.font', 'Police', NAS_FONTS, '— thème HA —');
-      this._text('header.title_shadow', 'Text-shadow', '0 0 6px ...');
       this._text('volume_label', 'Label volume (footer)', 'Volume 1');
+
+      this._select('header.font', 'Police', NAS_FONTS, '— thème HA —');
+      this._toggle('header.uppercase', 'Majuscules', true);
+
+      this._group('Effets avancés du titre', false, () => {
+        this._text('header.font_weight', 'Épaisseur', '600');
+        this._text('header.letter_spacing', 'Espacement', '0.02em');
+        this._toggle('header.italic', 'Italique', false);
+        this._toggle('header.gradient', 'Dégradé texte', false);
+        this._color('header.gradient_from', 'Dégradé — départ', 'var(--primary-color)');
+        this._color('header.gradient_to', 'Dégradé — arrivée', 'var(--accent-color)');
+        this._toggle('header.glow', 'Glow néon', true);
+        this._text('header.glow_size', 'Taille glow', '14');
+        this._color('header.glow_color', 'Couleur glow', 'var(--primary-color)');
+        this._toggle('header.flicker', 'Flicker néon', false);
+        this._color('header.icon_color', 'Couleur icône', 'défaut : blanc cassé');
+        this._text('header.icon_size', 'Taille icône', '18px');
+      });
 
       this._section('Capteurs principaux');
       this._entity('health_entity', 'Health / État volume', 'sensor');

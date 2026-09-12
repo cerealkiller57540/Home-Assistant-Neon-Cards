@@ -16,6 +16,9 @@ CONF_BRAND                    = "brand"
 CONF_USERNAME                 = "username"
 CONF_PASSWORD                 = "password"
 CONF_SPIN                     = "spin"
+# b19 (#1337) — the solved captcha text on Porsche's Auth0 captcha-resume step.
+# Transient (never persisted to a config entry, unlike the fields above).
+CONF_CAPTCHA_CODE             = "captcha_code"
 # v3.0.0-alpha — companion (ADB) channel. A config entry whose CONF_STRATEGY is
 # "companion_adb" is served by the CompanionClient over network ADB instead of
 # a CARIAD network client. Host/port point at the spare phone; VIN is the car
@@ -48,6 +51,25 @@ CONF_COMPANION_WAKE_SLEEP        = "companion_wake_sleep"
 CONF_COMPANION_USE_ADDON         = "companion_use_addon"
 CONF_COMPANION_ADDON_TOKEN       = "companion_addon_token"
 DEFAULT_COMPANION_ADDON_PORT     = 8129
+# v4.4.0 (#968) — companion agent relay. Instead of Home Assistant reaching into
+# the phone (ADB directly, or the add-on doing it), a small agent app on the
+# phone makes an outbound long-poll to HA and takes its commands from the
+# response. That removes wireless-debugging pairing, a fixed phone IP and
+# client-isolated Wi-Fi from the requirements in one go. When set, no host/port
+# is used at all; the random agent token is the entire binding, and it must be
+# at least COMPANION_MIN_TOKEN_LEN characters.
+CONF_COMPANION_USE_RELAY         = "companion_use_relay"
+CONF_COMPANION_AGENT_TOKEN       = "companion_agent_token"
+COMPANION_MIN_TOKEN_LEN          = 32
+# v4.4.0 (#968) — the deeper companion nav-read opt-ins. Each one TAPS its way
+# through the app to reach values the overview does not carry, so each is off by
+# default and separately enabled: the odometer + service countdown on the
+# Vehicle Health screen (4.3.2 dropped the odometer from the overview), the
+# target/outside temperature on the climate detail, and the parking position,
+# which is read from the coordinates in the app's own share link.
+CONF_COMPANION_READ_VEHICLE_HEALTH   = "companion_read_vehicle_health"
+CONF_COMPANION_READ_CLIMATE_DETAIL   = "companion_read_climate_detail"
+CONF_COMPANION_READ_PARKING_POSITION = "companion_read_parking_position"
 # v2.17.5 (#759) — optional per-VIN S-PIN overrides: {vin: spin}. When a
 # vehicle has no entry here the shared CONF_SPIN is used, so existing
 # single-S-PIN setups are unchanged. Set via the Options flow.
@@ -72,6 +94,15 @@ CONF_MBB_COMMAND_CHANNEL      = "mbb_command_channel"      # bool: armed?
 CONF_MBB_COMMAND_TOKENS       = "mbb_command_tokens"       # dag-shaped dict (strategy=mbb)
 CONF_MBB_COMMAND_CLIENT_ID    = "mbb_command_client_id"    # registered X-Client-Id
 CONF_MEB_COMMANDS_UNAVAILABLE = "meb_commands_unavailable"  # bool: MEB/ID car, commands requested but impossible
+# b15 — MBB COMMAND FALLBACK for a TWO-WAY device-grant primary (e.g. Audi
+# Car-Net on the CARIAD BFF). Unlike CONF_MBB_COMMAND_CHANNEL (portal primary →
+# MBB *is* the command channel), here the BFF stays the command primary and the
+# MBB connector is armed ONLY as a fallback: a command runs on the BFF first and
+# re-routes to MBB *only* when the BFF refuses it (401/403 auth refusal), and
+# only for MBB-eligible (pre-MEB Car-Net) cars. Škoda pulled its device-grant in
+# 2026-08 — this keeps a two-way Audi commandable if VW ever does the same. Reuses
+# the CONF_MBB_COMMAND_TOKENS / _CLIENT_ID / _VINS storage (same durable bearer).
+CONF_MBB_COMMAND_FALLBACK     = "mbb_command_fallback"     # bool: MBB armed as BFF-refusal fallback?
 # 2026-08 — VW EU Two-Way (modern CARIAD BFF) via device-grant client 650d46ca.
 # Its 1h Bearer is BFF-whitelisted for reads+commands (the surface vw_eu.py
 # drives), unlike the DAG-dead app client / read-only portal client. Because the
@@ -92,6 +123,9 @@ CONF_ENABLE_REVERSE_GEOCODING = "enable_reverse_geocoding"
 # model name maps to several battery options). When the user supplies it we
 # publish battery_soh_pct = current max capacity / nominal. 0 / unset = no SoH.
 CONF_BATTERY_NOMINAL_KWH      = "battery_nominal_kwh"
+# Optional fuel-tank capacity (litres) — lets a litres-only source (acpp
+# plug&play) derive a fuel-level percentage. 0 = off (litres only).
+CONF_FUEL_TANK_CAPACITY       = "fuel_tank_capacity"
 # P1-5 — opt-in diagnostic archive of raw EU Data Act dataset ZIPs. Default
 # off: a raw dataset carries GPS + VIN + telemetry, so keeping the last few on
 # disk is a privacy cost the user opts into knowingly. When on, the coordinator
@@ -186,7 +220,31 @@ CONF_CLIENT_ID_OVERRIDE       = "client_id_override"
 # subscription on the user's account, which is free.
 # The resolved per-VIN Identifier is persisted under CONF_DATA_ACT_IDENTIFIERS.
 CONF_EU_DATA_ACT_AUTO_KICKOFF = "eu_data_act_auto_kickoff"
+
+# Stage-1 one-time historical-export lifecycle. The portal accepts AT MOST ONE
+# custom request per VIN at a time, so a one-time export would BLOCK the
+# The portal gives the one-time request no terminal state (it can silently
+# vanish after submit), so we impose our own client-side deadline; the wedge-guard
+# refuses only while OUR OWN one-time export is pending (#923). Persisted per VIN
+# as {state, submitted_at}.
+CONF_HISTORICAL_EXPORT_STATE = "historical_export_state"
+# Past this many seconds a still-pending export is declared timed-out. #923
+# (@naked-head) observed a request legitimately still "Gathering your data" on
+# the portal past 39h, so the earlier 26h floor timed out real in-flight requests
+# and (once the wedge-guard was fixed to key off our own pending state) would let
+# a resubmit through that the portal then rejects. 72h leaves a wide margin.
+HISTORICAL_EXPORT_DEADLINE_S = 72 * 3600
+# Kill-switch — set True to disable the whole one-time lifecycle (button hidden,
+# service + kickoff abort). The machinery stays intact; nothing else changes.
+ONETIME_EXPORT_DISABLED = False
 CONF_DATA_ACT_IDENTIFIERS     = "data_act_identifiers"
+# b9 (#1273) — sibling map {vin: iso-timestamp} of the last kickoff attempt. We
+# back off re-POSTing a Custom Data Request (the portal 500s on a 2nd active request
+# per VIN, and the anonymous probe false-negatives) when a cached Identifier was
+# re-verified within KICKOFF_REVERIFY_S. Kept SEPARATE from the identifier map so
+# that value stays a plain string (diagnostics redaction + the spawn-gate rely on it).
+CONF_DATA_ACT_KICKOFF_TS      = "data_act_kickoff_ts"
+KICKOFF_REVERIFY_S            = 24 * 3600
 
 # v2.14.0 — OPT-IN, BETA. When set on a Volkswagen entry, the integration
 # authenticates + reads via the volkswagen.de website authproxy (a confidential
@@ -225,6 +283,10 @@ CONF_SUPPLEMENTARY_AUTHPROXY         = "supplementary_authproxy"
 # read ONLY via entry.data (the options listener folds options → data, and
 # entry.options is always {} at read time — see [[vag-connect-entry-options-trap]]).
 CONF_TEST_COHORT                     = "test_cohort"
+# Opt-in (default OFF): auto-provision monthly utility_meter helpers (charged
+# energy kWh + odometer km) per vehicle. Persistent config-entry helpers the user
+# must remove themselves, so never created silently — see utility_meter.py.
+CONF_AUTO_UTILITY_METERS             = "auto_utility_meters"
 # v2.15.0b8 (C1) — supplementary EU Data Act PORTAL read channel (email/pw,
 # no OTP) merged onto a command-capable primary like MBB to fill the reads MBB
 # can't. Creds stored separately from the primary's (an MBB-QR entry has none).
@@ -246,6 +308,42 @@ CONF_SUPPLEMENTARY_AUTHPROXY_COOKIES = "supplementary_authproxy_cookies"
 # back here. SECURITY: the token bundle is never logged.
 CONF_SUPPLEMENTARY_TIBBER        = "supplementary_tibber"
 CONF_SUPPLEMENTARY_TIBBER_TOKENS = "supplementary_tibber_tokens"
+# Škoda OFFICIAL public API key (opt-in) — a FAILOVER-ONLY source: read only
+# when the primary (unofficial mysmob) channel hard-fails, never polled
+# continuously, because the official API is rate-limited to 20 requests/hour/key.
+CONF_SKODA_OFFICIAL_API_KEY      = "skoda_official_api_key"
+# Auto-enrolled per-VIN official keys, minted from the user's mysmob login:
+# {vin: {"key": str, "id": str, "validUntil": str}}. Keys are VIN-bound, so this
+# is a map, not a single key; CONF_SKODA_OFFICIAL_API_KEY stays the manual-fallback
+# single key for any VIN not auto-enrolled.
+CONF_SKODA_OFFICIAL_KEYS         = "skoda_official_keys"
+# Škoda official-API source mode (opt-in select, #1286 @n3roGit). Governs how the
+# official manufacturer API interacts with the primary "mysmob" channel:
+#   auto            → read both every poll, official's readings win (default)
+#   prefer_official → same active merge; official is the authoritative source
+#   failover        → mysmob only; official steps in solely on a hard failure
+#   official_only   → only the official API (mysmob off), per-VIN degrade to mysmob
+#                     for any car without a valid official key
+#   mysmob_only     → only the mysmob channel (official off entirely, no minting)
+CONF_SKODA_OFFICIAL_MODE         = "skoda_official_mode"
+SKODA_OFFICIAL_MODES: tuple[str, ...] = (
+    "auto", "prefer_official", "failover", "official_only", "mysmob_only",
+)
+SKODA_OFFICIAL_MODE_DEFAULT = "auto"
+
+# Per-VIN read-source priority (#1357 @Ra72xx). On a car with more than one read
+# channel (EU Data Act portal + live vw.de), the per-field winner is the channel
+# ORDER handed to the merge, not the freshest value — so a portal-primary car has
+# the (slower, batch) EU-DA feed win every field the live vw.de channel also
+# carries. This lets a user flip that PER CAR so the live vw.de channel wins every
+# field it has while EU-DA keeps filling the fields only it provides.
+#   auto                      → today's behaviour (primary channel wins), default
+#   prefer_website_authproxy  → the live vw.de channel wins; EU-DA fills the gaps
+# Stored as a ``{VIN: mode}`` map (per-VIN, like CONF_SKODA_OFFICIAL_KEYS). Only
+# reorders the read merge; command routing / reconcile / write paths are untouched.
+CONF_READ_PRIORITY               = "read_priority"
+READ_PRIORITY_MODES: tuple[str, ...] = ("auto", "prefer_website_authproxy")
+READ_PRIORITY_DEFAULT = "auto"
 
 # v2.15.0b3 — "hide entities without data" (default ON). When enabled, data
 # sensors / binary sensors whose value hasn't arrived are not created, so a
@@ -287,12 +385,15 @@ CONF_ABRP_USER_TOKEN         = "abrp_user_token"
 BRANDS = {
     "audi":           "Audi (myAudi)",
     "volkswagen":     "Volkswagen EU (WeConnect ID)",
+    "volkswagen_commercial": "Volkswagen Commercial Vehicles",  # #1316 Nutzfahrzeuge
     "skoda":          "Škoda (MyŠkoda)",
     "seat":           "SEAT",
     "cupra":          "CUPRA",
     "volkswagen_na":  "Volkswagen US/CA",
     "audi_na":        "Audi US/CA",
     "porsche":        "Porsche (My Porsche)",
+    "audi_acpp":      "Audi plug&play (OBD dongle)",
+    "skoda_official": "Škoda (official API)",
 }
 
 # v2.8.0 quick-win B — native-app deeplink schemes per brand. Used by
@@ -318,12 +419,15 @@ BRANDS = {
 DEEPLINK_SCHEMES: dict[str, str] = {
     "audi":          "myaudi://",          # DEX: myAudi 5.5.1
     "volkswagen":    "weconnect://",       # DEX: We Connect 4.0.3 (was wecharge://)
+    "volkswagen_commercial": "weconnect://",  # #1316 — same We Connect app
     "skoda":         "myskoda://",         # DEX: MySkoda 8.14.0
     "seat":          "seat://",            # DEX: My SEAT 2.19.1 (was myseat://)
     "cupra":         "cupra://",           # DEX: My CUPRA 2.18.1 (was mycupra://)
     "porsche":       "porsche-app://",     # DEX: Porsche One 12.24.27 (was myporsche://)
     "volkswagen_na": "myvw://",            # DEX: myVW 2026.5.27 (was vwapp://)
     "audi_na":       "myaudi://",          # US Audi = same global myAudi app
+    "audi_acpp":     "acpp://",            # Audi connect plug&play (de.audi.connectplugandplay)
+    "skoda_official": "myskoda://",        # official API keys are managed in the MyŠkoda app
 }
 
 # Polling interval limits
@@ -349,6 +453,11 @@ MAX_SCAN_INTERVAL     = 60   # minutes — the config-flow selectable ceiling (#
 # every other brand keeps the 10-min default.
 RECOMMENDED_SCAN_INTERVAL: dict[str, int] = {
     "skoda": 30,
+    # acpp (Audi plug&play OBD dongle) uploads a snapshot only when the dongle
+    # syncs after a drive — polling faster than the car is driven returns
+    # identical data and just churns the ~1h rotating token. Hourly reliably
+    # catches the post-drive snapshot.
+    "audi_acpp": 60,
 }
 
 

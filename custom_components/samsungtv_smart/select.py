@@ -50,6 +50,7 @@ from .const import (
     DEFAULT_PORT,
     DOMAIN,
     WS_PREFIX,
+    ip_control_port,
 )
 from .token_notify import METHOD_IP_CONTROL, clear_token_problem, notify_token_problem
 
@@ -526,7 +527,12 @@ class SamsungTVIPControlColorToneSelect(SelectEntity):
             return None
         token = entry.data.get(CONF_IP_CONTROL_TOKEN)
         if self._ip_control is None or self._ip_control_token != token:
-            self._ip_control = SamsungIPControl(self.hass, self._host, token=token)
+            self._ip_control = SamsungIPControl(
+                self.hass,
+                self._host,
+                port=ip_control_port(entry.data),
+                token=token,
+            )
             self._ip_control_token = token
         return self._ip_control
 
@@ -680,7 +686,12 @@ class SamsungTVIPControlSpeakerSelect(SelectEntity):
             return None
         token = entry.data.get(CONF_IP_CONTROL_TOKEN)
         if self._ip_control is None or self._ip_control_token != token:
-            self._ip_control = SamsungIPControl(self.hass, self._host, token=token)
+            self._ip_control = SamsungIPControl(
+                self.hass,
+                self._host,
+                port=ip_control_port(entry.data),
+                token=token,
+            )
             self._ip_control_token = token
         return self._ip_control
 

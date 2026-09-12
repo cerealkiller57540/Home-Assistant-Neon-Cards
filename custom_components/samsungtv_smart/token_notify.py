@@ -36,15 +36,18 @@ from .const import DOMAIN
 # uses the native Repairs issue registry instead).
 METHOD_LOCAL = "local"
 METHOD_IP_CONTROL = "ip_control"
+METHOD_SMARTTHINGS = "smartthings"
 
 _TITLES: dict[str, dict[str, str]] = {
     "en": {
         METHOD_LOCAL: "Samsung TV — local connection not authorized",
         METHOD_IP_CONTROL: "Samsung TV — IP Control token rejected",
+        METHOD_SMARTTHINGS: "Samsung TV — SmartThings device no longer accessible",
     },
     "fr": {
         METHOD_LOCAL: "Téléviseur Samsung — connexion locale non autorisée",
         METHOD_IP_CONTROL: "Téléviseur Samsung — token IP Control rejeté",
+        METHOD_SMARTTHINGS: "Téléviseur Samsung — appareil SmartThings inaccessible",
     },
 }
 
@@ -70,6 +73,25 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "screen.\n\nThis notification clears automatically once IP Control "
             "works again."
         ),
+        METHOD_SMARTTHINGS: (
+            "SmartThings refuses access to **{device_name}** (*Forbidden*). "
+            "The cloud features — channel name, picture mode, sound mode, "
+            "power metering — are paused; local control keeps working.\n\n"
+            "This usually means the TV is no longer the device Home Assistant "
+            "was configured with. It happens after a **mainboard repair or "
+            "replacement** (the TV re-registers under a new id), while a "
+            "repaired or reset TV has **not been signed in to your Samsung "
+            "account again yet**, after the TV is removed and re-added in the "
+            "SmartThings app, or when the account that owns it changes.\n\n"
+            "If the TV has just been repaired or reset, link it in the "
+            "SmartThings app **first** — there is nothing for Home Assistant "
+            "to select until it appears there.\n\n"
+            "To fix it: open **Settings → Devices & services → Samsung TV "
+            "Smart → Reconfigure → SmartThings device**, and pick the TV again "
+            "so the new id is stored. Your entities and history are kept.\n\n"
+            "Polling has been slowed down until it works again, and this "
+            "notice clears itself automatically."
+        ),
     },
     "fr": {
         METHOD_LOCAL: (
@@ -93,6 +115,29 @@ _MESSAGES: dict[str, dict[str, str]] = {
             "maintenant* téléviseur ALLUMÉ et **pas** en mode Art, puis "
             "acceptez l'invite à l'écran.\n\nCette notification disparaît "
             "automatiquement dès qu'IP Control refonctionne."
+        ),
+        METHOD_SMARTTHINGS: (
+            "SmartThings refuse l'accès à **{device_name}** (*Forbidden*). "
+            "Les fonctions cloud — nom de chaîne, mode image, mode son, "
+            "mesure de consommation — sont suspendues ; le contrôle local "
+            "continue de fonctionner.\n\n"
+            "Cela signifie généralement que le téléviseur n'est plus "
+            "l'appareil avec lequel Home Assistant a été configuré. Cela "
+            "arrive après un **remplacement de carte mère** (le téléviseur se "
+            "réenregistre sous un nouvel identifiant), tant qu'un téléviseur "
+            "réparé ou réinitialisé n'a **pas encore été reconnecté à votre "
+            "compte Samsung**, après une suppression puis un rajout dans "
+            "l'application SmartThings, ou lors d'un changement de compte "
+            "propriétaire.\n\n"
+            "Si le téléviseur vient d'être réparé ou réinitialisé, "
+            "associez-le **d'abord** dans l'application SmartThings : Home "
+            "Assistant n'a rien à sélectionner tant qu'il n'y apparaît pas.\n\n"
+            "Pour corriger : ouvrez **Paramètres → Appareils et services → "
+            "Samsung TV Smart → Reconfigurer → Appareil SmartThings**, et "
+            "sélectionnez à nouveau le téléviseur pour enregistrer le nouvel "
+            "identifiant. Vos entités et votre historique sont conservés.\n\n"
+            "Les interrogations ont été espacées en attendant, et cette "
+            "notification disparaît automatiquement."
         ),
     },
 }

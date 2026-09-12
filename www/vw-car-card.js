@@ -672,7 +672,7 @@ class VwCarCard extends HTMLElement {
         if (badge.unit) val = val + badge.unit;
       }
 
-      if (val === 'unavailable') { val = '--'; bColor = 'rgba(255,255,255,0.2)'; }
+      if (val === 'unavailable') { val = '--'; bColor = 'rgba(255,255,255,0.35)'; }
 
       // Engrenage si settings_entity défini sur ce badge
       const gear = badge.settings_entity
@@ -684,13 +684,11 @@ class VwCarCard extends HTMLElement {
       return `
         <div class="vw-badge-wrap" data-entity="${badge.entity}">
           <div class="vw-badge" style="
-            background:${bColor}25;
-            border:1px solid ${bColor}60;
             color:${bColor};
-            text-shadow:0 0 4px ${bColor}55;
+            text-shadow:0 0 1px rgba(255,255,255,0.5), 0 0 6px ${bColor}, 0 0 13px ${bColor};
           ">
             ${bIcon ? (bIcon.startsWith('mdi:')
-              ? `<ha-icon icon="${bIcon}" style="--mdc-icon-size:12px;color:${bColor};"></ha-icon>`
+              ? `<ha-icon icon="${bIcon}" style="--mdc-icon-size:12px;color:${bColor};filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 5px ${bColor}) drop-shadow(0 0 12px ${bColor});"></ha-icon>`
               : `<span style="font-size:12px;line-height:1;">${bIcon}</span>`
             ) : ''}
             <span>${val}</span>
@@ -915,13 +913,16 @@ class VwCarCard extends HTMLElement {
             val = Math.round(parseFloat(val));
             if (badge.unit) val = val + badge.unit;
           }
-          if (val === 'unavailable') { val = '--'; bColor = 'rgba(255,255,255,0.2)'; }
+          if (val === 'unavailable') { val = '--'; bColor = 'rgba(255,255,255,0.35)'; }
           const badgeEl = wrap.querySelector('.vw-badge');
           if (badgeEl) {
-            badgeEl.style.background = bColor + '25';
-            badgeEl.style.borderColor = bColor + '60';
             badgeEl.style.color = bColor;
-            badgeEl.style.textShadow = `0 0 4px ${bColor}55`;
+            badgeEl.style.textShadow = `0 0 1px rgba(255,255,255,0.5), 0 0 6px ${bColor}, 0 0 13px ${bColor}`;
+            const iconEl = badgeEl.querySelector('ha-icon');
+            if (iconEl) {
+              iconEl.style.color = bColor;
+              iconEl.style.filter = `drop-shadow(0 0 1px #fff) drop-shadow(0 0 5px ${bColor}) drop-shadow(0 0 12px ${bColor})`;
+            }
             const spanEl = badgeEl.querySelector('span:last-child');
             if (spanEl) spanEl.textContent = val;
           }
@@ -1227,17 +1228,17 @@ class VwCarCard extends HTMLElement {
         flex-wrap:wrap; gap:6px;
       }
       .vw-badge-wrap { display:inline-flex; align-items:center; gap:4px; }
+      /* texte lumineux, pas de badge encadré (cf. .temp/.health, neon-nas-card-v2) */
       .vw-badge {
-        display:inline-flex; align-items:center; gap:6px;
-        border-radius:6px; padding:5px 12px;
-        font-family:'Orbitron',monospace; font-size:11px; font-weight:700;
+        display:inline-flex; align-items:center; gap:5px;
+        font-family:'Orbitron',monospace; font-size:12px; font-weight:600;
         cursor:pointer; transition:filter 0.2s;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.06em; line-height:1;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
         text-rendering: optimizeLegibility;
       }
-      .vw-badge:hover { filter: brightness(1.2); }
+      .vw-badge:hover { filter: brightness(1.25); }
       .vw-badge-gear {
         display:inline-flex; align-items:center; justify-content:center;
         width:22px; height:22px; border-radius:5px;

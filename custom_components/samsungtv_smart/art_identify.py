@@ -36,6 +36,7 @@ import base64
 import hashlib
 import json
 import logging
+import re
 import time
 from typing import Any
 
@@ -72,6 +73,14 @@ class LLMError(Exception):
     """LLM confirmation call failed or returned unparseable output."""
 
 
+class ModelUnavailableError(LLMError):
+    """The configured model was rejected by the provider (retired/typo).
+
+    A subclass so existing handlers keep catching it, while callers that care
+    can tell a configuration problem apart from a transport failure.
+    """
+
+
 _VISION_URL = "https://vision.googleapis.com/v1/images:annotate"
 _ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 _ANTHROPIC_VERSION = "2023-06-01"
@@ -82,12 +91,32 @@ _GEMINI_URL_TMPL = (
 )
 
 _CACHE_STORE_VERSION = 1
+
+# Bumped whenever the prompt or the candidate handling changes in a way that
+# could turn a past failure into a success. Cached *misses* from an older
+# revision are ignored so the improvement applies on the next artwork change;
+# cached hits are untouched, since a confirmed identification stays valid.
+#   1 — original "confirm a candidate or nothing" prompt
+#   2 — candidate de-noising + identification from the model's own knowledge
+#   3 — real image media type sent; prompt no longer implies "old master
+#       painting", which made the model withhold graphic/contemporary works
+#   4 — a lone "not identified" with no candidate is re-sampled once
+#   5 — web entities explained as unordered fragments (title / museum /
+#       artist), which the model may combine to pin down a work
+_PIPELINE_REVISION = 5
 _HTTP_TIMEOUT = 45  # seconds per external call
 # Output token budget for the confirmation reply. Must fit the whole JSON —
 # title + three prose fields in every LANGS language — or the reply is
 # truncated and fails to parse. 700 was fine single-language; 5 languages need
 # far more headroom.
-_LLM_MAX_TOKENS = 3000
+_LLM_MAX_TOKENS = 8000
+
+# Gemini 2.5+/3.x spend "thinking" tokens from the SAME budget as the answer,
+# and reason by default. With a modest cap the reply is cut off mid-JSON —
+# which surfaces as a cryptic "Expecting ',' delimiter" rather than a quota
+# error (issue #188). Disable thinking for this task: it is a constrained
+# extraction against a supplied candidate list, not a reasoning problem.
+_GEMINI_THINKING_BUDGET = 0
 
 # Languages the metadata is produced in, so each viewer can be shown the
 # artwork description in their own UI language (the Lovelace card picks by the
@@ -158,11 +187,18 @@ class ArtIdentifyCache:
         """Return a non-expired cached result, or None.
 
         A hit (identified) is kept effectively forever; a miss is retried after
-        ``ART_CACHE_TTL_MISS``. Expired entries return None so the caller
-        re-runs the pipeline.
+        ``ART_CACHE_TTL_MISS``, or immediately if it was produced by an older
+        pipeline revision. Expired entries return None so the caller re-runs
+        the pipeline.
         """
         entry = self._data.get(key)
         if not entry:
+            return None
+        if not entry.get("identified") and entry.get("_rev") != _PIPELINE_REVISION:
+            # A failure recorded by an older prompt/candidate logic says nothing
+            # about the current one. Without this, improving identification had
+            # no visible effect for up to ART_CACHE_TTL_MISS (14 days) on
+            # exactly the artworks the improvement was written for.
             return None
         ttl = ART_CACHE_TTL_HIT if entry.get("identified") else ART_CACHE_TTL_MISS
         if time.time() - entry.get("_fetched_at", 0) > ttl:
@@ -175,6 +211,7 @@ class ArtIdentifyCache:
         """Store a fresh result (hit or miss) and persist it. Errors are not cached."""
         entry = {k: result.get(k) for k in RESULT_KEYS}
         entry["_fetched_at"] = time.time()
+        entry["_rev"] = _PIPELINE_REVISION
         self._data[key] = entry
         await self._store.async_save(self._data)
 
@@ -228,6 +265,134 @@ async def async_vision_web_detection(
     }
 
 
+# Web entities Vision returns for practically every painting. They carry no
+# identifying power, but they pad the candidate list and make a genuinely
+# useful entity ("The Kimono", "Basket of Fruit") look like one item in a
+# wall of noise.
+_GENERIC_ENTITIES = frozenset(
+    {
+        "art",
+        "artist",
+        "artwork",
+        "acrylic paint",
+        "canvas",
+        "cartoon",
+        "clip art",
+        "doodle",
+        "drawing",
+        "graphic design",
+        "line art",
+        "logo",
+        "sketch",
+        "design",
+        "digital art",
+        "digital illustration",
+        "fine art",
+        "graphics",
+        "illustration",
+        "illustrator",
+        "image",
+        "landscape painting",
+        "modern art",
+        "oil painting",
+        "paint",
+        "painter",
+        "painting",
+        "photograph",
+        "photography",
+        "picture",
+        "portrait",
+        "poster",
+        "printmaking",
+        "still life",
+        "visual arts",
+        "watercolor painting",
+    }
+)
+
+# Page titles that match these are tutorials/listicles the image merely
+# resembles — Vision returns them when it has NOT found the picture anywhere.
+# Feeding them to the LLM as "the image appears on these pages" is actively
+# misleading.
+_NOISE_PAGE_RE = re.compile(
+    r"how to|tutorial|for beginners|beginners guide|tips|step by step|"
+    r"masterclass|guide to|the basics|basics of|painting technique|lesson|course|"
+    r"learn to|teaching you|level up|what is |youtube",
+    re.IGNORECASE,
+)
+
+
+def denoise_candidates(candidates: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Drop the generic filler from Vision's reply and promote the specifics.
+
+    Vision answers a failed reverse image search with plausible-looking
+    filler: entities like "Painting"/"Art" and pages like "How To Master
+    Painting With Zero Experience". Passed through verbatim, that filler both
+    buries the occasional real lead and makes an unidentified image look
+    well-sourced. Entities that name something concrete are moved to the
+    front; noise pages are removed entirely so an empty ``pages`` list
+    honestly signals "found nowhere".
+    """
+    entities = candidates.get("entities") or []
+    specific = [e for e in entities if e.strip().lower() not in _GENERIC_ENTITIES]
+    generic = [e for e in entities if e.strip().lower() in _GENERIC_ENTITIES]
+    pages = [p for p in (candidates.get("pages") or []) if not _NOISE_PAGE_RE.search(p)]
+    best_guess = [
+        b
+        for b in (candidates.get("best_guess") or [])
+        if b.strip().lower() not in _GENERIC_ENTITIES
+    ]
+    return {
+        "best_guess": best_guess,
+        "entities": specific + generic,
+        "pages": pages,
+    }
+
+
+# Base64 prefixes of the magic bytes of the formats a Frame thumbnail can be
+# in. Every thumbnail is saved as ``current.jpg`` whatever the TV actually
+# sent (the Art API reports the real type in its header), so the extension is
+# not evidence of the content.
+_B64_MAGIC = (
+    ("/9j/", "image/jpeg"),
+    # Only the bytes that are constant in the signature: base64 encodes three
+    # bytes per four characters, so a longer prefix would start depending on
+    # the payload and stop matching.
+    ("iVBORw0K", "image/png"),
+    ("R0lG", "image/gif"),
+    ("UklGR", "image/webp"),
+)
+
+
+def media_type_from_b64(img_b64: str) -> str:
+    """Return the real image media type, sniffed from the encoded bytes.
+
+    All three providers are told the media type explicitly; announcing
+    ``image/jpeg`` for a PNG is at best undefined behaviour and at worst a
+    rejected request. Falls back to JPEG, which is what a Frame thumbnail
+    usually is.
+    """
+    for prefix, media_type in _B64_MAGIC:
+        if img_b64.startswith(prefix):
+            return media_type
+    return "image/jpeg"
+
+
+def _has_usable_candidate(candidates: dict[str, list[str]]) -> bool:
+    """True if the reverse search produced anything the LLM can confirm.
+
+    After de-noising, a candidate set made only of generic entities carries no
+    identifying power: the model is answering from memory alone, and a "no" is
+    then a judgement call rather than a rejection of a concrete name.
+    """
+    if candidates.get("best_guess"):
+        return True
+    return any(
+        e.strip().lower() not in _GENERIC_ENTITIES
+        for e in (candidates.get("entities") or [])
+    )
+
+
 def _build_llm_prompt(candidates: dict[str, list[str]]) -> str:
     """Prompt that hands the reverse-search candidates to the LLM for checking.
 
@@ -243,11 +408,42 @@ def _build_llm_prompt(candidates: dict[str, list[str]]) -> str:
         f"- Best guess: {' / '.join(candidates.get('best_guess') or []) or '(none)'}\n"
         f"- Web entities: {', '.join(candidates.get('entities') or []) or '(none)'}\n"
         f"- Page titles: {' | '.join(candidates.get('pages') or []) or '(none)'}\n\n"
-        "Your task: confirm the identification ONLY if a candidate is consistent "
-        "with what you actually SEE in the image. If none matches, set "
-        '"identified": false and leave artist/date null and translations {}. '
+        "The web entities are unordered FRAGMENTS, not a formatted answer: one "
+        "may be the title, another the museum that holds the work, another the "
+        "artist, mixed in with generic labels. Read them together — a title "
+        "plus a holding institution is often enough to pin down a specific "
+        "work you know.\n\n"
+        "Your task, in this order:\n"
+        "1. If a candidate is consistent with what you actually SEE in the "
+        'image, confirm it: set "identified": true, name it in '
+        '"matched_candidate", and use your normal confidence. A fragment does '
+        "not have to arrive complete: if the fragments plus the image let you "
+        "name one specific work you know, that IS a confirmation — fill in the "
+        "artist and date yourself, and say which fragment you matched.\n"
+        "2. The candidate list is often empty or generic, because reverse "
+        "image search regularly fails on artwork. In that case you MAY still "
+        "identify the work from your OWN knowledge, whenever you genuinely "
+        'recognise what you are looking at. Then set "identified": true, '
+        'leave "matched_candidate": null, and cap "confidence" at 0.6 to mark '
+        "that no external source corroborates it.\n"
+        "   The Samsung Art Store is not limited to old master paintings: it "
+        "sells photography, prints, posters, graphic design, street art, "
+        "cartoons, calligraphy and contemporary illustration. Do NOT withhold "
+        "an identification because the image looks like an icon, a doodle, "
+        "clip art or a logo rather than a traditional painting — that is "
+        "exactly what a large part of the catalogue is. A signature motif you "
+        "can name together with its artist (for instance an artist's "
+        "recurring emblematic figure) counts as recognising the work: give "
+        "the motif's usual name as the title.\n"
+        '3. If you do not recognise the work, set "identified": false and '
+        "leave artist/date null. Recognising a STYLE, period or school alone "
+        "is NOT recognising the work — do not guess a plausible title, and "
+        "never attribute a piece to an artist merely because it looks like "
+        "their manner. The test is whether you can name it, not whether it "
+        "reminds you of someone.\n"
         "Do NOT invent facts. Separate the visual description from the factual "
-        "identification. confidence is a number from 0 to 1.\n"
+        "identification. confidence is a number from 0 to 1. Always fill "
+        "visual_description, even when the work is not identified.\n"
         f"Provide title, artwork_description, artist_biography and "
         f"visual_description in ALL these languages: {langs}. artist, date and "
         "suggested_search_query stay in one language (English). Translate the "
@@ -263,13 +459,79 @@ def _build_llm_prompt(candidates: dict[str, list[str]]) -> str:
     )
 
 
+def _anthropic_output_schema() -> dict[str, Any]:
+    """JSON Schema for the identification reply, in Anthropic's strict dialect.
+
+    Built from the key tuples above so it can never drift from what
+    ``_normalize_result`` expects. Three constraints the API enforces:
+    ``additionalProperties: false`` on every object, no recursion, and no
+    numeric/length keywords (``minimum``, ``minLength``, ...) — so the shape is
+    expressed with types and ``required`` alone.
+    """
+    translated = {
+        "type": "object",
+        "properties": {
+            field: {"type": ["string", "null"]} for field in TRANSLATED_FIELDS
+        },
+        "required": list(TRANSLATED_FIELDS),
+        "additionalProperties": False,
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "identified": {"type": "boolean"},
+            "confidence": {"type": ["number", "null"]},
+            "matched_candidate": {"type": ["string", "null"]},
+            "artist": {"type": ["string", "null"]},
+            "date": {"type": ["string", "null"]},
+            "suggested_search_query": {"type": ["string", "null"]},
+            "translations": {
+                "type": "object",
+                "properties": {lang: translated for lang in LANGS},
+                "required": list(LANGS),
+                "additionalProperties": False,
+            },
+        },
+        "required": [*TOP_LEVEL_KEYS, "translations"],
+        "additionalProperties": False,
+    }
+
+
 def _parse_llm_json(raw: str) -> dict[str, Any]:
-    """Extract the JSON object from an LLM reply, tolerating stray fences/prose."""
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start == -1 or end == -1 or end < start:
-        raise LLMError(f"no JSON object in LLM reply: {raw[:200]}")
-    return json.loads(raw[start : end + 1])
+    """Extract the JSON object from an LLM reply, tolerating stray fences/prose.
+
+    Raises a *diagnosable* error when the reply was cut short. A truncated
+    answer used to surface as ``Expecting ',' delimiter: line 20 column 6``,
+    which tells the user nothing about the actual cause (the model spent its
+    token budget before finishing the JSON — see ``_GEMINI_THINKING_BUDGET``).
+    """
+    text = raw.strip()
+    if not text:
+        raise LLMError("empty LLM reply (model returned no text)")
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1:
+        raise LLMError(f"no JSON object in LLM reply: {text[:200]}")
+
+    if end < start:
+        raise LLMError(
+            "LLM reply was cut off before the JSON closed — the model ran out "
+            f"of output tokens. Reply ended with: ...{text[-120:]!r}"
+        )
+
+    try:
+        return json.loads(text[start : end + 1])
+    except json.JSONDecodeError as ex:
+        # An unbalanced brace count is the signature of a truncated reply,
+        # as opposed to a genuinely malformed one.
+        candidate = text[start : end + 1]
+        if candidate.count("{") != candidate.count("}"):
+            raise LLMError(
+                "LLM reply was cut off mid-JSON — the model ran out of output "
+                f"tokens ({ex}). Try a lighter model or a larger budget."
+            ) from ex
+        raise LLMError(f"could not parse LLM JSON ({ex}): {candidate[:200]}") from ex
 
 
 async def async_llm_confirm(
@@ -286,6 +548,7 @@ async def async_llm_confirm(
     chat APIs. Raises on transport/parse failure (not cached).
     """
     prompt = _build_llm_prompt(candidates)
+    media_type = media_type_from_b64(img_b64)
     if provider == "anthropic":
         headers = {
             "x-api-key": api_key,
@@ -303,7 +566,7 @@ async def async_llm_confirm(
                             "type": "image",
                             "source": {
                                 "type": "base64",
-                                "media_type": "image/jpeg",
+                                "media_type": media_type,
                                 "data": img_b64,
                             },
                         },
@@ -311,6 +574,16 @@ async def async_llm_confirm(
                     ],
                 }
             ],
+            # Structured outputs (GA, no beta header): the API constrains the
+            # reply to this schema instead of us hoping the prompt was obeyed.
+            # Dropped and retried without it on models that predate the feature
+            # — see the 400 handling below.
+            "output_config": {
+                "format": {
+                    "type": "json_schema",
+                    "schema": _anthropic_output_schema(),
+                }
+            },
         }
         url = _ANTHROPIC_URL
     elif provider == "openai":
@@ -334,7 +607,7 @@ async def async_llm_confirm(
                         {"type": "text", "text": prompt},
                         {
                             "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"},
+                            "image_url": {"url": f"data:{media_type};base64,{img_b64}"},
                         },
                     ],
                 }
@@ -350,7 +623,7 @@ async def async_llm_confirm(
                         {"text": prompt},
                         {
                             "inline_data": {
-                                "mime_type": "image/jpeg",
+                                "mime_type": media_type,
                                 "data": img_b64,
                             }
                         },
@@ -360,7 +633,10 @@ async def async_llm_confirm(
             "generationConfig": {
                 "temperature": 0.1,
                 "maxOutputTokens": _LLM_MAX_TOKENS,
-                "response_mime_type": "application/json",
+                # camelCase is the documented REST spelling (the snake_case
+                # form is the Python SDK's).
+                "responseMimeType": "application/json",
+                "thinkingConfig": {"thinkingBudget": _GEMINI_THINKING_BUDGET},
             },
         }
         # Gemini takes the key as a query param, not a header.
@@ -368,13 +644,54 @@ async def async_llm_confirm(
     else:
         raise LLMError(f"unknown LLM provider: {provider!r}")
 
-    async with session.post(
-        url, json=body, headers=headers, timeout=_HTTP_TIMEOUT
-    ) as resp:
-        if resp.status != 200:
+    # Two attempts at most: the retry exists only to drop `output_config` for a
+    # model that predates structured outputs. Everything else fails on the
+    # first pass.
+    for attempt in (1, 2):
+        async with session.post(
+            url, json=body, headers=headers, timeout=_HTTP_TIMEOUT
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                break
+
             text = await resp.text()
+            # An older Claude rejects output_config with a 400. Drop it and
+            # retry — the prompt still asks for the same JSON, so we degrade to
+            # the previous contract instead of failing outright.
+            if (
+                attempt == 1
+                and resp.status == 400
+                and "output_config" in body
+                and "output_config" in text
+            ):
+                _LOGGER.debug(
+                    "Art identify: %s rejected structured outputs, retrying "
+                    "with the prompt-only JSON contract",
+                    model,
+                )
+                body.pop("output_config", None)
+                continue
+
+            # A retired or mistyped model is a configuration problem, not a
+            # transient failure: retrying it forever just burns quota and
+            # leaves a cryptic 404 in the log. Name the alternatives instead.
+            if resp.status == 404:
+                available = await async_list_models(session, provider, api_key)
+                suggestion = (
+                    f" Available models for this key include: "
+                    f"{', '.join(available[:8])}."
+                    if available
+                    else ""
+                )
+                raise ModelUnavailableError(
+                    f"{provider} model {model!r} is not available to this API "
+                    f"key.{suggestion} Update it under Configure → Art "
+                    f"Identification."
+                )
             raise LLMError(f"{provider} API {resp.status}: {text[:200]}")
-        data = await resp.json()
+
+    _raise_if_truncated(provider, model, data)
 
     if provider == "anthropic":
         blocks = data.get("content") or []
@@ -389,6 +706,34 @@ async def async_llm_confirm(
     _LOGGER.debug("LLM (%s/%s) raw reply: %s", provider, model, raw[:600])
     parsed = _parse_llm_json(raw)
     return _normalize_result(parsed)
+
+
+def _raise_if_truncated(provider: str, model: str, data: dict[str, Any]) -> None:
+    """Fail loudly when the provider says it stopped at the token limit.
+
+    Every provider reports this in its own field, and all three can hit it the
+    same way: reasoning/thinking tokens are drawn from the reply budget, so a
+    model that reasons a lot returns a JSON object cut mid-structure. Reading
+    the provider's own signal is far more reliable than inferring it from a
+    parse error after the fact (issue #188).
+    """
+    if provider == "anthropic":
+        reason = data.get("stop_reason")
+        truncated = reason == "max_tokens"
+    elif provider == "gemini":
+        reason = (data.get("candidates") or [{}])[0].get("finishReason")
+        truncated = reason == "MAX_TOKENS"
+    else:  # openai
+        reason = (data.get("choices") or [{}])[0].get("finish_reason")
+        truncated = reason == "length"
+
+    if truncated:
+        raise LLMError(
+            f"{provider} model {model!r} hit its output limit "
+            f"({_LLM_MAX_TOKENS} tokens) before finishing the JSON "
+            f"(stop reason {reason!r}). Pick a lighter model — reasoning "
+            f"models spend this budget thinking before they answer."
+        )
 
 
 def _normalize_result(parsed: dict[str, Any]) -> dict[str, Any]:
@@ -459,7 +804,9 @@ async def async_identify(
     img_b64 = base64.b64encode(image_bytes).decode()
     started = time.monotonic()
     try:
-        candidates = await async_vision_web_detection(session, vision_key, img_b64)
+        candidates = denoise_candidates(
+            await async_vision_web_detection(session, vision_key, img_b64)
+        )
         _LOGGER.debug(
             "Artwork %s: Vision candidates best_guess=%s | entities=%s | pages=%s",
             key,
@@ -470,6 +817,22 @@ async def async_identify(
         result = await async_llm_confirm(
             session, provider, llm_key, model, img_b64, candidates
         )
+        if not result.get("identified") and not _has_usable_candidate(candidates):
+            # No candidate to check against, so the answer rests entirely on
+            # what the model recalls — and that is not deterministic. Observed
+            # on one artwork with everything else held constant: four runs,
+            # two "not identified", two correct (Keith Haring, confidence
+            # 0.58-0.60). Temperature cannot be lowered to fix it, since the
+            # reasoning models only accept the default. So take one more
+            # sample: a second "no" is evidence, a lone "no" was a coin toss.
+            # Only on failure, and only when there was nothing to confirm, so
+            # the common paths cost exactly one call as before.
+            _LOGGER.debug("Artwork %s: unidentified with no candidates — retrying", key)
+            retry = await async_llm_confirm(
+                session, provider, llm_key, model, img_b64, candidates
+            )
+            if retry.get("identified"):
+                result = retry
     except (VisionError, LLMError, ClientError, TimeoutError, ValueError) as err:
         _LOGGER.warning("Artwork identification failed for %s: %s", key, err)
         return {
@@ -582,3 +945,124 @@ async def async_identify_for_entry(
     )
     result["content_id"] = content_id
     return result
+
+
+# --- Model discovery -------------------------------------------------------
+#
+# Hardcoding a model id gives it an expiry date: providers retire models and
+# the integration then fails with a 404 for everyone who never touched the
+# setting (issue #188, where the pinned gemini-2.5-flash became unavailable to
+# new users). Ask the provider what it actually offers instead, the way Home
+# Assistant's own Google Generative AI integration does.
+
+_MODELS_URL = {
+    "anthropic": "https://api.anthropic.com/v1/models",
+    "openai": "https://api.openai.com/v1/models",
+    "gemini": "https://generativelanguage.googleapis.com/v1beta/models",
+}
+
+# Preference order used to pick a default from the live list: cheap, fast,
+# vision-capable models first. Matched as substrings, best match wins.
+_MODEL_PREFERENCE = {
+    "anthropic": ("haiku", "sonnet"),
+    "openai": ("mini", "gpt-4o", "gpt-4"),
+    "gemini": ("flash-lite", "flash"),
+}
+
+# Substrings marking models that cannot do the job (no vision, or a different
+# modality entirely), so they never reach the picker.
+_MODEL_EXCLUDE = (
+    "embed",
+    "tts",
+    "whisper",
+    "audio",
+    "moderation",
+    "image-",
+    "dall-e",
+    "realtime",
+    "transcribe",
+    "search",
+    "veo",
+    "imagen",
+)
+
+
+async def async_list_models(
+    session: ClientSession, provider: str, api_key: str
+) -> list[str]:
+    """Return the model ids this key can actually use, best candidates first.
+
+    Raises :class:`LLMError` when the key is rejected or the provider is
+    unreachable, so the config flow can report a precise reason instead of
+    silently offering an empty list.
+    """
+    url = _MODELS_URL.get(provider)
+    if url is None:
+        raise LLMError(f"unknown LLM provider: {provider!r}")
+
+    headers: dict[str, str] = {}
+    params: dict[str, str] = {}
+    if provider == "anthropic":
+        headers = {"x-api-key": api_key, "anthropic-version": _ANTHROPIC_VERSION}
+        params = {"limit": "1000"}
+    elif provider == "openai":
+        headers = {"Authorization": f"Bearer {api_key}"}
+    else:  # gemini takes the key as a query param
+        params = {"key": api_key, "pageSize": "1000"}
+
+    async with session.get(
+        url, headers=headers, params=params, timeout=_HTTP_TIMEOUT
+    ) as resp:
+        if resp.status != 200:
+            text = await resp.text()
+            raise LLMError(f"{provider} model list {resp.status}: {text[:200]}")
+        data = await resp.json()
+
+    names: list[str] = []
+    if provider == "gemini":
+        for item in data.get("models") or []:
+            # Only models that can answer a generateContent call are usable.
+            if "generateContent" not in (item.get("supportedGenerationMethods") or []):
+                continue
+            # The API returns "models/gemini-x"; the request path wants the bare id.
+            names.append(str(item.get("name", "")).removeprefix("models/"))
+    else:  # anthropic and openai share the {"data": [{"id": ...}]} shape
+        names = [str(item.get("id", "")) for item in data.get("data") or []]
+
+    usable = [
+        name
+        for name in names
+        if name and not any(bad in name.lower() for bad in _MODEL_EXCLUDE)
+    ]
+    return sort_models_by_preference(provider, usable)
+
+
+def sort_models_by_preference(provider: str, models: list[str]) -> list[str]:
+    """Order models so the cheapest sensible default comes first.
+
+    Within a preference tier the provider's own order is kept (Anthropic
+    returns newest first, and for the others alphabetical is stable enough),
+    so a newly released haiku outranks last year's.
+    """
+    preference = _MODEL_PREFERENCE.get(provider, ())
+
+    def rank(name: str) -> tuple[int, str]:
+        lowered = name.lower()
+        for index, token in enumerate(preference):
+            if token in lowered:
+                return (index, "")
+        return (len(preference), lowered)
+
+    return sorted(models, key=rank)
+
+
+async def async_pick_default_model(
+    session: ClientSession, provider: str, api_key: str
+) -> str | None:
+    """Best available model for a provider, or None if the list can't be read."""
+    try:
+        models = await async_list_models(session, provider, api_key)
+    except (LLMError, ClientError, TimeoutError) as ex:
+        _LOGGER.debug("Could not list %s models: %s", provider, ex)
+        return None
+    return models[0] if models else None

@@ -58,6 +58,14 @@
       "reauth_confirm": {
         "title": "Re-authentication Required",
         "description": "Your SmartThings authentication has expired. Click Submit to sign in again."
+      },
+      "reconfigure_st_device": {
+        "title": "SmartThings eszköz",
+        "description": "Válassza ki a tévéhez tartozó SmartThings eszközt.\n\nJelenleg: **{current}**\n\nA javított, visszaállított, vagy a SmartThings alkalmazásból eltávolított és újra hozzáadott tévé **új azonosítót** kap, a régit pedig *Forbidden* hibával utasítja el. Az itteni újraválasztás megőrzi az entitásokat és az előzményeket.",
+        "data": {
+          "st_devices": "SmartThings eszköz",
+          "device_id": "SmartThings eszközazonosító"
+        }
       }
     },
     "error": {
@@ -79,7 +87,10 @@
       "missing_scopes": "The granted permissions are insufficient. Please ensure you grant all requested permissions.",
       "reauth_account_mismatch": "The account used for re-authentication doesn't match the original account.",
       "reauth_successful": "Re-authentication successful.",
-      "reauth_failed": "Re-authentication failed."
+      "reauth_failed": "Re-authentication failed.",
+      "st_device_updated": "SmartThings eszköz frissítve. Az integráció újratöltődik.",
+      "st_not_configured": "A SmartThings nincs beállítva ehhez a tévéhez.",
+      "st_device_missing": "Nem lett SmartThings eszköz kiválasztva."
     },
     "create_entry": {
       "default": "Successfully configured {name}"
@@ -151,7 +162,9 @@
           "use_mute_check": "Hangerőnémítás állapotának használata hamis bekapcsolás észleléséhez",
           "dump_apps": "Az alkalmazások listájának naplófájlba való kiírása induláskor (amennyiben lehetséges)",
           "toggle_art_mode": "Art módra váltó bekapcsológomb (kizárólag Frame TV esetén)",
-          "st_poll_on_interval": "SmartThings lekérdezési időköz bekapcsolt TV-nél (másodperc)"
+          "st_poll_on_interval": "SmartThings időköz bekapcsolt TV-nél (mp)",
+          "content_list_interval": "Műalkotáslista frissítési időköze (mp)",
+          "ip_control_poll_interval": "IP Control időköz (mp)"
         }
       },
       "save_exit": {
@@ -161,7 +174,8 @@
     "error": {
       "invalid_tv_list": "Érvénytelen formátum. Kérjük, ellenőrizze a dokumentációt.",
       "ip_control_no_host": "Nincs gazdacím beállítva ehhez a TV-hez.",
-      "ip_control_pair_failed": "A párosítás sikertelen. Győződjön meg róla, hogy a TV be van kapcsolva és normál nézetben van (nem Art módban), és hogy az IP Remote engedélyezve van, majd próbálja újra."
+      "ip_control_pair_failed": "A párosítás sikertelen. Győződjön meg róla, hogy a TV be van kapcsolva és normál nézetben van (nem Art módban), és hogy az IP Remote engedélyezve van, majd próbálja újra.",
+      "ip_control_unreachable": "A tévé nem érhető el az 1516-os porton: semmi nem figyel rajta. Így sem a tévé állapota, sem az IP Remote beállítás nem az ok. Ez a modell nagy valószínűséggel nem támogatja az IP Controlt. Csak a háttérvilágítás, színtónus, képkalibráció és újraindítás entitások függenek tőle."
     }
   },
   "application_credentials": {

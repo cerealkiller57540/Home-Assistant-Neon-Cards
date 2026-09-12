@@ -24,6 +24,21 @@ if (!document.getElementById('neon-climate-font')) {
   document.head.appendChild(l);
 }
 
+// Chargement dynamique d'une police choisie dans l'éditeur (header.font) — sinon
+// la police est listée dans NEON_FONTS mais jamais réellement chargée si != Orbitron.
+const _nccFontLoaded = new Set(['Orbitron']);
+function _nccLoadFont(family) {
+  if (!family || _nccFontLoaded.has(family)) return;
+  const id = `ncc-font-${family.replace(/\s/g, '-')}`;
+  if (document.getElementById(id)) { _nccFontLoaded.add(family); return; }
+  const link = document.createElement('link');
+  link.id = id; link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@400;600;700&display=swap`;
+  link.onerror = () => { link.onerror = null; link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}&display=swap`; };
+  document.head.appendChild(link);
+  _nccFontLoaded.add(family);
+}
+
 // ─── Couleurs par défaut ──────────────────────────────────────────────────────
 const MODE_DEFAULTS = {
   off:      '#6a7aaa',
@@ -179,28 +194,56 @@ class NeonClimateCard extends HTMLElement {
 
   _neonHeaderCss() {
     const hdr = (this._config.header && typeof this._config.header === 'object') ? this._config.header : {};
-    const color  = hdr.color       || 'var(--primary-color)';
-    const size   = hdr.title_size  || 'clamp(8px, 2vw, 11px)';
-    const font   = hdr.font        ? `'${hdr.font}', ` : "'Orbitron', ";
-    const shadow = hdr.title_shadow || 'none';
+    if (hdr.font) _nccLoadFont(hdr.font);
+    const color      = hdr.color       || 'var(--primary-color)';
+    const size       = hdr.title_size  || 'clamp(8px, 2vw, 11px)';
+    const font       = hdr.font        ? `'${hdr.font}', ` : "'Orbitron', ";
+    const weight     = parseFloat(hdr.font_weight) || 600;
+    const spacing    = hdr.letter_spacing || '0.02em';
+    const uppercase  = hdr.uppercase === false ? 'none' : 'uppercase';
+    const italic     = hdr.italic ? 'italic' : 'normal';
+    const shadowRaw  = hdr.title_shadow;
     const badgeColor = hdr.badge_color || 'rgba(0,255,249,0.7)';
+    const iconColor  = hdr.icon_color  || 'rgba(var(--rgb-primary-text-color),0.85)';
+    const iconSize   = hdr.icon_size ? `${parseFloat(hdr.icon_size)}px` : `clamp(16px, calc(${size} * 1.125), 18px)`;
+    const glowOn     = !!hdr.glow;
+    const glowColor  = hdr.glow_color  || 'var(--primary-color, #00E8FF)';
+    const glowSize   = parseFloat(hdr.glow_size) || 12;
+    const iconGlow   = glowOn
+      ? `filter: drop-shadow(0 0 ${Math.round(glowSize*0.2)}px #fff) drop-shadow(0 0 ${Math.round(glowSize*0.4)}px ${glowColor}) drop-shadow(0 0 ${Math.round(glowSize*0.8)}px ${glowColor}) drop-shadow(0 0 ${glowSize}px ${glowColor});`
+      : '';
+    const titleGlowShadow = glowOn
+      ? `0 0 ${Math.round(glowSize*0.2)}px #fff, 0 0 ${Math.round(glowSize*0.4)}px ${glowColor}, 0 0 ${Math.round(glowSize*0.8)}px ${glowColor}, 0 0 ${glowSize}px ${glowColor}`
+      : 'none';
+    const titleShadow = (shadowRaw != null && shadowRaw !== '') ? shadowRaw : titleGlowShadow;
+    const gradFrom   = hdr.gradient_from || 'var(--primary-color, #00E8FF)';
+    const gradTo     = hdr.gradient_to   || 'var(--accent-color, #FF50A0)';
+    const gradCss    = hdr.gradient
+      ? `background:linear-gradient(90deg,${gradFrom},${gradTo});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;`
+      : `color:${color};`;
+    const iconPos    = hdr.icon_position || 'left';
+    const groupDir   = iconPos === 'top' ? 'column' : iconPos === 'right' ? 'row-reverse' : 'row';
     return `
       .neon-hdr { display:flex; align-items:center; gap:8px; padding:11px 14px 8px; }
-      .neon-hdr-icon { display:flex; align-items:center; flex-shrink:0; }
+      .neon-hdr-group { display:flex; flex-direction:${groupDir}; align-items:center; gap:8px; flex:1; min-width:0; }
+      .neon-hdr-icon { display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:visible; }
       .neon-hdr-icon ha-icon {
-        --mdc-icon-size: clamp(14px, ${size}, ${size});
-        color: ${color};
-        filter: drop-shadow(0 0 8px color-mix(in srgb, currentColor, transparent 10%));
+        --mdc-icon-size: ${iconSize};
+        color: ${iconColor};
+        overflow:visible;
+        ${iconGlow}
       }
       .neon-hdr-body { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
       .neon-hdr-title {
         font-family: ${font}var(--primary-font-family, system-ui);
         font-size: clamp(14px, ${size}, ${size});
-        color: ${color};
+        font-weight: ${weight};
+        text-transform: ${uppercase};
+        font-style: ${italic};
+        ${gradCss}
         padding-left: 8px;
-        letter-spacing: clamp(1px, 0.5cqi, 3px);
-		text-transform: uppercase;
-        text-shadow: ${shadow}; line-height: 1.2;
+        letter-spacing: ${spacing};
+        text-shadow: ${titleShadow}; line-height: 1.2;
         white-space: nowrap; overflow: visible; text-overflow: ellipsis;
       }
       .neon-hdr-subtitle {
@@ -235,10 +278,12 @@ class NeonClimateCard extends HTMLElement {
     if (!icon && !title) return '';
     return `
       <div class="neon-hdr">
-        ${icon ? `<div class="neon-hdr-icon"><ha-icon icon="${icon}"></ha-icon></div>` : ''}
-        <div class="neon-hdr-body">
-          ${title    ? `<span class="neon-hdr-title">${title}</span>`       : ''}
-          ${subtitle ? `<span class="neon-hdr-subtitle">${subtitle}</span>` : ''}
+        <div class="neon-hdr-group">
+          ${icon ? `<div class="neon-hdr-icon"><ha-icon icon="${icon}"></ha-icon></div>` : ''}
+          <div class="neon-hdr-body">
+            ${title    ? `<span class="neon-hdr-title">${title}</span>`       : ''}
+            ${subtitle ? `<span class="neon-hdr-subtitle">${subtitle}</span>` : ''}
+          </div>
         </div>
         ${badge ? `<span class="neon-hdr-badge">${badge}</span>` : ''}
       </div>
@@ -1286,13 +1331,28 @@ class NeonClimateCardEditor extends HTMLElement {
   _schema() {
     this._section('En-tête');
     this._text('header.title', 'Titre', 'ex: Climatisation');
-    this._icon('header.icon', 'Icône (mdi)');
-    this._color('header.color', 'Couleur titre', 'var(--primary-color)', 'défaut : couleur primaire — ex rgb(var(--rgb-lavande))');
-    this._text('header.title_size', 'Taille titre', '16px');
-    this._select('header.font', 'Police', NEON_FONTS, '— thème HA —');
     this._text('header.subtitle', 'Sous-titre', 'optionnel');
+    this._icon('header.icon', 'Icône (mdi)');
+    this._select('header.icon_position', 'Position icône', [
+      ['left', 'Gauche'], ['right', 'Droite'], ['top', 'Dessus'],
+    ]);
+    this._text('header.title_size', 'Taille titre', 'clamp(8px, 2vw, 11px)');
+    this._select('header.font', 'Police', NEON_FONTS, '— thème HA —');
+    this._number('header.font_weight', 'Épaisseur', { min: 100, max: 900, step: 100, ph: '600' });
+    this._text('header.letter_spacing', 'Espacement', '0.02em');
+    this._toggle('header.uppercase', 'Majuscules', true);
+    this._toggle('header.italic', 'Italique', false);
+    this._color('header.color', 'Couleur titre', 'var(--primary-color)', 'défaut : couleur primaire — ex rgb(var(--rgb-lavande))');
+    this._color('header.icon_color', 'Couleur icône', null, 'défaut : blanc cassé');
+    this._toggle('header.glow', 'Glow icône + titre', false);
+    this._color('header.glow_color', 'Couleur glow', 'var(--primary-color, #00E8FF)');
+    this._number('header.glow_size', 'Taille glow', { min: 2, max: 30, step: 1, ph: '12' });
+    this._number('header.icon_size', 'Taille icône (px)', { min: 10, max: 48, step: 1, ph: '18' });
+    this._toggle('header.gradient', 'Gradient titre', false);
+    this._color('header.gradient_from', 'Gradient début', 'var(--primary-color, #00E8FF)');
+    this._color('header.gradient_to', 'Gradient fin', 'var(--accent-color, #FF50A0)');
     this._text('header.badge', 'Badge', 'optionnel');
-    this._text('header.title_shadow', 'Text-shadow', '0 0 6px ...');
+    this._text('header.title_shadow', 'Text-shadow (override manuel, prioritaire sur glow)', 'optionnel');
 
     this._section('Entité principale');
     this._entity('entity', 'Entité climate *', 'climate');

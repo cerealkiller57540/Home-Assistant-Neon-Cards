@@ -137,6 +137,9 @@
       },
       "consumable_robot_health": {
         "name": "Onderhoudsstatus"
+      },
+      "rain_protection_end": {
+        "name": "Maaien hervat na regenbescherming"
       }
     },
     "binary_sensor": {
@@ -166,6 +169,48 @@
     "number": {
       "cutting_height": {
         "name": "Maaihoogte"
+      }
+    },
+    "switch": {
+      "charging_period": {
+        "name": "Laadperiode"
+      },
+      "rain_protection": {
+        "name": "Regenbescherming"
+      },
+      "lift_alarm": {
+        "name": "Optilalarm"
+      },
+      "off_map_alarm": {
+        "name": "Alarm buiten de kaart"
+      },
+      "location_reporting": {
+        "name": "Realtime locatie"
+      },
+      "anti_theft_pin_check": {
+        "name": "Pincontrole voor uitschakelen"
+      },
+      "edge_mowing_auto": {
+        "name": "Automatisch randen maaien"
+      },
+      "edge_blade_offset": {
+        "name": "EdgeMaster"
+      },
+      "edge_mowing_safe": {
+        "name": "Veilig maaien van randen"
+      }
+    },
+    "time": {
+      "charging_period_start": {
+        "name": "Start laadperiode"
+      },
+      "charging_period_end": {
+        "name": "Einde laadperiode"
+      }
+    },
+    "select": {
+      "rain_delay": {
+        "name": "Wachttijd na regen"
       }
     }
   }

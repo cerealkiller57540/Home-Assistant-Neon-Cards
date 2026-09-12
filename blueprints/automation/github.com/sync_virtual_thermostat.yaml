@@ -85,4 +85,10 @@ action:
 
   - delay: "00:01:00"
 
+# 2026-09-08 : patch local, max_exceeded silent — le delay 60s est un debounce
+# voulu (fallback BLE tp393 reporte parfois plusieurs fois/minute, bien plus vite
+# que le cooldown). "Already running" est le mécanisme qui marche, pas un bug.
+# Attention : ce blueprint vient de source_url (gekkekoe/esphome-ecodan-hp) —
+# un ré-import écrasera ce patch, à ré-appliquer si mis à jour.
 mode: single
+max_exceeded: silent

@@ -1100,7 +1100,7 @@ class StoreyBatteryCard extends HTMLElement {
     if (socVal !== null) {
       const avail = (socVal/100 * +totalKwh).toFixed(1);
       pillHTML =
-        `<div class="kwh-pill" style="background:${accent}11;--pill-col:${accent}">
+        `<div class="kwh-pill">
           <span class="kwh-num" style="color:${accent}">${avail}</span>
           <span class="kwh-sep" style="color:${accent}88">/</span>
           <span class="kwh-num" style="color:${accent}">${totalKwh}</span>
@@ -1108,7 +1108,7 @@ class StoreyBatteryCard extends HTMLElement {
         </div>`;
     } else {
       pillHTML =
-        `<div class="kwh-pill" style="background:${accent}11;--pill-col:${accent}">
+        `<div class="kwh-pill">
           <span class="kwh-num" style="color:${accent}">${totalKwh}</span>
           <span class="kwh-unit" style="color:${accent}">kWh</span>
         </div>`;
@@ -1136,33 +1136,34 @@ class StoreyBatteryCard extends HTMLElement {
         .top-band { display:flex; justify-content:space-between; align-items:center; padding:16px 14px 0; width:100% }
         .brand-row { display:flex; align-items:center; gap:8px }
         .brand {
-          font-size: var(--sbc-title-size, 24px); letter-spacing: clamp(1px, 0.5cqi, 3px);
+          font-size: var(--sbc-title-size, 24px); letter-spacing: var(--sbc-title-spacing, 0.02em);
           color: var(--sbc-title-color, rgba(var(--rgb-primary-text-color),0.55));
           font-family: var(--sbc-title-font, inherit);
-          line-height:1; text-transform:uppercase;
-          text-shadow: var(--sbc-title-shadow, 0 0 30px var(--sbc-glow));
+          font-weight: var(--sbc-title-weight, 600);
+          font-style: var(--sbc-title-style, normal);
+          line-height:1; text-transform: var(--sbc-title-transform, uppercase);
+          text-shadow: var(--sbc-title-shadow, var(--sbc-title-shadow-glow, 0 0 30px var(--sbc-glow)));
         }
-        :host([data-neon]) .brand { text-shadow: var(--sbc-title-shadow, 0 0 8px #fff, 0 0 20px var(--sbc-accent), 0 0 40px var(--sbc-accent)) }
-        .brand-icon { display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; width:var(--sbc-icon-size,22px); height:var(--sbc-icon-size,22px); --mdc-icon-size: var(--sbc-icon-size, 22px); color: var(--sbc-accent); filter: drop-shadow(0 0 6px var(--sbc-glow)); }
+        :host([data-neon]) .brand { text-shadow: var(--sbc-title-shadow, var(--sbc-title-shadow-glow, 0 0 8px #fff, 0 0 20px var(--sbc-accent), 0 0 40px var(--sbc-accent))) }
+        .brand-icon { display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; width:var(--sbc-icon-size,22px); height:var(--sbc-icon-size,22px); --mdc-icon-size: var(--sbc-icon-size, 22px); color: var(--sbc-icon-color, var(--sbc-accent)); filter: drop-shadow(0 0 6px var(--sbc-glow)); }
         .neon-div {
           height:1px; margin: 8px 14px 0;
           background: linear-gradient(90deg, transparent, rgba(var(--rgb-primary-color,98,0,234),0.55), rgba(var(--rgb-accent-color,0,255,249),0.25), transparent);
         }
+        /* kwh — texte lumineux, plus de pilule (cf .mw-stat-value, mova-mower-card) */
         .kwh-pill {
           position:relative; display:inline-flex; align-items:baseline; gap:4px;
-          padding:5px 13px; border-radius:99px; cursor:default;
+          padding:0; cursor:default;
         }
-        .kwh-pill::before {
-          content:''; position:absolute; inset:0; border-radius:99px;
-          border:1.5px solid transparent;
-          background:linear-gradient(135deg, var(--pill-col),
-            color-mix(in srgb, var(--pill-col) 30%, transparent), transparent) border-box;
-          -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
-          -webkit-mask-composite: destination-out; mask-composite: exclude; pointer-events:none;
+        .kwh-num  {
+          font-size:16px; font-weight:800; letter-spacing:-.02em;
+          text-shadow: 0 0 1px #fff, 0 0 6px currentColor, 0 0 13px currentColor;
         }
-        .kwh-num  { font-size:16px; font-weight:800; letter-spacing:-.02em }
-        .kwh-sep  { font-size:13px; font-weight:600; margin:0 1px }
-        .kwh-unit { font-size:10px; color:inherit; opacity:.55; letter-spacing:.07em; text-transform:uppercase }
+        .kwh-sep  { font-size:13px; font-weight:600; margin:0 1px; text-shadow: 0 0 5px currentColor }
+        .kwh-unit {
+          font-size:10px; color:inherit; opacity:.7; letter-spacing:.07em; text-transform:uppercase;
+          text-shadow: 0 0 1px #fff, 0 0 6px currentColor, 0 0 13px currentColor;
+        }
         .pills-row { display:flex; align-items:center; gap:8px }
         .svg-body { padding:12px 14px 16px }
         .dp { transition:opacity .1s; contain:layout style }
@@ -1225,7 +1226,7 @@ class StoreyBatteryCard extends HTMLElement {
 
         .glow-grp   { will-change:transform; transform:translateZ(0) }
         .panels-grp { will-change:transform }
-        :host([data-neon]) .kwh-pill { box-shadow: 0 0 8px var(--sbc-accent) }
+        :host([data-neon]) .kwh-num, :host([data-neon]) .kwh-unit { text-shadow: 0 0 1px #fff, 0 0 7px currentColor, 0 0 16px currentColor, 0 0 26px currentColor }
         :host([data-cp]) .kwh-unit { color: var(--sbc-cp-primary,${CP_PRIMARY}); opacity:.6 }
       </style>
       <ha-card>
@@ -1262,10 +1263,29 @@ class StoreyBatteryCard extends HTMLElement {
     else                  this.style.removeProperty('--sbc-title-shadow');
     if (hdr.icon_size)    this.style.setProperty('--sbc-icon-size',    hdr.icon_size+'px');
     else                  this.style.removeProperty('--sbc-icon-size');
+    if (hdr.font_weight)    this.style.setProperty('--sbc-title-weight', hdr.font_weight);
+    else                     this.style.removeProperty('--sbc-title-weight');
+    if (hdr.letter_spacing)  this.style.setProperty('--sbc-title-spacing', hdr.letter_spacing);
+    else                     this.style.removeProperty('--sbc-title-spacing');
+    this.style.setProperty('--sbc-title-transform', hdr.uppercase === false ? 'none' : 'uppercase');
+    this.style.setProperty('--sbc-title-style', hdr.italic ? 'italic' : 'normal');
+    if (hdr.icon_color)     this.style.setProperty('--sbc-icon-color', hdr.icon_color);
+    else                     this.style.removeProperty('--sbc-icon-color');
     this.style.setProperty('--sbc-accent', accent);
     this.style.setProperty('--sbc-bg', bg);
     this.style.setProperty('--sbc-border', cyberpunk ? CP_PRIMARY+'33' : (bg===DEF_BG?'#282828':'transparent'));
-    this.style.setProperty('--sbc-glow', accent+'55');
+    // header.glow_color/glow_size = override explicite du glow (icône + titre), sinon
+    // comportement historique inchangé (dérivé de accent via --sbc-glow).
+    const hdrGlowColor = hdr.glow_color || null;
+    const hdrGlowSize  = hdr.glow_size ? parseFloat(hdr.glow_size) : null;
+    this.style.setProperty('--sbc-glow', hdrGlowColor || (accent+'55'));
+    if (hdr.glow && hdrGlowSize) {
+      const gc = hdrGlowColor || accent;
+      this.style.setProperty('--sbc-title-shadow-glow',
+        `0 0 ${Math.round(hdrGlowSize*0.2)}px #fff, 0 0 ${Math.round(hdrGlowSize*0.4)}px ${gc}, 0 0 ${Math.round(hdrGlowSize*0.8)}px ${gc}, 0 0 ${hdrGlowSize}px ${gc}`);
+    } else {
+      this.style.removeProperty('--sbc-title-shadow-glow');
+    }
     this.style.setProperty('--sbc-cp-primary', CP_PRIMARY);
 
     if (cyberpunk) this.setAttribute('data-cp',''); else this.removeAttribute('data-cp');
@@ -1309,13 +1329,18 @@ class StoreyBatteryCard extends HTMLElement {
         hi.style.setProperty('--mdc-icon-size', size);
         hi.style.color = iconColor;
         hi.style.display = 'flex';
-        // Extraire le blur et la couleur du title_shadow pour drop-shadow
+        // Extraire le blur et la couleur du title_shadow pour drop-shadow (override manuel, prioritaire)
         const ts = this._config.header?.title_shadow || '';
+        const hdrGlowOn   = !!this._config.header?.glow;
+        const hdrGlowSize = this._config.header?.glow_size ? parseFloat(this._config.header.glow_size) : null;
         let iconFilter;
         if (ts) {
           // Extraire "X Y blur color" depuis le premier shadow (avant la 1ère virgule hors parens)
           const m = ts.match(/^([\d.px-]+\s+[\d.px-]+\s+[\d.px-]+\s+(?:rgba?\([^)]+\)|#[0-9a-fA-F]{3,8}|\w+))/);
           iconFilter = m ? `drop-shadow(${m[1]})` : `drop-shadow(0 0 8px ${iconColor})`;
+        } else if (hdrGlowOn && hdrGlowSize) {
+          const gc = this._config.header?.glow_color || iconColor;
+          iconFilter = `drop-shadow(0 0 ${Math.round(hdrGlowSize*0.2)}px #fff) drop-shadow(0 0 ${Math.round(hdrGlowSize*0.4)}px ${gc}) drop-shadow(0 0 ${Math.round(hdrGlowSize*0.8)}px ${gc}) drop-shadow(0 0 ${hdrGlowSize}px ${gc})`;
         } else {
           iconFilter = `drop-shadow(0 0 6px ${iconColor})`;
         }
@@ -1636,7 +1661,15 @@ class StoreyBatteryCardEditor extends HTMLElement {
     this._number('header.icon_size', 'Taille icône (px)', { min: 10, max: 48, step: 1, ph: '22' });
     this._color('header.color', 'Couleur titre', 'var(--primary-color)');
     this._select('header.font', 'Police', SBC_FONTS, '— thème HA —');
-    this._text('header.title_shadow', 'Text-shadow', '0 0 8px rgba(0,212,255,0.7)');
+    this._text('header.font_weight', 'Épaisseur', '600');
+    this._text('header.letter_spacing', 'Espacement', '0.02em');
+    this._toggle('header.uppercase', 'Majuscules', true);
+    this._toggle('header.italic', 'Italique', false);
+    this._color('header.icon_color', 'Couleur icône', 'défaut : couleur accent');
+    this._toggle('header.glow', 'Glow (icône + titre)', false);
+    this._color('header.glow_color', 'Couleur glow', 'défaut : couleur accent');
+    this._text('header.glow_size', 'Taille glow', '12');
+    this._text('header.title_shadow', 'Text-shadow (override manuel, prioritaire sur glow)', 'optionnel');
 
     this._section('Modules');
     this._select('modules', 'Modules additionnels (0–3)',

@@ -82,10 +82,17 @@ from typing import TYPE_CHECKING, Callable
 if TYPE_CHECKING:
     from aiohttp import ClientSession
 
-from ..exceptions import AuthenticationError
+from ..exceptions import AuthenticationError, TokenRefreshRetryError
 from ..models import TokenSet
 
 _LOGGER = logging.getLogger(__name__)
+
+# Refresh-exchange error codes that a fresh login actually fixes. ``invalid_grant``
+# is the ONLY hard case: the refresh token is dead/revoked, so re-prompting the QR
+# login is the correct remedy. Every other rejection (``invalid_client``,
+# ``server_error``, a 5xx, a network blip) is transient — retrying next poll is
+# right, and bouncing the user to a fresh QR prompt for it is the bug we fix here.
+_HARD_REFRESH_ERRORS: frozenset[str] = frozenset({"invalid_grant"})
 
 
 # IDP endpoints (both shared across all VW Group Brand IDs).
@@ -198,7 +205,10 @@ class DeviceAuthorizationGrant:
                 payload = await resp.json(content_type=None)
         except Exception as exc:  # noqa: BLE001
             raise AuthenticationError(
-                f"Device grant: /device_authorization request failed ({exc})"
+                # Class only — this message surfaces to the user/config-flow; keep
+                # any transport-exception text (which can echo the request URL) out.
+                f"Device grant: /device_authorization request failed "
+                f"({type(exc).__name__})"
             ) from exc
 
         if status != 200:
@@ -392,18 +402,29 @@ class DeviceAuthorizationGrant:
         except AuthenticationError:
             raise
         except Exception as exc:  # noqa: BLE001
-            raise AuthenticationError(
-                f"Device grant refresh: request failed ({exc})"
+            # network/transport blip — transient, NOT a dead refresh token
+            raise TokenRefreshRetryError(
+                # Class only — keep transport-exception text (can echo the URL) out.
+                f"Device grant refresh: request failed ({type(exc).__name__})"
             ) from exc
 
         if status != 200:
             err = payload.get("error", "") if isinstance(payload, dict) else ""
-            raise AuthenticationError(
-                f"Device grant refresh: IDP returned HTTP {status} ({err})"
+            # invalid_grant = the refresh token is dead → a fresh QR login is the
+            # only fix (hard). Everything else (invalid_client, server_error, a
+            # 5xx) is transient → retry next poll instead of a reauth prompt.
+            if err in _HARD_REFRESH_ERRORS:
+                raise AuthenticationError(
+                    f"Device grant refresh: IDP returned HTTP {status} ({err})"
+                )
+            raise TokenRefreshRetryError(
+                f"Device grant refresh: transient IDP rejection "
+                f"HTTP {status} ({err})"
             )
         access_token = payload.get("access_token", "")
         if not access_token:
-            raise AuthenticationError(
+            # 200 without a token is a server anomaly, not a dead grant → transient.
+            raise TokenRefreshRetryError(
                 "Device grant refresh: 200 but no access_token in payload"
             )
         return TokenSet(
@@ -477,10 +498,14 @@ DAG_ENABLED_BRANDS = frozenset({"audi", "seat", "cupra", "audi_na"})
 
 # v2.19.0 — Audi US/CA (audi_na) drives the SAME RFC-8628 flow against the NA IDP
 # instead of the EU one (endpoints mirror EU on identity.na.vwgroup.io, from the
-# live US myAudi market-config / NA OIDC discovery). LIVE-GATED / UNCONFIRMED,
-# needs a real US-Audi tester: (1) whether the NA IDP exposes
-# /oidc/v1/device_authorization at all, (2) whether client 7c6b4634 is
-# device-code-capable, (3) whether a device-grant token then reads na.bff.
+# live US myAudi market-config / NA OIDC discovery).
+# b13 UPDATE — two of the three open questions are now confirmed by a standalone
+# live probe (@cyrano330, #1340, 2026-09-04): (1) the NA IDP DOES expose
+# /oidc/v1/device_authorization (HTTP 200, RFC-8628 response, expires_in=300,
+# interval=1; verification URI identity.na.vwgroup.io/oidc/device/aoa), and
+# (2) client 7c6b4634 (US Android live) IS device-code-capable there (also the
+# US iOS 61755a4f and Watch c07d4b3a clients returned 200). STILL OPEN: (3)
+# whether a device-grant token then READS na.bff — needs a real US account.
 # NOTE: the community "Audi Connect" project reads NA Audi data via the
 # PASSWORD/authorization-code path (no attestation on the reads); this DAG path
 # is the preferred clean-auth alternative — wired here, but its read-capability
@@ -563,7 +588,15 @@ MBB_DAG_CLIENT_ID = "9496332b-ea03-4091-a224-8c746b885068@apps_vw-dilab_com"
 # The ``mbb`` token is the key — without it the id_token aud is the OIDC client
 # and the exchange 400s ("Audiences don't match issuer (VWGMBB01DELIV1)").
 MBB_DAG_SCOPE = "openid profile mbb cars"
-MBB_DAG_BRANDS = frozenset({"volkswagen"})
+# b15 (2026-08-30) — "audi" added after a LIVE validation on a real Audi account:
+# the MBB device-grant (9496332b + mbb scope) minted an id_token with aud
+# ``VWGMBB01DELIV1``, ``register/v1`` returned HTTP 200, and the exchange with the
+# REGISTERED client id returned HTTP 200 + a durable refresh_token. So Car-Net
+# Audis mint the durable MBB bearer too — the exchange was never technically
+# VW-only; the ``mbb`` scope is what carries the backend audience. Unlocks MBB
+# two-way commands for portal-primary Audi (the flow already offers the toggle
+# for audi) AND the device-grant Audi command fallback (CONF_MBB_COMMAND_FALLBACK).
+MBB_DAG_BRANDS = frozenset({"volkswagen", "audi"})
 
 
 def mbb_dag_config(brand_name: str) -> tuple[str, str] | None:

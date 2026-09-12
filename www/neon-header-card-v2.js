@@ -1241,7 +1241,7 @@ class NeonHeaderCardV2 extends HTMLElement {
     const sIconSize    = s.icon_size ? `${parseFloat(s.icon_size)}px` : sFontSize;
     const sLetterSp    = s.letter_spacing ? `${parseFloat(s.letter_spacing)}px` : 'normal';
     const sGlowColor   = s.glow_color || 'var(--accent-color, #FF50A0)';
-    const sGlowSize    = parseFloat(s.glow_size)||10;
+    const sGlowSize    = parseFloat(s.glow_size)||6;
     const sGlowShadow  = s.glow ? _neonGlow(sGlowColor, sGlowSize) : '';
     const sGradFrom    = s.gradient_from || 'var(--primary-color, #00E8FF)';
     const sGradTo      = s.gradient_to   || 'var(--accent-color, #FF50A0)';

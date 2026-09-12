@@ -15,8 +15,32 @@
  * - Smart contrast calculation for optimal text readability
  * - Cyberpunk visual effects (scanlines, glitch, intense glow, color pulse)
  * 
- * @version 2.1.0
+ * @version 2.2.0
  * @repository https://github.com/YOUR_USERNAME/neon-compact-light-card
+ *
+ * v2.2.0 — nouvelle option `font_family` (police du nom), même liste/pattern que
+ * neon-header-card-v2 (Google Fonts chargée à la demande, sélecteur dans l'éditeur,
+ * fallback thème HA si vide).
+ *
+ * v2.1.2 — fixes revue Kimi (vérifiés manuellement avant correction) :
+ * - getUsableWidth() utilise désormais le cache _contentWidth au lieu de refaire
+ *   getComputedStyle+clientWidth à chaque pixel de mousemove/touchmove pendant un drag
+ *   (reflow synchrone répété — le point-virgule CSS et 90% du reste de la liste Kimi
+ *   étaient soit déjà corrigés en v2.1.1, soit des faux positifs après vérification)
+ * - animating-pending a désormais un timeout de sécurité (8s) : si le service HA échoue
+ *   ou si l'état ne bascule pas, l'icône ne reste plus figée en "pending" indéfiniment
+ * - --off-primary-colour (jamais settée, toujours écrasée par :host(.state-off/on) donc
+ *   sans effet visuel réel) remplacée par --off-background-colour pour éviter la confusion
+ *
+ * v2.1.1 — fixes revue GLM 5.3 Flash (vérifiés manuellement avant correction) :
+ * - _hexToRgb: gère le hex court (#fff), fallback sécurisé dans _parseColour (crash évité)
+ * - power_fx: capture _lastState AVANT écrasement (le flash powering-off ne se déclenchait jamais)
+ * - Timers d'animation power alignés sur la durée réelle des @keyframes (650ms/600ms, était 500ms)
+ * - Closures de drag (onDragStart/onDragEnd) relisent this._hass/this.config.entity dynamiquement
+ *   au lieu de hass/entity/state figés au premier rendu ; teardown réutilisé depuis setConfig()
+ *   quand l'entity change sans reconnexion du custom element
+ * - opacity/blur/off_blur bornés des deux côtés (étaient à sens unique)
+ * - renderKey inclut désormais name et icon (un changement de nom/icône seul déclenchait un skip)
  */
 
 console.log("neon-compact-light-card.js loaded!");
@@ -27,6 +51,32 @@ const _LEFT_OFFSET = 66; // private constant — was _LEFT_OFFSET (global pollut
 const NCL_IS_IPAD = /iPad/.test(navigator.userAgent) ||
   (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const NCL_IS_LOW_POWER = NCL_IS_IPAD || /iPhone|iPad|iPod|Android|Mobile|HomeAssistant/i.test(navigator.userAgent);
+
+// ── Police du nom (facultative) — même liste/pattern que neon-header-card-v2 ──
+const NCL_FONTS = [
+  'Rajdhani', 'Orbitron', 'Share Tech Mono', 'Exo 2', 'Roboto', 'Montserrat',
+  'Oswald', 'Bebas Neue', 'Inter', 'Poppins', 'Space Grotesk', 'Syne',
+  'DM Sans', 'Playfair Display', 'Cinzel',
+];
+const _nclFontLoaded = new Set();
+function nclLoadFont(family) {
+  if (!family || _nclFontLoaded.has(family)) return;
+  const id = `ncl-font-${family.replace(/\s/g, '-')}`;
+  if (document.getElementById(id)) { _nclFontLoaded.add(family); return; }
+  ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'].forEach(href => {
+    if (!document.querySelector(`link[rel=preconnect][href="${href}"]`)) {
+      const l = document.createElement('link');
+      l.rel = 'preconnect'; l.href = href;
+      if (href.includes('gstatic')) l.crossOrigin = 'anonymous';
+      document.head.appendChild(l);
+    }
+  });
+  const link = document.createElement('link');
+  link.id = id; link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@300;400;500;600;700;900&display=swap`;
+  document.head.appendChild(link);
+  _nclFontLoaded.add(family);
+}
 
 const MDI_ICONS = [
   'mdi:lightbulb', 'mdi:lightbulb-outline', 'mdi:lamp', 'mdi:floor-lamp',
@@ -115,7 +165,7 @@ class NeonCompactLightCard extends HTMLElement {
           z-index: 2;
           width: 100%;
           height: 100%;
-          background: var(--off-primary-colour);
+          background: var(--off-background-colour);
           border: 3px solid var(--icon-border-colour);
           color: var(--off-text-colour);
           border-radius: var(--icon-border-radius);
@@ -185,6 +235,7 @@ class NeonCompactLightCard extends HTMLElement {
           padding-left: 79px;
           font-weight: bold;
           font-size: 18px;
+          font-family: var(--name-font-family, inherit);
           color: var(--primary-text-color);
           text-shadow: none;
           transition: text-shadow 0.6s ease, color 0.6s ease;
@@ -563,6 +614,15 @@ class NeonCompactLightCard extends HTMLElement {
   }
 
   _hexToRgb(hex) {
+    // Supporte les deux formats : #rgb (raccourci) et #rrggbb
+    const shortResult = /^#?([a-f\d])([a-f\d])([a-f\d])$/i.exec(hex);
+    if (shortResult) {
+      return {
+        r: parseInt(shortResult[1] + shortResult[1], 16),
+        g: parseInt(shortResult[2] + shortResult[2], 16),
+        b: parseInt(shortResult[3] + shortResult[3], 16)
+      };
+    }
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result ? {
       r: parseInt(result[1], 16),
@@ -594,7 +654,7 @@ class NeonCompactLightCard extends HTMLElement {
       colour = computedStyle.getPropertyValue(varName).trim() || '#000000';
     }
     if (colour.startsWith('#')) {
-      return this._hexToRgb(colour);
+      return this._hexToRgb(colour) || { r: 0, g: 0, b: 0 };
     }
     const rgbMatch = colour.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
     if (rgbMatch) {
@@ -622,6 +682,13 @@ class NeonCompactLightCard extends HTMLElement {
     if (!config.entity) {
       throw new Error("Neon Compact Light Card: Please provide an 'entity' in the config.")
     }
+    // Si l'entity change (ex: depuis l'éditeur, sans reconnexion du custom element),
+    // les closures de drag attachées par set hass() gardent l'ancienne entity/state
+    // figées tant que _handlersSetup reste true. On retire les listeners existants
+    // pour forcer set hass() à les recréer avec la nouvelle entity au prochain appel.
+    if (this.config && this.config.entity !== config.entity) {
+      this._teardownHandlers();
+    }
     // Cleanup avant rebuild
     if (this.pendingUpdate) { cancelAnimationFrame(this.pendingUpdate); this.pendingUpdate = null; }
     if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
@@ -638,12 +705,14 @@ class NeonCompactLightCard extends HTMLElement {
       primary_colour: config.primary_colour,
       secondary_colour: config.secondary_colour,
       icon_colour: config.icon_colour,
+      font_family: config.font_family || null,
       chevron_action: config.chevron_action || { action: "hass-more-info" },
       chevron_hold_action: config.chevron_hold_action,
       chevron_double_tap_action: config.chevron_double_tap_action,
-      opacity: config.opacity !== undefined ? Math.max(config.opacity, 0.2) : 0.85,
-      blur: config.blur !== undefined ? Math.min(config.blur, 10) : 6,
-      off_blur: config.off_blur !== undefined ? Math.min(config.off_blur, 10) : undefined,
+      // Bornes des deux côtés : opacity ∈ [0.2, 1], blur/off_blur ∈ [0, 10].
+      opacity: config.opacity !== undefined ? Math.min(Math.max(config.opacity, 0.2), 1) : 0.85,
+      blur: config.blur !== undefined ? Math.max(Math.min(config.blur, 10), 0) : 6,
+      off_blur: config.off_blur !== undefined ? Math.max(Math.min(config.off_blur, 10), 0) : undefined,
       smart_font_colour: config.smart_font_colour !== false,
       text_colour: config.text_colour || null,
 
@@ -660,6 +729,14 @@ class NeonCompactLightCard extends HTMLElement {
       if (typeof config.off_colours !== "object" || (config.off_colours.light === undefined && config.off_colours.background === undefined)) {
         throw new Error("Neon Compact Light Card: Invalid off_colours format.");
       }
+    }
+    // Police du nom (facultative) — même pattern que neon-header-card-v2 : charge la
+    // police Google Fonts à la demande, une seule fois par famille (Set partagé).
+    if (this.config.font_family) {
+      nclLoadFont(this.config.font_family);
+      this.style.setProperty("--name-font-family", `'${this.config.font_family}'`);
+    } else {
+      this.style.removeProperty("--name-font-family");
     }
   }
 
@@ -693,15 +770,12 @@ class NeonCompactLightCard extends HTMLElement {
     }
   }
 
-  disconnectedCallback() {
-    if (this.pendingUpdate) { cancelAnimationFrame(this.pendingUpdate); this.pendingUpdate = null; }
-    if (this._updateTimeout) { clearTimeout(this._updateTimeout); this._updateTimeout = null; }
-    if (this._powerAnimTimer) { clearTimeout(this._powerAnimTimer); this._powerAnimTimer = null; }
-    if (this._powerFxTimer) { clearTimeout(this._powerFxTimer); this._powerFxTimer = null; }
-    if (this._resizeObserver) {
-      this._resizeObserver.disconnect();
-      this._resizeObserver = null;
-    }
+  // Retire tous les listeners attachés par set hass() (document + shadow DOM) et
+  // remet le guard _handlersSetup à false pour permettre leur ré-attache propre.
+  // Factorisé pour être appelé à la fois par disconnectedCallback() (tab switch,
+  // suppression de la card) et par setConfig() (changement d'entity depuis
+  // l'éditeur, qui sinon laisse les closures de drag pointer sur l'ancienne entity).
+  _teardownHandlers() {
     if (this._mousedownHandler) {
       const brightnessEl = this.shadowRoot?.querySelector(".brightness");
       if (brightnessEl) brightnessEl.removeEventListener("mousedown", this._mousedownHandler);
@@ -719,11 +793,24 @@ class NeonCompactLightCard extends HTMLElement {
       if (ico) ico.removeEventListener('click', this._iconClickHandler);
       this._iconClickHandler = null;
     }
+    this._handlersSetup = false;
+    this._lastRenderKey = null;   // force un _updateDisplay complet au retour
+  }
+
+  disconnectedCallback() {
+    if (this.pendingUpdate) { cancelAnimationFrame(this.pendingUpdate); this.pendingUpdate = null; }
+    if (this._updateTimeout) { clearTimeout(this._updateTimeout); this._updateTimeout = null; }
+    if (this._powerAnimTimer) { clearTimeout(this._powerAnimTimer); this._powerAnimTimer = null; }
+    if (this._powerFxTimer) { clearTimeout(this._powerFxTimer); this._powerFxTimer = null; }
+    if (this._pendingStateTimer) { clearTimeout(this._pendingStateTimer); this._pendingStateTimer = null; }
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
     // Les handlers viennent d'être retirés → permettre leur ré-attache au reconnect.
     // Sans ça, après un changement d'onglet (fréquent sur iPad/kiosk), set hass()
     // saute la ré-attache (guard _handlersSetup) et le toggle ne répond plus → F5 obligatoire.
-    this._handlersSetup = false;
-    this._lastRenderKey = null;   // force un _updateDisplay complet au retour
+    this._teardownHandlers();
   }
 
   _refreshCard() {
@@ -777,12 +864,16 @@ class NeonCompactLightCard extends HTMLElement {
   }
 
   getUsableWidth = () => {
-    const buffer = 4;
-    const contentEl = this.shadowRoot.querySelector(".content");
-    const contentStyle = getComputedStyle(contentEl);
-    const paddingRight = parseFloat(contentStyle.paddingRight);
-    const contentWidth = contentEl.clientWidth - buffer - paddingRight - _LEFT_OFFSET;
-    return contentWidth;
+    // Perf : mêmes calculs que le cache _contentWidth de _updateDisplay (invalidé par
+    // le ResizeObserver). Appelé à chaque pixel de mousemove/touchmove pendant un drag —
+    // sans ce cache, getComputedStyle + clientWidth forçaient un reflow synchrone par tick.
+    if (this._contentWidth == null) {
+      const buffer = 4;
+      const contentEl = this.shadowRoot.querySelector(".content");
+      const paddingRight = parseFloat(getComputedStyle(contentEl).paddingRight) || 0;
+      this._contentWidth = contentEl.clientWidth - buffer - paddingRight - _LEFT_OFFSET;
+    }
+    return this._contentWidth;
   };
 
   _performAction(actionObj) {
@@ -855,7 +946,7 @@ class NeonCompactLightCard extends HTMLElement {
     const { name, displayText, brightnessPercent, primaryColour, secondaryColour, icon } = this._getCardState();
 
     // ── Diff: skip expensive _updateDisplay if nothing relevant changed ──
-    const renderKey = `${stateObj.state}|${displayText}|${primaryColour}|${secondaryColour}`;
+    const renderKey = `${stateObj.state}|${displayText}|${primaryColour}|${secondaryColour}|${name}|${icon}`;
     if (this._handlersSetup && !this.isDragging && renderKey === this._lastRenderKey) return;
     if (!this.isDragging) this._lastRenderKey = renderKey;
 
@@ -878,6 +969,15 @@ class NeonCompactLightCard extends HTMLElement {
       if (this.config.icon_power_animation) {
         this._pendingStateChange = true;
         haIconEl.classList.add('animating-pending');
+        // Filet de sécurité : si le service échoue ou si l'état ne bascule pas
+        // (device offline, timeout HA...), rien d'autre ne retire cette classe —
+        // sans ce timeout l'icône resterait figée en "pending" indéfiniment.
+        if (this._pendingStateTimer) clearTimeout(this._pendingStateTimer);
+        this._pendingStateTimer = setTimeout(() => {
+          haIconEl.classList.remove('animating-pending');
+          this._pendingStateChange = false;
+          this._pendingStateTimer = null;
+        }, 8000);
       }
       
       this._hass.callService("light", s.state === "on" ? "turn_off" : "turn_on", {
@@ -983,9 +1083,14 @@ class NeonCompactLightCard extends HTMLElement {
       const brightness = this.startWidth;
       updateBarPreview(brightness);
       currentBrightness = brightness;
-      if (state !== "on") {
+      // Ce handler n'est créé qu'une fois par cycle connectedCallback (guard
+      // _handlersSetup) : `hass`/`entity`/`state` figés ici seraient périmés dès
+      // le rendu suivant. On relit donc l'état courant dynamiquement.
+      const currentEntity = this.config.entity;
+      const currentStateObj = this._hass?.states[currentEntity];
+      if (currentStateObj && currentStateObj.state !== "on") {
         const brightness255 = Math.round((brightness / 100) * 255);
-        hass.callService("light", "turn_on", { entity_id: this.config.entity, brightness: Math.max(1, brightness255) });
+        this._hass.callService("light", "turn_on", { entity_id: currentEntity, brightness: Math.max(1, brightness255) });
       }
       document.body.style.userSelect = "none";
     };
@@ -1004,7 +1109,9 @@ class NeonCompactLightCard extends HTMLElement {
       this.isDragging = false;
       document.body.style.userSelect = "";
       clearTimeout(this._updateTimeout);
-      applyBrightness(hass, entity, currentBrightness);
+      // Idem onDragStart : lire this._hass/this.config.entity au lieu des
+      // locales `hass`/`entity` figées à la première exécution de set hass().
+      applyBrightness(this._hass, this.config.entity, currentBrightness);
       if (barEl.style.transition === "none") barEl.style.transition = "width 0.6s ease";
     };
 
@@ -1117,19 +1224,27 @@ class NeonCompactLightCard extends HTMLElement {
     // ── États et classes CSS ────────────────────────────────────────
     const isOn = (percentageText !== "Off" && percentageText !== "Unavailable");
     
+    // Capturé AVANT d'écraser _lastState : nécessaire pour le power-fx (ligne ~1171)
+    // qui doit comparer l'état précédent au nouveau, pas isOn contre lui-même.
+    const previousState = this._lastState;
+
     // Détecter transition d'état pour animation power
     if (this.config.icon_power_animation && this._lastState !== null && this._lastState !== isOn) {
       // Arrêter l'animation pending si elle est active
       if (this._pendingStateChange) {
         haIconEl.classList.remove('animating-pending');
         this._pendingStateChange = false;
+        if (this._pendingStateTimer) { clearTimeout(this._pendingStateTimer); this._pendingStateTimer = null; }
       }
       
       // Lancer l'animation finale (powerOn ou powerOff)
+      // Durées alignées sur les @keyframes powerOn (0.65s) / powerOff (0.6s) ci-dessus :
+      // un timer plus court coupait la classe avant la fin de l'animation CSS.
       const animClass = isOn ? 'animating-power-on' : 'animating-power-off';
+      const animDuration = isOn ? 650 : 600;
       haIconEl.classList.add(animClass);
       if (this._powerAnimTimer) clearTimeout(this._powerAnimTimer);
-      this._powerAnimTimer = setTimeout(() => { haIconEl.classList.remove(animClass); this._powerAnimTimer = null; }, 500);
+      this._powerAnimTimer = setTimeout(() => { haIconEl.classList.remove(animClass); this._powerAnimTimer = null; }, animDuration);
     }
     this._lastState = isOn;
     
@@ -1159,7 +1274,7 @@ class NeonCompactLightCard extends HTMLElement {
     this.classList.toggle("neon-border", this.config.neon_border === true);
     this.classList.toggle("power-fx", this.config.power_fx === true);
     // Power-down : flash bref de la barre au passage ON→OFF
-    if (this.config.power_fx && this._lastState === true && isOn === false) {
+    if (this.config.power_fx && previousState === true && isOn === false) {
       this.classList.add("powering-off");
       if (this._powerFxTimer) clearTimeout(this._powerFxTimer);
       this._powerFxTimer = setTimeout(() => this.classList.remove("powering-off"), 280);
@@ -1492,6 +1607,7 @@ class NeonCompactLightCardEditor extends HTMLElement {
     this._entity('entity', 'Light Entity *', 'light');
     this._icon('icon', 'Icône (mdi)');
     this._text('name', 'Nom affiché', 'Vide = friendly_name');
+    this._select('font_family', 'Police (nom)', NCL_FONTS, '— thème HA —');
 
     this._section('Effets visuels');
     this._toggle('glow', 'Glow Effect', true);

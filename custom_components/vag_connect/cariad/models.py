@@ -70,6 +70,55 @@ BRAND_VW_EU = BrandConfig(
     android_package_name="de.volkswagen.weconnect",
 )
 
+# #1316 — VW Commercial Vehicles (Nutzfahrzeuge) is a SEPARATE EU Data Act
+# data-controller realm from passenger VW. Its native BFF is the same
+# attestation-walled path as passenger VW, so it reads through the EU-Data-Act
+# portal — where the ONLY difference is the OIDC ``state_brand``
+# ``VOLKSWAGEN_COMMERCIAL_VEHICLES`` (live-confirmed 2026-09-02; wired in
+# _eu_data_act.py). Every other field mirrors BRAND_VW_EU; the DISTINCT ``name``
+# is what steers the portal to the commercial realm (base.py builds the state
+# from ``self._brand.name``), so it must NOT reuse "volkswagen".
+BRAND_VW_COMMERCIAL = BrandConfig(
+    name="volkswagen_commercial",
+    client_id="a24fba63-34b3-4d43-b181-942111e6bda8@apps_vw-dilab_com",
+    redirect_uri="weconnect://authenticated",
+    user_agent="Volkswagen/4.2.1-android/14",
+    api_base="https://emea.bff.cariad.digital",
+    scope="openid profile badge cars dealers vin",
+    android_package_name="de.volkswagen.weconnect",
+)
+
+# ── DataPlug / plug&play cloud (OBD-dongle cars WITHOUT built-in connectivity) ──
+# A separate read source served by api/plugandplay.py. Reaches OLD dongle-equipped
+# cars that the BFF + EU-Data-Act portal do not serve. Auth is plain
+# authorization_code+PKCE exchanged at the plug&play backend's OWN /token endpoint
+# (no Play-Integrity/x-qmauth). ``name`` is deliberately NOT 'audi'/'volkswagen' so
+# IDKAuth._exchange_code() takes the plain-OAuth branch. See
+# docs/research/plugandplay_cloud_reader.md.
+#
+# Audi (acpp): LIVE-VALIDATED 2026-08-24 against an enrolled A5 B8.
+BRAND_AUDI_ACPP = BrandConfig(
+    name="audi_acpp",
+    client_id="ec6198b1-b31e-41ec-9a69-95d42d6497ed@apps_vw-dilab_com",
+    redirect_uri="acpp://de.audi.connectplugandplay/oauth2redirect/identitykit",
+    user_agent="Audi-connect-plug-and-play/3.6.4-android",
+    api_base="https://prod.acpp.cariad.digital",
+    # 'openid email profile' ONLY — adding 'https://audiid.vwgroup.io/account'
+    # (also present in the APK) makes /authorize return consent_required.
+    scope="openid email profile",
+    android_package_name="de.audi.connectplugandplay",
+)
+# VW (wcg): TESTER-GATED — legacy signin-service login not wired (see WCGCloudClient).
+BRAND_VW_WCG = BrandConfig(
+    name="vw_wcg",
+    client_id="ac42b0fa-3b11-48a0-a941-43a399e7ef84@apps_vw-dilab_com",
+    redirect_uri="vwconnect://de.volkswagen.vwconnect/oauth2redirect/identitykit",
+    user_agent="WeConnect-Go/2.28.5-android",
+    api_base="https://prod.wcg.cariad.digital",
+    scope="openid profile address email phone",
+    android_package_name="de.volkswagen.vwconnect",
+)
+
 # b13 (RE dismantle 2026-06) — known-good FALLBACK OAuth client_ids harvested
 # from the current brand APKs. Each app ships more dilab clients than we model;
 # if VW ever blocklists a primary client_id, a user can set one of these via the
@@ -295,7 +344,8 @@ BRAND_CUPRA_STANDALONE = BrandConfig(
 )
 
 BRANDS: dict[str, BrandConfig] = {
-    "volkswagen":    BRAND_VW_EU,
+    "volkswagen":            BRAND_VW_EU,
+    "volkswagen_commercial": BRAND_VW_COMMERCIAL,  # #1316 — Nutzfahrzeuge realm
     "audi":          BRAND_AUDI,
     "skoda":         BRAND_SKODA,
     "seat":          BRAND_SEAT,
@@ -305,6 +355,10 @@ BRANDS: dict[str, BrandConfig] = {
     "porsche":       BRAND_PORSCHE,
     # v2.14.11 — Bentley wired (login+read; runs on the Audi IDK client/tenant).
     "bentley":       BRAND_BENTLEY,
+    # plug&play OBD-dongle cloud reader (Audi acpp) — read-only, its own silo
+    # (token is NOT BFF-whitelisted). For pre-connectivity Audi cars paired with
+    # a TEXA dongle, the only cloud read path. Live-validated on a real A5 B8.
+    "audi_acpp":     BRAND_AUDI_ACPP,
 }
 
 
@@ -376,6 +430,18 @@ class VehicleData:
     manufacturer: str | None = None
     firmware_version: str | None = None
     license_plate: str | None = None
+    # acpp plug&play — factory master-data (carport) bonus fields.
+    exterior_color: str | None = None
+    interior_color: str | None = None
+    engine_power: str | None = None  # consolidated, e.g. "176 kW / 239 PS"
+    engine_torque_nm: int | None = None
+    engine_cylinders: int | None = None
+    engine_displacement_ccm: int | None = None
+    engine_code: str | None = None       # e.g. "CCW"
+    fuel_type: str | None = None         # e.g. "Diesel"
+    transmission: str | None = None      # e.g. "Manual (Code: KMU)"
+    warranty_until: Any | None = None
+    data_captured_at: Any | None = None  # ISO ts of the dongle's last sync ("Datenstand")
 
     # Render images — dict of mediaType → public URL (fetched via GraphQL, no auth needed to GET)
     # e.g. {"MYAPN8NB": "https://mediaservice.audi.com/media/fast/v3_...", ...}
@@ -440,6 +506,9 @@ class VehicleData:
     battery_soh_pct: int | None = None
     battery_temp: float | None = None
     fuel_level: int | None = None
+    # acpp plug&play — absolute fuel in the tank (litres). Distinct from the
+    # percentage ``fuel_level``; the dongle reports litres, not a %.
+    fuel_level_liters: float | None = None
     range_km: int | None = None
     # v1.10.0 (#94 — PHEV range triple).
     # ``range_km`` stays as the headline number (back-compat — existing
@@ -481,6 +550,13 @@ class VehicleData:
     charging_type: str | None = None
     target_soc: int | None = None
     max_charge_current: float | None = None
+    # b11 (#1343 n300home) — Skoda cars that return no charging-profiles never
+    # populate ``max_charging_current`` (the select's usual source), yet the
+    # plain charging settings still carry the MAXIMUM/REDUCED enum. Kept separate
+    # from the numeric ``max_charge_current`` (device_class current) and from the
+    # EU-DA diagnostic sensor ``max_charge_current_ac``; the Skoda charge-current
+    # select falls back to this when no profile is present.
+    max_charge_current_enum: str | None = None
     min_soc: int | None = None  # Minimum SoC for departure timer (PHEV)
     auto_unlock_charge: bool | None = None
     connector_locked: bool | None = None
@@ -746,6 +822,10 @@ class VehicleData:
     # carry-forward TTL in ``vehicle_cache.reconcile`` measures against, and what
     # the device_tracker exposes so the age is visible rather than implied.
     position_captured_at: str | None = None
+    # b9 — set True by reconcile when the last-known position is carried past the
+    # 24h freshness window (kept visible on the device_tracker, but flagged so a
+    # day-old pin isn't mistaken for a fresh fix). Absent/None = current.
+    position_is_stale: bool | None = None
 
     # Status
     vehicle_state: str | None = None
@@ -767,11 +847,28 @@ class VehicleData:
     # they grow analogous parsing.
     last_seen_at: Any | None = None
 
+    # Stage-0 EU-DA observability. portal_health: one of ok / waiting_for_portal_data
+    # / empty_snapshots / delivery_not_ready / stale — computed in coordinator._enrich
+    # from the portal connector's last_no_data_reason + capture-age, so a user can tell
+    # "the portal snapshot is stale/empty" apart from "the integration is broken". None
+    # for a car that isn't read over the EU Data Act portal. minutes_since_last_snapshot:
+    # the car's own data-capture age in whole minutes (diagnostic).
+    portal_health: str | None = None
+    minutes_since_last_snapshot: int | None = None
+    # #465 — automatable stale-data flag (True once the car's own capture age
+    # passes the same 72h/8x-interval threshold as the stale-data Repair). None for
+    # a read that carries no capture timestamp, so the binary_sensor self-hides.
+    data_stale: bool | None = None
+
     # Service
     service_km: int | None = None
     service_due_at: Any | None = None
     oil_service_km: int | None = None
     oil_service_at: Any | None = None
+    # acpp plug&play — main inspection (HU / TÜV) + first-registration dates from
+    # the dongle's carport record; surfaced as service-calendar events.
+    main_inspection_due_at: Any | None = None
+    registration_date: Any | None = None
     # v1.11.0 (#91 closure) — explicit "raw int days" sensors complementing
     # the existing DATE sensors. The DATE conversion (sensor.py) loses the
     # exact day count; users who want "5 days remaining" instead of
@@ -1173,6 +1270,20 @@ class VehicleData:
     # derived booleans (`is_electric`, `is_hybrid`).
     car_type: str | None = None
 
+    # #928-audit / vgql coverage (2026-08-28) — VW-EU/Audi authoritative
+    # drivetrain classification from the userVehicles vgql
+    # (vehicle.classification.driveTrain, e.g. "electric"/"hybrid"/
+    # "gasoline"/"diesel"). CARIAD companion to Škoda `car_type` /
+    # CUPRA-SEAT `primary_engine_type`; a diagnostic string, distinct from
+    # the telemetry-derived is_electric/is_hybrid booleans. Fetched on the
+    # same vgql we already run for the model name.
+    drive_train: str | None = None
+
+    # vgql userVehicles `csid` — the stable per-vehicle Customer Service ID.
+    # A durable secondary identifier / diagnostic handle (what the classic
+    # myAudi clients key some calls on); never the VIN, never PII to a plate.
+    csid: str | None = None
+
     # Skoda mysmob `driving-range.primaryEngineRange.engineType`
     # (string PETROL/DIESEL/...). Cross-brand reuse: maps in den
     # existing `primary_engine_type` field aus PR #3 Phase 7 (CUPRA/
@@ -1354,6 +1465,13 @@ class VehicleData:
     software_update_status: str | None = None
     ota_update_available: bool | None = None
     ota_release_notes_url: str | None = None
+    # #1333 (Scout, Elroq) — Škoda ``readiness.softwareUpdateStatus`` (e.g.
+    # "UPDATE_IN_PROGRESS"). A SEPARATE source from ``software_update_status`` above
+    # (that is the /software-version/update-status endpoint). Surfaced as a plain
+    # string diagnostic sensor (not an ENUM) so a value we haven't seen yet is shown
+    # verbatim, never suppressed — the Scout "never suppress" policy. Škoda-only;
+    # other brands leave it None → no phantom entity (gated by _DATA_PRESENT_REQUIRED).
+    readiness_software_update_status: str | None = None
 
     # v2.0.0 (Big-Bang) — Skoda driving-score (efficiency metric 0-100).
     # Endpoint ``GET /api/v2/vehicle-status/{vin}/driving-score`` on mysmob
@@ -1400,6 +1518,9 @@ class VehicleData:
     alarm_active: bool | None = None       # vehicleAlarm == "ALARM"
     siren_active: bool | None = None       # siren == "ACTIVE"
     last_alarm_at: Any | None = None       # ISO timestamp of last alarm
+    # v4.7.8 (#1396) — EU-DA portal anti-theft alarm reason, verbatim enum
+    # string (e.g. "ALARM_REASON_DRIVERSDOOROPEN"); None = not reported.
+    alarm_reason: str | None = None
 
     # v2.0.0 (Big-Bang) — Heat-source mode (issue #163, best-effort).
     # ID.x heat-pump models surface ``climatisationSettings.value.heaterSource``
@@ -1433,6 +1554,20 @@ class VehicleData:
     last_trip_avg_speed_kmh: float | None = None
     last_trip_avg_fuel_consumption_l_100km: float | None = None
     last_trip_avg_electric_consumption_kwh_100km: float | None = None
+    # #1378 (Škoda Elroq) — the EU Data Act portal's short-term (recent) average
+    # electric consumption, distinct from the per-trip figure above.
+    short_term_avg_electric_consumption_kwh_100km: float | None = None
+    # #1375 (Audi S6 TDI) — SCR/AdBlue system engine-start counter (diagnostic).
+    engine_starts_count: int | None = None
+    # v4.7.8 — fuel-unit shape of the short-term consumption leaf (Scout policy:
+    # never drop a value the feed sends).
+    short_term_avg_fuel_consumption_l_100km: float | None = None
+    # v4.7.8 — the portal's "SoC at the last charge start/stop report" leaf,
+    # kept apart from the live SoC (#1195/#1380) and now surfaced instead of
+    # being re-reported by the Scout every poll.
+    battery_soc_charge_report: int | None = None
+    # v4.7.8 (#1337) — Porsche Connect contract state; None = not reported.
+    connect_contract_active: bool | None = None
     last_trip_timestamp: str | None = None
     # v2.10.0 - last-trip reset timestamp. audi_connect_ha v2.1.0 surfaces
     # this as `shortterm_reset`. Read-only: records WHEN the user last
@@ -1443,6 +1578,18 @@ class VehicleData:
     lifetime_avg_fuel_consumption_l_100km: float | None = None
     lifetime_avg_electric_consumption_kwh_100km: float | None = None
     recent_trips: list[dict[str, Any]] = field(default_factory=list)
+    # Audi plug&play (acpp) trip logbook + fuel log extras — acpp-only, so every
+    # other brand leaves them None and the sensors are phantom-protected via
+    # ``_DATA_PRESENT_REQUIRED`` (sensor.py). Distinct from the Škoda ``last_refuel_*``
+    # dict keys on purpose (those are set by a coordinator hook, not this dataclass).
+    last_trip_eco_score: int | None = None            # driving-style EcoScore 0-100
+    last_trip_intake_air_temp_c: int | None = None    # avg intake-air temp for the trip
+    trip_count: int | None = None                     # total trips in the logbook
+    score_points_total: int | None = None             # account driver-score points
+    last_refuel_liters_added: float | None = None      # litres dispensed at the pump
+    last_refuel_tank_before_l: float | None = None     # tank level before the fill-up
+    last_refuel_tank_after_l: float | None = None      # tank level after the fill-up
+    last_refuel_odometer_km: int | None = None         # odometer at the fill-up
     # v2.12.0 (myskoda PR #575) — trip overall-cost breakdown. Currency
     # carried separately so the sensor can set native_unit_of_measurement
     # to the ISO code. None on accounts/firmwares that don't ship costs.
@@ -1678,6 +1825,13 @@ class VehicleData:
     tyre_pressure_required_rl: int | None = None
     tyre_pressure_required_rr: int | None = None
     tyre_pressure_required_spare: int | None = None
+    # #528/#538 — TPMS system-type. Indirect/ABS-based TPMS ships the whole
+    # actual-pressure family as "1" (dict 1=invalid: system present, no numeric
+    # bar), which the sentinel filter drops — so the per-wheel pressure sensors
+    # never spawn and the fact the car HAS a (indirect) TPMS is otherwise invisible.
+    # "measured" = at least one corner reports a real >1 reading; "indirect" =
+    # the family is present but all-"1". ENUM sensor, diagnostic, off by default.
+    tpms_status: str | None = None
     # F. Lights / energy / misc.
     # Parking lights state (parking_lights enum → off/left/right/both). sensor.
     parking_lights_state: str | None = None

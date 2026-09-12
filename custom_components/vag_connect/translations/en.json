@@ -31,6 +31,16 @@
           "mfa_code": "6-digit code — valid for a few minutes."
         }
       },
+      "porsche_captcha": {
+        "title": "Captcha required",
+        "description": "Porsche needs you to solve a captcha to continue signing in.\n\n{captcha_img}\n\nSolve it once with your best guess — repeated failed attempts have caused Porsche to lock accounts for suspicious activity.\n\nYour answer goes only to Porsche's login service, never to any third party or to this project. If the image will not load or you keep getting errors, you can report it: {report_url}",
+        "data": {
+          "captcha_code": "Captcha Code"
+        },
+        "data_description": {
+          "captcha_code": "Type the characters shown in the image above."
+        }
+      },
       "email_password": {
         "title": "Sign in with email + password (legacy)",
         "description": "Connect your vehicle to Home Assistant.\n\nChoose your brand and enter the credentials from your manufacturer's app.",
@@ -144,14 +154,31 @@
           "vin": "VIN (the car the app shows)",
           "spin": "S-PIN (optional)",
           "companion_use_addon": "Connect through the ADB Bridge add-on",
-          "companion_addon_token": "Add-on token"
+          "companion_addon_token": "Add-on token",
+          "companion_use_relay": "Use the companion agent app (the phone calls Home Assistant)",
+          "companion_agent_token": "Agent token"
         },
         "data_description": {
           "adb_host": "The phone's address on your network, e.g. 192.168.1.42.",
           "adb_port": "Usually 5555 for ADB over Wi-Fi.",
           "vin": "The 17-character VIN of the car shown in the app.",
           "companion_use_addon": "Tick this for an Android 11 or newer phone, which only offers wireless debugging. Then enter the ADD-ON's address above instead of the phone's.",
-          "companion_addon_token": "Only needed if you set api_token in the add-on."
+          "companion_addon_token": "Only needed if you set api_token in the add-on.",
+          "companion_use_relay": "Tick this when the phone runs the companion agent app. The phone then calls Home Assistant, so no ADB, no wireless debugging and no fixed phone IP are needed — leave the address field empty.",
+          "companion_agent_token": "The random token the agent app generated. At least 32 characters, and a different one for every vehicle."
+        }
+      },
+      "audi_mbb_fallback": {
+        "title": "Audi — keep remote commands working (backup connection)",
+        "description": "This adds a backup connection so your Audi's remote commands — lock/unlock, climate and charging — keep working even if Audi ever changes how the app signs in. Day to day nothing changes: your Audi uses its normal connection, and the backup only steps in if the normal one stops accepting commands. Setting it up takes one quick browser confirmation (no password is stored). Choose the Audi you already added with the QR / app login. It works on most petrol, diesel and plug-in-hybrid Audis; some of the newest fully-electric models aren't supported and are turned down automatically.",
+        "data": {
+          "entry_id": "Which Audi",
+          "mbb_vins": "Vehicle ID (VIN) — usually leave blank",
+          "spin": "S-PIN (only needed for lock/unlock)"
+        },
+        "data_description": {
+          "mbb_vins": "Leave this blank unless the setup asks for it.",
+          "spin": "Your Audi S-PIN — the code you use for remote lock/unlock."
         }
       }
     },
@@ -166,20 +193,33 @@
       "invalid_credentials": "Email address or password incorrect.",
       "upstream_unavailable": "VW backend temporarily unavailable. This is a server-side issue at VW, NOT a credentials problem. Please wait 5–15 minutes and try again. Do NOT reconfigure the integration.",
       "na_signin_attestation": "Your email and password are fine — Volkswagen North America now blocks this sign-in behind a Google device-attestation check (Play Integrity) that only the official app on a genuine phone can pass. Re-entering your password will not help; this is a VW server-side lock, not a credentials problem. (Tracked: #1165.)",
+      "porsche_login_wall": "Your email and password are fine — the login got past the password step but then landed on a Porsche captcha/consent screen (seen on some accounts at my.porsche.com) that a headless login can't clear. Re-entering your password won't help; this is a Porsche-side wall, not a credentials problem. Try at most once — repeated attempts have locked Porsche accounts. (Tracked: #1337.)",
       "brand_not_dag_eligible": "Selected brand does not support browser login. Use the email + password flow instead.",
       "skoda_qr_retired": "Škoda's passwordless (QR) login was switched off by Volkswagen and no longer works. Go back and choose “Email + Password (legacy)”, then pick Škoda there and sign in with your MyŠkoda email and password.",
+      "device_grant_retired": "This brand's app device-login was switched off by the manufacturer and can't be completed automatically anymore — it now needs on-device app verification. Audi: go back and choose “Email + Password”, then set up the read-only EU Data Act Portal, which still works. Porsche: no read-only fallback exists yet (tracked in #1337).",
       "portal_interaction_required": "The EU Data Act portal needs a one-time action in your browser or brand app (e.g. accept terms, confirm consent, finish onboarding/region selection) before headless access works. This is NOT a wrong-password problem — open the portal once in a browser, complete the prompt, then try again.",
       "still_waiting_browser": "Still waiting for browser approval. Open the URL above, sign in, confirm the code, then click Submit again.",
       "companion_cannot_connect": "Could not reach the phone over ADB. Check it is on the network, that ADB over Wi-Fi is on, and that you accepted the debugging prompt.",
       "companion_needs_addon": "This looks like an Android 11+ phone using wireless debugging, which the direct connection here cannot use (it is TLS + pairing). Install the 'VW Group App ADB Bridge' add-on (github.com/its-me-prash/vwgroup-app-adb-bridge) and point the companion at it. Older phones (Android 10 or earlier) connect here directly.",
       "companion_app_not_found": "Connected to the phone, but the brand app is not installed on it.",
-      "companion_unknown_brand": "That brand has no companion preset yet."
+      "companion_unknown_brand": "That brand has no companion preset yet.",
+      "companion_agent_token_too_short": "The agent token is too short. Paste the random token the agent app generated (at least 32 characters).",
+      "companion_host_required": "Enter the phone's IP address — or tick the companion agent option if the phone calls Home Assistant instead.",
+      "missing_captcha": "Please type the characters shown in the image above.",
+      "captcha_retry": "Please solve the captcha shown above to continue."
     },
     "abort": {
       "already_configured": "This account is already configured.",
       "reauth_successful": "Re-authentication successful.",
       "reconfigure_successful": "Configuration updated successfully.",
-      "mbb_not_eligible": "Your vehicle isn't eligible for the MBB durable login — the backend returned \"Unknown user\". This means it's a newer ID / MEB model (ID.3/4/5, e-up, etc.) that was never enrolled in the legacy Car-Net/MBB system, so the durable login + remote commands can't reach it. Use the EU Data Act portal channel (or the Email + Password login) for these vehicles instead. The MBB login is for older Car-Net cars (most PHEV / combustion models)."
+      "mbb_not_eligible": "Your vehicle isn't eligible for the MBB durable login — the backend returned \"Unknown user\". This means it's a newer ID / MEB model (ID.3/4/5, e-up, etc.) that was never enrolled in the legacy Car-Net/MBB system, so the durable login + remote commands can't reach it. Use the EU Data Act portal channel (or the Email + Password login) for these vehicles instead. The MBB login is for older Car-Net cars (most PHEV / combustion models).",
+      "mbb_fallback_armed": "Backup connection set up. If your Audi's normal connection ever stops accepting remote commands, lock/unlock, climate and charging switch to the backup automatically. Nothing changes day to day.",
+      "no_devicegrant_audi": "No matching Audi found. This backup only applies to an Audi you added with the QR / app login that doesn't already have it. Add your Audi that way first, then come back here.",
+      "porsche_login_wall": "Your credentials are fine — the login got past the password step but stopped at a Porsche captcha/consent screen it can't complete automatically (seen at my.porsche.com). This is a Porsche-side wall, tracked in #1337, not a wrong password. Don't retry in a loop — repeated attempts have locked Porsche accounts. If you can, please report it so we can fix it (attach diagnostics): {report_url}",
+      "porsche_captcha_failed": "That captcha could not be verified and it is now used up. Please close this dialog and start the Porsche login again to get a fresh one. If you can, please report it so we can fix it (attach diagnostics): {report_url}",
+      "porsche_captcha_cooldown": "Too many captcha attempts. Repeated tries can make Porsche temporarily lock the account or flag your network, so this stopped to keep your account safe. Wait a few minutes before trying again. If you can, please report it so we can fix it (attach diagnostics): {report_url}",
+      "reconfigure_failed": "Reconfigure failed: the configuration entry could not be found. Please try again.",
+      "reauth_failed": "Re-authentication failed: the configuration entry could not be found. Please try again."
     },
     "progress": {
       "awaiting_browser_login": "Open {verification_uri} in any browser, sign in with your Brand ID account, and confirm the code {user_code}.",
@@ -194,6 +234,7 @@
           "scan_interval": "Update Interval",
           "spin": "S-PIN",
           "battery_nominal_kwh": "Battery nameplate capacity (kWh, for State of Health)",
+          "fuel_tank_capacity": "Fuel tank capacity (litres, for fuel level %)",
           "enable_reverse_geocoding": "Reverse Geocoding (parking address)",
           "read_only_mode": "Read-only Mode",
           "companion_read_charge_detail": "Companion: read charge target (navigates the app)",
@@ -204,20 +245,27 @@
           "enable_push_audi_vw": "Audi/VW push updates (Cariad FCM, Live (beta))",
           "client_id_override": "OAuth client_id override (power users)",
           "eu_data_act_auto_kickoff": "EU Data Act: auto-kickoff Custom Data Request",
-          "supplementary_authproxy": "Add a Volkswagen.de read channel (merge extra data)",
+          "supplementary_authproxy": "Add or refresh a Volkswagen.de read channel (merge extra data)",
           "vweu_device_grant": "Add VW EU Two-Way — commands + live reads (BETA)",
           "hide_empty_entities": "Hide entities without data",
-          "supplementary_eu_portal": "Add an EU Data Act portal read channel",
+          "supplementary_eu_portal": "Add or refresh the EU Data Act portal read channel",
           "remove_supplementary_authproxy": "Remove the vw.de read channel",
           "remove_supplementary_eu_portal": "Remove the EU Data Act portal read channel",
-          "supplementary_tibber": "Add a Tibber read channel (EV charge data)",
+          "supplementary_tibber": "Add or refresh a Tibber read channel (EV charge data)",
           "remove_supplementary_tibber": "Remove the Tibber read channel",
           "abrp_enable": "Enable ABRP telemetry push",
           "abrp_api_key": "ABRP api_key (developer key)",
           "abrp_user_token": "ABRP token (per vehicle)",
           "keep_raw_datasets": "Keep raw EU Data Act datasets (diagnostics)",
+          "auto_utility_meters": "Auto-create monthly meters (charged energy, mileage)",
           "test_cohort": "Help improve VW Group Connect (opt-in test cohort)",
-          "remove_vweu_twoway": "Remove VW EU Two-Way (revert to the previous channel)"
+          "remove_vweu_twoway": "Remove VW EU Two-Way (revert to the previous channel)",
+          "companion_read_vehicle_health": "Companion: read odometer and service from Vehicle Health (navigates the app)",
+          "companion_read_climate_detail": "Companion: read target and outside temperature (navigates the app)",
+          "companion_read_parking_position": "Companion: read parking position from the app's share link (navigates the app)",
+          "skoda_official_api_key": "Škoda official API key — adds the official manufacturer API as a live data source (and failover)",
+          "clear_skoda_official_key": "Clear the stored Škoda official API key (a fresh one is created automatically if your login supports it)",
+          "skoda_official_mode": "Škoda official-API source mode"
         },
         "data_description": {
           "scan_interval": "How often data is fetched (minutes). Minimum: 3.",
@@ -237,6 +285,7 @@
           "abrp_user_token": "The 'Generic' token from the ABRP app: Settings -> your car -> Live Data. Never logged.",
           "vweu_device_grant": "Volkswagen only, BETA. Adds two-way control (lock/unlock, climate, charging) and live CARIAD reads by signing in with your Volkswagen ID. Volkswagen only issues a 1-hour token here, so your password is stored to renew it automatically — it is sent only to Volkswagen's own login server and is never written to logs or diagnostics. If you would rather not store a password, use the read-only channels instead. Ticking this opens the sign-in step.",
           "keep_raw_datasets": "Only useful on the EU Data Act portal channel. When on, the last few raw dataset ZIPs the portal delivers are kept on disk (under .storage, per vehicle and size-capped) so a wrong or missing value can be reproduced from the exact bytes your car sent. These files contain your GPS, VIN and telemetry, so it is off by default; turn it on only while troubleshooting.",
+          "auto_utility_meters": "Off by default. When on, the integration creates Home Assistant utility_meter helpers that total your charged energy and mileage per calendar month, one per vehicle. The toggle only appears when a matching source sensor already exists. These are permanent helpers: switching this back off stops new ones being created but does not delete the ones already made — remove those under Settings → Devices & Services → Helpers.",
           "test_cohort": "Off by default. Turn this on to let the integration try experimental reads on your car — such as the ongoing attempt to recover GPS location for Volkswagen EU cars — and occasionally show a dismissible notification asking you to share a diagnostics file so a new capability can be confirmed for your model. Everything shared is redacted automatically before it leaves your system: no VIN, GPS, tokens or email is ever included. It is how new features get unlocked for your car and everyone driving the same model, and you can switch it off again at any time."
         }
       },
@@ -305,7 +354,8 @@
       "invalid_auth": "Sign-in failed. Check your Volkswagen ID email and password.",
       "cannot_connect": "Could not reach Volkswagen. Please try again.",
       "vweu_mfa_unsupported": "This account needs an email or authenticator code, which VW EU Two-Way cannot handle yet. Use the read-only channels instead.",
-      "vweu_no_bff_data": "Signed in, but Volkswagen returned no live data for this car on the modern backend yet, so VW EU Two-Way was not enabled and your current channel is unchanged. Please try again later, or share a diagnostics so we can look into it."
+      "vweu_no_bff_data": "Signed in, but Volkswagen returned no live data for this car on the modern backend yet, so VW EU Two-Way was not enabled and your current channel is unchanged. Please try again later, or share a diagnostics so we can look into it.",
+      "terms_and_conditions": "Terms and conditions need to be accepted. Sign in to the app once and confirm."
     },
     "abort": {
       "not_volkswagen": "This channel is only available for Volkswagen.",
@@ -339,7 +389,33 @@
         "name": "Charging Status"
       },
       "plug_state": {
-        "name": "Charging Port"
+        "name": "Charging Port",
+        "state": {
+          "connected": "Connected",
+          "disconnected": "Disconnected"
+        }
+      },
+      "portal_health": {
+        "name": "Portal feed health",
+        "state": {
+          "ok": "Live",
+          "waiting_for_portal_data": "Waiting for portal data",
+          "empty_snapshots": "Empty snapshots",
+          "delivery_not_ready": "Delivery not ready",
+          "portal_error": "Portal error",
+          "stale": "Stale"
+        }
+      },
+      "minutes_since_last_snapshot": {
+        "name": "Minutes since last snapshot"
+      },
+      "historical_export_state": {
+        "name": "Historical export",
+        "state": {
+          "pending": "Requested — preparing",
+          "done": "Delivered",
+          "timed_out": "Timed out"
+        }
       },
       "target_soc": {
         "name": "Charge Target"
@@ -421,6 +497,9 @@
       },
       "last_trip_avg_speed_kmh": {
         "name": "Last Trip Average Speed"
+      },
+      "last_trip_duration_min": {
+        "name": "Last Trip Duration"
       },
       "last_trip_avg_fuel_consumption_l_100km": {
         "name": "Last Trip Average Fuel Consumption"
@@ -532,6 +611,9 @@
       },
       "fuel_tank_capacity_liters": {
         "name": "Fuel Tank Capacity"
+      },
+      "fuel_level_liters": {
+        "name": "Fuel Level (litres)"
       },
       "climate_running_requests_count": {
         "name": "Climate Requests Pending"
@@ -1273,6 +1355,118 @@
       },
       "reminder_tyre_repair_kit": {
         "name": "Tyre repair kit reminder"
+      },
+      "exterior_color": {
+        "name": "Exterior Colour"
+      },
+      "engine_power": {
+        "name": "Engine Power"
+      },
+      "engine_torque_nm": {
+        "name": "Engine Torque"
+      },
+      "engine_cylinders": {
+        "name": "Cylinders"
+      },
+      "engine_displacement_ccm": {
+        "name": "Displacement"
+      },
+      "engine_code": {
+        "name": "Engine Code"
+      },
+      "fuel_type": {
+        "name": "Fuel Type"
+      },
+      "data_captured_at": {
+        "name": "Data as of"
+      },
+      "window_position_front_left": {
+        "name": "Window Front Left Position"
+      },
+      "window_position_front_right": {
+        "name": "Window Front Right Position"
+      },
+      "window_position_rear_left": {
+        "name": "Window Rear Left Position"
+      },
+      "window_position_rear_right": {
+        "name": "Window Rear Right Position"
+      },
+      "transmission": {
+        "name": "Transmission"
+      },
+      "interior_color": {
+        "name": "Interior Colour"
+      },
+      "drive_train": {
+        "name": "Drivetrain"
+      },
+      "csid": {
+        "name": "Customer service ID"
+      },
+      "parked_since": {
+        "name": "Parked since"
+      },
+      "last_trip_eco_score": {
+        "name": "Last trip eco score"
+      },
+      "last_trip_intake_air_temp_c": {
+        "name": "Last trip intake air temperature"
+      },
+      "trip_count": {
+        "name": "Logged trips"
+      },
+      "score_points_total": {
+        "name": "Driver score points"
+      },
+      "last_refuel_liters_added": {
+        "name": "Fuel added"
+      },
+      "last_refuel_tank_before_l": {
+        "name": "Tank before fill-up"
+      },
+      "last_refuel_tank_after_l": {
+        "name": "Tank after fill-up"
+      },
+      "last_refuel_odometer_km": {
+        "name": "Odometer at fill-up"
+      },
+      "data_request_created_at": {
+        "name": "Data request created"
+      },
+      "last_snapshot_at": {
+        "name": "Last snapshot received"
+      },
+      "last_no_data_at": {
+        "name": "Last no-data poll"
+      },
+      "no_data_count": {
+        "name": "No-data polls"
+      },
+      "tpms_status": {
+        "name": "Tyre pressure monitoring",
+        "state": {
+          "measured": "Measured (per-wheel)",
+          "indirect": "Indirect (no pressure values)"
+        }
+      },
+      "readiness_software_update_status": {
+        "name": "Software update status"
+      },
+      "short_term_avg_electric_consumption_kwh_100km": {
+        "name": "Short Term Average Electric Consumption"
+      },
+      "engine_starts_count": {
+        "name": "Engine Starts"
+      },
+      "short_term_avg_fuel_consumption_l_100km": {
+        "name": "Short Term Average Fuel Consumption"
+      },
+      "battery_soc_charge_report": {
+        "name": "Battery Level at Last Charge Report"
+      },
+      "alarm_reason": {
+        "name": "Alarm Reason"
       }
     },
     "binary_sensor": {
@@ -1578,6 +1772,15 @@
       },
       "marketing_consent_given": {
         "name": "Marketing consent given"
+      },
+      "data_source": {
+        "name": "Source: {source}"
+      },
+      "data_stale": {
+        "name": "Data stale"
+      },
+      "connect_contract_active": {
+        "name": "Connect Contract Active"
       }
     },
     "switch": {
@@ -1666,6 +1869,9 @@
       "data_act_request_button": {
         "name": "Create EU Data Act data request"
       },
+      "historical_export_button": {
+        "name": "Request historical export"
+      },
       "companion_reset_button": {
         "name": "Reset companion connection"
       }
@@ -1713,28 +1919,28 @@
     },
     "image": {
       "render_icon": {
-        "name": "3/4 View Icon"
+        "name": "3/4 view (icon)"
       },
       "render_small": {
-        "name": "3/4 View Small"
+        "name": "3/4 view (small)"
       },
       "render_medium": {
-        "name": "3/4 View Medium"
+        "name": "3/4 view (medium)"
       },
       "render_side_sm": {
-        "name": "Side Profile Small"
+        "name": "Side view (small)"
       },
       "render_side_lg": {
-        "name": "Side Profile Large"
+        "name": "Side view (large)"
       },
       "render_angle_hd": {
-        "name": "3/4 View HD"
+        "name": "3/4 view (HD)"
       },
       "render_angle_lg": {
-        "name": "3/4 View Large"
+        "name": "3/4 view (large)"
       },
       "vehicle_render": {
-        "name": "Vehicle Render"
+        "name": "Vehicle render"
       }
     },
     "lock": {
@@ -1777,9 +1983,34 @@
     }
   },
   "issues": {
+    "skoda_official_manual_key": {
+      "title": "Škoda official API — add your API key",
+      "fix_flow": {
+        "step": {
+          "enter_key": {
+            "title": "Add a MyŠkoda API key",
+            "description": "Home Assistant couldn't create an official Škoda API key for this car automatically. Create one in the MyŠkoda app, then choose the vehicle and paste the key here. Automatic creation keeps trying in the background — this is just the manual fallback.",
+            "data": {
+              "vin": "Vehicle",
+              "api_key": "MyŠkoda API key (starts with msk_)"
+            }
+          }
+        },
+        "error": {
+          "key_required": "Please paste your MyŠkoda API key."
+        },
+        "abort": {
+          "entry_gone": "That integration entry no longer exists."
+        }
+      }
+    },
+    "invalid_credentials": {
+      "title": "Sign-in failed — {brand}",
+      "description": "Home Assistant couldn't sign in to your {brand} account — usually a wrong or changed password, though a temporary block can look the same.\n\nSettings → Devices & Services → VW Group Connect → ⋮ → Reconfigure to re-enter your credentials."
+    },
     "vweu_twoway_disabled": {
       "title": "VW EU Two-Way: disabled by Volkswagen",
-      "description": "On 2026-08-18 Volkswagen disabled the login that the VW EU Two-Way (modern CARIAD backend) channel used, so its 1-hour token can no longer be renewed and two-way commands via that channel have stopped. This is a Volkswagen-side change \u2014 nothing is misconfigured on your side, and your account is not at risk (the failure happens before any password is sent).\n\n**Your live reads keep working** through the EU Data Act portal, so your sensors are unaffected.\n\n**For two-way commands (lock/unlock, climate, charging):** a durable replacement via the classic Car-Net (MBB) backend \u2014 which Volkswagen has NOT disabled \u2014 is now in beta. See issue #584 for how to enable and test it.\n\nYou can remove the now-inactive channel any time under the integration's options (VW EU Two-Way \u2192 remove). This message is informational; the integration keeps running on your read channels.\n\n**Tip:** enable only ONE two-way integration for a given car at a time. VW rate-limits and can temporarily lock an account that several apps hammer at once \u2014 when that happens even the official VW app can't control the car, which is the tell that it's an account lockout, not this integration."
+      "description": "On 2026-08-18 Volkswagen disabled the login that the VW EU Two-Way (modern CARIAD backend) channel used, so its 1-hour token can no longer be renewed and two-way commands via that channel have stopped. This is a Volkswagen-side change — nothing is misconfigured on your side, and your account is not at risk (the failure happens before any password is sent).\n\n**Your live reads keep working** through the EU Data Act portal, so your sensors are unaffected.\n\n**For two-way commands (lock/unlock, climate, charging):** a durable replacement via the classic Car-Net (MBB) backend — which Volkswagen has NOT disabled — is now in beta. See issue #584 for how to enable and test it.\n\nYou can remove the now-inactive channel any time under the integration's options (VW EU Two-Way → remove). This message is informational; the integration keeps running on your read channels.\n\n**Tip:** enable only ONE two-way integration for a given car at a time. VW rate-limits and can temporarily lock an account that several apps hammer at once — when that happens even the official VW app can't control the car, which is the tell that it's an account lockout, not this integration."
     },
     "two_factor_required": {
       "title": "Two-factor authentication required — {brand}",
@@ -1831,7 +2062,7 @@
     },
     "data_act_no_data": {
       "title": "EU Data Act portal: no vehicle data yet ({brand})",
-      "description": "The EU Data Act portal signed in for {brand} but isn't returning any vehicle data yet.\n\nThe integration creates the continuous data request for you automatically, so the usual reasons for an empty feed are:\n\n1. **Data-sharing consent not granted for this car.** On the portal you grant the EU Data Act data-sharing consent per vehicle, once. Until you do, the request is created but stays empty — this is the most common cause.\n2. **The car hasn't sent anything new yet.** A fresh dataset is only published after the car has been driven, charged, or locked/unlocked, so a brand-new request can take 15-60 minutes (or a short drive) to start filling.\n3. **A VW-side outage.** VW reported an all-brands EU Data Act portal outage from late May 2026; while it lasts the portal returns empty data for every tool, recovering brand by brand.\n\n**Quickest check:** open `eu-data-act.drivesomethinggreater.com`, sign in, and confirm (a) the data-sharing consent is granted for this car and (b) there is an active continuous (15-minute) data request with all clusters ticked. If you see no data there either, it's the VW side — nothing this integration can do until VW restores it.\n\nThis is the read-only portal beta — the warning clears by itself once data arrives."
+      "description": "The EU Data Act portal signed in for {brand} but isn't returning any vehicle data yet.\n\nThe integration tries to create the continuous data request for you automatically, but on some accounts the portal keeps the browser session anonymous — and then the automatic request (and the in-app \"Create EU Data Act data request\" button) can't complete, so you have to create the request yourself in the portal. The usual causes of an empty feed:\n\n1. **Ownership/usership not confirmed for this car.** The portal must show your vehicle's ownership (or usership) as confirmed. If it isn't, confirm it there first — necessary, though not always sufficient on its own.\n2. **Data-sharing consent not granted for this car.** You grant the EU Data Act data-sharing consent per vehicle, once. Until you do, the request stays empty.\n3. **No continuous request exists yet.** If the automatic creation didn't take, create it yourself: in the portal, add a Custom Data Request with all clusters ticked at a 15-minute frequency. **First delete any older request for this same car** — the portal allows only one active request per vehicle, so an older one (for example a monthly request) for this car blocks the new one. Don't delete another car's request: on a mixed passenger + commercial account each car keeps its own request under its own realm (passenger cars under Volkswagen Personenkraftwagen, vans under Volkswagen Nutzfahrzeuge). The integration picks it up on the next poll — no restart needed.\n4. **The car hasn't sent anything new yet.** A fresh dataset is only published after the car has been driven, charged, or locked/unlocked, so a new request can take 15-60 minutes (or a short drive) to start filling.\n5. **A VW-side outage.** VW reported an all-brands EU Data Act portal outage from late May 2026; while it lasts the portal returns empty data for every tool, recovering brand by brand.\n6. **Or add the volkswagen.de website read channel.** In the integration's options you can add the read-only volkswagen.de website channel as an alternative source: it signs in on the volkswagen.de website (not the app backend that blocks the headless login), and for some cars returns fields the portal feed doesn't. It needs your Volkswagen ID to be the vehicle's confirmed primary user.\n\n**Quickest check:** open `eu-data-act.drivesomethinggreater.com`, sign in, and confirm (a) ownership/usership is confirmed, (b) the data-sharing consent is granted for this car, and (c) there is an active continuous (15-minute) data request with all clusters ticked — creating it yourself if none exists. If you see no data there either, it's the VW side — nothing this integration can do until VW restores it.\n\nThis is the read-only portal beta — the warning clears by itself once data arrives."
     },
     "data_act_browser_missing": {
       "description": "You enabled the headless-browser fallback for the EU Data Act portal but the `playwright` Python package is not installed in your Home Assistant container.\n\n**To install:** open the HA container shell (Add-ons → Terminal & SSH, or `docker exec` for a manual install) and run:\n\n```\npip install playwright\nplaywright install chromium\n```\n\nThe chromium download is large (around 100 MB), which is why this dependency is opt-in instead of bundled with the integration. After installing, restart Home Assistant.\n\nAlternatively, disable the toggle under Settings → Devices & Services → VW Group Connect → Configure → 'EU Data Act portal: headless-browser fallback'.",
@@ -1867,11 +2098,27 @@
     },
     "test_cohort_share_request": {
       "title": "Help confirm a new capability — share your test result?",
-      "description": "Thanks for joining the opt-in test cohort. Your car is included in one or more experiments — for example recovering GPS location or battery State-of-Health for VW EU cars over the volkswagen.de channel, or capturing exactly how your car's backend answers a command. To confirm the result across different models and platforms, it would genuinely help if you shared a diagnostics file: go to Settings → Devices & Services → VW Group Connect → the three-dot menu → Download diagnostics, then attach the file to the relevant testers issue on GitHub.\n\nThe export is redacted automatically before you download it — no VIN, GPS, tokens or email are included — so it is safe to post publicly. You are only seeing this because you opted in; you can dismiss it, and turning the test cohort back off in the integration's options stops these notifications entirely. Thank you for helping unlock features for everyone driving your model."
+      "description": "Thanks for joining the opt-in test cohort. Your car is included in one or more experiments — for example recovering GPS location or battery State-of-Health for VW EU cars over the volkswagen.de channel, or capturing exactly how your car's backend answers a command. To confirm the result across different models and platforms, it would genuinely help if you shared a diagnostics file: open your car's OWN device (Settings → Devices & Services → VW Group Connect → the device named after your car — not \"VW Group Connect Settings\", which holds only config and no vehicle data) → the three-dot menu → Download diagnostics, then attach that file to the tracking issue linked below (#923).\n\nThe export is redacted automatically before you download it — no VIN, GPS, tokens or email are included — so it is safe to post publicly. You are only seeing this because you opted in; you can dismiss it, and turning the test cohort back off in the integration's options stops these notifications entirely. Thank you for helping unlock features for everyone driving your model."
     },
     "stale_data": {
       "title": "{vin}: vehicle data hasn't refreshed in {age}h",
       "description": "The last data your car reported was captured about **{age} hours ago**, even though the integration is still polling successfully. Two things can cause this: the car may simply be parked and asleep (normal — nothing to do), or its EU Data Act data feed may have lapsed and stopped delivering fresh readings.\n\nThe values you currently see are the last known ones, not live. If the car has been driven or plugged in since then and this warning stays, the data feed has most likely expired: open volkswagen.de → your car's data settings and renew/re-request the data sharing, or re-add the channel.\n\nThis warning auto-clears the moment a fresher reading arrives."
+    },
+    "historical_timeout": {
+      "title": "{vin}: one-time historical export didn't complete",
+      "description": "The one-time historical export requested for this car didn't produce a file within the client deadline. The VW portal gives this request no terminal state, so it may have been silently dropped. The request has been cleared — you can request it again, or check the portal directly."
+    },
+    "skoda_official_enrolled": {
+      "title": "Škoda official API — you're now enrolled automatically",
+      "description": "Good news: we used your existing Škoda login to create an official Škoda API key for your car, so Home Assistant can now read it over Škoda's new official, durable channel — as an automatic backup if the normal connection ever struggles. Because this official channel is rate-limited (only a small number of requests an hour), it stays on standby and only reads when your main connection can't — so it won't slow anything down. Nothing to do on your side; this is just a heads-up, and you can dismiss it."
+    },
+    "skoda_official_quota_full": {
+      "title": "Škoda official API — key limit reached",
+      "description": "We tried to set up Škoda's official API for your car automatically, but your account already has the maximum of 5 API keys for this vehicle. To use it, free a slot in the MyŠkoda app (Settings → API keys → delete an unused one) and reload the integration, or paste an existing key manually in the integration's options. Everything else keeps working as before."
+    },
+    "skoda_official_multi_integration": {
+      "title": "Škoda official API — another integration is using it too",
+      "description": "We found more official-API keys on your Škoda account than this integration created — usually a sign that a second integration or app is also reading Škoda's official API. That's fine to run, but they share the same small per-car request budget, so the combined traffic can hit Škoda's rate limit sooner and, in the worst case, get the account temporarily — or eventually permanently — blocked. If you don't need both, remove the official-API key you're not using in the MyŠkoda app (Settings → API keys). You can dismiss this notice."
     }
   },
   "services": {
@@ -2088,6 +2335,12 @@
     },
     "historical_portal_not_ready": {
       "message": "The EU Data Act portal isn't ready yet. Wait until the integration has polled once after setup, then try requesting/importing the historical export again."
+    },
+    "historical_disabled": {
+      "message": "The one-time historical export is currently disabled."
+    },
+    "historical_wedge_blocked": {
+      "message": "A one-time historical export is already in progress for this car. The portal handles one request of this kind at a time, so wait for the current one to finish (or time out) before requesting another."
     }
   },
   "selector": {
@@ -2108,6 +2361,81 @@
         "start_ventilation": "Start ventilation",
         "stop_ventilation": "Stop ventilation"
       }
+    },
+    "skoda_official_mode": {
+      "options": {
+        "auto": "Automatic (both sources, official preferred)",
+        "prefer_official": "Prefer the official API",
+        "failover": "Official API as failover only",
+        "official_only": "Official API only",
+        "mysmob_only": "Standard channel only"
+      }
+    },
+    "read_priority": {
+      "options": {
+        "auto": "Automatic (recommended)",
+        "prefer_website_authproxy": "Prefer live vw.de data"
+      }
+    }
+  },
+  "triggers": {
+    "started_charging": {
+      "name": "Vehicle started charging",
+      "description": "Triggers when a vehicle starts charging."
+    },
+    "stopped_charging": {
+      "name": "Vehicle stopped charging",
+      "description": "Triggers when a vehicle stops charging."
+    },
+    "plugged_in": {
+      "name": "Vehicle plugged in",
+      "description": "Triggers when a vehicle's charging cable is connected."
+    },
+    "unplugged": {
+      "name": "Vehicle unplugged",
+      "description": "Triggers when a vehicle's charging cable is disconnected."
+    },
+    "locked": {
+      "name": "Vehicle locked",
+      "description": "Triggers when a vehicle becomes locked."
+    },
+    "unlocked": {
+      "name": "Vehicle unlocked",
+      "description": "Triggers when a vehicle becomes unlocked."
+    },
+    "started_preconditioning": {
+      "name": "Vehicle started preconditioning",
+      "description": "Triggers when a vehicle starts climate preconditioning."
+    },
+    "stopped_preconditioning": {
+      "name": "Vehicle stopped preconditioning",
+      "description": "Triggers when a vehicle stops climate preconditioning."
+    },
+    "charge_target_reached": {
+      "name": "Vehicle reached its charge target",
+      "description": "Triggers when a vehicle's charge level reaches its target."
+    }
+  },
+  "conditions": {
+    "is_charging": {
+      "name": "A vehicle is charging",
+      "description": "Tests whether any vehicle is currently charging."
+    },
+    "is_plugged_in": {
+      "name": "A vehicle is plugged in",
+      "description": "Tests whether any vehicle's charging cable is connected."
+    },
+    "is_locked": {
+      "name": "A vehicle is locked",
+      "description": "Tests whether any vehicle is locked."
+    },
+    "is_preconditioning": {
+      "name": "A vehicle is preconditioning",
+      "description": "Tests whether any vehicle is running climate preconditioning."
+    },
+    "is_charge_target_reached": {
+      "name": "A vehicle reached its charge target",
+      "description": "Tests whether any vehicle's charge level is at or above its target."
     }
   }
 }

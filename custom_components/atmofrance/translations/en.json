@@ -9,7 +9,7 @@
             "user": {
                 "data": {
                     "username": "Username",
-                    "password": "Password "
+                    "password": "Password"
                 },
                 "description": "Enter your Atmo Data credentials.",
                 "title": "Authentication"
@@ -41,7 +41,7 @@
                     "include_pollen_forecast": "Pollen forecast",
                     "include_pollution_forecast": "Pollution forecast"
                 },
-                "title": "Forecast ndicator type selection",
+                "title": "Forecast indicator type selection",
                 "description": "Select sensor type"
             }
         }

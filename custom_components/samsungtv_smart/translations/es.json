@@ -58,6 +58,14 @@
       "reauth_confirm": {
         "title": "Reautenticación requerida",
         "description": "Tu autenticación de SmartThings ha expirado. Haz clic en Enviar para volver a iniciar sesión."
+      },
+      "reconfigure_st_device": {
+        "title": "Dispositivo SmartThings",
+        "description": "Seleccione el dispositivo SmartThings correspondiente a este televisor.\n\nActualmente: **{current}**\n\nUn televisor reparado, restablecido o eliminado y vuelto a añadir en la aplicación SmartThings recibe un **nuevo identificador**, y el anterior se rechaza con *Forbidden*. Volver a seleccionarlo aquí conserva sus entidades e historial.",
+        "data": {
+          "st_devices": "Dispositivo SmartThings",
+          "device_id": "ID del dispositivo SmartThings"
+        }
       }
     },
     "error": {
@@ -79,7 +87,10 @@
       "missing_scopes": "Los permisos concedidos son insuficientes. Por favor, asegúrate de conceder todos los permisos solicitados.",
       "reauth_account_mismatch": "La cuenta utilizada para la reautenticación no coincide con la cuenta original.",
       "reauth_successful": "Reautenticación exitosa.",
-      "reauth_failed": "Error en la reautenticación."
+      "reauth_failed": "Error en la reautenticación.",
+      "st_device_updated": "Dispositivo SmartThings actualizado. La integración se está recargando.",
+      "st_not_configured": "SmartThings no está configurado para este televisor.",
+      "st_device_missing": "No se ha seleccionado ningún dispositivo SmartThings."
     },
     "create_entry": {
       "default": "{name} configurado correctamente"
@@ -151,7 +162,9 @@
           "use_mute_check": "Usar estado de silencio para detectar encendido",
           "dump_apps": "Depuración: exportar lista de aplicaciones",
           "toggle_art_mode": "Botón de encendido alterna el modo Arte",
-          "st_poll_on_interval": "Intervalo de sondeo de SmartThings con la TV encendida (segundos)"
+          "st_poll_on_interval": "Intervalo de SmartThings con TV encendida (s)",
+          "content_list_interval": "Intervalo de actualización de la lista de obras (s)",
+          "ip_control_poll_interval": "Intervalo de IP Control (s)"
         }
       },
       "save_exit": {
@@ -161,7 +174,8 @@
     "error": {
       "invalid_tv_list": "Formato no válido. Por favor, usa el formato JSON correcto.",
       "ip_control_no_host": "No hay ninguna dirección de host configurada para este televisor.",
-      "ip_control_pair_failed": "Error de emparejamiento. Asegúrate de que el televisor esté encendido y en visualización normal (no en modo Arte), y de que IP Remote esté activado, luego inténtalo de nuevo."
+      "ip_control_pair_failed": "Error de emparejamiento. Asegúrate de que el televisor esté encendido y en visualización normal (no en modo Arte), y de que IP Remote esté activado, luego inténtalo de nuevo.",
+      "ip_control_unreachable": "No se puede conectar con el televisor en el puerto 1516: no hay nada escuchando ahí. Por tanto, ni el estado del televisor ni el ajuste IP Remote son la causa. Es probable que este modelo no admita IP Control. Solo dependen de él las entidades de retroiluminación, tono de color, calibración de imagen y reinicio."
     }
   },
   "application_credentials": {

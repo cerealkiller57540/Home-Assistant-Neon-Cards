@@ -24,3 +24,9 @@ FIRMWARE_POLL_INTERVAL_HOURS = 24
 # even when the robot loses its own connection, so this poll is what flips
 # entities to unavailable while the device is offline.
 ONLINE_POLL_INTERVAL_SECONDS = 60
+
+# How often to re-read the time rain protection lets the mower work again. The
+# device reports that time when it starts holding the mower back but says
+# nothing when it simply runs out, so the poll is what retires a time that has
+# passed. Settings are not polled: the device announces every change to those.
+RAIN_POLL_INTERVAL_SECONDS = 300

@@ -236,14 +236,12 @@
       brightness_pct: 80
       transition: 5
       profile: perso
-      effect: perso
     action: light.turn_on
   - target:
       entity_id: light.leds_cuisine
     data:
       brightness_pct: 80
       profile: perso
-      effect: perso
     action: light.turn_on
   mode: single
 - id: '1769597114684'
@@ -257,7 +255,7 @@
   - trigger: numeric_state
     entity_id:
     - sensor.capteur_temperature_capteur_de_luminosite_luminance
-    above: 100
+    above: 50
     for:
       minutes: 5
   conditions:
@@ -266,6 +264,7 @@
     state: 'on'
   actions:
   - action: light.turn_off
+    continue_on_error: true
     target:
       entity_id:
       - light.smart_plug_mini_mss110_main_channel
@@ -307,6 +306,21 @@
     before: 09:00:00
   - condition: sun
     before: sunrise
+    enabled: false
+  - condition: illuminance.is_value
+    target:
+      entity_id: sensor.capteur_temperature_capteur_de_luminosite_luminance
+    options:
+      behavior: any
+      for:
+        hours: 0
+        minutes: 5
+        seconds: 0
+      threshold:
+        type: below
+        value:
+          active_choice: number
+          number: 75
   actions:
   - action: light.turn_on
     target:
@@ -1055,8 +1069,8 @@
     after: 07:00:00
     before: '20:00:00'
   - condition: template
-    value_template: '{{ (states(''sensor.burthecourt_aux_chenes_wind_gust'') | float(0))
-      <= 40 }}'
+    value_template: '{{ (states(''sensor.burthecourt_aux_chenes_wind_speed'') | float(0))
+      <= 15 }}'
   - condition: template
     value_template: "{{ this.attributes.last_triggered is none\n   or (now() - this.attributes.last_triggered).total_seconds()
       > 720 }}"
@@ -1132,6 +1146,9 @@
   - trigger: state
     entity_id: binary_sensor.ecodan_heatpump_booster_heater
     id: booster
+  - trigger: state
+    entity_id: binary_sensor.ecodan_heatpump_short_cycle_lockout
+    id: lockout
   - trigger: state
     entity_id: binary_sensor.freeze_risk_expected
     id: gel
@@ -1461,17 +1478,16 @@
     - conditions:
       - condition: trigger
         id: porte_ouverte
-      - condition: not
-        conditions:
-        - condition: state
-          entity_id: climate.clim_chambre_control
-          state: 'off'
+      - condition: state
+        entity_id: binary_sensor.clim_chambre_en_marche
+        state: 'on'
       sequence:
       - action: input_text.set_value
         target:
           entity_id: input_text.clim_chambre_etat_avant
         data:
-          value: '{{ states(''climate.clim_chambre_control'') }}'
+          value: '{% set m = states(''climate.clim_chambre_control'') %} {{ m if m
+            not in [''off'', ''unknown'', ''unavailable''] else ''cool'' }}'
       - action: climate.turn_off
         target:
           entity_id: climate.clim_chambre_control
@@ -1484,7 +1500,7 @@
           entity_id: input_text.clim_chambre_etat_avant
           state: 'off'
       - condition: state
-        entity_id: climate.clim_chambre_control
+        entity_id: binary_sensor.clim_chambre_en_marche
         state: 'off'
       sequence:
       - action: climate.set_hvac_mode
@@ -1492,6 +1508,11 @@
           entity_id: climate.clim_chambre_control
         data:
           hvac_mode: '{{ states(''input_text.clim_chambre_etat_avant'') }}'
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.clim_chambre_etat_avant
+        data:
+          value: 'off'
   mode: single
 - id: '1775496079688'
   alias: "\U0001F4A1 Salon - Allumage 23h15"
@@ -1851,7 +1872,23 @@
   - trigger: sun
     event: sunrise
     offset: 0
-  conditions: []
+    enabled: false
+  - trigger: sun.dawn
+    options:
+      offset:
+        days: 0
+        hours: 0
+        minutes: 0
+        seconds: 0
+      offset_type: before
+      type: nautical
+  conditions:
+  - condition: door.is_closed
+    target:
+      entity_id: binary_sensor.capteur_baie_vitree_contact_2
+    options:
+      behavior: any
+      for: 00:00:00
   actions:
   - repeat:
       until:
@@ -1872,16 +1909,33 @@
   mode: single
 - id: '1779456867156'
   alias: "\U0001F319 Volets - Fermeture 23h"
-  description: Ferme un volet roulant tous les soirs à 23h00.
+  description: Ferme un volet roulant tous les soirs à 23h00. Notifie si la fenêtre
+    est ouverte (volet non fermé).
   triggers:
   - trigger: time
     at: '23:00:00'
   conditions: []
   actions:
-  - device_id: de59a7d08004ed1a1204ebf3ecc3d547
-    domain: cover
-    entity_id: a99dbe849f714a98fedf22a2e5ec21a7
-    type: close
+  - choose:
+    - conditions:
+      - condition: door.is_closed
+        target:
+          entity_id: binary_sensor.capteur_baie_vitree_contact_2
+        options:
+          behavior: any
+          for: 00:00:00
+      sequence:
+      - device_id: de59a7d08004ed1a1204ebf3ecc3d547
+        domain: cover
+        entity_id: a99dbe849f714a98fedf22a2e5ec21a7
+        type: close
+    default:
+    - action: persistent_notification.create
+      data:
+        notification_id: volet_baie_vitree_fenetre_ouverte
+        title: "\U0001F319 Volet non fermé"
+        message: 'Le volet de la baie vitrée n''a pas pu être fermé à 23h : la fenêtre/porte
+          est ouverte.'
   mode: single
 - id: depart_demande
   alias: "\U0001F697 Départ — AA connecté → 'Tu pars ?'"
@@ -2123,51 +2177,11 @@
       entity_id:
       - switch.driveway_auto_retour_au_point_de_garde
       - switch.driveway_suivi_automatique
-  - repeat:
-      count: 5
-      sequence:
-      - action: reolink.ptz_move
-        target:
-          entity_id: button.driveway_ptz_droit
-        data:
-          speed: 16
-      - delay:
-          milliseconds: 1000
-      - action: button.press
-        target:
-          entity_id: button.driveway_arret_ptz
-      - delay:
-          milliseconds: 1000
-  - repeat:
-      count: 4
-      sequence:
-      - action: reolink.ptz_move
-        target:
-          entity_id: button.driveway_ptz_haut
-        data:
-          speed: 16
-      - delay:
-          milliseconds: 1000
-      - action: button.press
-        target:
-          entity_id: button.driveway_arret_ptz
-      - delay:
-          milliseconds: 1000
-  - repeat:
-      count: 2
-      sequence:
-      - action: reolink.ptz_move
-        target:
-          entity_id: button.driveway_ptz_gauche
-        data:
-          speed: 11
-      - delay:
-          milliseconds: 1000
-      - action: button.press
-        target:
-          entity_id: button.driveway_arret_ptz
-      - delay:
-          milliseconds: 1000
+  - action: select.select_option
+    target:
+      entity_id: select.exterieur_driveway_pre_reglage_ptz
+    data:
+      option: retour
   - wait_for_trigger:
     - trigger: state
       entity_id: binary_sensor.zigbee_47614_1_contact
@@ -2522,15 +2536,15 @@
           sequence:
           - action: camera.record
             target:
-              entity_id: camera.driveway_fluide
+              entity_id: camera.driveway_net
             data:
               filename: /media/driveway/{{ fname }}_p{{ repeat.index }}.mp4
-              duration: 10
+              duration: 20
               lookback: '{{ 4 if repeat.index == 1 else 2 }}'
     default:
     - action: camera.record
       target:
-        entity_id: camera.driveway_net
+        entity_id: camera.driveway_fluide
       data:
         filename: /media/driveway/{{ fname }}.mp4
         duration: 10
@@ -2714,3 +2728,87 @@
       data:
         transition: 2
   mode: restart
+- id: '1787858340899'
+  alias: "\U0001F6A8 NAS - Alerte déconnexion eth0"
+  description: Envoie une notification persistante si l'interface réseau eth0 du NAS
+    est hors ligne pendant plus de 10 minutes.
+  triggers:
+  - trigger: state
+    entity_id:
+    - binary_sensor.rackstation_snmp_eth0_connecte
+    from:
+    - 'on'
+    to:
+    - 'off'
+    - unknown
+    - unavailable
+    for:
+      hours: 0
+      minutes: 10
+      seconds: 0
+  conditions: []
+  actions:
+  - action: notify.persistent_notification
+    metadata: {}
+    data:
+      message: Eth0 Offline
+      title: NAS Alert
+  mode: single
+- id: '1787858371775'
+  alias: "\U0001F6A8 NAS - Alerte déconnexion eth0"
+  description: Envoie une notification persistante si l'interface réseau eth0 du NAS
+    est hors ligne pendant plus de 10 minutes.
+  triggers:
+  - trigger: state
+    entity_id:
+    - binary_sensor.rackstation_snmp_eth1_connecte
+    from:
+    - 'on'
+    to:
+    - 'off'
+    - unknown
+    - unavailable
+    for:
+      hours: 0
+      minutes: 10
+      seconds: 0
+  conditions: []
+  actions:
+  - action: notify.persistent_notification
+    metadata: {}
+    data:
+      message: Eth0 Offline
+      title: NAS Alert
+  mode: single
+- id: '1788436885087'
+  alias: "\U0001F32C️ Sensibilité vibration dynamique (vent)"
+  description: 'Ajuste number.capteur_vibrations_sensitivity selon sensor.burthecourt_aux_chenes_wind_speed.
+    40 au calme (<=5 km/h), dégressif linéaire jusqu''à 32 à 20 km/h+. Plancher remonté
+    à 32 (au lieu de 25) : le capteur est un sleepy device Zigbee qui n''applique
+    le set_value qu''à son prochain réveil (vibration) -- un plancher trop bas réduit
+    les réveils et peut bloquer durablement la sensibilité basse, sans retour possible
+    à 40. Complète le fix de la condition vent de automation.alerte_courrier (wind_gust
+    mort -> wind_speed).
+
+    '
+  triggers:
+  - trigger: state
+    entity_id:
+    - sensor.burthecourt_aux_chenes_wind_speed
+  - trigger: homeassistant
+    event: start
+  conditions: []
+  actions:
+  - variables:
+      vent: '{{ states(''sensor.burthecourt_aux_chenes_wind_speed'') | float(0) }}'
+      cible: '{{ 40 if vent <= 5 else (32 if vent >= 20 else (40 - (vent - 5) * (8
+        / 15)) | round(0)) }}'
+  - condition: template
+    value_template: '{{ (states(''number.capteur_vibrations_sensitivity'') | float(0))
+      != (cible | float) }}'
+  - action: number.set_value
+    target:
+      entity_id: number.capteur_vibrations_sensitivity
+    data:
+      value: '{{ cible }}'
+  mode: single

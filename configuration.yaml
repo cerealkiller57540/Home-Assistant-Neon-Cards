@@ -45,6 +45,11 @@ logger:
     homeassistant.components.dlna_dmr: error
     homeassistant.helpers.entity: error
     homeassistant.components.media_player: error
+    # 2026-09-08 : warning "custom integration X has not been tested" au boot,
+    # une ligne par intégration custom (pyscript, livebox_pro, sunology, hacs,
+    # liveboxtv_ng...) — bruit connu/attendu, rien à corriger derrière.
+    homeassistant.loader: error
+    homeassistant.components.libre_hardware_monitor.coordinator: error
 
 # === CAMERAS ===
 # 2026-06-05 : bloc camera mjpeg YAML retiré (déprécié → erreur log). La webcam est désormais
@@ -250,6 +255,13 @@ utility_meter:
     source: sensor.pc_sunology_energy
     cycle: daily
 
+  # Vrai volume d'arrosage EST du jour (L), reset automatique a minuit.
+  # NE PAS utiliser sensor.arrosage_est_daily_irrigation_volume : malgre son nom
+  # c'est le volume de la DERNIERE SESSION, fige entre deux arrosages.
+  arrosage_est_eau_journaliere:
+    source: sensor.arrosage_est_eau_totale_l
+    cycle: daily
+
 light:
 - platform: group
   name: "LEDs Cuisine"
@@ -329,11 +341,12 @@ recorder:
     # pas un pollueur DB. cf [[project-recorder-crash]].
     - sensor.dccurrent_*
     # Switch Netgear GS108T (compteurs trafic par port — pur diagnostic réseau)
-    - sensor.gs108t_*
+    - sensor.gs108t_*_link_speed
+    - sensor.gs108t_port_*_io
+    - sensor.gs108t_port_*_total_*
+    - sensor.gs108t_port_*_traffic_*
     entities:
     # Prises / divers puissance instantanée (l'énergie kWh cumulée reste via statistics)
-    - sensor.prise_chambre_power
-    - sensor.pc_hydroponie_power
     # 2026-07-18 : ré-historisé à la demande de Chris (sparkline watermark POWER FEED
     # de la card BATTLESTATION voulait une vraie courbe). Surveiller le volume si la DB
     # regonfle, même logique que prod_totale_2 ci-dessous. cf [[project-recorder-crash]],
@@ -344,7 +357,7 @@ recorder:
     # - sensor.prod_totale_2
     # 2026-06-02 : Shelly EM (puissance instantanée, ~241k lignes) — l'énergie kWh
     # cumulée reste via statistics. Identifié comme gros pollueur post-recover DB.
-    - sensor.shellyemminig4_d885acef3f88_puissance
+    #- sensor.shellyemminig4_d885acef3f88_puissance
     # Diagnostics internes ESP Ecodan (debug, aucun intérêt historique)
     - sensor.ecodan_heatpump_heap_free
     - sensor.ecodan_heatpump_loop_time

@@ -104,6 +104,9 @@ function buildConfig(raw) {
     fx_gl:         raw.fx_gl         ?? true,   // la passe post-process elle-meme
     // pluie sur vitre (validee 2026-08-09) : lentille + rack focus
     fx_pluie:        _n(raw.fx_pluie,        0.70),
+    // meme idiome que fx_aurore_toujours : force l'effet visible hors de sa condition
+    // meteo reelle, pour le regler depuis l'editeur sans attendre la bonne meteo.
+    fx_pluie_toujours: raw.fx_pluie_toujours ?? false,
     fx_pluie_taille: _n(raw.fx_pluie_taille, 1.00),
     fx_pluie_dens:   _n(raw.fx_pluie_dens,   0.55),
     fx_pluie_refr:   _n(raw.fx_pluie_refr,   1.20),
@@ -113,13 +116,16 @@ function buildConfig(raw) {
     fx_pluie_fond:   _n(raw.fx_pluie_fond,   0.80),  // l'averse canvas DERRIERE la vitre
     // brouillard (valide du premier coup)
     fx_brouillard:   _n(raw.fx_brouillard,   0.80),
+    fx_brouillard_toujours: raw.fx_brouillard_toujours ?? false,
     // vent (valide apres refonte : 2 flux opposes)
     fx_vent_warp:    _n(raw.fx_vent_warp,    7.00),
     fx_vent_turb:    _n(raw.fx_vent_turb,    2.40),
     fx_vent_swirl:   _n(raw.fx_vent_swirl,   0.40),
     fx_vent_teinte:  _n(raw.fx_vent_teinte,  0.55),
+    fx_vent_toujours: raw.fx_vent_toujours ?? false,
     // givre (valide apres 7 iterations)
     fx_givre:        _n(raw.fx_givre,        1.00),
+    fx_givre_toujours: raw.fx_givre_toujours ?? false,
     fx_givre_pente:  _n(raw.fx_givre_pente,  5.00),
     fx_givre_force:  _n(raw.fx_givre_force, 14.00),
     fx_givre_epais:  _n(raw.fx_givre_epais,  0.46),
@@ -132,6 +138,9 @@ function buildConfig(raw) {
     fx_givre_couv:   _n(raw.fx_givre_couv,   2.40),
     fx_givre_lis:    _n(raw.fx_givre_lis,    0.80),
     fx_givre_seuil:  _n(raw.fx_givre_seuil,  0.06),
+    // Rayon du halo de la clairiere, en px de la mixmap. STRUCTUREL : il faut
+    // reconstruire le calque d encre quand il bouge (cf _fxInkKey).
+    fx_givre_halo:   _n(raw.fx_givre_halo,  18),
     // ces cinq-la ne vont PAS au shader : ils construisent la mixmap (_fxFrostMap).
     // Les changer invalide le cache -> voir _fxMixKey.
     fx_givre_finesse:_n(raw.fx_givre_finesse,6),
@@ -144,6 +153,7 @@ function buildConfig(raw) {
     // `taille` monte de 30 (SVG) a 96 : le banc a ete regle a ce diametre, et le
     // relief des crateres ne se lit pas a 30 px. Le halo deborde en plus du disque.
     fx_lune:         raw.fx_lune ?? true,
+    fx_lune_toujours: raw.fx_lune_toujours ?? false,  // force visible meme hors nuit
     fx_lune_taille:  _n(raw.fx_lune_taille,  96),
     fx_lune_doux:    _n(raw.fx_lune_doux,    0.045),
     fx_lune_relief:  _n(raw.fx_lune_relief,  0.60),
@@ -160,6 +170,7 @@ function buildConfig(raw) {
     // neige tombe DEHORS, derriere la vitre -- elle va donc dans la texture de scene
     // (canvas 2D), et se fait ensuite deformer par les gouttes et voiler par la brume.
     fx_neige:        _n(raw.fx_neige,        0.25),
+    fx_neige_toujours: raw.fx_neige_toujours ?? false,
     fx_neige_nb:     _n(raw.fx_neige_nb,     1500),
     fx_neige_taille: _n(raw.fx_neige_taille, 0.55),
     fx_neige_grav:   _n(raw.fx_neige_grav,   0.55),
@@ -168,6 +179,7 @@ function buildConfig(raw) {
     fx_neige_fondu:  _n(raw.fx_neige_fondu,  0.75),
     // canicule (validee du premier coup)
     fx_chaleur:      _n(raw.fx_chaleur,      0.95),
+    fx_chaleur_toujours: raw.fx_chaleur_toujours ?? false,
     fx_chaleur_amp:  _n(raw.fx_chaleur_amp, 18.00),
     fx_chaleur_freq: _n(raw.fx_chaleur_freq, 7.00),
     fx_chaleur_agl:  _n(raw.fx_chaleur_agl,  5.50),
@@ -617,10 +629,81 @@ function moonSvg(size = 30) {
 }
 // Nuit étoilée : étoiles CSS qui scintillent + lune à phase réelle. Les étoiles
 // filantes sont injectées à part par _shootStar() (one-shot, timer JS).
+// PRNG seedé (mulberry32) : même graine = même ciel. Obligatoire — .wfxlayer voit
+// son innerHTML REMPLACÉ à chaque changement de clé FX, donc avec Math.random()
+// les étoiles sauteraient de place à chaque re-render.
+function starRng(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+// Graine par JOUR : ciel différent chaque nuit (« on se lasse pas »), mais stable
+// pendant toute la nuit. Une graine par montage ferait sauter le semis au moindre
+// re-render ; Math.random() le ferait plusieurs fois par minute.
+function starSeed() { return Math.floor(Date.now() / 864e5) * 2654435761; }
+
+// Réglages arbitrés à l'œil par Chris au banc ha-card-preview-bench, 31/08/2026.
+// Ce ne sont pas des valeurs calculées : ne pas les « arrondir ».
+const STARS = {
+  n: 115,        // nombre d'étoiles
+  bias: 0.55,    // tassement vers le haut de la card
+  hmax: 78,      // hauteur max en % (le bas reste à la température et aux pills)
+  mag: 0.65,     // écart de taille entre faibles et brillantes
+  smax: 2.8,     // taille max en px
+  glow: 0.70,    // intensité du halo
+  bright: 0.12,  // part d'étoiles brillantes forcées
+  tint: 0.45,    // part d'étoiles colorées
+  milky: 0.38,   // opacité de la Voie lactée
+  mang: -24,     // son angle, en degrés depuis l'horizontale
+  twk: 0.55,     // amplitude du scintillement
+  twn: 0.60      // part d'étoiles qui scintillent
+};
+
+// Nuit étoilée : semis pseudo-aléatoire à magnitudes, Voie lactée, lune à phase
+// réelle. Les filantes sont injectées à part par _shootStar() (one-shot, timer JS).
 function nightHtml() {
-  const stars = [...Array(16)].map((_, i) =>
-    `<span class="wstar" style="left:${(i * 61) % 100}%;top:${(i * 37) % 70}%;animation-delay:${(i % 5) * .7}s;animation-duration:${(2.2 + (i % 4) * .9)}s"></span>`).join('');
-  return `<div class="wfx">${stars}${moonSvg(30)}</div>`;
+  const r = starRng(starSeed()), out = [];
+  for (let i = 0; i < STARS.n; i++) {
+    const x = r() * 100;
+    // un uniforme élevé à une puissance > 1 se tasse vers 0 = vers le haut
+    const y = Math.pow(r(), 1 + STARS.bias * 2.2) * STARS.hmax;
+    // magnitude en loi de puissance : beaucoup de faibles, peu de brillantes
+    let m = Math.pow(r(), 2.4);
+    if (r() < STARS.bright) m = 0.75 + r() * 0.25;
+    const size = 1 + m * STARS.mag * (STARS.smax - 1);
+    const op = 0.35 + m * 0.65;
+    const blur = (size * 1.6 + m * STARS.glow * 4).toFixed(1);
+    let col = '#dfeeff', shc = '200,225,255';
+    if (r() < STARS.tint) {
+      const t = r();
+      if (t < 0.45)     { col = '#ffe3c4'; shc = '255,215,170'; }  // ambre (géantes rouges)
+      else if (t < 0.8) { col = '#cfe0ff'; shc = '185,210,255'; }  // bleu-blanc
+      else              { col = '#fff3d6'; shc = '255,240,200'; }  // jaune pâle
+    }
+    const sh = STARS.glow > 0
+      ? `box-shadow:0 0 ${blur}px rgba(${shc},${(op * STARS.glow).toFixed(2)});` : '';
+    // Tout le relief est dans la taille / l'opacité / le halo, JAMAIS dans
+    // l'animation : .low-power coupe toute animation et effacerait le ciel.
+    let anim;
+    if (r() < STARS.twn && STARS.twk > 0) {
+      anim = `animation-duration:${(2 + r() * 4.5).toFixed(1)}s;`
+           + `animation-delay:${(r() * 6).toFixed(1)}s;`
+           + `--tw-lo:${(op * (1 - STARS.twk * 0.8)).toFixed(2)};--tw-hi:${op.toFixed(2)};`;
+    } else {
+      r(); r(); anim = 'animation:none;';   // on consomme quand même les 2 tirages
+    }
+    out.push(`<span class="wstar" style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%;`
+      + `width:${size.toFixed(2)}px;height:${size.toFixed(2)}px;`
+      + `background:${col};opacity:${op.toFixed(2)};${sh}${anim}"></span>`);
+  }
+  const mo = STARS.milky, milky = mo <= 0 ? '' :
+    `<div class="wmilky" style="background:linear-gradient(${90 + STARS.mang}deg,transparent 30%,`
+    + `rgba(150,180,255,${(mo * 0.09).toFixed(3)}) 44%,rgba(200,215,255,${(mo * 0.16).toFixed(3)}) 50%,`
+    + `rgba(150,180,255,${(mo * 0.09).toFixed(3)}) 56%,transparent 70%)"></div>`;
+  return `<div class="wfx">${milky}${out.join('')}${moonSvg(30)}</div>`;
 }
 
 // Particules & décors CSS. cond = condition ; rainCh/snowCh = probabilités (0-100)
@@ -1566,7 +1649,7 @@ class WeatherNeonCardWebgl extends HTMLElement {
     // CANICULE → heat-haze sur la hero zone (icône). Déclenché par la vigilance MF
     // "Canicule" ≥ Jaune. Actif aussi sur Companion en version allégée : filtre SVG
     // sur 1 petit élément, RAF léger → pas un canvas en boucle.
-    const heatOn = !!vigi && vigi.risks.includes('Canicule');
+    const heatOn = this._config.fx_chaleur_toujours || (!!vigi && vigi.risks.includes('Canicule'));
 
     // forecast en TUILES + barre thermique min/max : la fourchette lo→hi du jour est
     // positionnée (left/width) dans la fourchette de la période affichée, couleur
@@ -1647,7 +1730,12 @@ class WeatherNeonCardWebgl extends HTMLElement {
     // état est indisponible — sinon la card afficherait « unavailable » en clair.
     const condGeneric = COND_FR[cond] || cond;
     let condLabel = condGeneric;
-    if (this._config.condition_label) {
+    // ⚠️ La nuit, on garde le générique. Le capteur Météo-France décrit le temps DU JOUR
+    // et ne connaît pas la nuit : il renvoie « Ensoleillé » à 21h, à côté de la lune et
+    // des étoiles (constaté le 31/08/2026). Le générique, lui, part de `cond` déjà passé
+    // par NIGHT_OF → « Nuit claire ». Une couverture nuageuse reste visible via l'icône,
+    // le fond et les FX, qui eux ont bien basculé.
+    if (this._config.condition_label && !(this._config.night_from_sun && this._isNight)) {
       const clState = S[this._config.condition_label_entity || `sensor.${base}_original_condition`];
       const cl = clState && String(clState.state).trim();
       if (cl && !['unknown', 'unavailable', 'none', ''].includes(cl.toLowerCase())) condLabel = cl;
@@ -1685,7 +1773,8 @@ class WeatherNeonCardWebgl extends HTMLElement {
     }
 
     // ═══ MOTEUR FX : niveaux selon la condition, la boucle unique s'occupe du reste.
-    const rainLevel = cond === 'pouring' ? 1
+    const rainLevel = this._config.fx_pluie_toujours ? 1
+      : cond === 'pouring' ? 1
       : ['rainy', 'lightning-rainy'].includes(cond) ? 0.6
       : cond === 'snowy-rainy' ? 0.4
       : (ex.rainCh >= 40 && this._config.particles) ? ex.rainCh / 100 * 0.4  // annonce forte → bruine
@@ -1719,9 +1808,10 @@ class WeatherNeonCardWebgl extends HTMLElement {
     this._rainGlassOnly = !!(this._fxCapable && this._config.fx_pluie > 0
       && cond !== 'pouring' && !STORM_CONDS.has(cond) && (ex.rainCh || 0) < 50);
     this._windForce = Math.max(ex.gust || 0, ex.wind || 0);
-    this._windOn = fxOn && this._windForce >= 12;
-    this._fogLevel = (fxOn && cond === 'fog') ? 1 : 0;
-    const snowLevel = SNOW_CONDS.has(cond) ? 1
+    this._windOn = fxOn && (this._windForce >= 12 || this._config.fx_vent_toujours);
+    this._fogLevel = this._config.fx_brouillard_toujours ? 1 : (fxOn && cond === 'fog') ? 1 : 0;
+    const snowLevel = this._config.fx_neige_toujours ? 1
+      : SNOW_CONDS.has(cond) ? 1
       : cond === 'snowy-rainy' ? 0.6
       : (ex.snowCh >= 30 && this._config.particles) ? ex.snowCh / 100 * 0.5
       : 0;
@@ -1740,7 +1830,7 @@ class WeatherNeonCardWebgl extends HTMLElement {
     // que ce truc existe (Chris, 2026-08-17).
     const nightNow = this._isNight || NIGHT_CONDS.has(cond);
     if (fxOn && nightNow) this._startNight(); else this._stopNight();
-    this._moonOn = !!(this._config.fx_lune && nightNow);
+    this._moonOn = !!(this._config.fx_lune && (nightNow || this._config.fx_lune_toujours));
     this._moonEnsure();
     // AURORE (easter egg) : lune NOIRE + ciel DEGAGE + nuit. Les trois, sans quoi
     // l'effet mentirait (aucun capteur Kp ici). `cond` est deja passe en variante
@@ -1782,8 +1872,8 @@ class WeatherNeonCardWebgl extends HTMLElement {
 
     // GIVRE (canvas) : cristaux quand temp ≤ frost_below. One-shot animé : on ne (re)lance
     // la croissance qu'au PASSAGE sec→gel (_frostOn), sinon chaque tick rejouerait l'anim.
-    const frostNow = this._config.frost && this._config.particles
-      && Number.isFinite(temp) && temp <= this._config.frost_below;
+    const frostNow = this._config.fx_givre_toujours || (this._config.frost && this._config.particles
+      && Number.isFinite(temp) && temp <= this._config.frost_below);
     if (frostNow && !this._frostOn) { this._frostOn = true; this._startFrost(); }
     else if (!frostNow && this._frostOn) { this._frostOn = false; this._clearFrost(); }
     if (this._fxGl && frostNow) this._ensureFxLoop();
@@ -2255,7 +2345,25 @@ void main(){
     gl.uniform1f(U.uSpeed, c.sky_vitesse);
     gl.uniform1f(U.uDir, c.sky_direction);
     gl.uniform1f(U.uRelief, c.sky_relief);
-    gl.uniform1f(U.uDusk, c.sky_crepuscule);
+    // Le crepuscule s eteint AVEC le capteur, pas avec l altitude. duskW =
+    // exp(-alt*alt*7) est une cloche en sin(elevation) : a -7.8 deg elle vaut
+    // encore 0.88, et il faudrait -33 deg pour la fermer -- l horizon restait
+    // donc peint 75% orange TOUTE la nuit (Chris, 31/08 : "la photo c est le
+    // debut de la nuit, apres c est tout noir"). On ne touche pas a alt (il
+    // pilote dayW, le halo, la position de l astre) : on coupe le seul uniform
+    // qui ne sert QU AU crepuscule. Le vrai crepuscule -- capteur encore au-
+    // dessus du seuil, soleil juste sous l horizon -- garde sa bande orangee.
+    // Rampe : _isNight bascule d un coup (hysterese du capteur), le ciel perdrait
+    // son orange en UNE frame. On glisse sur ~8 s. Etat local au rendu, jamais
+    // persiste : au montage il part deja a la bonne valeur, pas de fondu parasite.
+    const duskTarget = this._isNight ? 0 : 1;
+    if (this._duskEase === undefined) this._duskEase = duskTarget;
+    else {
+      const dDt = Math.min(0.1, Math.max(0, t - (this._duskLast || t)));
+      this._duskEase += (duskTarget - this._duskEase) * Math.min(1, dDt / 8);
+    }
+    this._duskLast = t;
+    gl.uniform1f(U.uDusk, c.sky_crepuscule * this._duskEase);
     gl.uniform1f(U.uHalo, c.sky_halo * moonGain);
     gl.uniform1f(U.uHaze, K.haze * c.sky_brume);          // gain x condition
     gl.uniform1f(U.uDepth, c.sky_profondeur);
@@ -2615,10 +2723,17 @@ void main(){
         gl.activeTexture(gl.TEXTURE2);
         gl.bindTexture(gl.TEXTURE_2D, this._fxTex[2]);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, mix);
+        this._fxMixUp = this._fxMixKey;
+      }
+      // La clairiere a sa PROPRE cle. Elle suit le texte affiche -- la temperature
+      // change toutes les minutes -- alors que l arbre de dendrites coute un Sobel
+      // pleine resolution : les melanger reconstruirait tout l arbre a chaque degre.
+      const ink = this._fxInkMap();
+      if (ink && this._fxInkUp !== this._fxInkHeatFor) {
         gl.activeTexture(gl.TEXTURE3);
         gl.bindTexture(gl.TEXTURE_2D, this._fxTex[3]);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this._fxInkMap());
-        this._fxMixUp = this._fxMixKey;
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, ink);
+        this._fxInkUp = this._fxInkHeatFor;
       }
     }
 
@@ -3051,35 +3166,193 @@ void main(){
   }
 
   // ── LA CLAIRIERE (uInk) ───────────────────────────────────────────────────
-  //    Sans elle le givre mange l'icone et les textes -- ce n'est pas le rendu
-  //    valide. Le banc dessinait des formes en dur ; ici on n'a pas la card en
-  //    pixels, alors on peint les BOITES reelles des elements (icone, temperature,
-  //    lieu), floutees : le shader n'a besoin que d'une luminance douce pour
-  //    savoir ou degivrer.
-  _fxInkMap() {
+  //    Le givre ne doit pas manger la card. Pas de masque dessine a la main au centre :
+  //    ca ne survivrait pas au premier changement de layout. Une clairiere par element
+  //    de contenu, DERIVEE DU CONTENU LUI-MEME.
+  //
+  //    /!\ Deux pieges documentes au banc (artifact 1238bc21), tous deux vecus :
+  //
+  //    a) la LUMINANCE DE LA SCENE n est pas le bon signal. Elle degage la temperature
+  //       et le flocon mais pas les petits libelles violets -- plus sombres que les
+  //       fenetres de la ville, donc la ville degelait a leur place.
+  //    b) des BOITES pleines floutees (ce que faisait cette methode avant le 2026-09-04)
+  //       saturent a 1.0 en leur centre : la clairiere redevient un DISQUE a bord franc,
+  //       exactement le masque dessine a la main qu on voulait eviter.
+  //
+  //    On rasterise donc un calque d ENCRE : les vrais glyphes + l icone, blancs sur
+  //    noir. Une card connait ses propres textes, elle sait faire exactement ca.
+
+  // Le calque NET. Met a jour this._fxInkKey ; le flou et l upload s y raccrochent.
+  _fxInkSharp() {
     const src = this._elFxCv;
     const RW = src.width, RH = src.height;
-    if (!RW || !RH) return src;
-    if (!this._fxInkCv) this._fxInkCv = document.createElement('canvas');
-    const k = this._fxInkCv;
+    const host = this.getBoundingClientRect();
+    if (!RW || !RH || !host.width || !host.height) return null;
+    const root = this.shadowRoot.querySelector('.winner') || this.shadowRoot;
+    if (!root) return null;
+
+    // L icone est un SVG : il faut le rasteriser, donc le charger, donc attendre.
+    // On le prepare avant de calculer la cle pour que son arrivee la fasse bouger.
+    // /!\ querySelectorAll, PAS querySelector : .wicon est la grosse icone de
+    // l entete, mais les 7 tuiles de prevision ont chacune la leur (.wmini). Avec
+    // le singulier, le givre recouvrait les 7 icones -- visible le 2026-09-04 des
+    // que le halo a ete remis a l echelle : avant, la nappe degelait tout et le
+    // trou etait masque. Chris : "le givre ca doit pas cacher le texte".
+    const svgs = root.querySelectorAll('.wicon svg, .wmini svg');
+    // Cache par SIGNATURE : le meme soleil revient sur plusieurs jours, on ne le
+    // rasterise qu une fois. Les entrees sont l Image, ou 'ko' si le SVG a echoue.
+    const cache = this._fxInkImgs || (this._fxInkImgs = new Map());
+    // /!\ On MEMORISE la paire {el, sig}. Cette methode tourne a chaque frame (elle
+    // est appelee par _fxInkMap() l.1029, dans la boucle de rendu) et la signature
+    // etait calculee deux fois par SVG -- ici puis dans la boucle des boites -- soit
+    // 16 serialisations XML par frame pour 8 icones, le tout AVANT l early-return.
+    const svgi = [];
+    for (const s of svgs) {
+      // /!\ XMLSerializer, PAS outerHTML : outerHTML serialise en HTML, donc sans
+      // xmlns. Une data: URI svg+xml est lue en XML strict et un <svg> sans namespace
+      // est rejete en silence -- l icone retombait sur le fillBox, c est-a-dire
+      // exactement le disque a bord net que le banc interdit.
+      const isig = new XMLSerializer().serializeToString(s);
+      svgi.push({ el: s, sig: isig });
+      if (cache.has(isig)) continue;
+      cache.set(isig, null);
+      const im = new Image();
+      im.onload = () => {
+        // La forme est arrivee : on invalide pour que la prochaine frame la prenne.
+        cache.set(isig, im); this._fxInkKey = null;
+      };
+      im.onerror = () => { cache.set(isig, 'ko'); this._fxInkKey = null; };
+      im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(isig);
+    }
+
+    // Les noeuds texte, un par un : un Range donne la boite REELLE de chacun, donc
+    // le <small> de l unite est capte avec sa propre taille de police.
+    const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const rg = document.createRange();
+    const runs = [];
+    // La cle compte les icones PRETES : quand la derniere arrive, la cle bouge et
+    // le calque est refait avec toutes les silhouettes.
+    let nrdy = 0;
+    for (const v of cache.values()) if (v && v !== 'ko') nrdy++;
+    let sig = RW + 'x' + RH + '|i' + nrdy + '/' + cache.size;
+    for (let n = tw.nextNode(); n; n = tw.nextNode()) {
+      const raw = n.data.trim();
+      if (!raw) continue;
+      const pe = n.parentElement;
+      if (!pe) continue;
+      const cs = getComputedStyle(pe);
+      if (cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity === 0) continue;
+      rg.selectNodeContents(n);
+      const r = rg.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      // text-transform est du RENDU : le noeud porte encore le texte d origine.
+      const tt = cs.textTransform;
+      const t = tt === 'uppercase' ? raw.toUpperCase()
+              : tt === 'lowercase' ? raw.toLowerCase() : raw;
+      runs.push({ t, cs, x: r.left - host.left, y: r.top - host.top + r.height / 2 });
+      sig += '|' + t + '@' + Math.round(r.left) + ',' + Math.round(r.top);
+    }
+    const icons = [];
+    for (const it of svgi) {
+      const s = it.el;
+      const r = s.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      const cs = getComputedStyle(s);
+      if (cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity === 0) continue;
+      icons.push({ sig: it.sig,
+                   x: r.left - host.left, y: r.top - host.top, w: r.width, h: r.height });
+      sig += '|ic' + Math.round(r.left) + ',' + Math.round(r.top);
+    }
+    if (sig === this._fxInkKey && this._fxInkSh) return this._fxInkSh;
+
+    if (!this._fxInkSh) this._fxInkSh = document.createElement('canvas');
+    const k = this._fxInkSh;
     if (k.width !== RW || k.height !== RH) { k.width = RW; k.height = RH; }
     const x = k.getContext('2d');
-    const host = this.getBoundingClientRect();
-    if (!host.width || !host.height) return src;
-    const sx = RW / host.width, sy = RH / host.height;
     x.setTransform(1, 0, 0, 1, 0, 0);
+    x.globalCompositeOperation = 'source-over';
     x.fillStyle = '#000'; x.fillRect(0, 0, RW, RH);
-    x.filter = 'blur(' + Math.max(4, RW * 0.02).toFixed(1) + 'px)';
+    // On dessine en px CSS ; le canvas met a l echelle de la mixmap tout seul.
+    x.setTransform(RW / host.width, 0, 0, RH / host.height, 0, 0);
     x.fillStyle = '#fff';
-    for (const sel of ['.wicon', '.wtemp', '.wloc', '.wcond']) {
-      const el = this.shadowRoot.querySelector(sel);
-      if (!el) continue;
-      const r = el.getBoundingClientRect();
-      if (!r.width || !r.height) continue;
-      x.fillRect((r.left - host.left) * sx, (r.top - host.top) * sy, r.width * sx, r.height * sy);
+    x.textBaseline = 'middle';
+    for (const r of runs) {
+      x.font = r.cs.fontStyle + ' ' + r.cs.fontWeight + ' ' + r.cs.fontSize + ' ' + r.cs.fontFamily;
+      // letterSpacing : Chrome 99+. Ailleurs le texte est juste un peu plus serre --
+      // sans consequence, on ne fabrique qu une carte de chaleur.
+      try { x.letterSpacing = r.cs.letterSpacing; } catch (e) { }
+      x.fillText(r.t, r.x, r.y);
     }
-    x.filter = 'none';
+    try { x.letterSpacing = '0px'; } catch (e) { }
+    for (const i of icons) {
+      const img = cache.get(i.sig);
+      if (img && img !== 'ko') {
+        // La FORME de l icone, repeinte en blanc : le calque d encre ne veut que la
+        // silhouette. C est ce qui fait que la clairiere suit les 6 branches du flocon
+        // au lieu d etre le disque que donnait un fillRect.
+        const t = this._fxInkTmp || (this._fxInkTmp = document.createElement('canvas'));
+        const tw2 = Math.max(1, Math.round(i.w)), th2 = Math.max(1, Math.round(i.h));
+        if (t.width !== tw2 || t.height !== th2) { t.width = tw2; t.height = th2; }
+        const tx = t.getContext('2d');
+        tx.setTransform(1, 0, 0, 1, 0, 0);
+        tx.globalCompositeOperation = 'source-over';
+        tx.clearRect(0, 0, tw2, th2);
+        tx.drawImage(img, 0, 0, tw2, th2);
+        tx.globalCompositeOperation = 'source-in';
+        tx.fillStyle = '#fff'; tx.fillRect(0, 0, tw2, th2);
+        x.drawImage(t, i.x, i.y, i.w, i.h);
+      } else {
+        // Filet, le temps que le SVG charge (ou s il echoue) : mieux vaut la boite que
+        // pas de clairiere du tout sur l icone.
+        x.fillRect(i.x, i.y, i.w, i.h);
+      }
+    }
+    x.setTransform(1, 0, 0, 1, 0, 0);
+    this._fxInkKey = sig;
     return k;
+  }
+
+  // La carte de chaleur = le calque net, floute, puis REMONTE.
+  _fxInkMap() {
+    const sh = this._fxInkSharp();
+    if (!sh) return null;
+    // /!\ Le halo est un RAYON DE FLOU EN PIXELS, regle au banc 1238bc21 dont le
+    // canvas fait 700 px de large. Applique tel quel sur une card de 380 px il
+    // couvre une fraction 2x plus grande de l image : les 7 tuiles de prevision
+    // fusionnent en nappe et degelent 90% de la surface (mesure le 2026-09-04 :
+    // encre lum_moy 61.9, degel partiel 90.6%) -- le givre disparaissait alors
+    // que la mixmap etait pleine. On ramene donc le reglage de Chris dans le
+    // repere de la card : 700 = largeur du banc, donc `halo: 18` reste exact
+    // la-bas et devient proportionnel ici.
+    // /!\ En CSS px, PAS en device : le calque d encre est rendu en pixels device,
+    // donc a dpr 2 une card de 355 CSS px donne sh.width = 760 -- soit la largeur
+    // du banc, et un facteur 1 qui ne corrige rien. C est la largeur APPARENTE qui
+    // compte, puisque le halo doit couvrir la meme fraction d image qu au banc.
+    const cssW = this.getBoundingClientRect().width || (sh.width / (window.devicePixelRatio || 1));
+    const haloK = Math.max(0.35, Math.min(1.0, cssW / 700));
+    const halo = Math.max(2, this._config.fx_givre_halo * haloK * (sh.width / Math.max(1, cssW)));
+    const key = this._fxInkKey + '|h' + halo.toFixed(2);
+    if (this._fxInkHeatFor === key && this._fxInkCv) return this._fxInkCv;
+    const RW = sh.width, RH = sh.height;
+    if (!this._fxInkCv) this._fxInkCv = document.createElement('canvas');
+    const c = this._fxInkCv;
+    if (c.width !== RW || c.height !== RH) { c.width = RW; c.height = RH; }
+    const x = c.getContext('2d');
+    x.setTransform(1, 0, 0, 1, 0, 0);
+    x.globalCompositeOperation = 'source-over';
+    x.fillStyle = '#000'; x.fillRect(0, 0, RW, RH);
+    x.filter = 'blur(' + halo.toFixed(1) + 'px)';
+    x.drawImage(sh, 0, 0);
+    x.filter = 'none';
+    // Le flou divise l encre par la surface du noyau : un glyphe fin retombe a ~0.15 et
+    // ne degele plus rien. On la remonte en la re-additionnant, SANS elargir le halo.
+    // /!\ 2 passes (x4) et pas 3 : a x8 le flou sature en plateau et la clairiere
+    // redevient un disque a bord net -- le masque dessine a la main qu on evite.
+    x.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 2; i++) x.drawImage(c, 0, 0);
+    x.globalCompositeOperation = 'source-over';
+    this._fxInkHeatFor = key;
+    return c;
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -3366,6 +3639,7 @@ void main(){
   }
 
   getCardSize() { return 4; }
+  static getConfigElement() { return document.createElement('weather-neon-card-webgl-editor'); }
   static getStubConfig(hass) {
     const states = hass?.states || {};
     const w = Object.keys(states).find(e => e.startsWith('weather.'));
@@ -3498,6 +3772,14 @@ WeatherNeonCardWebgl.styles = `
             mask:linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%); }
   /* quand le GL tient la barre, le 2D reste dessine mais n'est plus affiche. */
   :host([fxgl]) .wfxmain { visibility:hidden; }
+  /* IDEM POUR LE GIVRE (2026-09-03). .wfrost-canvas est en z-index 2, donc
+     AU-DESSUS du GL (z1) : sans cette regle le dessin bleu de dendrites du 2D
+     recouvre la glace du shader -- on voyait le volet 'Actuel' du banc peint
+     par-dessus le 'Propose'. Le canvas reste DESSINE : _fxFrostMap() en derive
+     la mixmap (Sobel), c est la meme donnee ; il cesse juste d etre AFFICHE.
+     Comme pour .wfxmain, [fxgl] retombe des que le GL ne dessine plus, donc le
+     2D reprend la main tout seul : jamais d ecran sans givre. */
+  :host([fxgl]) .wfrost-canvas { visibility:hidden; }
   .wfxmain { position:absolute; top:0; left:0; z-index:1; pointer-events:none;
     width:100%; height:100%;
     -webkit-mask:linear-gradient(90deg, transparent 0, #000 6%, #000 94%, transparent 100%);
@@ -3545,8 +3827,10 @@ WeatherNeonCardWebgl.styles = `
     filter:blur(9px); transform-origin:top center; transform:rotate(var(--ra,14deg));
     animation:wraybreathe 6s ease-in-out infinite; }
   /* nuit étoilée : étoiles qui scintillent + lune (phase réelle) + filantes one-shot */
-  .wstar { position:absolute; width:2px; height:2px; border-radius:50%; background:#dfeeff;
-    box-shadow:0 0 4px rgba(200,225,255,.8); animation:wtwinkle ease-in-out infinite; }
+  .wstar { position:absolute; border-radius:50%; background:#dfeeff;
+    animation:wtwinkle ease-in-out infinite; }
+  /* Voie lactée : sous les étoiles (z-index 0), comme le ciel GL .wskygl */
+  .wmilky { position:absolute; inset:0; z-index:0; pointer-events:none; }
   .wmoon { position:absolute; right:16px; top:8px;
     filter:drop-shadow(0 0 8px rgba(210,230,255,.5)); }
   .wshoot { position:absolute; width:52px; height:1.5px; border-radius:2px; pointer-events:none;
@@ -3620,7 +3904,7 @@ WeatherNeonCardWebgl.styles = `
   @keyframes wdust { 0%,100%{transform:translateY(0);opacity:.4} 50%{transform:translateY(-12px);opacity:.85} }
   @keyframes wraybreathe { 0%,100% { opacity:.65; transform:rotate(var(--ra,14deg)); }
     50% { opacity:1; transform:rotate(calc(var(--ra,14deg) + 1.5deg)) scaleY(1.05); } }
-  @keyframes wtwinkle { 0%,100%{opacity:.25} 50%{opacity:1} }
+  @keyframes wtwinkle { 0%,100%{opacity:var(--tw-lo,.25)} 50%{opacity:var(--tw-hi,1)} }
   @keyframes wshootA { 0% { transform:rotate(var(--sa,24deg)) translateX(0); opacity:0; }
     12% { opacity:.95; } 100% { transform:rotate(var(--sa,24deg)) translateX(120px); opacity:0; } }
   @keyframes wcomet { 0% { left:0; transform:translateX(-110%); } 100% { left:100%; transform:translateX(10%); } }
@@ -3657,6 +3941,23 @@ uniform float uRainLvl,uRainSize,uRainDens,uRainRefr,uRainFog,uRainSlide,uRainSp
 uniform float uFrAmt,uFrSteep,uFrStr,uFrThick,uFrSpec,uFrRelief,uFrTile,uFrTint,uFrSpark,uFrDens,uFrCouv,uFrLis,uFrSeuil;
 uniform float uFogAmt;
 float h21(vec2 p){ return fract(sin(dot(p,vec2(41.3,289.1)))*43758.5453); }
+// ── Micro-relief de glace (banc 1238bc21) ────────────────────────────────────
+//    Tient lieu du _IceTex de Riccardi. VU SEULEMENT dans les branches, et STATIQUE :
+//    aucun uTime ici, le givre ne respire pas (consigne de Chris). Hash propre au banc.
+float frH21(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+float frVn(vec2 p){
+  vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
+  return mix(mix(frH21(i),frH21(i+vec2(1.0,0.0)),u.x),
+             mix(frH21(i+vec2(0.0,1.0)),frH21(i+vec2(1.0,1.0)),u.x), u.y);
+}
+float icH(vec2 p){ return frVn(p)*0.6 + frVn(p*2.3+7.1)*0.3 + frVn(p*5.1+3.3)*0.1; }
+vec3 iceNormal(vec2 q){
+  vec2 p = q*uFrTile*vec2(uRes.x/uRes.y,1.0);
+  float e = 0.06;
+  vec2 g = vec2(icH(p+vec2(e,0.0))-icH(p-vec2(e,0.0)),
+                icH(p+vec2(0.0,e))-icH(p-vec2(0.0,e)))/(2.0*e);
+  return normalize(vec3(-g*uFrRelief, 1.0));
+}
 float vnoise(vec3 p){
   vec3 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
   float a=h21(i.xy+i.z*37.0), b=h21(i.xy+vec2(1.0,0.0)+i.z*37.0);
@@ -3721,8 +4022,16 @@ void main(){
   density*=1.0-clear; opacity*=1.0-clear;
   float gradient=pow(max(opacity,1e-4), max(uFrSteep-(uFrAmt*uFrSteep),0.0))*uFrAmt;
   gradient*=smoothstep(0.0,0.02,opacity);
+  // /!\ LA ligne qui fait la PLAQUE. Sans elle on garde la magnitude brute du Sobel,
+  // nulle partout sauf sur le trait : la scene n est refractee que sur les nervures et
+  // le givre lit "toile d araignee". Normalisee, la normale n est plus qu une DIRECTION
+  // et c est opacity seule qui dose -- toute la zone gelee devient du verre.
+  fn=normalize(fn+vec2(1e-5));
   density*=gradient; opacity*=gradient;
   density=mix(density*density*density*density*density, density, uFrThick)*mix(3.0,0.75,uFrThick);
+  // Chez Riccardi thickness pilote AUSSI l amplitude de la normale, donc la REFRACTION :
+  // sans cette ligne le curseur ne touche que la densite et parait mort a l oeil.
+  fn*=mix(0.2,1.0,uFrThick);
   fn*=opacity;
   glass += fn*uFrStr;
 #endif
@@ -3772,14 +4081,28 @@ void main(){
   }
 #endif
 #ifdef FX_FROST
-  vec3 lsrc=normalize(vec3(-0.45,0.60,0.66));
-  float sp=pow(max(dot(normalize(vec3(fn*uFrRelief,1.0)),lsrc),0.0),18.0)*uFrSpec*opacity;
-  float ice=fbm(vec3(uv*uFrTile,uTime*0.05));
-  vec3 thick=mix(vec3(0.72,0.86,0.95),vec3(0.55,0.72,0.92),uFrTint);
-  float k=clamp(density*opacity*mix(1.1,0.8,ice*3.0),0.0,1.0);
+  // Modele d eclairage de Riccardi, repris du banc 1238bc21 ligne a ligne.
+  // /!\ La lumiere DEPEND DE LA POSITION ECRAN : c est elle qui donne le galbe rond
+  // a la plaque de glace. Une direction fixe rend la surface plate -- c etait le cas
+  // avant, et c est le gros de l ecart que Chris voyait entre l artifact et la card.
+  vec3 lsrc=normalize(vec3(uv*2.0-1.0,1.0));
+  vec3 iceN=iceNormal(uv);
+  float NdotL=clamp(dot(iceN,lsrc),0.0,1.0);
+  // uFrSpec est l EXPOSANT speculaire (defaut 2.0), pas une intensite : un 18 en dur
+  // concentrait le reflet en points minuscules au lieu de l etaler sur la plaque.
+  float NdotV=pow(max(dot(reflect(lsrc,iceN),vec3(0.0,0.0,-1.0)),0.0),uFrSpec);
+  float tw=1.0;
+  if(uFrSpark>0.0){
+    tw=1.0+uFrSpark*(sin(uTime*2.1+h21(floor(uv*uFrTile*0.9))*6.2831)*0.5+0.5);
+  }
+  vec3 col3=mix(vec3(0.80,0.82,0.90),vec3(0.55,0.78,1.0),uFrTint);
+  // Le speculaire est DANS la glace epaisse, pas ajoute par-dessus : sinon il brille
+  // aussi la ou il n y a pas de givre.
+  vec3 thick=col3*NdotL + col3*NdotV*tw + col3*0.05;
+  float aTex=clamp(icH(uv*uFrTile*vec2(uRes.x/uRes.y,1.0)),0.0,1.0);
+  float k=clamp(density*opacity*mix(1.1,0.8,aTex*3.0),0.0,1.0);
   col=mix(col,thick,k);
-  col+=vec3(sp)+vec3(0.9,0.97,1.0)*step(0.97,ice)*uFrSpark*opacity;
-  alpha=max(alpha,max(k,sp));               // la glace est du depot : elle couvre
+  alpha=max(alpha,k);                       // la glace est du depot : elle couvre
 #endif
 #ifdef FX_FOG
   vec3 fogc=mix(vec3(0.62,0.74,0.84),vec3(0.60,0.55,0.82),0.30);
@@ -3877,9 +4200,392 @@ customElements.define('weather-neon-card-webgl', WeatherNeonCardWebgl);
 //  build UNE seule fois, puis _syncValues() chirurgical avec guard
 //  activeElement ; entités en <input>+<datalist> (PAS <select> brut qui se
 //  réinitialise/perd le focus à chaque set hass → c'était LE bug habituel).
-// Pas d editeur dans cette variante : Chris veut d abord juger le rendu du ciel
-// dans son theme. L editeur viendra A ONGLETS (~100 options), pas en liste plate.
+// ═══════════════════════════════════════════════════════
+//  EDITOR — variante WebGL, pattern canonique (skill ha-neon-css,
+//  strategie A sync in-place + _group() repliable). Ecrit directement
+//  ici (genere), PAS derive de WeatherNeonCardEditor (source canvas 2D) :
+//  ~75 des champs (sky_*/fx_*) n'existent QUE dans cette variante, les
+//  ajouter a la source canvas 2D y creerait des champs morts.
+//  Pas de bloc "header" (demande explicite de Chris, 25/08/2026).
+// ═══════════════════════════════════════════════════════
+class WeatherNeonCardWebglEditor extends HTMLElement {
+  constructor() { super(); this._config = {}; this._hass = null; this._rendered = false; }
 
+  // ── Cycle de vie (NE PAS toucher) ──────────────────────────────────
+  setConfig(c) {
+    this._config = { ...(c || {}) };
+    if (!this._rendered) { this._rendered = true; this._renderEditor(); }
+    else this._syncValues();
+  }
+  set hass(h) { this._hass = h; this._fillDatalists(); }   // JAMAIS de render ici
+  disconnectedCallback() { this._rendered = false; }
+
+  // ── Lecture / écriture config (clés imbriquées via ".") ────────────
+  _read(key) {
+    return key.includes('.')
+      ? key.split('.').reduce((o, p) => (o && o[p] !== undefined ? o[p] : undefined), this._config)
+      : this._config[key];
+  }
+  _set(key, value) {
+    const empty = (value === undefined || value === '' || value === null);
+    if (key.includes('.')) {
+      const parts = key.split('.');
+      let o = this._config;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!o[parts[i]] || typeof o[parts[i]] !== 'object') o[parts[i]] = {};
+        o = o[parts[i]];
+      }
+      const last = parts[parts.length - 1];
+      if (empty) delete o[last]; else o[last] = value;
+      const parent = parts.slice(0, -1).reduce((a, k) => a && a[k], this._config);
+      if (parent && typeof parent === 'object' && !Object.keys(parent).length) delete this._config[parts[0]];
+    } else if (empty) { delete this._config[key]; }
+    else { this._config[key] = value; }
+    this.dispatchEvent(new CustomEvent('config-changed',
+      { detail: { config: { ...this._config } }, bubbles: true, composed: true }));
+  }
+
+  // ── Sync in-place (guard focus + clés imbriquées) ──────────────────
+  _syncValues() {
+    const active = this.querySelector(':focus') || document.activeElement;
+    this.querySelectorAll('[data-key]').forEach(el => {
+      if (el === active) return;
+      const v = this._read(el.dataset.key);
+      if (el.type === 'checkbox') el.checked = el.dataset.defaultOn ? (v !== false) : !!v;
+      else { el.value = (v == null ? '' : v); }
+    });
+  }
+
+  // ── Groupe repliable (<ha-expansion-panel>) ─────────────────────────
+  _group(title, expanded, buildFn) {
+    const panel = document.createElement('ha-expansion-panel');
+    panel.outlined = true;
+    panel.header = title;
+    if (expanded) panel.expanded = true;
+    (this._appendTo || this).appendChild(panel);
+    const prevAppendTo = this._appendTo;
+    this._appendTo = panel;
+    buildFn();
+    this._appendTo = prevAppendTo;
+    return panel;
+  }
+
+  // ── Helpers de champ (signatures FIXES) ─────────────────────────────
+  _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; (this._appendTo || this).appendChild(d); return d; }
+  _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; (this._appendTo || this).appendChild(d); return d; }
+
+  _text(key, label, ph = '') {
+    const row = this._row(label);
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.placeholder = ph; inp.dataset.key = key;
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  _number(key, label, { min, max, step = 1, ph = '' } = {}) {
+    const row = this._row(label);
+    const inp = document.createElement('input');
+    inp.type = 'number'; if (min != null) inp.min = min; if (max != null) inp.max = max;
+    inp.step = step; inp.placeholder = ph; inp.dataset.key = key;
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => { const n = parseFloat(inp.value); this._set(key, isNaN(n) ? undefined : n); });
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  _toggle(key, label, defaultOn = false) {
+    const row = this._row(label);
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.key = key;
+    if (defaultOn) cb.dataset.defaultOn = '1';
+    const v = this._read(key);
+    cb.checked = defaultOn ? (v !== false) : !!v;
+    cb.style.cssText = 'width:38px;height:20px;cursor:pointer;accent-color:var(--primary-color);flex:none;';
+    cb.addEventListener('change', () => this._set(key, cb.checked));
+    row.wrap.appendChild(cb); return cb;
+  }
+
+  _select(key, label, options, emptyLabel = null) {
+    const w = this._row(label).wrap;
+    const sel = document.createElement('select'); sel.dataset.key = key;
+    if (emptyLabel !== null) { const o = document.createElement('option'); o.value = ''; o.textContent = emptyLabel; sel.appendChild(o); }
+    options.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = (typeof opt === 'object') ? opt.value : opt;
+      o.textContent = (typeof opt === 'object') ? opt.label : opt;
+      sel.appendChild(o);
+    });
+    sel.value = this._read(key) ?? '';
+    sel.addEventListener('change', () => this._set(key, sel.value));
+    w.appendChild(sel); return sel;
+  }
+
+  // Entité : input + datalist (rempli par _fillDatalists quand hass arrive).
+  // `placeholder` : surcharge le repli générique ("sensor.…") par le nom REEL
+  // auto-devine par la card (entityBase + suffixe) quand le champ est vide —
+  // pour que ce ne soit pas lu comme "hardcodé" alors que c'est un vrai repli.
+  _entity(key, label, prefix = '', placeholder = '') {
+    const row = this._row(label);
+    const inp = document.createElement('input'); inp.type = 'text'; inp.autocomplete = 'off';
+    inp.placeholder = placeholder || (prefix || 'domain') + '.…'; inp.dataset.key = key; inp.dataset.prefix = prefix;
+    inp.setAttribute('list', `weathergl-ent-${(prefix || 'all').replace(/[^a-z]/g, '')}`);
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value.trim()));
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  // ── Mécanique commune ────────────────────────────────────────────────
+  _row(labelHtml, isHtml = false) {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('label');
+    if (isHtml) lbl.innerHTML = labelHtml; else lbl.textContent = labelHtml;
+    const wrap = document.createElement('div'); wrap.className = 'field-wrap';
+    row.appendChild(lbl); row.appendChild(wrap); (this._appendTo || this).appendChild(row);
+    return { row, wrap };
+  }
+
+  _fillDatalists() {
+    if (!this._hass) return;
+    this.querySelectorAll('input[data-prefix]').forEach(inp => {
+      const id = inp.getAttribute('list'); if (!id) return;
+      let dl = this.querySelector('#' + id);
+      if (!dl) { dl = document.createElement('datalist'); dl.id = id; this.appendChild(dl); }
+      const ids = Object.keys(this._hass.states).filter(e => e.startsWith(inp.dataset.prefix || '')).sort();
+      if (dl.childElementCount === ids.length) return;   // déjà à jour
+      dl.textContent = '';
+      const frag = document.createDocumentFragment();
+      ids.forEach(id2 => { const o = document.createElement('option'); o.value = id2;
+        const fn = this._hass.states[id2].attributes?.friendly_name; if (fn && fn !== id2) o.label = fn; frag.appendChild(o); });
+      dl.appendChild(frag);
+    });
+  }
+
+  // ── CSS commun (identique aux autres cartes néon) ───────────────────
+  _css() {
+    return `
+      :host { display:block; padding:14px; font-family:var(--primary-font-family,Roboto,sans-serif); }
+      .sec { font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--divider-color); }
+      .sec:first-child { margin-top:0; }
+      .row { display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:0 4px; }
+      .row label { flex:0 0 160px;font-size:12px;color:var(--secondary-text-color); }
+      .field-wrap { flex:1;min-width:0;display:flex; }
+      input[type=text],input[type=number],select { flex:1;width:100%;padding:4px 8px;border:1px solid var(--divider-color);border-radius:4px;background:var(--card-background-color);color:var(--primary-text-color);font-size:12px;outline:none;box-sizing:border-box; }
+      select { cursor:pointer; }
+      input:focus,select:focus { box-shadow:0 0 0 1px var(--primary-color); }
+      ha-expansion-panel { display:block; margin-bottom:8px; --ha-card-border-radius:8px; }
+      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:-2px 4px 6px 168px; }
+    `;
+  }
+
+  // ── Render : on vide, on pose le style, on déroule le schéma ────────
+  _renderEditor() {
+    this.innerHTML = '';
+    const st = document.createElement('style'); st.textContent = this._css(); this.appendChild(st);
+    this._schema();
+    this._fillDatalists();
+  }
+
+  // ╔════════════════════════════════════════════════════════════════╗
+  // ║  SCHÉMA                                                          ║
+  // ╚════════════════════════════════════════════════════════════════╝
+  _schema() {
+    this._entity('entity', 'Entité météo', 'weather');
+    this._text('name', 'Nom affiché', 'ex: Maison');
+
+    // Repli auto de la card (weather-neon-card.js, entityBase()+pick()) : si
+    // ces champs restent vides, elle devine sensor.<base>_<suffixe> a partir
+    // de `entity`. On l'affiche en placeholder pour que ce ne soit pas pris
+    // pour du hardcode -- c'est le nom REELLEMENT utilise en repli.
+    const base = (this._read('entity') || '').replace(/^weather\./, '');
+    const guess = (suffix) => base ? `sensor.${base}_${suffix} (auto)` : 'sensor.…';
+
+    this._group('Entités additionnelles', false, () => {
+      this._entity('alert_entity', 'Vigilance (Météo-France)', 'sensor');
+      this._entity('sun_entity', 'Soleil (lever/coucher)', 'sun', 'sun.sun (défaut)');
+      this._entity('lux_entity', 'Luminosité (jour/nuit)', 'sensor', 'sensor.luminosite_moyenne_5_min (défaut)');
+      this._entity('wind_entity', 'Vent (rafales)', 'sensor', guess('wind_speed'));
+      this._entity('rain_chance_entity', 'Chance de pluie', 'sensor', guess('rain_chance'));
+      this._entity('snow_chance_entity', 'Chance de neige', 'sensor', guess('snow_chance'));
+      this._entity('condition_label_entity', 'Libellé condition custom', 'sensor', guess('original_condition'));
+      this._entity('air_entity', 'Qualité air (jour)', 'sensor');
+      this._entity('air_entity_next', 'Qualité air (J+1)', 'sensor');
+      this._entity('pollen_entity', 'Pollens (jour)', 'sensor');
+      this._entity('pollen_entity_next', 'Pollens (J+1)', 'sensor');
+    });
+
+    this._group('Prévisions & affichage', false, () => {
+      this._select('forecast_type', 'Type de prévision', ['daily', 'hourly', 'twice_daily'], null);
+      this._number('forecast_count', 'Nb de jours/créneaux', { min: 1, max: 10, step: 1, ph: '5' });
+      this._toggle('show_name', 'Afficher le nom', true);
+      this._toggle('show_aside', 'Colonne lever/coucher/rafales', true);
+      this._toggle('condition_label', 'Libellé condition', true);
+      this._toggle('show_humidity', 'Humidité', true);
+      this._toggle('show_wind', 'Vent', true);
+      this._toggle('show_pressure', 'Pression', true);
+      this._toggle('show_atmo', 'Bloc air/pollens', true);
+    });
+
+    this._group('Effets généraux', false, () => {
+      this._toggle('neon_fx', 'Scanlines + temp glitchée', true);
+      this._toggle('glitch', 'GLITCH le chat', true);
+      this._toggle('orbitron', 'Typo Orbitron', false);
+      this._toggle('mood_accent', 'Accent couleur = condition', true);
+      this._toggle('reactive_bg', 'Fond réactif (écrase card-mod)', false);
+      this._toggle('night_from_sun', "Nuit déduite du soleil (sinon lux)", true);
+      this._toggle('particles', 'Particules CSS/canvas', true);
+      this._toggle('frost', 'Cristaux de givre', true);
+      this._number('frost_below', 'Seuil givre (°C)', { min: -20, max: 15, step: 1, ph: '3' });
+      this._toggle('fx_gl', 'Post-process WebGL (pluie/givre/chaleur/neige)', true);
+    });
+
+    this._group('Ciel WebGL', false, () => {
+      this._toggle('sky', 'Couche ciel WebGL', true);
+      this._hint('sky_* : opacite/couverture/saturation/brume/profondeur = GAINS (1.00 = neutre), pas des absolus.');
+      this._number('sky_opacite', 'Opacité (maître-volume)', { min: 0, max: 2, step: 0.05, ph: '0.55' });
+      this._number('sky_fond', 'Fond (dégradé)', { min: 0, max: 1, step: 0.05, ph: '0.00' });
+      this._number('sky_horizon', 'Hauteur horizon', { min: 0, max: 1, step: 0.02, ph: '0.86' });
+      this._number('sky_couverture', 'Couverture (gain)', { min: 0, max: 2, step: 0.05, ph: '1.00' });
+      this._number('sky_echelle', 'Échelle des nuages', { min: 0.2, max: 6, step: 0.1, ph: '2.20' });
+      this._number('sky_epaisseur', 'Épaisseur', { min: 0, max: 2, step: 0.05, ph: '0.90' });
+      this._number('sky_vitesse', 'Vitesse défilement', { min: 0, max: 1, step: 0.02, ph: '0.22' });
+      this._number('sky_direction', 'Direction (degrés)', { min: -360, max: 360, step: 1, ph: '-110' });
+      this._number('sky_relief', 'Relief (doublure argentée)', { min: 0, max: 3, step: 0.05, ph: '1.10' });
+      this._number('sky_crepuscule', 'Intensité crépuscule', { min: 0, max: 3, step: 0.05, ph: '1.20' });
+      this._number('sky_halo', 'Halo', { min: 0, max: 3, step: 0.05, ph: '0.90' });
+      this._number('sky_brume', 'Brume (gain)', { min: 0, max: 2, step: 0.05, ph: '1.00' });
+      this._number('sky_profondeur', 'Profondeur (gain)', { min: 0, max: 2, step: 0.05, ph: '1.00' });
+      this._number('sky_saturation', 'Saturation (gain)', { min: 0, max: 2, step: 0.05, ph: '1.00' });
+      this._number('sky_grain', 'Grain (tramage)', { min: 0, max: 1, step: 0.02, ph: '0.40' });
+      this._number('sky_nuit_reflet', 'Nuit — reflet lunaire', { min: 0, max: 3, step: 0.05, ph: '3.00' });
+      this._number('sky_nuit_plancher', 'Nuit — plancher opacité', { min: 0, max: 1, step: 0.02, ph: '0.35' });
+      this._number('sky_nuit_portee', 'Nuit — portée du halo', { min: 0, max: 3, step: 0.05, ph: '1.80' });
+    });
+
+    this._group('Pluie sur vitre', false, () => {
+      this._toggle('fx_pluie_toujours', 'Toujours visible (démo)', false);
+      this._number('fx_pluie', 'Intensité', { min: 0, max: 2, step: 0.05, ph: '0.70' });
+      this._number('fx_pluie_taille', 'Taille des gouttes', { min: 0, max: 3, step: 0.05, ph: '1.00' });
+      this._number('fx_pluie_dens', 'Densité', { min: 0, max: 2, step: 0.05, ph: '0.55' });
+      this._number('fx_pluie_refr', 'Réfraction', { min: 0, max: 3, step: 0.05, ph: '1.20' });
+      this._number('fx_pluie_buee', 'Buée', { min: 0, max: 2, step: 0.05, ph: '0.85' });
+      this._number('fx_pluie_glisse', 'Glissement (rack focus)', { min: 0, max: 3, step: 0.05, ph: '1.50' });
+      this._number('fx_pluie_spec', 'Spéculaire', { min: 0, max: 2, step: 0.05, ph: '0.75' });
+      this._number('fx_pluie_fond', "Averse en fond (derrière vitre)", { min: 0, max: 2, step: 0.05, ph: '0.80' });
+    });
+
+    this._group('Givre', false, () => {
+      this._toggle('fx_givre_toujours', 'Toujours visible (démo)', false);
+      this._number('fx_givre', 'Intensité', { min: 0, max: 2, step: 0.05, ph: '1.00' });
+      this._number('fx_givre_pente', 'Pente cristaux', { min: 0, max: 20, step: 0.5, ph: '5.00' });
+      this._number('fx_givre_force', 'Force', { min: 0, max: 30, step: 0.5, ph: '14.00' });
+      this._number('fx_givre_epais', 'Épaisseur', { min: 0, max: 2, step: 0.02, ph: '0.46' });
+      this._number('fx_givre_spec', 'Spéculaire', { min: 0, max: 5, step: 0.1, ph: '2.00' });
+      this._number('fx_givre_relief', 'Relief', { min: 0, max: 2, step: 0.05, ph: '0.60' });
+      this._number('fx_givre_tuile', 'Taille tuilage', { min: 1, max: 40, step: 1, ph: '16.00' });
+      this._number('fx_givre_teinte', 'Teinte', { min: 0, max: 1, step: 0.02, ph: '0.35' });
+      this._number('fx_givre_paill', 'Paillettes', { min: 0, max: 1, step: 0.02, ph: '0.35' });
+      this._number('fx_givre_dens', 'Densité', { min: 0, max: 10, step: 0.1, ph: '3.20' });
+      this._number('fx_givre_couv', 'Couverture', { min: 0, max: 5, step: 0.1, ph: '2.40' });
+      this._hint('Clairières : le givre s\'écarte du contenu. Lisibilité = à quel point ça dégèle, seuil = à partir de quelle densité d\'encre, halo = jusqu\'où ça déborde autour de chaque texte.');
+      this._number('fx_givre_lis', 'Clairières : lisibilité', { min: 0, max: 2, step: 0.05, ph: '0.80' });
+      this._number('fx_givre_seuil', 'Clairières : seuil', { min: 0, max: 1, step: 0.01, ph: '0.06' });
+      this._number('fx_givre_halo', 'Clairières : halo (px)', { min: 0, max: 60, step: 1, ph: '18' });
+      this._hint('finesse/barbes/trait/grain/sinu : cache la mixmap (pas envoyés au shader), changer invalide le cache.');
+      this._number('fx_givre_finesse', 'Finesse (mixmap)', { min: 1, max: 20, step: 1, ph: '6' });
+      this._number('fx_givre_barbes', 'Barbes (mixmap)', { min: 1, max: 20, step: 1, ph: '5' });
+      this._number('fx_givre_trait', 'Trait (mixmap)', { min: 0, max: 2, step: 0.05, ph: '0.55' });
+      this._number('fx_givre_grain', 'Grain (mixmap)', { min: 0, max: 2, step: 0.05, ph: '0.55' });
+      this._number('fx_givre_sinu', 'Sinuosité (mixmap)', { min: 0, max: 2, step: 0.05, ph: '0.45' });
+    });
+
+    this._group('Vent & brouillard', false, () => {
+      this._toggle('fx_brouillard_toujours', 'Brouillard toujours visible (démo)', false);
+      this._number('fx_brouillard', 'Brouillard', { min: 0, max: 2, step: 0.05, ph: '0.80' });
+      this._toggle('fx_vent_toujours', 'Vent toujours visible (démo)', false);
+      this._number('fx_vent_warp', 'Vent — déformation', { min: 0, max: 20, step: 0.5, ph: '7.00' });
+      this._number('fx_vent_turb', 'Vent — turbulence', { min: 0, max: 10, step: 0.1, ph: '2.40' });
+      this._number('fx_vent_swirl', 'Vent — tourbillon', { min: 0, max: 2, step: 0.05, ph: '0.40' });
+      this._number('fx_vent_teinte', 'Vent — teinte', { min: 0, max: 1, step: 0.02, ph: '0.55' });
+    });
+
+    this._group('Lune', false, () => {
+      this._toggle('fx_lune', 'Lune photo-réaliste (WebGL)', true);
+      this._toggle('fx_lune_toujours', 'Toujours visible (démo)', false);
+      this._number('fx_lune_taille', 'Taille (px)', { min: 20, max: 200, step: 1, ph: '96' });
+      this._number('fx_lune_doux', 'Douceur terminateur', { min: 0, max: 0.3, step: 0.005, ph: '0.045' });
+      this._number('fx_lune_relief', 'Relief cratères', { min: 0, max: 2, step: 0.05, ph: '0.60' });
+      this._number('fx_lune_limbe', 'Assombrissement limbe', { min: 0, max: 2, step: 0.05, ph: '0.70' });
+      this._number('fx_lune_cendree', 'Lumière cendrée', { min: 0, max: 1, step: 0.02, ph: '0.16' });
+      this._number('fx_lune_nuit', 'Face nuit', { min: 0, max: 1, step: 0.02, ph: '0.35' });
+      this._number('fx_lune_teinte', 'Teinte', { min: 0, max: 1, step: 0.02, ph: '0.30' });
+      this._number('fx_lune_eclat', 'Éclat', { min: 0, max: 3, step: 0.05, ph: '1.05' });
+      this._number('fx_lune_halo', 'Halo (px)', { min: 0, max: 60, step: 1, ph: '20' });
+      this._number('fx_lune_halok', 'Halo (intensité)', { min: 0, max: 2, step: 0.02, ph: '0.40' });
+      this._number('fx_lune_incl', 'Inclinaison (degrés)', { min: -90, max: 90, step: 1, ph: '-18' });
+      this._number('fx_lune_grain', 'Grain', { min: 0, max: 1, step: 0.02, ph: '0.25' });
+    });
+
+    this._group('Neige', false, () => {
+      this._toggle('fx_neige_toujours', 'Toujours visible (démo)', false);
+      this._number('fx_neige', 'Intensité', { min: 0, max: 2, step: 0.05, ph: '0.25' });
+      this._number('fx_neige_nb', 'Nombre de flocons', { min: 0, max: 5000, step: 50, ph: '1500' });
+      this._number('fx_neige_taille', 'Taille', { min: 0, max: 3, step: 0.05, ph: '0.55' });
+      this._number('fx_neige_grav', 'Gravité (chute)', { min: 0, max: 3, step: 0.05, ph: '0.55' });
+      this._number('fx_neige_balanc', 'Balancement', { min: 0, max: 3, step: 0.05, ph: '1.00' });
+      this._number('fx_neige_prof', 'Profondeur (parallaxe)', { min: 0, max: 6, step: 0.1, ph: '3.00' });
+      this._number('fx_neige_fondu', 'Fondu au sol', { min: 0, max: 2, step: 0.05, ph: '0.75' });
+    });
+
+    this._group('Canicule', false, () => {
+      this._toggle('fx_chaleur_toujours', 'Toujours visible (démo)', false);
+      this._number('fx_chaleur', 'Intensité', { min: 0, max: 2, step: 0.05, ph: '0.95' });
+      this._number('fx_chaleur_amp', 'Amplitude', { min: 0, max: 40, step: 0.5, ph: '18.00' });
+      this._number('fx_chaleur_freq', 'Fréquence', { min: 0, max: 20, step: 0.5, ph: '7.00' });
+      this._number('fx_chaleur_agl', 'Angle', { min: 0, max: 20, step: 0.5, ph: '5.50' });
+      this._number('fx_chaleur_mont', 'Montée', { min: 0, max: 2, step: 0.05, ph: '0.55' });
+      this._number('fx_chaleur_brass', 'Brassage', { min: 0, max: 2, step: 0.05, ph: '0.60' });
+      this._number('fx_chaleur_src', 'Source', { min: 0, max: 1, step: 0.02, ph: '0.10' });
+      this._number('fx_chaleur_dec', 'Décalage', { min: 0, max: 3, step: 0.05, ph: '1.30' });
+      this._number('fx_chaleur_aniso', 'Anisotropie', { min: 0, max: 2, step: 0.05, ph: '0.75' });
+      this._number('fx_chaleur_mir', 'Mirage', { min: 0, max: 1, step: 0.02, ph: '0.30' });
+      this._number('fx_chaleur_glow', 'Glow', { min: 0, max: 2, step: 0.05, ph: '0.65' });
+      this._number('fx_chaleur_teint', 'Teinte', { min: 0, max: 1, step: 0.02, ph: '0.45' });
+      this._number('fx_chaleur_sat', 'Saturation', { min: 0, max: 1, step: 0.02, ph: '0.30' });
+      this._number('fx_chaleur_grain', 'Grain', { min: 0, max: 1, step: 0.02, ph: '0.25' });
+    });
+
+    this._group('Aurore boréale (easter egg)', false, () => {
+      this._hint("Ne se déclenche que lune noire + ciel dégagé + nuit. fx_aurore_toujours = mode démo, jamais en prod.");
+      this._toggle('fx_aurore', 'Activer', true);
+      this._toggle('fx_aurore_toujours', 'Toujours visible (démo)', false);
+      this._number('fx_aurore_lune', 'Seuil disque lunaire éclairé', { min: 0, max: 0.5, step: 0.01, ph: '0.07' });
+      this._number('fx_aurore_base', 'Position de base', { min: 0, max: 1, step: 0.01, ph: '0.563' });
+      this._number('fx_aurore_amplitude', 'Amplitude', { min: 0, max: 1, step: 0.01, ph: '0.24' });
+      this._number('fx_aurore_sigma', 'Épaisseur (sigma)', { min: 0, max: 2, step: 0.02, ph: '0.90' });
+      this._number('fx_aurore_plis', 'Plis', { min: 0, max: 10, step: 0.1, ph: '3.40' });
+      this._number('fx_aurore_fin', 'Finesse', { min: 0, max: 1, step: 0.02, ph: '0.20' });
+      this._number('fx_aurore_derive', 'Dérive', { min: 0, max: 1, step: 0.01, ph: '0.14' });
+      this._number('fx_aurore_ondulation', 'Ondulation', { min: 0, max: 1, step: 0.02, ph: '0.40' });
+      this._number('fx_aurore_vert', 'Canal vert', { min: 0, max: 2, step: 0.05, ph: '1.00' });
+      this._number('fx_aurore_rouge', 'Canal rouge', { min: 0, max: 2, step: 0.05, ph: '1.45' });
+      this._number('fx_aurore_bleu', 'Canal bleu', { min: 0, max: 2, step: 0.05, ph: '1.85' });
+      this._number('fx_aurore_nappes', 'Nombre de nappes', { min: 1, max: 6, step: 1, ph: '3' });
+      this._number('fx_aurore_largeur', 'Largeur', { min: 0, max: 1, step: 0.02, ph: '0.66' });
+      this._number('fx_aurore_centre', 'Centre', { min: 0, max: 1, step: 0.02, ph: '0.55' });
+      this._number('fx_aurore_pulse', 'Pulsation', { min: 0, max: 2, step: 0.05, ph: '0.90' });
+      this._number('fx_aurore_opacite', 'Opacité', { min: 0, max: 1, step: 0.02, ph: '0.80' });
+    });
+
+    this._group("Transverses (cumuls d'effets)", false, () => {
+      this._number('fx_plafond', 'Plafond cumul vitre', { min: 0, max: 2, step: 0.05, ph: '1.00' });
+      this._number('fx_partage_vitre', 'Partage vitre entre effets', { min: 0, max: 1, step: 0.02, ph: '0.50' });
+      this._number('fx_recul_brume', 'Recul brume (cumul)', { min: 0, max: 1, step: 0.02, ph: '0.60' });
+      this._number('fx_recul_givre', 'Recul givre (cumul)', { min: 0, max: 1, step: 0.02, ph: '0.70' });
+      this._number('fx_recul_givre_neige', 'Recul givre si neige', { min: 0, max: 1, step: 0.02, ph: '0.45' });
+      this._number('largeur_ref', 'Largeur de référence (px)', { min: 200, max: 800, step: 10, ph: '380' });
+    });
+  }
+}
+customElements.define('weather-neon-card-webgl-editor', WeatherNeonCardWebglEditor);
 
 
 window.customCards = window.customCards || [];

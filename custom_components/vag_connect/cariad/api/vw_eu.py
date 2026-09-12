@@ -25,6 +25,7 @@ from .._util import (
 from ..exceptions import (
     APIError,
     AuthenticationError,
+    PortalSessionExpiredError,
     SpinError,
     VehicleCommandError,
 )
@@ -356,7 +357,17 @@ class VWEUClient(CariadBaseClient):
                     await self._refresh_tokens()
                 else:
                     await portal.login(self._email, self._password)
-                vins = await portal.list_vehicle_vins()
+                # b12 (#1340 @cyrano330) — a 401 on the SECOND enumeration, after
+                # we already refreshed/re-logged-in, means the portal refuses to
+                # authorise an otherwise-valid session (the IDK + portal logins
+                # both succeeded). Mark it distinctly so the coordinator surfaces
+                # the session-expired repair instead of "wrong password". A
+                # genuinely bad credential fails at portal.login() above and never
+                # reaches here.
+                try:
+                    vins = await portal.list_vehicle_vins()
+                except AuthenticationError as err2:
+                    raise PortalSessionExpiredError(str(err2)) from err2
             # Best-effort nickname enrichment from the relation endpoint.
             self._vehicle_metadata: dict[str, dict[str, Any]] = {}
             for pvin in vins:
@@ -386,7 +397,30 @@ class VWEUClient(CariadBaseClient):
         if self._tokens and self._tokens.strategy == "mbb":
             return await self._get_vehicles_via_mbb()
 
-        data = await self._get(f"{self._garage_base()}/vehicle/v1/vehicles")
+        # b15 — garage-list resilience. myAudi 5.7.0 refactored the garage list
+        # from ``/vehicle/v1/vehicles`` to ``/vehicles`` (a new garageinformation
+        # module); CARIAD may eventually deprecate the old path. If the primary
+        # BFF list fails (e.g. a future 404 on the retired path), don't die: for
+        # Audi the vgql userVehicles list lives on a DIFFERENT host
+        # (app-api.*.my.audi.com) and enumerates the whole account garage, so fall
+        # back to it instead of returning no cars. Previously a 404 here raised
+        # APIError BEFORE the vgql merge below could run, so get_vehicles() died
+        # hard for Audi the moment the legacy path went away.
+        try:
+            data = await self._get(f"{self._garage_base()}/vehicle/v1/vehicles")
+        except APIError as err:
+            _LOGGER.warning(
+                "VAG: BFF garage list failed (HTTP %s) — falling back to the vgql "
+                "userVehicles enumeration.", getattr(err, "status", "?"),
+            )
+            await self.fetch_images()  # best-effort; populates self._image_data
+            fb_vins = [v for v in (getattr(self, "_image_data", {}) or {}) if v]
+            if fb_vins:
+                _LOGGER.info(
+                    "VAG: recovered %d vehicle(s) from the vgql garage after the "
+                    "BFF list failed.", len(fb_vins),
+                )
+            return fb_vins
         vehicles: list[dict[str, Any]] = data.get("data", [])
 
         # Cache nickname/model per VIN — used in _parse_status to set device name
@@ -448,15 +482,16 @@ class VWEUClient(CariadBaseClient):
 
         vins = [v["vin"] for v in supported if v.get("vin")]
         if vehicles:
+            # field NAMES only — values can carry the VIN/nickname (PII); the
+            # debug intent is "which keys did CARIAD return".
             _LOGGER.debug(
                 "VAG vehicles raw fields (first car): %s",
-                {k: str(v)[:40] for k, v in vehicles[0].items()
-                 if k not in ("vin",)},
+                sorted(vehicles[0].keys()),
             )
         _LOGGER.debug(
             "Found %d vehicle(s): %s",
             len(vins),
-            {k: m["model"] for k, m in self._vehicle_metadata.items()},
+            {k[-6:]: m["model"] for k, m in self._vehicle_metadata.items()},
         )
 
         # v2.1.0 — HomeRegion full wire-in. Resolve per-VIN base URLs
@@ -469,6 +504,20 @@ class VWEUClient(CariadBaseClient):
 
         # Fetch render images via shared base method (best-effort)
         await self.fetch_images()
+
+        # Discovery from the vgql userVehicles list — it enumerates the WHOLE
+        # account garage, so a car the modern BFF vehicle-list omits still shows,
+        # with its model / year / render carried by the vgql. (audi_connect uses
+        # this list as its primary source; we merge in anything the BFF missed.)
+        # Per-VIN reads the BFF can't serve fail-soft, so the car appears with its
+        # master data even if live telemetry is thin.
+        for _seed_vin in getattr(self, "_image_data", {}) or {}:
+            if _seed_vin and _seed_vin not in vins:
+                _LOGGER.info(
+                    "Audi: adding %s from the vgql garage (not in the BFF list)",
+                    _seed_vin[-6:],
+                )
+                vins.append(_seed_vin)
 
         return vins
 
@@ -608,6 +657,55 @@ class VWEUClient(CariadBaseClient):
                 return v[: int(max_results)]
         return []
 
+    async def _fetch_trip_statistics(
+        self, vin: str, base: str
+    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+        """Fetch shortTerm/longTerm/cyclic trip statistics, throttled + cached.
+
+        Trip stats change per-ignition at most, and for the vast majority of
+        cars post-lockdown the CARIAD-BFF ``tripstatistics`` endpoint is dead
+        (404). Firing all three query types on EVERY poll (3 GETs) only spammed
+        404s and polluted the parser-health telemetry. So we fetch at most once
+        per hour per VIN and cache the raw responses, then reuse them on the
+        polls in between — the downstream parse still runs every poll, so the
+        trip fields never flicker to empty between fetches. (coordinator's
+        ``refresh_trip_statistics`` does the guarded shortTerm+longTerm refresh
+        for the sensor values; this keeps get_status()'s own parse cheap+quiet.)
+
+        Best-effort throughout: any failure yields empty dicts so the parsers
+        leave the trip fields at their dataclass defaults and never break a poll.
+        """
+        if not hasattr(self, "_trip_stats_raw_cache"):
+            self._trip_stats_raw_cache: dict[
+                str, tuple[datetime, dict[str, Any], dict[str, Any], dict[str, Any]]
+            ] = {}
+        cached = self._trip_stats_raw_cache.get(vin)
+        now = datetime.now(tz=timezone.utc)
+        if cached is not None and (now - cached[0]) < timedelta(hours=1):
+            return cached[1], cached[2], cached[3]
+
+        trip_short: dict[str, Any] = {}
+        trip_long: dict[str, Any] = {}
+        trip_refuel: dict[str, Any] = {}
+        url = f"{base}/vehicle/v1/vehicles/{vin}/tripstatistics"
+        try:
+            with self._parser_job("trip_statistics"):
+                trip_short = await self._get(url, params={"type": "shortTerm"})
+                trip_long = await self._get(url, params={"type": "longTerm"})
+                # v2.10.0 — "cyclic" = since-refuel / since-recharge aggregator
+                # (an Energy-Dashboard building block). Newer-firmware capability;
+                # some pre-2024 vehicles 404 it, so treat a miss as a soft-fail.
+                try:
+                    trip_refuel = await self._get(url, params={"type": "cyclic"})
+                except Exception:  # noqa: BLE001
+                    pass
+        except Exception:  # noqa: BLE001
+            pass
+        # Cache whatever we got — including empties on a dead endpoint, so a 404
+        # host is not re-hit every poll for the next hour.
+        self._trip_stats_raw_cache[vin] = (now, trip_short, trip_long, trip_refuel)
+        return trip_short, trip_long, trip_refuel
+
     async def get_status(self, vin: str) -> VehicleData:
         """Fetch full vehicle status via selectivestatus."""
         # v2.14.0 — OPT-IN website-authproxy mode (read-only beta). Routed
@@ -680,45 +778,18 @@ class VWEUClient(CariadBaseClient):
             # attestation/ACL-closed (403 XID_APP_VW) for VW EU passenger cars
             # post-lockdown. Log at debug so a #923-class diagnostic shows the
             # attempt+failure instead of a silent gap.
-            _LOGGER.debug("parkingposition fetch failed for %s: %s", vin[-6:], exc)
+            _LOGGER.debug(
+                "parkingposition fetch failed for %s: %s",
+                vin[-6:], type(exc).__name__,
+            )
 
-        # v2.7.0b11 — Trip statistics (separate endpoint, two query
-        # types). Lifetime and last-trip stats live here, NOT in
-        # selectivestatus. Best-effort: any failure leaves the trip
-        # fields at their dataclass defaults so older firmwares /
-        # capability-gated vehicles don't crash the whole poll.
-        trip_short: dict[str, Any] = {}
-        trip_long: dict[str, Any] = {}
-        trip_refuel: dict[str, Any] = {}
-        try:
-            with self._parser_job("trip_statistics"):
-                trip_short = await self._get(
-                    f"{base}/vehicle/v1/vehicles/{vin}/tripstatistics",
-                    params={"type": "shortTerm"},
-                )
-                trip_long = await self._get(
-                    f"{base}/vehicle/v1/vehicles/{vin}/tripstatistics",
-                    params={"type": "longTerm"},
-                )
-                # v2.10.0 - "cyclic" category = since-refuel / since-recharge
-                # aggregator. CARIAD BFF exposes this alongside shortTerm
-                # and longTerm at the same endpoint. Pattern observed in
-                # volkswagencarnet's TRIP_REFUEL service constant and
-                # mirrored here with our own parser. Energy-Dashboard-
-                # friendly: total-consumption-per-tank/charge is a missing
-                # building block in the HA VAG ecosystem today.
-                try:
-                    trip_refuel = await self._get(
-                        f"{base}/vehicle/v1/vehicles/{vin}/tripstatistics",
-                        params={"type": "cyclic"},
-                    )
-                except Exception:  # noqa: BLE001
-                    # cyclic is a newer firmware capability; some pre-2024
-                    # vehicles 404 it. Treat as soft-fail to keep the rest
-                    # of the parse working unchanged.
-                    pass
-        except Exception:  # noqa: BLE001
-            pass
+        # v2.7.0b11 — Trip statistics (separate endpoint, shortTerm/longTerm/
+        # cyclic). Lifetime and last-trip stats live here, NOT in
+        # selectivestatus. Throttled + cached once per hour per VIN so a dead
+        # (404) endpoint is not hit on every poll — see _fetch_trip_statistics.
+        trip_short, trip_long, trip_refuel = await self._fetch_trip_statistics(
+            vin, base
+        )
 
         # 4.0.x — battery State-of-Health. We Connect 4.3.2 reads it via the BFF
         # sub-job ``selectivestatus?jobs=batteryHealthState`` (RE 2026-08-12), NOT
@@ -732,7 +803,10 @@ class VWEUClient(CariadBaseClient):
             with self._parser_job("battery_health"):
                 soh_raw = await self._get(url, params={"jobs": "batteryHealthState"})
         except Exception as exc:  # noqa: BLE001
-            _LOGGER.debug("batteryHealthState fetch failed for %s: %s", vin[-6:], exc)
+            _LOGGER.debug(
+                "batteryHealthState fetch failed for %s: %s",
+                vin[-6:], type(exc).__name__,
+            )
 
         d = self._parse_status(vin, raw, parking)
         self._parse_trip_statistics(d, trip_short, trip_long)
@@ -742,11 +816,24 @@ class VWEUClient(CariadBaseClient):
         # SoH from the batteryHealthState sub-job above (value lives at
         # ``stateOfHealth.ubeIndicator_pct``; parse_battery_health walks for it).
         if soh_raw:
-            from .._authproxy import parse_battery_health  # noqa: PLC0415
+            from .._authproxy import (  # noqa: PLC0415
+                parse_battery_health,
+                parse_usable_battery_capacity,
+            )
 
             _soh = parse_battery_health(soh_raw)
             if _soh is not None:
                 d.battery_soh_pct = int(round(_soh))
+            # The same batteryHealthState body also carries usable (net) capacity
+            # in kWh (myAudi 5.7.0 StateOfHealth.usableBatteryCapacity) — the same
+            # quantity as batteryCapacityNetto. Use it only as a GAP-FILL source
+            # for the existing battery_cap_kwh sensor: the main selectivestatus /
+            # EU-DA value wins when present, but a car whose main bundle omitted
+            # net capacity gets it from the health read instead of nothing.
+            if d.battery_cap_kwh is None:
+                _cap = parse_usable_battery_capacity(soh_raw)
+                if _cap is not None:
+                    d.battery_cap_kwh = _cap
 
         # v1.25.0 PR-G — MBB VSR Phase 2 read-side fallback (Golf 7 GTE
         # Tank-Level use case). Triggers when:
@@ -809,11 +896,25 @@ class VWEUClient(CariadBaseClient):
 
     async def arm_mbb_command_channel(
         self, tokens: Any, client_id: str, vins: list[str], spin: str = "",
+        fallback_only: bool = False,
     ) -> bool:
-        """b12 — arm a durable-MBB command connector ALONGSIDE this (read-only
-        primary) client: commands route through MBB while reads stay on the
-        primary. Builds a second VWEUClient on the shared session (MBB = bearer,
-        no IDP-cookie clobber). Fail-soft → False leaves the slot None and the
+        """b12 — arm a durable-MBB command connector ALONGSIDE this client.
+
+        Two modes:
+        - ``fallback_only=False`` (b12, read-only primary, e.g. EU Data Act
+          portal): MBB *is* the command channel — commands route through it
+          while reads stay on the primary. Stored as ``self._mbb_command`` so
+          ``_mbb_command_target()`` returns it.
+        - ``fallback_only=True`` (b15, TWO-WAY device-grant primary, e.g. Audi
+          Car-Net on the CARIAD BFF): the BFF stays the command primary; this
+          connector is stored as ``self._mbb_fallback`` and used ONLY by the
+          coordinator's BFF-refusal retry path. ``_mbb_command_target()`` is
+          deliberately left untouched so normal commands keep hitting the BFF —
+          no regression for a working two-way Audi; MBB only steps in when the
+          BFF refuses (401/403).
+
+        Builds a second VWEUClient on the shared session (MBB = bearer, no
+        IDP-cookie clobber). Fail-soft → False leaves the slot None and the
         primary unaffected. Skipped if THIS client is already MBB-primary."""
         if not tokens or not getattr(tokens, "access_token", ""):
             return False
@@ -831,19 +932,42 @@ class VWEUClient(CariadBaseClient):
             cmd.set_persisted_tokens(tokens)
             cmd._mbb_client_id = client_id or ""
             cmd._mbb_manual_vins = list(vins or [])
-            self._mbb_command = cmd
-            _LOGGER.info(
-                "VW Group Connect: MBB command channel armed alongside the"
-                " read-only primary (commands → MBB, reads → primary)."
-            )
+            # #584 — the fetched-role diagnostic runs on WHICHEVER connector hits
+            # the operationList (here the command sub-connector), so inherit the
+            # primary's test-cohort flag; otherwise the probe never fires for the
+            # read-only-primary shape (VW-EU portal/vw.de + armed MBB channel).
+            cmd._test_cohort = getattr(self, "_test_cohort", False)
+            if fallback_only:
+                self._mbb_fallback: "VWEUClient | None" = cmd
+                _LOGGER.info(
+                    "VW Group Connect: MBB command FALLBACK armed alongside the"
+                    " two-way primary (BFF commands first, MBB only on refusal)."
+                )
+            else:
+                self._mbb_command = cmd
+                _LOGGER.info(
+                    "VW Group Connect: MBB command channel armed alongside the"
+                    " read-only primary (commands → MBB, reads → primary)."
+                )
             return True
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning(
-                "VW Group Connect: could not arm MBB command channel (%s) —"
-                " primary unaffected.", type(err).__name__,
+                "VW Group Connect: could not arm MBB command %s (%s) —"
+                " primary unaffected.",
+                "fallback" if fallback_only else "channel", type(err).__name__,
             )
-            self._mbb_command = None
+            if fallback_only:
+                self._mbb_fallback = None
+            else:
+                self._mbb_command = None
             return False
+
+    def mbb_fallback_connector(self) -> "VWEUClient | None":
+        """b15 — the armed MBB *fallback* connector (two-way device-grant
+        primary), or None. Consumed by the coordinator's BFF-refusal command
+        retry. Distinct from ``_mbb_command_target()``, which stays None on a
+        device-grant primary so normal commands keep hitting the BFF."""
+        return getattr(self, "_mbb_fallback", None)
 
     async def command_lock(self, vin: str, spin: str = "") -> None:
         """Lock vehicle — separate endpoint (primary) with combined endpoint as
@@ -1269,9 +1393,10 @@ class VWEUClient(CariadBaseClient):
                     self._mbb_backend_cache.set(vin, "cariad")
                 return
             except APIError as err:
-                # APIError's message includes body[:200]; use str(err) for the
-                # wrapper-404 marker detection (no separate .body attribute).
-                if is_cariad_wrapper_404(str(err)):
+                # Marker lives in the response body. APIError's message is now
+                # redacted (body stripped, #1355) but keeps the raw body as an
+                # attribute — read that (fall back to the message for safety).
+                if is_cariad_wrapper_404(f"{getattr(err, 'body', '')} {err}"):
                     break  # whole vehicle speaks MBB → switch to the legacy stack
                 if (
                     getattr(err, "status", None) == 404
@@ -1724,9 +1849,10 @@ class VWEUClient(CariadBaseClient):
                 resp = await self._mbb_get(url)
             except APIError as err:
                 last_status = err.status
+                # body dropped — an MBB error body can echo the VIN; status is enough.
                 _LOGGER.warning(
-                    "MBB enum %s /%s → HTTP %s: %s",
-                    host_label, country, err.status, str(err.body)[:160],
+                    "MBB enum %s /%s → HTTP %s",
+                    host_label, country, err.status,
                 )
                 continue
             except Exception as err:  # noqa: BLE001
@@ -1859,6 +1985,16 @@ class VWEUClient(CariadBaseClient):
                     "change it. Not retried for %d h.",
                     vin[-6:], int(_MBB_OPLIST_DENY_TTL.total_seconds() // 3600),
                 )
+                # #584 — cohort-only, read-only leapfrog probe. The legacy
+                # operationList/v3 is dead for this car, but the shipping app
+                # reads the gate via the MODERN ``permissions/v1/…/fetched-role``
+                # on the EU-DP host instead. Test whether that answers where v3
+                # 401s, so an enrolled MBB_ODP reporter gives us the decisive
+                # data point (200 vs 404 vs 401) without extracting a bearer or
+                # exposing anything private — status codes only, into
+                # ``probe_outcomes``. Default off; never runs for normal users.
+                if getattr(self, "_test_cohort", False):
+                    await self._probe_fetched_role_cohort(vin)
                 return None
             if err.status in (401, 403):
                 # v2.24.2 — a 401/403 WITHOUT the explicit gateway verdict above
@@ -1873,15 +2009,15 @@ class VWEUClient(CariadBaseClient):
                 self._mbb_oplist_denied[vin] = now + _MBB_OPLIST_SOFT_DENY_TTL
                 _LOGGER.log(
                     logging.WARNING if first_denial else logging.DEBUG,
-                    "MBB operationList ***%s → HTTP %s: %s. Backing off %d min "
+                    "MBB operationList ***%s → HTTP %s. Backing off %d min "
                     "(no explicit gateway verdict, so this may be transient).",
-                    vin[-6:], err.status, body[:160],
+                    vin[-6:], err.status,
                     int(_MBB_OPLIST_SOFT_DENY_TTL.total_seconds() // 60),
                 )
                 return None
             _LOGGER.warning(
-                "MBB operationList ***%s → HTTP %s: %s",
-                vin[-6:], err.status, body[:160],
+                "MBB operationList ***%s → HTTP %s",
+                vin[-6:], err.status,
             )
             return None
         except Exception as err:  # noqa: BLE001
@@ -1904,6 +2040,69 @@ class VWEUClient(CariadBaseClient):
                 len(enabled), len(oplist.services),
             )
         return oplist
+
+    async def _probe_fetched_role_cohort(self, vin: str) -> None:
+        """#584 — cohort-only, READ-ONLY leapfrog probe. Fail-soft.
+
+        The legacy ``operationlist/v3`` on ``mal-1a.prd.ece`` answered
+        ``gw.error.authentication`` for this vehicle, but the shipping We Connect
+        app (4.2.1/4.3.2, APK-verified) never calls operationlist — it reads the
+        per-vehicle permission gate via ``rolesrights/permissions/v1/{Brand}/
+        {country}/vehicles/{vin}/fetched-role`` on the newer EU-DP host
+        ``mal-3a.prd.eu.dp``. This GETs that gate (EU-DP host, then the legacy
+        host as a fallback) with the connector's OWN MBB bearer and records only
+        the HTTP status into ``probe_outcomes`` — no VIN, no body, no token — so
+        an enrolled MBB_ODP reporter can hand us the decisive 200-vs-404-vs-401
+        signal from their diagnostics. A 200 here where operationlist/v3 401s
+        means the modern gate is reachable and the existing ``authorization/v2``
+        S-PIN command handshake could be wired for these cars.
+
+        One-shot per VIN. Never raises, never refreshes, never writes to the car.
+        """
+        from .._mbb import (  # noqa: PLC0415
+            MBB_EUDP_SETTER_BASE,
+            MBB_SETTER_BASE,
+            build_mbb_fetched_role_url,
+            mbb_brand_segment,
+        )
+
+        if not hasattr(self, "_fetched_role_probed"):
+            self._fetched_role_probed: set[str] = set()
+        if vin in self._fetched_role_probed:
+            return
+        self._fetched_role_probed.add(vin)
+
+        country = self._mbb_country_from_id_token() or "DE"
+        seg = mbb_brand_segment(self._brand.name)
+        targets = [
+            ("eudp", MBB_EUDP_SETTER_BASE),  # modern host the shipping app uses
+            ("ece", MBB_SETTER_BASE),        # legacy host, as a fallback data point
+        ]
+        for label, base in targets:
+            url = build_mbb_fetched_role_url(base, self._brand.name, country, vin)
+            key = f"fetched_role:{label}:{seg}/{country}"
+            try:
+                async with self._session.get(
+                    url, headers=self._mbb_headers()
+                ) as resp:
+                    status = resp.status
+                    body = await resp.text()
+            except Exception as err:  # noqa: BLE001
+                self.probe_outcomes[key] = f"error:{type(err).__name__}"
+                continue
+            if status == 200:
+                # A role/permission doc came back — the modern gate answers.
+                # Record only that it was a 200 with a role payload (no values).
+                has_role = '"role"' in body or "fetched" in body.lower()
+                self.probe_outcomes[key] = "200 role" if has_role else "200"
+            else:
+                self.probe_outcomes[key] = str(status)
+        _LOGGER.debug(
+            "MBB fetched-role cohort probe ***%s: %s",
+            vin[-6:],
+            {k: v for k, v in self.probe_outcomes.items()
+             if k.startswith("fetched_role:")},
+        )
 
     def _apply_mbb_subscription(
         self, d: VehicleData, oplist: "MbbOperationList | None",
@@ -1984,9 +2183,11 @@ class VWEUClient(CariadBaseClient):
             # per-poll token-refresh storm when the data-plane ACL 401s the read.
             resp = await self._mbb_get(url, _retry=False)
         except APIError as err:
+            # body dropped — the VSR error body can echo the VIN/request; the
+            # masked VIN + host + country + status already give the diagnostic.
             _LOGGER.warning(
-                "MBB VSR read ***%s via %s/%s → HTTP %s: %s",
-                vin[-6:], host_label, country, err.status, str(err.body)[:200],
+                "MBB VSR read ***%s via %s/%s → HTTP %s",
+                vin[-6:], host_label, country, err.status,
             )
             return d
         except Exception as err:  # noqa: BLE001
@@ -3146,13 +3347,43 @@ class VWEUClient(CariadBaseClient):
         meta = getattr(self, "_vehicle_metadata", {}).get(vin, {})
         if meta.get("model"):
             d.model = meta["model"]
+        # The REST vehicles-list often carries NO model name (e.g. an Audi S6
+        # returns an empty ``model``, so the device fell back to "Audi (2021)").
+        # The vgql media block we already fetch for render images also carries
+        # the proper localized designation — media.longName ("S6 Avant TDI") —
+        # plus the exterior colour. Surface those, and fall back the model to the
+        # media long/short name when the REST list gave nothing.
+        img = getattr(self, "_image_data", {}).get(vin)
+        if img is not None:
+            if img.short_name and not d.media_short_name:
+                d.media_short_name = img.short_name
+            if img.long_name and not d.media_long_name:
+                d.media_long_name = img.long_name
+            if not d.model and (img.long_name or img.short_name):
+                d.model = img.long_name or img.short_name
+            if img.exterior_color and not d.exterior_color:
+                d.exterior_color = img.exterior_color
+            # A car discovered only via the vgql garage (not in the BFF list) has
+            # no REST metadata, so take its model year from the vgql core block.
+            if img.model_year and not d.model_year:
+                d.model_year = img.model_year
+            # vgql coverage (#928-audit, 2026-08-28) — authoritative drivetrain
+            # classification + the stable customer-service id, both from the same
+            # userVehicles query. Gap-fill only (never overwrite a real value).
+            if img.drive_train and not d.drive_train:
+                d.drive_train = img.drive_train
+            if img.csid and not d.csid:
+                d.csid = img.csid
         # v1.10.1 (#58) — safe_int. The model_year metadata sometimes
         # arrives as a 4-digit string and sometimes as int depending on
         # how the auth flow normalised the user profile JSON.
         d.model_year = safe_int(meta.get("model_year"), default=d.model_year)
 
         # ── Charging ──────────────────────────────────────────────────────────
-        d.charging_state = v(raw, "charging", "chargingStatus", "value", "chargingState")
+        # #923-sweep — drop the no-reading sentinel so 'invalid' never reaches the
+        # sensor; is_charging below then correctly stays unknown (isinstance(None)).
+        d.charging_state = drop_charge_sentinel(
+            v(raw, "charging", "chargingStatus", "value", "chargingState"))
         # v2.0.1 (#131 follow-up) — defensive: keep is_charging None
         # when charging_state is missing (preserves "unknown" semantics).
         if isinstance(d.charging_state, str):
@@ -3160,7 +3391,8 @@ class VWEUClient(CariadBaseClient):
         # The charging_scenario sensor exists and the EU-DA portal populates it,
         # but the BFF path never read chargingScenario — so it was permanently dark
         # on every BFF-primary car (Audi EU, audi_na, VW-EU-BFF). Read it here.
-        _scenario = v(raw, "charging", "chargingStatus", "value", "chargingScenario")
+        _scenario = drop_charge_sentinel(  # #923-sweep
+            v(raw, "charging", "chargingStatus", "value", "chargingScenario"))
         if isinstance(_scenario, str) and _scenario:
             d.charging_scenario = _scenario.strip().upper()
         d.charging_power_kw = v(raw, "charging", "chargingStatus", "value", "chargePower_kW")
@@ -3198,6 +3430,7 @@ class VWEUClient(CariadBaseClient):
             or v(raw, "charging", "plugStatus", "value", "plugLedColor")
             or v(raw, "charging", "chargingStatus", "value", "plugLedColor")
         )
+        led_color = drop_charge_sentinel(led_color)  # #923-sweep — 'invalid' → None
         if isinstance(led_color, str) and led_color:
             d.plug_led_color = led_color
 
@@ -3371,6 +3604,7 @@ class VWEUClient(CariadBaseClient):
                 raw, "chargingProfiles", "chargingProfilesStatus", "value",
                 "nextChargingTimer", "targetSOCreachable",
             )
+        nct_target = drop_charge_sentinel(nct_target)  # #923-sweep — 'invalid' → None
         if isinstance(nct_target, str) and nct_target:
             d.next_charging_timer_target_soc_reachable = nct_target
 
@@ -3423,7 +3657,8 @@ class VWEUClient(CariadBaseClient):
         # real backend additions (independent of the auth crisis). Values
         # observed: "manual", "timer", "preferredChargingTimes",
         # "timerChargingWithClimatisation".
-        preferred = v(raw, "charging", "chargeMode", "value", "preferredChargeMode")
+        preferred = drop_charge_sentinel(  # #923-sweep
+            v(raw, "charging", "chargeMode", "value", "preferredChargeMode"))
         if isinstance(preferred, str) and preferred:
             d.charging_preferred_mode = preferred
         available = v(raw, "charging", "chargeMode", "value", "availableChargeModes")
@@ -4018,33 +4253,68 @@ class VWEUClient(CariadBaseClient):
             v(raw, "access", "accessStatus", "value", "windows") or []
         )
         overall = v(raw, "access", "accessStatus", "value", "overallStatus")
+        # #1279 (@peterbauer1709, Audi S6 e-tron / PPE) — an accessStatus array
+        # entry can carry ``status`` as a list of STRINGS (``["open"]``) OR of
+        # OBJECTS (``[{"value": "open"}]``). We only read the object form via
+        # ``status[0].value``, so a PPE car reporting the string form parsed to
+        # empty windows *and* doors (windows_open False, windows_individual {})
+        # even though the raw clearly said "open". Read either shape.
+        # #1281 (@peterbauer1709, Audi S6 e-tron / PPE) — a *door* entry ships
+        # BOTH its lock token and its open token in the SAME ``status`` list
+        # (``["unlocked", "open"]``), so the earlier ``status[0]``-only read
+        # returned the lock word ("unlocked") and every side door + the trunk
+        # read as closed even when physically open. A bonnet/window carries a
+        # single token (``["open"]``), which is why those already worked.
+        # Collect the whole token set (string OR ``[{"value": ...}]`` object
+        # form, #1279) and look for the specific token we want.
+        def _acc_tokens(entry: dict[str, Any]) -> set[str]:
+            out: set[str] = set()
+            for s in (entry.get("status") or []):
+                if isinstance(s, dict):
+                    s = s.get("value") or s.get("status")
+                if isinstance(s, str):
+                    out.add(s.lower())
+            return out
+
         if doors:
-            d.doors_open = any(
-                safe_get(door, "status[0].value") == "open" for door in doors
-            )
-            d.doors_individual = {
-                str(name): safe_get(door, "status[0].value") == "open"
+            door_tokens = {
+                str(name): _acc_tokens(door)
                 for door in doors
                 if (name := door.get("name")) is not None
             }
-            # Trunk lock state lives in the doors array under the
-            # entry whose name is "trunk". Backends ship either a
-            # top-level ``locked`` boolean or a status entry with
-            # value=="locked" — accept both.
-            trunk = next(
-                (door for door in doors if door.get("name") == "trunk"),
-                None,
-            )
-            if trunk is not None:
-                trunk_locked_raw = (
-                    trunk.get("locked")
-                    if "locked" in trunk
-                    else safe_get(trunk, "lockState[0].value")
+            d.doors_individual = {
+                name: "open" in tk for name, tk in door_tokens.items()
+            }
+            d.doors_open = any("open" in tk for tk in door_tokens.values())
+            # The trunk rides in the doors array under name "trunk". Surface its
+            # dedicated open + lock state — both were previously left null on the
+            # two-token ``["unlocked", "closed"]`` shape (open never set at all,
+            # lock only read from a top-level ``locked`` key that PPE omits).
+            trunk_tk = door_tokens.get("trunk")
+            if trunk_tk is not None:
+                if "open" in trunk_tk or "closed" in trunk_tk:
+                    d.trunk_open = "open" in trunk_tk
+                if "locked" in trunk_tk:
+                    d.trunk_locked = True
+                elif "unlocked" in trunk_tk:
+                    d.trunk_locked = False
+            # Legacy shapes: other backends carry the trunk lock as a top-level
+            # ``locked`` boolean or a ``lockState[0].value`` string instead.
+            if d.trunk_locked is None:
+                trunk = next(
+                    (door for door in doors if door.get("name") == "trunk"),
+                    None,
                 )
-                if isinstance(trunk_locked_raw, bool):
-                    d.trunk_locked = trunk_locked_raw
-                elif isinstance(trunk_locked_raw, str):
-                    d.trunk_locked = trunk_locked_raw.lower() == "locked"
+                if trunk is not None:
+                    trunk_locked_raw = (
+                        trunk.get("locked")
+                        if "locked" in trunk
+                        else safe_get(trunk, "lockState[0].value")
+                    )
+                    if isinstance(trunk_locked_raw, bool):
+                        d.trunk_locked = trunk_locked_raw
+                    elif isinstance(trunk_locked_raw, str):
+                        d.trunk_locked = trunk_locked_raw.lower() == "locked"
         elif overall == "SAFE":
             # Backend reported SAFE but didn't enumerate the doors
             # array. Honour the aggregate signal so the entity shows
@@ -4052,32 +4322,43 @@ class VWEUClient(CariadBaseClient):
             d.doors_open = False
 
         if windows:
-            d.windows_open = any(
-                safe_get(w, "status[0].value") == "open" for w in windows
-            )
+            d.windows_open = any("open" in _acc_tokens(w) for w in windows)
             # v2.18.1 (#810, @lucson) — windows_individual follows the documented
             # ``True == closed`` convention: the same one VagWindowSensor (which
             # inverts for the HA WINDOW device_class) and the EU-Data-Act portal
-            # parser already use. Storing ``== "open"`` here (True == open) was the
-            # lone outlier and rendered every *closed* window as *open* on Audi /
-            # VW-EU cars. Only entries with a real open/closed status are stored; a
-            # non-open/closed sentinel (an option-dependent roof on a car without
-            # one) is skipped so it can't surface as a phantom window.
+            # parser already use. Only entries with a real open/closed status are
+            # stored; a non-open/closed sentinel (an option-dependent roof on a
+            # car without one) is skipped so it can't surface as a phantom window.
             windows_individual: dict[str, bool] = {}
+            windows_position: dict[str, int] = {}
             for w in windows:
                 name = w.get("name")
                 if name is None:
                     continue
-                st = safe_get(w, "status[0].value")
-                if not isinstance(st, str) or st.lower() not in ("open", "closed"):
+                tk = _acc_tokens(w)
+                if "open" in tk:
+                    windows_individual[str(name)] = False  # True == closed
+                elif "closed" in tk:
+                    windows_individual[str(name)] = True
+                else:
                     continue
-                windows_individual[str(name)] = st.lower() == "closed"
+                # #1279 — PPE cars ship an opening percentage (``windowOpen_pct``)
+                # per window, so surface it instead of leaving windows_position {}.
+                pct = w.get("windowOpen_pct")
+                if isinstance(pct, (int, float)) and not isinstance(pct, bool):
+                    windows_position[str(name)] = int(pct)
             d.windows_individual = windows_individual
+            if windows_position:
+                d.windows_position = windows_position
         elif overall == "SAFE":
             d.windows_open = False
 
         # ── Climatisation ─────────────────────────────────────────────────────
-        d.climatisation_state = v(raw, "climatisation", "climatisationStatus", "value", "climatisationState")
+        # #923-sweep — drop the no-reading sentinel ('invalid'/unavailable) so it
+        # never reaches the sensor; the active-derivation below (None → False)
+        # stays correct and the #442 case-normalisation is now belt-and-suspenders.
+        d.climatisation_state = drop_charge_sentinel(
+            v(raw, "climatisation", "climatisationStatus", "value", "climatisationState"))
         # v2.15.0a9 — #442 (nekas123, Audi e-tron): the car can report
         # ``climatisationState = "invalid"`` (a degraded/no-data sentinel — seen
         # when climatisation can't start, e.g. at a low battery level). The old
@@ -4520,9 +4801,25 @@ class VWEUClient(CariadBaseClient):
                     d.tire_pressure_rear_right_bar = round(bar_value, 2)
             warning_raw = tyre_value.get("overallStatus") or tyre_value.get("warningLight")
             if isinstance(warning_raw, str):
-                d.tire_pressure_warning = warning_raw.lower() not in (
-                    "ok", "normal", "off", "false",
-                )
+                lowered = warning_raw.lower()
+                # b7 (grounded audit P1-6, INTERIM) — this branch used allow-list-GOOD
+                # polarity (anything not in {ok,normal,off,false} → warning=True), so a
+                # telemetry-ABSENT status (unavailable/unknown/notSupported/…) lit the
+                # tyre PROBLEM sensor RED on a fault-free car. Demote the known "no data"
+                # tokens out of the True path (leave the bool None, mirroring the oil
+                # parser above — "don't render a fake OK") while any other non-OK token
+                # still fires as a real fault. The full explicit-BAD polarity flip waits
+                # on a byte capture of the tyrePressure overallStatus vocabulary.
+                if lowered in ("ok", "normal", "off", "false", "none"):
+                    d.tire_pressure_warning = False
+                elif lowered in (
+                    "unavailable", "unknown", "notsupported", "not_supported",
+                    "unsupported", "invalid", "na", "n/a", "notavailable",
+                    "not_available",
+                ):
+                    d.tire_pressure_warning = None
+                else:
+                    d.tire_pressure_warning = True
             elif isinstance(warning_raw, bool):
                 d.tire_pressure_warning = warning_raw
 

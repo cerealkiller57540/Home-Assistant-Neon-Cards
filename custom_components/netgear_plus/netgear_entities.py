@@ -4,6 +4,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
+from functools import partial
 from decimal import Decimal
 from typing import Any
 
@@ -369,6 +370,62 @@ unique_id={self._unique_id}>"
         await self.coordinator.async_request_refresh()
 
 
+class NetgearSnmpRebootButtonEntity(NetgearCoordinatorEntity, ButtonEntity):
+    """Reboot via SNMP (agentResetSystem), pour le chemin SNMP pur.
+
+    has_reboot_button() (upstream) suppose un reboot HTTP indisponible sur ce
+    firmware (cf. [[project_gs108t_http11_refuse]]). Le SET est ecrit en
+    'private' (RW). Aucune relecture classique n'est possible pendant le
+    reboot : snmp_reboot_switch verifie a la place que le switch cesse de
+    repondre puis redevient joignable avant de rendre la main.
+    """
+
+    entity_description: NetgearButtonEntityDescription
+    _attr_device_class = ButtonDeviceClass.RESTART
+
+    def __init__(
+        self,
+        coordinator: DataUpdateCoordinator,
+        hub: HomeAssistantNetgearSwitch,
+        entity_description: NetgearButtonEntityDescription,
+    ) -> None:
+        """Initialize a Netgear device."""
+        super().__init__(coordinator, hub)
+        self.entity_description = entity_description
+        self._name = f"{hub.device_name} {entity_description.name}"
+        self._unique_id = (
+            f"{hub.unique_id}-{entity_description.key}-{entity_description.index}"
+        )
+        self.hub = hub
+
+    def __repr__(self) -> str:
+        """Return human readable object representation."""
+        return f"<NetgearSnmpRebootButtonEntity unique_id={self._unique_id}>"
+
+    def _reboot(self) -> bool:
+        """Blocking SNMP reboot, run in an executor."""
+        from .snmp_client import snmp_reboot_switch
+
+        host = self.hub.api.host if self.hub.api else None
+        if not host:
+            return False
+        return snmp_reboot_switch(host, community=self.hub.snmp_write_community)
+
+    async def async_press(self) -> None:
+        """Reboot the switch via SNMP."""
+        successful = await self.hub.hass.async_add_executor_job(self._reboot)
+        _LOGGER.info(
+            "called snmp_reboot_switch for uid=%s: successful=%s",
+            self._unique_id,
+            successful,
+        )
+        if not successful:
+            message = "Le switch n'a pas confirme le reboot SNMP (cf. logs)"
+            raise HomeAssistantError(message)
+
+        await self.coordinator.async_request_refresh()
+
+
 class NetgearLedSwitchEntity(NetgearAPICoordinatorEntity, SwitchEntity):
     """Represents a Front Panel LED Switch in HomeAssistant."""
 
@@ -438,3 +495,88 @@ class NetgearLedSwitchEntity(NetgearAPICoordinatorEntity, SwitchEntity):
             self._unique_id,
             successful,
         )
+
+
+class NetgearPortAdminSwitchEntity(NetgearAPICoordinatorEntity, SwitchEntity):
+    """Activation administrative d'un port physique (ifAdminStatus, SNMP RW).
+
+    Lecture via l'ifTable deja collectee par le coordinateur ; ecriture par
+    SetRequest sur la communaute RW. Le switch acquitte parfois sans appliquer :
+    snmp_set_port_admin relit systematiquement pour confirmer.
+    """
+
+    entity_description: NetgearBinarySensorEntityDescription
+
+    def __init__(
+        self,
+        coordinator: DataUpdateCoordinator,
+        hub: HomeAssistantNetgearSwitch,
+        entity_description: NetgearBinarySensorEntityDescription,
+        port_nr: int,
+    ) -> None:
+        """Initialize a port admin switch."""
+        super().__init__(coordinator, hub)
+        self.entity_description = entity_description
+        self._name = f"{hub.device_name} {entity_description.name}"
+        self._unique_id = f"{hub.unique_id}-{entity_description.key}"
+        self._port_nr = port_nr
+        self._value = None
+        self.hub = hub
+
+    def __repr__(self) -> str:
+        """Return human readable object representation."""
+        return f"<NetgearPortAdminSwitchEntity unique_id={self._unique_id}>"
+
+    @callback
+    def async_update_device(self) -> None:
+        """Update entity from coordinator data."""
+        if self.coordinator.data is None:
+            return
+        data = self.coordinator.data.get(self.entity_description.key)
+        if data is None:
+            self._value = None
+            return
+        self._value = data
+
+    @property
+    def is_on(self) -> bool:
+        """Return true if the port is administratively enabled."""
+        return self._value in const.ON_VALUES
+
+    @property
+    def icon(self) -> str:
+        """Return a plug icon reflecting the admin state."""
+        return "mdi:ethernet" if self.is_on else "mdi:ethernet-off"
+
+    def _set_admin(self, *, up: bool) -> bool:
+        """Blocking SNMP write, run in an executor."""
+        from .snmp_client import snmp_set_port_admin
+
+        host = self.hub.api.host if self.hub.api else None
+        if not host:
+            return False
+        return snmp_set_port_admin(
+            host, self._port_nr, up=up, community=self.hub.snmp_write_community
+        )
+
+    async def async_turn_on(self, **kwargs: dict[str, Any]) -> None:  # noqa: ARG002
+        """Enable the port."""
+        successful = await self.hub.hass.async_add_executor_job(
+            partial(self._set_admin, up=True)
+        )
+        if not successful:
+            msg = f"Le switch a refuse l'activation du port {self._port_nr}"
+            raise HomeAssistantError(msg)
+        self._value = "on"
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs: dict[str, Any]) -> None:  # noqa: ARG002
+        """Disable the port."""
+        successful = await self.hub.hass.async_add_executor_job(
+            partial(self._set_admin, up=False)
+        )
+        if not successful:
+            msg = f"Le switch a refuse la desactivation du port {self._port_nr}"
+            raise HomeAssistantError(msg)
+        self._value = "off"
+        self.async_write_ha_state()

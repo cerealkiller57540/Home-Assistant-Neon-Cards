@@ -35,6 +35,7 @@ from .const import (
     CONF_ABRP_ENABLE,
     CONF_ABRP_USER_TOKEN,
     CONF_BATTERY_NOMINAL_KWH,
+    CONF_FUEL_TANK_CAPACITY,
     CONF_KEEP_RAW_DATASETS,
     CONF_BRAND,
     CONF_CLIENT_ID_OVERRIDE,
@@ -46,6 +47,8 @@ from .const import (
     CONF_ENABLE_REVERSE_GEOCODING,
     CONF_FORCE_PPE_CLIMATE,
     CONF_MBB_COMMAND_CHANNEL,
+    CONF_CAPTCHA_CODE,
+    CONF_MBB_COMMAND_FALLBACK,
     CONF_MEB_COMMANDS_UNAVAILABLE,
     CONF_MBB_COMMAND_CLIENT_ID,
     CONF_MBB_COMMAND_TOKENS,
@@ -88,6 +91,8 @@ def _brand_label(brand: str) -> str:
 _BRAND_OPTIONS: list[SelectOptionDict] = [
     SelectOptionDict(value="audi",          label="Audi (myAudi)"),
     SelectOptionDict(value="volkswagen",    label="Volkswagen EU (WeConnect ID)"),
+    # #1316 — VW Commercial Vehicles (Nutzfahrzeuge): separate EU-Data-Act realm.
+    SelectOptionDict(value="volkswagen_commercial", label="Volkswagen Commercial Vehicles"),
     SelectOptionDict(value="skoda",         label="Škoda (MyŠkoda)"),
     SelectOptionDict(value="seat",          label="SEAT"),
     SelectOptionDict(value="cupra",         label="CUPRA"),
@@ -96,6 +101,8 @@ _BRAND_OPTIONS: list[SelectOptionDict] = [
     SelectOptionDict(value="porsche",       label="Porsche (My Porsche) — experimental, login may fail"),
     # v2.14.11 — Bentley (login+read; Audi IDK tenant). Two-way live-test gated.
     SelectOptionDict(value="bentley",       label="Bentley (My Bentley)"),
+    # plug&play OBD-dongle cloud reader for pre-connectivity Audi cars (read-only).
+    SelectOptionDict(value="audi_acpp",     label="Audi plug&play — OBD dongle (older cars)"),
 ]
 
 _BRAND_SELECTOR = SelectSelector(
@@ -160,6 +167,16 @@ _KWH_SELECTOR = NumberSelector(
     )
 )
 
+_LITERS_SELECTOR = NumberSelector(
+    NumberSelectorConfig(
+        min=0,
+        max=200,
+        step=1,
+        mode=NumberSelectorMode.BOX,
+        unit_of_measurement="L",
+    )
+)
+
 _BOOL_SELECTOR = BooleanSelector()
 
 
@@ -169,14 +186,29 @@ async def _validate_credentials(
     hass: HomeAssistant, brand: str, username: str, password: str,
     mfa_code: str | None = None,
     country: str = "us",
-) -> None:
-    """Validate credentials by authenticating with the CARIAD API."""
+    *,
+    captcha_code: str | None = None,
+    captcha_state: str | None = None,
+    captcha_verifier: str | None = None,
+    captcha_resume: dict | None = None,
+) -> dict[str, Any] | None:
+    """Validate credentials by authenticating with the CARIAD API.
+
+    ``captcha_code``/``captcha_state``/``captcha_verifier`` (b19, #1337,
+    CJNE-comparison #12) only apply to Porsche's Auth0 flow — resuming a
+    login that :class:`PorscheCaptchaRequiredError` interrupted. Other
+    brands' ``authenticate()`` signatures don't accept these kwargs, so they
+    are forwarded only when ``brand == "porsche"``.
+    """
     import aiohttp  # noqa: PLC0415
     from .cariad import CariadClientFactory  # noqa: PLC0415
+    from .cariad.api.porsche import PorscheClient  # noqa: PLC0415
     from .cariad.exceptions import (  # noqa: PLC0415
         AuthenticationError,
         MarketingConsentError,
         NorthAmericaAttestationError,
+        PorscheCaptchaRequiredError,
+        PorscheLoginWallError,
         RateLimitError,
         TermsAndConditionsError,
         TwoFactorRequiredError,
@@ -192,7 +224,27 @@ async def _validate_credentials(
             brand, auth_session, username, password, country=country
         )
         try:
-            await client.authenticate(mfa_code=mfa_code)
+            # isinstance (not brand == "porsche") so mypy narrows client to
+            # PorscheClient here — its authenticate() is the only one with
+            # these kwargs; every other brand client's signature would
+            # reject them.
+            if isinstance(client, PorscheClient) and captcha_code:
+                await client.authenticate(
+                    mfa_code=mfa_code,
+                    captcha_code=captcha_code,
+                    resume_state=captcha_state,
+                    resume_verifier=captcha_verifier,
+                    captcha_resume=captcha_resume,
+                )
+            else:
+                await client.authenticate(mfa_code=mfa_code)
+        except PorscheCaptchaRequiredError:
+            # Let the config flow catch this directly — it carries the
+            # captcha image/state/verifier the caller needs to show the
+            # solving form, which a plain ValueError string can't carry
+            # cleanly. Must precede the generic AuthenticationError catch
+            # below (it is a subclass).
+            raise
         except TermsAndConditionsError as err:
             raise ValueError("terms_and_conditions") from err
         except MarketingConsentError as err:
@@ -220,6 +272,22 @@ async def _validate_credentials(
                 "device attestation (not a credentials problem): %s", brand, err,
             )
             raise ValueError("na_signin_attestation") from err
+        except PorscheLoginWallError as err:
+            # b23 (#1337) — login got past credentials but hit a captcha/consent
+            # wall in the redirect chain. NOT a wrong password (both reporters
+            # verified theirs at my.porsche.com). Must precede the generic
+            # AuthenticationError catch (it is a subclass) so these users stop
+            # being told "email/password incorrect".
+            _LOGGER.warning(
+                "VW Group Connect (%s): login reached a Porsche captcha/consent "
+                "wall past the password step (not a credentials problem): %s",
+                brand, err,
+            )
+            # v4.7.8 — carry the wall's screen/marker through the ValueError so
+            # the step handlers can put it into the one-click report.
+            raise ValueError(
+                f"porsche_login_wall:{err.screen}|{err.marker}"
+            ) from err
         except AuthenticationError as err:
             _LOGGER.warning("VW Group Connect auth failed (%s): %s", brand, err)
             raise ValueError("invalid_credentials") from err
@@ -234,16 +302,49 @@ async def _validate_credentials(
                 "VW Group Connect unexpected error during %s auth: %s",
                 brand, type(err).__name__,
             )
+            # class name only, never str(err): the comment above is the reason —
+            # a chained aiohttp InvalidURL carries the form-encoded request URL
+            # (username/redirect). format_tb renders frame/file/line/source only,
+            # never the exception message, so the traceback itself stays safe.
             _LOGGER.debug(
-                "VW Group Connect %s auth traceback: %s\n%s",
-                brand, err,
+                "VW Group Connect %s auth traceback (%s):\n%s",
+                brand, type(err).__name__,
                 "".join(traceback.format_tb(err.__traceback__)),
             )
             raise ValueError("cannot_connect") from err
 
+        # v4.7.7 (#1337) — on a successful Porsche login, return the token set so
+        # the config flow can bridge it into the entry (porsche_initial_tokens).
+        # The coordinator then reuses it via the never-captcha-gated /oauth/token
+        # refresh instead of running a SECOND interactive login (another captcha)
+        # at first setup. Other brands / no token → None (unchanged behaviour).
+        _t = getattr(client, "_tokens", None)
+        # v4.7.8 — bridge only a token that can actually be refreshed; a
+        # refresh-less one must fall back to the normal authenticate() path.
+        if isinstance(client, PorscheClient) and _t is not None and _t.refresh_token:
+            return {
+                "access_token":  _t.access_token,
+                "refresh_token": _t.refresh_token,
+                "id_token":      _t.id_token,
+                "expires_at":    _t.expires_at,
+                "strategy":      _t.strategy or "porsche",
+            }
+    return None
+
+
+def _wall_screen(err_str: str) -> str:
+    """v4.7.8 (#1337) — the ``<screen>`` carried on a ``porsche_login_wall:<screen>|<marker>``
+    ValueError (empty for any other error)."""
+    if not err_str.startswith("porsche_login_wall:"):
+        return ""
+    return err_str.partition(":")[2].partition("|")[0]
+
 
 def _map_error(err_code: str) -> str:
     """Map ValueError string to strings.json error key."""
+    # v4.7.8 — a ":detail" suffix (porsche_login_wall:<screen>|<marker>) rides
+    # along for the report link; the error KEY is the part before it.
+    err_code = err_code.split(":", 1)[0]
     return err_code if err_code in {
         "terms_and_conditions", "marketing_consent", "two_factor_required",
         "too_many_requests", "invalid_credentials", "missing_library",
@@ -251,6 +352,7 @@ def _map_error(err_code: str) -> str:
         "brand_not_dag_eligible",  # v2.7.0 — user picked non-DAG brand for browser login
         "portal_interaction_required",  # v2.15.4 (#527) — non-credential portal stop
         "na_signin_attestation",  # #1165/#659 — VW NA Play-Integrity sign-in wall
+        "porsche_login_wall",  # b23 #1337 — Porsche captcha/consent wall past password
     } else "cannot_connect"
 
 
@@ -342,6 +444,27 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
         # exactly like the non-2FA path. Without it, a 2FA account silently got a
         # read-only portal entry and the command channel was dropped.
         self._pending_user_input: dict[str, Any] = {}
+        # b19 (#1337, CJNE-comparison #12) — Porsche Auth0 captcha resume state.
+        # PorscheCaptchaRequiredError carries the image + the state/verifier
+        # that are bound to the ORIGINAL /authorize transaction (cannot be
+        # regenerated — see auth/porsche.py's authenticate() docstring), plus
+        # which step to resume into on success.
+        self._porsche_captcha_image: str = ""
+        self._porsche_captcha_state: str = ""
+        self._porsche_captcha_verifier: str = ""
+        # G5 (#1337) — replay descriptor for a post-password captcha (None for a
+        # classic identifier-step captcha, which resumes via the identifier POST).
+        self._porsche_captcha_resume: dict | None = None
+        self._porsche_captcha_return: str = ""  # "email_password"|"reauth"|"reconfigure"
+        # #1337 — bound the captcha loop: Auth0 can chain challenge after
+        # challenge, and repeated failed attempts have LOCKED Porsche accounts
+        # (ha-porscheconnect#199). After this many submits we stop and hand the
+        # user a one-click GitHub report instead of letting them hammer on.
+        self._porsche_captcha_attempts: int = 0
+        self._porsche_reconfigure_entry_id: str = ""
+        self._porsche_reauth_entry_id: str = ""
+        self._porsche_reauth_spin: str = ""
+        self._porsche_reauth_country: str = "us"
         # v2.7.0 — Device Authorization Grant (browser-login) state.
         # Two-phase flow so HA's show_progress can re-render with the
         # populated URL + user_code BEFORE the long polling wait begins.
@@ -355,6 +478,16 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
         # Populated by Phase 1, displayed during Phase 2.
         self._dag_user_code: str = ""
         self._dag_verification_uri: str = ""
+        # b10 (#835) — the plain verification_uri (no ``?user_code=`` prefill).
+        # VW's prefilled ``verification_uri_complete`` intermittently 500s /
+        # returns INVALID_REQUEST; the plain page keeps working, so we surface it
+        # as a manual-entry fallback in the login notification.
+        self._dag_verification_uri_plain: str = ""
+        # b10 (#845/#835) — passwordless (device_grant / durable-MBB) reauth:
+        # when set, the shared QR finish updates the EXISTING entry's tokens
+        # in place instead of creating a new entry.
+        self._reauth_qr: bool = False
+        self._reauth_qr_entry_id: str = ""
         self._dag_device_code: str = ""
         self._dag_poll_interval: int = 5
         self._dag_expires_in: int = 300
@@ -363,6 +496,10 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
         self._dag_user_id: str = ""
         # Captured if either phase fails.
         self._dag_error: str = ""
+        # #1364 (Audi) / #1337 (Porsche) — set when Phase 1 is rejected with
+        # ``unauthorized_client`` (the manufacturer disabled the app device-code
+        # grant). Drives an honest brand-picker message instead of a raw error.
+        self._dag_grant_disabled: bool = False
         # v2.15.0 — durable MBB strategy flag. When True the DAG flow uses the
         # e-Remote client + ``mbb`` scope and, after the browser confirm, mints
         # a durable MBB bearer via register/v1 + token-exchange. Default False
@@ -386,6 +523,12 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
         # EXISTING entry via Reconfigure. The QR finish/approve steps then UPDATE
         # this entry in place instead of creating a new one.
         self._mbb_reconfigure_entry_id: str | None = None
+        # b15 — device-grant Audi MBB command-fallback opt-in
+        # (async_step_audi_mbb_fallback). ``_dag_mbb_fallback`` tags the QR run so
+        # browser_login_finish ATTACHES the durable bearer to an existing Audi
+        # (``_mbb_fallback_entry_id``) instead of creating a new entry.
+        self._dag_mbb_fallback: bool = False
+        self._mbb_fallback_entry_id: str | None = None
         # v2.14.0 — website-authproxy (opt-in beta) pending state between the
         # credentials step and the email-OTP step. The connector + its session
         # are held open across the two-step OTP exchange so the cookie jar
@@ -446,6 +589,15 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                     "Companion-Handy (ADB) — EXPERIMENTELL, alle Marken "
                     "(zweites Handy mit eingeloggter App nötig)"
                 ),
+                # b15 — arm the durable MBB command fallback on an EXISTING
+                # device-grant Audi (Car-Net cars). One-time browser confirm; the
+                # BFF stays primary, MBB only steps in if VW ever revokes the
+                # device grant. Aborts gracefully if no eligible Audi entry exists.
+                "audi_mbb_fallback": (
+                    "Fernbefehle für einen bestehenden Audi absichern — "
+                    "Reserve-Verbindung, damit Ver-/Entriegeln, Klima & Laden "
+                    "weiterlaufen, falls sich die Audi-Anbindung ändert"
+                ),
             },
         )
 
@@ -460,10 +612,13 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
         is already signed in, and the only secret at rest is the ADB RSA key.
         """
         from .const import (  # noqa: PLC0415
+            COMPANION_MIN_TOKEN_LEN,
             CONF_ADB_HOST,
             CONF_ADB_PORT,
             CONF_COMPANION_ADDON_TOKEN,
+            CONF_COMPANION_AGENT_TOKEN,
             CONF_COMPANION_USE_ADDON,
+            CONF_COMPANION_USE_RELAY,
             CONF_STRATEGY,
             CONF_VIN,
             DEFAULT_ADB_PORT,
@@ -476,9 +631,15 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
 
         if user_input is not None:
             brand = user_input[CONF_BRAND]
-            host = user_input[CONF_ADB_HOST].strip()
+            host = (user_input.get(CONF_ADB_HOST) or "").strip()
             use_addon = bool(user_input.get(CONF_COMPANION_USE_ADDON))
             addon_token = (user_input.get(CONF_COMPANION_ADDON_TOKEN) or "").strip()
+            # v4.4.0 (#968) — relay mode. The phone's agent app calls Home
+            # Assistant, so there is nothing here to dial and nothing to probe:
+            # the token IS the binding, and setup succeeds as soon as it is long
+            # enough. The entry then waits for the agent to check in.
+            use_relay = bool(user_input.get(CONF_COMPANION_USE_RELAY))
+            agent_token = (user_input.get(CONF_COMPANION_AGENT_TOKEN) or "").strip()
             # The add-on serves its API on its own port, so a user who ticked
             # the box and left the ADB default in place gets the right one.
             _default_port = (
@@ -490,16 +651,23 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             vin = user_input[CONF_VIN].strip().upper()
             spin = (user_input.get(CONF_SPIN) or "").strip()
 
-            valid, reason = await self._companion_probe(
-                brand, host, port, use_addon=use_addon, addon_token=addon_token
-            )
+            if use_relay:
+                valid = len(agent_token) >= COMPANION_MIN_TOKEN_LEN
+                reason = "companion_agent_token_too_short"
+            elif not host:
+                valid, reason = False, "companion_host_required"
+            else:
+                valid, reason = await self._companion_probe(
+                    brand, host, port, use_addon=use_addon, addon_token=addon_token
+                )
             if not valid:
                 errors["base"] = reason
             else:
                 await self.async_set_unique_id(f"companion_{brand}_{vin}")
                 self._abort_if_unique_id_configured()
                 preset = PRESETS[brand]
-                title = f"{brand.title()} (Companion/ADB) {vin[-6:]}"
+                _how = "Companion/Agent" if use_relay else "Companion/ADB"
+                title = f"{brand.title()} ({_how}) {vin[-6:]}"
                 if not preset.verified:
                     title += " [alpha, read-only]"
                 return self.async_create_entry(
@@ -513,6 +681,8 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                         CONF_SPIN: spin,
                         CONF_COMPANION_USE_ADDON: use_addon,
                         CONF_COMPANION_ADDON_TOKEN: addon_token,
+                        CONF_COMPANION_USE_RELAY: use_relay,
+                        CONF_COMPANION_AGENT_TOKEN: agent_token,
                     },
                 )
 
@@ -520,7 +690,11 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
         schema = vol.Schema(
             {
                 vol.Required(CONF_BRAND, default="volkswagen"): vol.In(brands),
-                vol.Required(CONF_ADB_HOST): str,
+                # Optional since v4.4.0: relay mode never dials the phone, so
+                # there is no address to give. Still required for both ADB
+                # paths, enforced below with its own error rather than by the
+                # schema, so the message can say why.
+                vol.Optional(CONF_ADB_HOST, default=""): str,
                 vol.Optional(CONF_ADB_PORT, default=DEFAULT_ADB_PORT): int,
                 vol.Required(CONF_VIN): str,
                 vol.Optional(CONF_SPIN, default=""): str,
@@ -530,6 +704,13 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                 # phone's; the add-on holds the phone connection.
                 vol.Optional(CONF_COMPANION_USE_ADDON, default=False): bool,
                 vol.Optional(CONF_COMPANION_ADDON_TOKEN, default=""): str,
+                # v4.4.0 (#968) — the third way to reach the phone, and the only
+                # one that needs nothing FROM Home Assistant's side of the
+                # network: an agent app on the phone long-polls HA. Tick this,
+                # paste the token the agent generated, and leave the host field
+                # as anything (it is unused on this path).
+                vol.Optional(CONF_COMPANION_USE_RELAY, default=False): bool,
+                vol.Optional(CONF_COMPANION_AGENT_TOKEN, default=""): str,
             }
         )
         return self.async_show_form(
@@ -569,7 +750,7 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             await transport.connect()
             version = await transport.current_app_version(preset.package)
         except CompanionTransportError as err:
-            _LOGGER.warning("Companion ADB probe failed: %s", err)
+            _LOGGER.warning("Companion ADB probe failed: %s", type(err).__name__)
             # v2.26.0 — a bare "InvalidCommandError" is the fingerprint of
             # Android 11+ "wireless debugging": the pure-python transport reaches
             # the port but it speaks TLS + pairing, which adb-shell cannot. Point
@@ -608,10 +789,24 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             await self.async_set_unique_id(f"{brand}_{username}")
             self._abort_if_unique_id_configured()
 
+            from .cariad.exceptions import PorscheCaptchaRequiredError  # noqa: PLC0415
+
             try:
-                await _validate_credentials(
+                _tok = await _validate_credentials(
                     self.hass, brand, username, password, country=country
                 )
+            except PorscheCaptchaRequiredError as err:
+                self._pending_brand    = brand
+                self._pending_username = username
+                self._pending_password = password
+                self._pending_entry_data = self._build_entry_data(brand, username, password, user_input)
+                self._pending_user_input = dict(user_input)
+                self._porsche_captcha_return = "email_password"
+                self._porsche_captcha_image    = err.captcha_image
+                self._porsche_captcha_state    = err.state
+                self._porsche_captcha_verifier = err.code_verifier
+                self._porsche_captcha_resume   = err.resume
+                return await self.async_step_porsche_captcha()
             except ValueError as err:
                 err_str = str(err)
                 if err_str.startswith("two_factor_required"):
@@ -621,6 +816,19 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                     self._pending_entry_data = self._build_entry_data(brand, username, password, user_input)
                     self._pending_user_input = dict(user_input)
                     return await self.async_step_mfa()
+                if err_str.startswith("porsche_login_wall"):
+                    # #1337 — the login got past the password but hit a Porsche
+                    # wall we can't clear headless. Stop cleanly and offer a
+                    # one-click report that names which screen it was.
+                    return self.async_abort(
+                        reason="porsche_login_wall",
+                        description_placeholders={
+                            "report_url": self._porsche_report_url(
+                                "email_password", "porsche_login_wall",
+                                _wall_screen(err_str),
+                            ),
+                        },
+                    )
                 errors["base"] = _map_error(err_str)
             else:
                 portal_data = self._build_entry_data(
@@ -656,6 +864,8 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                     self._dag_user_id = ""
                     self._dag_error = ""
                     return await self.async_step_browser_login_pending()
+                if _tok:  # v4.7.7 (#1337) — bridge a Porsche login token (no-captcha path)
+                    portal_data = {**portal_data, "porsche_initial_tokens": _tok}
                 return self.async_create_entry(
                     title=f"{_brand_label(brand)} — {username}",
                     data=portal_data,
@@ -923,6 +1133,7 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
         if user_input is not None:
             # Reset DAG state for this MBB attempt.
             self._dag_mbb = True
+            self._dag_mbb_fallback = False  # b15 — this is the VW MBB flow, not the Audi fallback
             self._dag_brand = "volkswagen"
             self._dag_user_input = dict(user_input)
             self._dag_request_task = None
@@ -955,6 +1166,71 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             }),
         )
 
+    async def async_step_audi_mbb_fallback(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """b15 — arm the durable MBB command FALLBACK on an existing device-grant
+        Audi. A device-grant Audi stores no password, so Reconfigure / Re-auth
+        (both password-gated) can't reach it — this menu step runs a one-time MBB
+        browser confirm and attaches the durable Car-Net bearer to the chosen Audi
+        as a BFF-refusal fallback (``CONF_MBB_COMMAND_FALLBACK``), so lock / climate
+        / charge survive a future device-grant revocation. Only Car-Net (pre-MEB)
+        Audis are eligible; MEB / ID cars are rejected at the MBB exchange and the
+        flow aborts with ``mbb_not_eligible``."""
+        candidates = [
+            e for e in self.hass.config_entries.async_entries(DOMAIN)
+            if e.data.get(CONF_BRAND) == "audi"
+            and (e.data.get("dag_initial_tokens") or {}).get("strategy")
+            == "device_grant"
+            and not e.data.get(CONF_MBB_COMMAND_FALLBACK)
+        ]
+        if not candidates:
+            return self.async_abort(reason="no_devicegrant_audi")
+
+        if user_input is not None:
+            self._mbb_fallback_entry_id = (
+                user_input.get("entry_id") or candidates[0].entry_id
+            )
+            # Reset DAG state for the MBB attempt (mirrors async_step_mbb_login),
+            # tagged as a fallback so browser_login_finish attaches rather than
+            # creating a new entry.
+            self._dag_mbb = True
+            self._dag_mbb_fallback = True
+            self._dag_brand = "audi"
+            self._dag_request_task = None
+            self._dag_poll_task = None
+            self._dag_user_code = ""
+            self._dag_verification_uri = ""
+            self._dag_device_code = ""
+            self._dag_tokens = None
+            self._dag_mbb_tokens = None
+            self._dag_mbb_client_id = ""
+            self._dag_mbb_ineligible = False
+            self._dag_user_id = ""
+            self._dag_error = ""
+            self._dag_user_input = dict(user_input)
+            return await self.async_step_browser_login_pending()
+
+        schema_dict: dict[Any, Any] = {}
+        if len(candidates) > 1:
+            schema_dict[vol.Required("entry_id")] = SelectSelector(
+                SelectSelectorConfig(
+                    options=[
+                        SelectOptionDict(value=e.entry_id, label=e.title)
+                        for e in candidates
+                    ],
+                    mode=SelectSelectorMode.LIST,
+                )
+            )
+        schema_dict[vol.Optional(CONF_MBB_VINS, default="")] = TextSelector(
+            TextSelectorConfig()
+        )
+        schema_dict[vol.Optional(CONF_SPIN, default="")] = _SPIN_SELECTOR
+        return self.async_show_form(
+            step_id="audi_mbb_fallback",
+            data_schema=vol.Schema(schema_dict),
+        )
+
     async def async_step_browser_login(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
@@ -967,6 +1243,11 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
         from .cariad.auth._device_grant import DAG_ENABLED_BRANDS  # noqa: PLC0415
 
         errors: dict[str, str] = {}
+        # #1364/#1337 — a previous attempt was rejected because the brand's app
+        # device-code grant is disabled. Re-show the picker with an honest, actionable
+        # message (see the device_grant_retired string) rather than looping silently.
+        if self._dag_grant_disabled:
+            errors["base"] = "device_grant_retired"
 
         if user_input is not None:
             brand = user_input[CONF_BRAND]
@@ -984,6 +1265,7 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             else:
                 # Reset state for this attempt.
                 self._dag_mbb = False
+                self._dag_mbb_fallback = False  # b15 — normal device grant, not the Audi MBB fallback
                 self._dag_brand = brand
                 self._dag_user_input = dict(user_input)
                 self._dag_request_task = None
@@ -994,6 +1276,7 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                 self._dag_tokens = None
                 self._dag_user_id = ""
                 self._dag_error = ""
+                self._dag_grant_disabled = False  # fresh attempt
                 return await self.async_step_browser_login_pending()
 
         # DAG-eligible brand options only (subset of the standard list).
@@ -1069,7 +1352,11 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             # can retry. The error message lives in self._dag_error
             # (surfaced via debug log; future: repair-issue / notification).
             return self.async_show_progress_done(
-                next_step_id="mbb_login" if self._dag_mbb else "browser_login"
+                next_step_id=(
+                    "audi_mbb_fallback"
+                    if self._dag_mbb_fallback
+                    else "mbb_login" if self._dag_mbb else "browser_login"
+                )
             )
 
         # Phase 1 done — hand off to Phase 2 (separate step_id so HA
@@ -1113,6 +1400,8 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
         """
         # Defensive — should only be reached with Phase 1 state populated.
         if not self._dag_device_code:
+            if self._dag_mbb_fallback:
+                return await self.async_step_audi_mbb_fallback()
             return await self.async_step_browser_login()
 
         # Kick off poll_for_tokens() on first entry (idempotent)
@@ -1174,6 +1463,8 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                 # back to the right brand/MBB picker so user can retry.
                 self._dag_poll_task = None
                 self._dag_device_code = ""
+                if self._dag_mbb_fallback:
+                    return await self.async_step_audi_mbb_fallback()
                 if self._dag_mbb:
                     return await self.async_step_mbb_login()
                 return await self.async_step_browser_login()
@@ -1260,6 +1551,19 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             f"**4. Go back to Settings > Devices & Services** and "
             f"click Submit / Weiter in the VW Group Connect dialog."
         )
+        # b10 (#835) — manual-entry fallback: VW's prefilled link above
+        # intermittently returns an error page ("Provided request is invalid" /
+        # HTTP 500). The plain sign-in page keeps working, so offer it with the
+        # code to type by hand.
+        if (
+            self._dag_verification_uri_plain
+            and self._dag_verification_uri_plain != self._dag_verification_uri
+        ):
+            message += (
+                f"\n\n_If the link above shows an error page, open_ "
+                f"{self._dag_verification_uri_plain} _and enter the code_ "
+                f"`{self._dag_user_code}` _by hand._"
+            )
         pn_create(
             self.hass,
             message,
@@ -1310,7 +1614,8 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                 mbb_cfg = mbb_dag_config(self._dag_brand)
                 if mbb_cfg is None:
                     raise ValueError(
-                        f"MBB durable login is VW-only (got {self._dag_brand})"
+                        "MBB durable login needs a Car-Net brand (Volkswagen or "
+                        f"Audi); got {self._dag_brand}"
                     )
                 mbb_client_id, mbb_scope = mbb_cfg
                 self._dag_client = DeviceAuthorizationGrant(
@@ -1362,6 +1667,7 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             self._dag_device_code = code.device_code
             self._dag_user_code = code.user_code
             self._dag_verification_uri = code.verification_uri_complete
+            self._dag_verification_uri_plain = code.verification_uri
             self._dag_poll_interval = code.interval
             self._dag_expires_in = code.expires_in
             _LOGGER.debug(
@@ -1370,9 +1676,17 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             )
         except Exception as err:  # noqa: BLE001 — flow-level catch
             self._dag_error = str(err)
+            # #1364 (Audi Q4 e-tron) / #1337 (Porsche) — the manufacturer disabled
+            # the app device-code grant (Auth0 migration; the token exchange is now
+            # gated behind on-device Play-Integrity attestation we can't satisfy
+            # headless). Flag the unauthorized_client rejection so the brand picker
+            # shows an honest, actionable message instead of a raw exception.
+            _e = str(err).lower()
+            if "unauthorized_client" in _e or "not allowed" in _e:
+                self._dag_grant_disabled = True
             _LOGGER.warning(
                 "Browser login Phase 1 failed for %s: %s",
-                self._dag_brand, err,
+                self._dag_brand, type(err).__name__,
             )
             if hasattr(self, "_dag_session") and self._dag_session is not None:
                 await self._dag_session.close()
@@ -1425,12 +1739,15 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             # not a transient failure: MBB (durable login + commands) simply
             # doesn't cover MEB cars. Flag it so the flow aborts with a clear
             # "use EU Data Act instead" message rather than looping the VIN form.
-            low = str(err).lower()
+            # Read the marker from message AND the raw body attribute: APIError's
+            # message is now redacted (body stripped, #1355), so an MBB exchange
+            # that raises APIError would otherwise hide "invalid_grant" here.
+            low = (str(err) + " " + str(getattr(err, "body", ""))).lower()
             if self._dag_mbb and ("unknown user" in low or "invalid_grant" in low):
                 self._dag_mbb_ineligible = True
             _LOGGER.warning(
                 "Browser login Phase 2 failed for %s: %s",
-                self._dag_brand, err,
+                self._dag_brand, type(err).__name__,
             )
         finally:
             sess = getattr(self, "_dag_session", None)
@@ -1470,6 +1787,55 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
         if self._dag_tokens is None:
             # Shouldn't happen if step routing is correct, but defensive.
             return self.async_abort(reason="dag_no_tokens")
+
+        # b10 (#845/#835) — passwordless reauth: the QR was re-run to refresh an
+        # EXISTING entry's tokens. Update it in place and stop here, BEFORE any of
+        # the create/dedup branches below (which stay untouched for fresh setup).
+        if self._reauth_qr:
+            return await self._finish_reauth_qr()
+
+        # b15 — device-grant Audi command FALLBACK: the MBB QR just minted the
+        # durable Car-Net bearer; attach it to an EXISTING device-grant Audi entry
+        # as a BFF-refusal fallback (CONF_MBB_COMMAND_FALLBACK). Reached from
+        # ``async_step_audi_mbb_fallback`` (menu) or the setup checkbox, both of
+        # which set ``_dag_mbb_fallback`` + ``_mbb_fallback_entry_id``. The BFF
+        # stays the command primary; MBB only steps in when the BFF refuses (401/
+        # 403) — see coordinator ``_cariad_cmd``. If the MBB bearer never minted
+        # (MEB/ID car), abort with the eligibility reason.
+        if self._dag_mbb_fallback:
+            if self._dag_mbb_tokens is None:
+                return self.async_abort(reason="mbb_not_eligible")
+            entry = self.hass.config_entries.async_get_entry(
+                self._mbb_fallback_entry_id or ""
+            )
+            if entry is None:
+                return self.async_abort(reason="reconfigure_failed")
+            new_data = {
+                **entry.data,
+                CONF_MBB_COMMAND_FALLBACK: True,
+                CONF_MBB_COMMAND_TOKENS: {
+                    "access_token": self._dag_mbb_tokens.access_token,
+                    "refresh_token": self._dag_mbb_tokens.refresh_token,
+                    "id_token": self._dag_tokens.id_token,
+                    "expires_at": self._dag_mbb_tokens.expires_at,
+                    "strategy": "mbb",
+                },
+                CONF_MBB_COMMAND_CLIENT_ID: self._dag_mbb_client_id,
+            }
+            raw_vins = str(self._dag_user_input.get(CONF_MBB_VINS, "") or "")
+            vins = [
+                v.strip().upper()
+                for v in raw_vins.replace(",", " ").split()
+                if 11 <= len(v.strip()) <= 17
+            ]
+            if vins:
+                new_data[CONF_MBB_VINS] = vins
+            _spin = str(self._dag_user_input.get(CONF_SPIN, "") or "").strip()
+            if _spin:
+                new_data[CONF_SPIN] = _spin
+            self.hass.config_entries.async_update_entry(entry, data=new_data)
+            await self.hass.config_entries.async_reload(entry.entry_id)
+            return self.async_abort(reason="mbb_fallback_armed")
 
         # b12 — Portal-primary entry WITH an MBB command channel: the QR just
         # minted the durable-MBB bearer; attach it to the pending portal entry
@@ -1619,6 +1985,298 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             errors=errors,
         )
 
+    @staticmethod
+    def _porsche_report_url(step: str, reason: str, screen: str = "") -> str:
+        """Build a PII-FREE pre-filled GitHub issue URL for a Porsche login wall.
+
+        #1337 — when the headless login hits a screen we can't clear (captcha /
+        consent / an unknown Auth0 ACUL screen), we don't yet know WHICH screen
+        it is for that account. Rather than wait for a reporter to volunteer a
+        capture, the setup dialog hands the user a one-click "report this" link
+        so we get the decisive datapoint cleanly.
+
+        Privacy: the query string carries ONLY non-identifying context — which
+        step failed, the error key, and the Auth0 screen name if known. It must
+        NEVER contain a VIN, e-mail, password, token, captcha text, or any full
+        auth URL (those carry ``state``/``code``). Everything sensitive stays in
+        the auto-redacted diagnostics the body asks the user to attach — never in
+        the URL. (Redaction-gate: no secrets/PII in query strings.)
+        """
+        from urllib.parse import urlencode  # noqa: PLC0415
+
+        title = f"[Porsche login] {reason}"
+        body = (
+            "Auto-filled by the VW Group Connect setup dialog.\n\n"
+            f"- Step: {step}\n"
+            f"- Error: {reason}\n"
+            f"- Auth0 screen: {screen or 'unknown'}\n\n"
+            "What happened (optional):\n\n\n"
+            "Most useful: enable debug logging for VW Group Connect (Settings -> "
+            "Devices & Services -> VW Group Connect -> three-dots menu -> Enable "
+            "debug logging), reproduce once, then paste the 'Porsche auth:' lines "
+            "from the log -- they name the exact screen this got stuck on. "
+            "(If the setup itself failed there is no entry yet, so there is no "
+            "diagnostics file to download; the debug lines are the capture.) "
+            "If the integration IS set up, also attach Download diagnostics "
+            "(automatically redacted).\n"
+        )
+        query = urlencode({"labels": "porsche,auth", "title": title, "body": body})
+        return (
+            "https://github.com/its-me-prash/vwgroup-connect-ha/issues/new?"
+            + query
+        )
+
+    @staticmethod
+    def _porsche_captcha_img_html(data_uri: str) -> str:
+        """Resize a tiny inline captcha SVG for visibility.
+
+        b19 (#1337, CJNE-comparison #12) — mirrors ha-porscheconnect's
+        ``_async_form_captcha``: Porsche's native captcha SVG is 150x50,
+        too small to read comfortably; blown up to 300x100 with a white
+        background. Non-SVG images (a raster fallback) pass through as-is.
+        """
+        import base64  # noqa: PLC0415
+
+        try:
+            header, payload = data_uri.split(",", 1)
+            if "svg" in header:
+                svg = base64.b64decode(payload)
+                svg = svg.replace(
+                    b'width="150" height="50"',
+                    b'width="300" height="100" style="background-color:white"',
+                )
+                payload = base64.b64encode(svg).decode("ascii")
+                data_uri = f"{header},{payload}"
+        except Exception:  # noqa: BLE001 — cosmetic only, never break the form
+            pass
+        return f'<img src="{data_uri}" />'
+
+    async def _persist_porsche_token_store(
+        self, entry_id: str, tok: dict[str, Any] | None
+    ) -> None:
+        """v4.7.7 (#1337) — on Porsche reauth/reconfigure, OVERWRITE the per-entry
+        token store with the freshly solved-captcha token.
+
+        The coordinator prefers the persisted token store; the entry.data bridge
+        (``porsche_initial_tokens``) is only promoted when that store is EMPTY. On
+        a reauth the store still holds the old, now-dead token, so without this
+        overwrite the reload would restore the dead token and loop straight back
+        to reauth. Mirrors the DAG QR reauth's store overwrite. Fail-soft: a
+        storage error must not block the (otherwise successful) reauth.
+        """
+        if not tok:
+            return
+        try:
+            from homeassistant.helpers.storage import Store  # noqa: PLC0415
+
+            from .cariad.auth._token_storage import (  # noqa: PLC0415
+                _STORAGE_VERSION,
+                TokenStorage,
+                storage_key_for_entry,
+            )
+            from .cariad.models import TokenSet  # noqa: PLC0415
+            fresh = TokenSet(
+                access_token=str(tok.get("access_token", "")),
+                refresh_token=str(tok.get("refresh_token", "")),
+                id_token=str(tok.get("id_token", "")),
+                expires_at=float(tok.get("expires_at", 0.0) or 0.0),
+                strategy=str(tok.get("strategy", "") or "porsche"),
+            )
+            store: Store[dict[str, Any]] = Store(
+                self.hass, _STORAGE_VERSION, storage_key_for_entry(entry_id)
+            )
+            await TokenStorage(store).save(fresh)
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug(
+                "Porsche: could not overwrite token store on reauth", exc_info=True
+            )
+
+    async def async_step_porsche_captcha(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """b19 (#1337, CJNE-comparison #12) — solve Porsche's Auth0 captcha.
+
+        Reached only from Porsche email+password login (initial setup or
+        reauth) when Auth0 rendered a captcha instead of continuing the
+        redirect chain (``PorscheCaptchaRequiredError``). This is NOT a
+        generic "try again" retry: the Auth0 ``state`` and PKCE
+        ``code_verifier`` captured when the captcha was first raised must be
+        reused (see ``auth/porsche.py::PorscheAuth.authenticate`` — they are
+        bound to the original ``/authorize`` transaction and cannot be
+        regenerated), so this calls ``_validate_credentials`` with the
+        captcha resume kwargs rather than looping back to
+        ``async_step_email_password``.
+
+        NOT LIVE-VERIFIED — grounded against CJNE/pyporscheconnectapi's
+        extraction (Apache-2.0) and ``ha-porscheconnect``'s config-flow step
+        (same author, same license), but this project has no live account
+        that has actually hit a Porsche captcha yet.
+        """
+        errors: dict[str, str] = {}
+        from .cariad.exceptions import PorscheCaptchaRequiredError  # noqa: PLC0415
+
+        # #1337 — one report link for every give-up path in this step, so a user
+        # who hits a wall we can't clear can hand us the decisive datapoint.
+        def _abort_report(
+            reason: str, screen: str = ""
+        ) -> config_entries.ConfigFlowResult:
+            return self.async_abort(
+                reason=reason,
+                description_placeholders={
+                    "report_url": self._porsche_report_url(
+                        self._porsche_captcha_return or "porsche_captcha", reason,
+                        screen,
+                    ),
+                },
+            )
+
+        if user_input is not None:
+            code = str(user_input.get(CONF_CAPTCHA_CODE, "")).strip()
+            if not code:
+                # Blank submit — nothing was consumed, so re-show the SAME image
+                # (no fresh challenge fetched → no extra hit on Porsche's Auth0).
+                errors["base"] = "missing_captcha"
+            else:
+                if self._porsche_captcha_return == "reauth":
+                    country = self._porsche_reauth_country
+                elif self._porsche_captcha_return == "reconfigure":
+                    country = self._pending_user_input.get(CONF_COUNTRY, "us")
+                else:
+                    country = self._pending_entry_data.get(CONF_COUNTRY, "us")
+                try:
+                    _tok = await _validate_credentials(
+                        self.hass, "porsche",
+                        self._pending_username, self._pending_password,
+                        country=country,
+                        captcha_code=code,
+                        captcha_state=self._porsche_captcha_state,
+                        captcha_verifier=self._porsche_captcha_verifier,
+                        captcha_resume=self._porsche_captcha_resume,
+                    )
+                except PorscheCaptchaRequiredError as err:
+                    # Chained captcha (CJNE-comparison #12 — ha-porscheconnect
+                    # handles this the same way): Auth0 rendered ANOTHER one
+                    # rather than accepting or cleanly rejecting the solution.
+                    # Bound the loop — repeated failed attempts have LOCKED
+                    # Porsche accounts (ha-porscheconnect#199), so after a few
+                    # tries we stop and offer a report instead of hammering.
+                    self._porsche_captcha_attempts += 1
+                    if self._porsche_captcha_attempts >= 3:
+                        return _abort_report("porsche_captcha_cooldown")
+                    # Fresh image/state/verifier — never re-show a consumed one.
+                    self._porsche_captcha_image    = err.captcha_image
+                    self._porsche_captcha_state    = err.state
+                    self._porsche_captcha_verifier = err.code_verifier
+                    self._porsche_captcha_resume   = err.resume
+                    errors["base"] = "captcha_retry"
+                except ValueError as err:
+                    mapped = _map_error(str(err))
+                    if mapped == "porsche_login_wall":
+                        # b23 (#1337) — the captcha was accepted but the login
+                        # then hit the post-password captcha/consent wall.
+                        # Re-showing the now-consumed captcha would just invite a
+                        # lockout-risking retry, so stop cleanly + offer a report.
+                        return _abort_report("porsche_login_wall", _wall_screen(str(err)))
+                    if mapped == "cannot_connect":
+                        # Transient — the challenge may still be valid, so let the
+                        # user retry rather than forcing a full restart.
+                        errors["base"] = "cannot_connect"
+                    else:
+                        # Auth0 rejected without re-challenging: the captcha is
+                        # consumed and dead. Don't loop on a stale image — stop
+                        # cleanly; a fresh login gets a fresh transaction.
+                        return _abort_report("porsche_captcha_failed")
+                else:
+                    self._porsche_captcha_attempts = 0
+                    if self._porsche_captcha_return == "reauth":
+                        reauth_entry = self.hass.config_entries.async_get_entry(
+                            self._porsche_reauth_entry_id
+                        )
+                        if reauth_entry is None:
+                            return self.async_abort(reason="reauth_failed")
+                        self.hass.config_entries.async_update_entry(
+                            reauth_entry,
+                            data={
+                                **reauth_entry.data,
+                                CONF_PASSWORD: self._pending_password,
+                                CONF_SPIN: self._porsche_reauth_spin,
+                                # v4.7.7 (#1337) — bridge the freshly solved-captcha
+                                # token so the reload reuses it (refresh) instead of
+                                # a fresh interactive login (another captcha).
+                                **({"porsche_initial_tokens": _tok} if _tok else {}),
+                            },
+                        )
+                        # v4.7.7 — overwrite the token store so the reload reuses
+                        # the fresh token, not the dead one it still holds.
+                        await self._persist_porsche_token_store(
+                            reauth_entry.entry_id, _tok
+                        )
+                        await self.hass.config_entries.async_reload(
+                            reauth_entry.entry_id
+                        )
+                        return self.async_abort(reason="reauth_successful")
+                    if self._porsche_captcha_return == "reconfigure":
+                        # G1 (#1337) — a captcha hit during Reconfigure. Mirror
+                        # async_step_reconfigure's in-place update (Porsche is
+                        # never MBB-eligible, so no command-channel chain here).
+                        entry = self.hass.config_entries.async_get_entry(
+                            self._porsche_reconfigure_entry_id
+                        )
+                        if entry is None:
+                            return self.async_abort(reason="reconfigure_failed")
+                        brand = self._pending_brand
+                        username = self._pending_username
+                        password = self._pending_password
+                        new_unique_id = f"{brand}_{username}"
+                        await self.async_set_unique_id(new_unique_id)
+                        if new_unique_id != entry.unique_id:
+                            self._abort_if_unique_id_configured()
+                        base = self._build_entry_data(
+                            brand, username, password, self._pending_user_input
+                        )
+                        merged = (
+                            base if new_unique_id != entry.unique_id
+                            else {**entry.data, **base}
+                        )
+                        if _tok:  # v4.7.7 — bridge the solved-captcha token
+                            merged["porsche_initial_tokens"] = _tok
+                        self.hass.config_entries.async_update_entry(
+                            entry,
+                            title=f"{_brand_label(brand)} — {username}",
+                            unique_id=new_unique_id,
+                            data=merged,
+                        )
+                        await self._persist_porsche_token_store(entry.entry_id, _tok)
+                        await self.hass.config_entries.async_reload(entry.entry_id)
+                        return self.async_abort(reason="reconfigure_successful")
+                    # "email_password" — Porsche is never MBB-eligible (VW/Audi
+                    # only), so the non-captcha path's plain create-entry branch
+                    # is the only outcome here.
+                    if _tok:  # v4.7.7 — bridge the solved-captcha token
+                        self._pending_entry_data = {
+                            **self._pending_entry_data,
+                            "porsche_initial_tokens": _tok,
+                        }
+                    return self.async_create_entry(
+                        title=f"{_brand_label(self._pending_brand)} — {self._pending_username}",
+                        data=self._pending_entry_data,
+                    )
+
+        return self.async_show_form(
+            step_id="porsche_captcha",
+            data_schema=vol.Schema({vol.Required(CONF_CAPTCHA_CODE): str}),
+            errors=errors,
+            description_placeholders={
+                "captcha_img": self._porsche_captcha_img_html(
+                    self._porsche_captcha_image
+                ),
+                "report_url": self._porsche_report_url(
+                    self._porsche_captcha_return or "porsche_captcha",
+                    "porsche_captcha",
+                ),
+            },
+        )
+
     async def async_step_reauth(
         self, entry_data: dict[str, Any]
     ) -> config_entries.ConfigFlowResult:
@@ -1634,6 +2292,17 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             self.context["entry_id"]
         )
 
+        # b10 (#845/#835) — passwordless (device_grant / durable-MBB) entries have
+        # no stored password (username is the BrandID `sub`), so the credential
+        # form below can never succeed for them and leaves the user stuck. Route
+        # them to re-run the QR sign-in, which updates the entry's tokens in place.
+        if (
+            reauth_entry is not None
+            and reauth_entry.data.get("dag_initial_tokens")
+            and not reauth_entry.data.get(CONF_PASSWORD)
+        ):
+            return await self.async_step_reauth_qr()
+
         if user_input is not None and reauth_entry is not None:
             brand    = reauth_entry.data[CONF_BRAND]
             username = reauth_entry.data[CONF_USERNAME]
@@ -1641,17 +2310,49 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             spin     = user_input.get(CONF_SPIN, reauth_entry.data.get(CONF_SPIN, ""))
             country  = reauth_entry.data.get(CONF_COUNTRY, "us")
 
+            from .cariad.exceptions import PorscheCaptchaRequiredError  # noqa: PLC0415
+
             try:
-                await _validate_credentials(
+                _tok = await _validate_credentials(
                     self.hass, brand, username, password, country=country
                 )
+            except PorscheCaptchaRequiredError as err:
+                self._pending_brand    = brand
+                self._pending_username = username
+                self._pending_password = password
+                self._porsche_captcha_return = "reauth"
+                self._porsche_reauth_entry_id = reauth_entry.entry_id
+                self._porsche_reauth_spin     = spin
+                self._porsche_reauth_country  = country
+                self._porsche_captcha_image    = err.captcha_image
+                self._porsche_captcha_state    = err.state
+                self._porsche_captcha_verifier = err.code_verifier
+                self._porsche_captcha_resume   = err.resume
+                return await self.async_step_porsche_captcha()
             except ValueError as err:
+                if str(err).startswith("porsche_login_wall"):
+                    return self.async_abort(
+                        reason="porsche_login_wall",
+                        description_placeholders={
+                            "report_url": self._porsche_report_url(
+                                "reauth", "porsche_login_wall", _wall_screen(str(err)),
+                            ),
+                        },
+                    )
                 errors["base"] = _map_error(str(err))
             else:
                 self.hass.config_entries.async_update_entry(
                     reauth_entry,
-                    data={**reauth_entry.data, CONF_PASSWORD: password, CONF_SPIN: spin},
+                    data={
+                        **reauth_entry.data,
+                        CONF_PASSWORD: password,
+                        CONF_SPIN: spin,
+                        # v4.7.7 (#1337) — bridge a Porsche login token so the
+                        # reload reuses it (refresh) instead of re-logging in.
+                        **({"porsche_initial_tokens": _tok} if _tok else {}),
+                    },
                 )
+                await self._persist_porsche_token_store(reauth_entry.entry_id, _tok)
                 await self.hass.config_entries.async_reload(reauth_entry.entry_id)
                 return self.async_abort(reason="reauth_successful")
 
@@ -1671,6 +2372,109 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             },
         )
 
+    async def async_step_reauth_qr(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """b10 (#845/#835) — passwordless reauth via the QR device grant.
+
+        A device_grant / durable-MBB entry has no stored password, so reauth
+        re-runs the same QR sign-in machinery as setup. ``_reauth_qr`` makes the
+        shared finish step update THIS entry's tokens in place (see
+        ``_finish_reauth_qr``) instead of creating a second entry.
+        """
+        reauth_entry = self.hass.config_entries.async_get_entry(
+            self.context["entry_id"]
+        )
+        if reauth_entry is None:
+            return self.async_abort(reason="reconfigure_failed")
+        strategy = (reauth_entry.data.get("dag_initial_tokens") or {}).get(
+            "strategy", "device_grant"
+        )
+        # Mirror the state async_step_browser_login / async_step_mbb_login set
+        # before handing off to the shared pending → approve → finish steps.
+        self._reauth_qr = True
+        self._reauth_qr_entry_id = reauth_entry.entry_id
+        self._dag_mbb = strategy == "mbb"
+        self._dag_mbb_fallback = False
+        self._dag_mbb_command = False
+        self._dag_brand = reauth_entry.data.get(CONF_BRAND, "")
+        self._dag_user_input = dict(reauth_entry.data)
+        self._dag_request_task = None
+        self._dag_poll_task = None
+        self._dag_user_code = ""
+        self._dag_verification_uri = ""
+        self._dag_device_code = ""
+        self._dag_tokens = None
+        self._dag_mbb_tokens = None
+        self._dag_mbb_client_id = ""
+        self._dag_mbb_ineligible = False
+        self._dag_user_id = ""
+        self._dag_error = ""
+        return await self.async_step_browser_login_pending()
+
+    async def _finish_reauth_qr(self) -> config_entries.ConfigFlowResult:
+        """b10 — write the freshly-minted QR tokens onto the existing entry.
+
+        The coordinator prefers the persisted token store over
+        ``dag_initial_tokens`` (it only reads dag_initial_tokens when the store is
+        empty), so a reauth MUST overwrite the persisted store — otherwise the
+        reload would re-load the dead tokens and the reauth would no-op. Overwrite
+        both the store and dag_initial_tokens, then reload the entry.
+        """
+        from homeassistant.helpers.storage import Store  # noqa: PLC0415
+
+        from .cariad.auth._token_storage import (  # noqa: PLC0415
+            _STORAGE_VERSION,
+            TokenStorage,
+            storage_key_for_entry,
+        )
+        from .cariad.models import TokenSet  # noqa: PLC0415
+
+        entry = self.hass.config_entries.async_get_entry(
+            self._reauth_qr_entry_id or ""
+        )
+        if entry is None:
+            return self.async_abort(reason="reconfigure_failed")
+        if self._dag_tokens is None:
+            return self.async_abort(reason="dag_no_tokens")
+        if self._dag_mbb:
+            if self._dag_mbb_tokens is None:
+                return self.async_abort(reason="mbb_not_eligible")
+            fresh = TokenSet(
+                access_token=self._dag_mbb_tokens.access_token,
+                refresh_token=self._dag_mbb_tokens.refresh_token,
+                id_token=self._dag_tokens.id_token,
+                expires_at=self._dag_mbb_tokens.expires_at,
+                strategy="mbb",
+            )
+        else:
+            fresh = TokenSet(
+                access_token=self._dag_tokens.access_token,
+                refresh_token=self._dag_tokens.refresh_token,
+                id_token=self._dag_tokens.id_token,
+                expires_at=self._dag_tokens.expires_at,
+                strategy="device_grant",
+            )
+        store: Store[dict[str, Any]] = Store(
+            self.hass, _STORAGE_VERSION, storage_key_for_entry(entry.entry_id)
+        )
+        await TokenStorage(store).save(fresh)
+        new_data = {
+            **entry.data,
+            "dag_initial_tokens": {
+                "access_token": fresh.access_token,
+                "refresh_token": fresh.refresh_token,
+                "id_token": fresh.id_token,
+                "expires_at": fresh.expires_at,
+                "strategy": fresh.strategy,
+            },
+        }
+        if self._dag_mbb and self._dag_mbb_client_id:
+            new_data["mbb_client_id"] = self._dag_mbb_client_id
+        self.hass.config_entries.async_update_entry(entry, data=new_data)
+        await self.hass.config_entries.async_reload(entry.entry_id)
+        return self.async_abort(reason="reauth_successful")
+
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
@@ -1684,11 +2488,40 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             password = user_input[CONF_PASSWORD]
             country  = user_input.get(CONF_COUNTRY, "us")
 
+            from .cariad.exceptions import PorscheCaptchaRequiredError  # noqa: PLC0415
+
             try:
-                await _validate_credentials(
+                _tok = await _validate_credentials(
                     self.hass, brand, username, password, country=country
                 )
+            except PorscheCaptchaRequiredError as err:
+                # G1 (#1337) — a Porsche captcha during Reconfigure used to
+                # propagate uncaught here (only ValueError was handled) and crash
+                # the flow. Route it through the shared captcha step; the success
+                # branch there updates THIS entry in place.
+                self._pending_brand    = brand
+                self._pending_username = username
+                self._pending_password = password
+                self._pending_user_input = dict(user_input)
+                self._porsche_captcha_return = "reconfigure"
+                self._porsche_reconfigure_entry_id = entry.entry_id
+                self._porsche_captcha_attempts = 0
+                self._porsche_captcha_image    = err.captcha_image
+                self._porsche_captcha_state    = err.state
+                self._porsche_captcha_verifier = err.code_verifier
+                self._porsche_captcha_resume   = err.resume
+                return await self.async_step_porsche_captcha()
             except ValueError as err:
+                if str(err).startswith("porsche_login_wall"):
+                    return self.async_abort(
+                        reason="porsche_login_wall",
+                        description_placeholders={
+                            "report_url": self._porsche_report_url(
+                                "reconfigure", "porsche_login_wall",
+                                _wall_screen(str(err)),
+                            ),
+                        },
+                    )
                 errors["base"] = _map_error(str(err))
             else:
                 new_unique_id = f"{brand}_{username}"
@@ -1712,6 +2545,8 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                 # (unique_id changed) do a clean rebuild — carrying the previous
                 # account's brand-specific tokens forward would be wrong.
                 merged = base if account_changed else {**entry.data, **base}
+                if _tok:  # v4.7.7 (#1337) — bridge a Porsche login token
+                    merged["porsche_initial_tokens"] = _tok
 
                 # v2.17.2 (#666) — arm the durable-MBB command channel on an
                 # EXISTING portal entry via Reconfigure (VW/Audi). Mirrors the
@@ -1760,6 +2595,7 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                     unique_id=new_unique_id,
                     data=merged,
                 )
+                await self._persist_porsche_token_store(entry.entry_id, _tok)
                 await self.hass.config_entries.async_reload(entry.entry_id)
                 return self.async_abort(reason="reconfigure_successful")
 
@@ -1907,6 +2743,87 @@ class VagConnectOptionsFlow(config_entries.OptionsFlow):
                 # (see the entry.options trap) then kept the stale value — so a
                 # per-VIN S-PIN could never be removed once set (#759 follow-up).
                 user_input[CONF_SPIN_BY_VIN] = _by_vin
+            # Škoda: "clear stored official API key" wipes the manual key AND the
+            # per-VIN auto-enrolled map here, so a rotated or exposed key can be
+            # removed from the integration (#1286, n3roGit) — until now there was no
+            # way to remove an auto-enrolled key. A native login then auto-creates a
+            # fresh one on the next update. Takes precedence over the key fields on
+            # the same submit, so a re-save with the key still pre-filled clears.
+            from .const import (  # noqa: PLC0415
+                CONF_READ_PRIORITY,
+                CONF_SKODA_OFFICIAL_API_KEY,
+                CONF_SKODA_OFFICIAL_KEYS,
+            )
+            _clear_official = bool(user_input.pop("clear_skoda_official_key", False))
+            if _clear_official:
+                user_input[CONF_SKODA_OFFICIAL_API_KEY] = ""
+                user_input[CONF_SKODA_OFFICIAL_KEYS] = {}
+                for _kk in [
+                    k for k in list(user_input.keys())
+                    if k.startswith(f"{CONF_SKODA_OFFICIAL_KEYS}_")
+                ]:
+                    user_input.pop(_kk, None)
+            # Škoda per-VIN official API keys — fold the transient
+            # skoda_official_keys_<VIN> fields into the CONF_SKODA_OFFICIAL_KEYS
+            # map {VIN: {"key": ...}}. Keys are VIN-bound, so this lets a multi-car
+            # account enter one per car. A typed key overrides that VIN's entry; a
+            # BLANK field keeps the existing entry (NOT a wipe) — unlike the S-PIN
+            # above, because an official key can be auto-enrolled and expensive to
+            # recreate, and a password field may render blank on reopen, so
+            # blanking must never silently delete a saved key. Start from the stored
+            # map so untouched VINs (incl. auto-enrolled ones) are preserved.
+            # Skipped entirely when the clear switch above fired.
+            _off_fields = [] if _clear_official else [
+                _k for _k in list(user_input.keys())
+                if _k.startswith(f"{CONF_SKODA_OFFICIAL_KEYS}_")
+            ]
+            if _off_fields:
+                _stored = (
+                    self._config_entry.options.get(CONF_SKODA_OFFICIAL_KEYS)
+                    or self._config_entry.data.get(CONF_SKODA_OFFICIAL_KEYS)
+                )
+                _off_map = dict(_stored) if isinstance(_stored, dict) else {}
+                for _k in _off_fields:
+                    _vin = _k[len(CONF_SKODA_OFFICIAL_KEYS) + 1:].strip().upper()
+                    _val = str(user_input.pop(_k) or "").strip()
+                    if not _val:
+                        continue  # keep existing entry; never wipe on a blank field
+                    _prev = _off_map.get(_vin)
+                    if isinstance(_prev, dict) and _prev.get("key") == _val:
+                        continue  # unchanged
+                    _off_map[_vin] = {"key": _val, "source": "manual"}
+                user_input[CONF_SKODA_OFFICIAL_KEYS] = _off_map
+            # #1357 — fold the transient read_priority_<VIN> fields into the
+            # CONF_READ_PRIORITY map {VIN: mode}. The value is a plain enum that
+            # always renders, so a field set (back) to "auto" DROPS that VIN's entry
+            # (returns it to the default) — unlike the official keys, blanking here
+            # is a deliberate reset, not a lost secret.
+            _rp_fields = [
+                _k for _k in list(user_input.keys())
+                if _k.startswith(f"{CONF_READ_PRIORITY}_")
+            ]
+            if _rp_fields:
+                from .const import (  # noqa: PLC0415
+                    READ_PRIORITY_DEFAULT,
+                    READ_PRIORITY_MODES,
+                )
+                _stored_rp = (
+                    self._config_entry.options.get(CONF_READ_PRIORITY)
+                    or self._config_entry.data.get(CONF_READ_PRIORITY)
+                )
+                _rp_map = dict(_stored_rp) if isinstance(_stored_rp, dict) else {}
+                for _k in _rp_fields:
+                    _vin = _k[len(CONF_READ_PRIORITY) + 1:].strip().upper()
+                    _val = str(user_input.pop(_k) or "").strip()
+                    if (
+                        _val
+                        and _val != READ_PRIORITY_DEFAULT
+                        and _val in READ_PRIORITY_MODES
+                    ):
+                        _rp_map[_vin] = _val
+                    else:
+                        _rp_map.pop(_vin, None)  # auto/blank → back to the default
+                user_input[CONF_READ_PRIORITY] = _rp_map
             # b1/C1 — if the user ticked "add vw.de read channel", branch into
             # the login sub-flow; the remaining options are saved when it
             # completes. Default-False so untouched submits behave exactly as
@@ -2016,6 +2933,15 @@ class VagConnectOptionsFlow(config_entries.OptionsFlow):
                         current_data.get(CONF_BATTERY_NOMINAL_KWH, 0),
                     ),
                 ): _KWH_SELECTOR,
+                # Optional fuel-tank capacity (litres) so a litres-only source
+                # (acpp plug&play) can show a fuel-level %. 0 = off (litres only).
+                vol.Optional(
+                    CONF_FUEL_TANK_CAPACITY,
+                    default=current_options.get(
+                        CONF_FUEL_TANK_CAPACITY,
+                        current_data.get(CONF_FUEL_TANK_CAPACITY, 0),
+                    ),
+                ): _LITERS_SELECTOR,
                 vol.Optional(
                     CONF_ENABLE_REVERSE_GEOCODING,
                     default=current_options.get(
@@ -2250,6 +3176,64 @@ class VagConnectOptionsFlow(config_entries.OptionsFlow):
                 schema[vol.Optional(
                     CONF_VWEU_DEVICE_GRANT, default=False,
                 )] = _BOOL_SELECTOR
+        # Škoda official public API — opt-in key. A Škoda entry may add an API key
+        # it minted in the MyŠkoda app (Settings → Smart Home → API Keys, v8.16+);
+        # the official API is then read live on every cycle and merged into the
+        # existing sensors as a live source (and also serves as the hard-failure
+        # failover). This single field is the FALLBACK applied to any car without
+        # its own per-VIN key below. Pre-filled so re-opening options never blanks it.
+        if current_data.get(CONF_BRAND) == "skoda":
+            from .const import (  # noqa: PLC0415
+                CONF_SKODA_OFFICIAL_API_KEY,
+                CONF_SKODA_OFFICIAL_MODE,
+                SKODA_OFFICIAL_MODE_DEFAULT,
+                SKODA_OFFICIAL_MODES,
+            )
+            # #1286 (n3roGit) — pick how the official manufacturer API interacts
+            # with the primary "mysmob" channel (auto-merge / prefer-official /
+            # failover / official-only / mysmob-only). Options-then-data default so
+            # the options-trap (listener folds options into data) can't blank it.
+            schema[vol.Optional(
+                CONF_SKODA_OFFICIAL_MODE,
+                default=str(current_options.get(
+                    CONF_SKODA_OFFICIAL_MODE,
+                    current_data.get(
+                        CONF_SKODA_OFFICIAL_MODE, SKODA_OFFICIAL_MODE_DEFAULT
+                    ),
+                )),
+            )] = SelectSelector(SelectSelectorConfig(
+                options=list(SKODA_OFFICIAL_MODES),
+                mode=SelectSelectorMode.DROPDOWN,
+                translation_key=CONF_SKODA_OFFICIAL_MODE,
+            ))
+            schema[vol.Optional(
+                CONF_SKODA_OFFICIAL_API_KEY,
+                default=str(current_options.get(
+                    CONF_SKODA_OFFICIAL_API_KEY,
+                    current_data.get(CONF_SKODA_OFFICIAL_API_KEY, ""),
+                )),
+            )] = _PASSWORD_SELECTOR
+            # #1286 (n3roGit) — a switch to clear the stored official API key(s): the
+            # manual key AND the auto-enrolled per-VIN map. Until now an auto-enrolled
+            # key could not be removed from the UI. Shown only when a key is actually
+            # stored. Ticking it + submitting wipes them here (a native login then
+            # auto-mints a fresh one on the next update). Default off.
+            from .const import CONF_SKODA_OFFICIAL_KEYS  # noqa: PLC0415
+            _has_official = bool(
+                current_options.get(
+                    CONF_SKODA_OFFICIAL_API_KEY,
+                    current_data.get(CONF_SKODA_OFFICIAL_API_KEY, ""),
+                )
+            ) or bool(
+                current_options.get(
+                    CONF_SKODA_OFFICIAL_KEYS,
+                    current_data.get(CONF_SKODA_OFFICIAL_KEYS),
+                )
+            )
+            if _has_official:
+                schema[vol.Optional(
+                    "clear_skoda_official_key", default=False,
+                )] = _BOOL_SELECTOR
         # v2.17.5 (#759) — one optional S-PIN field per known VIN, shown only
         # when the account has more than one vehicle (each may carry its own
         # S-PIN). Empty leaves that vehicle on the shared CONF_SPIN above; values
@@ -2271,6 +3255,68 @@ class VagConnectOptionsFlow(config_entries.OptionsFlow):
                     f"{CONF_SPIN_BY_VIN}_{_vin}",
                     default=str(_cur_by_vin.get(_vin, "")),
                 )] = _SPIN_SELECTOR
+        # Škoda official public-API keys are VIN-bound (one key per car, minted in
+        # the MyŠkoda app, max 5/VIN). A multi-car Škoda account therefore gets one
+        # optional key field PER VIN, in addition to the single fallback field
+        # above. Pre-filled from the stored map so a re-save never wipes a saved or
+        # auto-enrolled key (options-trap safe); folded into CONF_SKODA_OFFICIAL_KEYS
+        # on submit. Only shown when the account has more than one vehicle — a
+        # single-car user just uses the one field above.
+        if (
+            current_data.get(CONF_BRAND) == "skoda"
+            and isinstance(_vehicles, dict)
+            and len(_vehicles) > 1
+        ):
+            from .const import CONF_SKODA_OFFICIAL_KEYS  # noqa: PLC0415
+            _off_map = current_options.get(
+                CONF_SKODA_OFFICIAL_KEYS,
+                current_data.get(CONF_SKODA_OFFICIAL_KEYS),
+            )
+            if not isinstance(_off_map, dict):
+                _off_map = {}
+            for _vin in _vehicles:
+                _rec = _off_map.get(_vin) or _off_map.get(str(_vin).upper()) or {}
+                _cur_key = _rec.get("key", "") if isinstance(_rec, dict) else ""
+                schema[vol.Optional(
+                    f"{CONF_SKODA_OFFICIAL_KEYS}_{_vin}",
+                    default=str(_cur_key),
+                )] = _PASSWORD_SELECTOR
+        # #1357 (Ra72xx) — per-VIN read-source priority. When a car reads over BOTH
+        # the EU Data Act portal and the live vw.de channel, the portal (batch) feed
+        # wins every shared field by default; this lets the user flip that PER car so
+        # the live vw.de channel wins the fields it carries and EU-DA fills the rest.
+        # Shown only when a vw.de channel is configured (else the reorder is a no-op).
+        # Options-then-data default (options-trap safe); folded into CONF_READ_PRIORITY
+        # on submit. "auto" for a VIN removes its entry (back to the default).
+        _has_vwde = bool(
+            current_data.get(CONF_SUPPLEMENTARY_AUTHPROXY)
+            or current_data.get(CONF_WEBSITE_AUTHPROXY)
+        )
+        if _has_vwde and isinstance(_vehicles, dict) and _vehicles:
+            from .const import (  # noqa: PLC0415
+                CONF_READ_PRIORITY,
+                READ_PRIORITY_DEFAULT,
+                READ_PRIORITY_MODES,
+            )
+            _rp_map = current_options.get(
+                CONF_READ_PRIORITY, current_data.get(CONF_READ_PRIORITY)
+            )
+            if not isinstance(_rp_map, dict):
+                _rp_map = {}
+            for _vin in _vehicles:
+                _cur_rp = str(
+                    _rp_map.get(_vin) or _rp_map.get(str(_vin).upper())
+                    or READ_PRIORITY_DEFAULT
+                )
+                if _cur_rp not in READ_PRIORITY_MODES:
+                    _cur_rp = READ_PRIORITY_DEFAULT
+                schema[vol.Optional(
+                    f"{CONF_READ_PRIORITY}_{_vin}", default=_cur_rp,
+                )] = SelectSelector(SelectSelectorConfig(
+                    options=list(READ_PRIORITY_MODES),
+                    mode=SelectSelectorMode.DROPDOWN,
+                    translation_key=CONF_READ_PRIORITY,
+                ))
         # v2.26.0 — companion (ADB) advanced opt-ins, surfaced only for a
         # companion entry (both default OFF: each TAPS the phone, so a user opts
         # in only after confirming the flow on their own device).
@@ -2293,6 +3339,47 @@ class VagConnectOptionsFlow(config_entries.OptionsFlow):
                 default=current_options.get(
                     CONF_COMPANION_WAKE_SLEEP,
                     current_data.get(CONF_COMPANION_WAKE_SLEEP, False),
+                ),
+            )] = _BOOL_SELECTOR
+            # v4.4.0 (#968) — the deeper nav-read opt-ins. Each walks further
+            # into the app than the charge-detail read, so each is its own
+            # toggle and each defaults to OFF.
+            from .const import (  # noqa: PLC0415
+                CONF_COMPANION_READ_CLIMATE_DETAIL,
+                CONF_COMPANION_READ_PARKING_POSITION,
+                CONF_COMPANION_READ_VEHICLE_HEALTH,
+            )
+            for _key in (
+                CONF_COMPANION_READ_VEHICLE_HEALTH,
+                CONF_COMPANION_READ_CLIMATE_DETAIL,
+                CONF_COMPANION_READ_PARKING_POSITION,
+            ):
+                schema[vol.Optional(
+                    _key,
+                    default=current_options.get(
+                        _key, current_data.get(_key, False)
+                    ),
+                )] = _BOOL_SELECTOR
+        # b17 — opt-in: auto-create monthly ``utility_meter`` helpers wired to
+        # our TOTAL_INCREASING sensors (charged energy kWh, odometer km), so a
+        # user gets monthly counters without hand-building them. Surfaced ONLY
+        # when at least one such source sensor is actually registered for this
+        # account's cars — a non-EV with no odometer sensor yet has nothing to
+        # wrap, so it never sees the toggle (keeps the form uncluttered and the
+        # option honest). These are persistent config-entry helpers the user
+        # must remove themselves, so it stays OFF by default; the coordinator
+        # provisions once, post-first-poll, only while the flag is on. Options-
+        # then-data default so the options-trap (listener folds options into
+        # data) can't silently blank it.
+        from .const import CONF_AUTO_UTILITY_METERS  # noqa: PLC0415
+        from .utility_meter import any_source_sensor_present  # noqa: PLC0415
+        _um_vins = list(_vehicles) if isinstance(_vehicles, dict) else []
+        if _um_vins and any_source_sensor_present(self.hass, _um_vins):
+            schema[vol.Optional(
+                CONF_AUTO_UTILITY_METERS,
+                default=current_options.get(
+                    CONF_AUTO_UTILITY_METERS,
+                    current_data.get(CONF_AUTO_UTILITY_METERS, False),
                 ),
             )] = _BOOL_SELECTOR
         return self.async_show_form(
