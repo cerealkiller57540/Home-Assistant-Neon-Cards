@@ -43,6 +43,7 @@ advanced:
   transmit_power: 20
   elapsed: true
   last_seen: ISO_8601
+  enable_external_js: true
 frontend:
   enabled: true
   port: 8099

@@ -352,7 +352,7 @@
   - condition: template
     value_template: "{{ trigger.id in ['restart', 'transition_hc_night', 'transition_hp_morning',\n
       \                 'transition_hc_afternoon', 'transition_hp_evening']\n   or
-      states('sensor.buanderie_lixee_tarif') in ['HEURE PLEINE', 'HEURE CREUSE'] }}\n"
+      states('sensor.lixee_current_price') in ['HEURE PLEINE', 'HEURE CREUSE'] }}\n"
   actions:
   - if:
     - condition: trigger
@@ -361,7 +361,7 @@
     - action: switch.turn_on
       target:
         entity_id: switch.ecodan_heatpump_server_control_zone_1_prohibit_heating
-    - wait_template: "{{ states('sensor.buanderie_lixee_tarif') in ['HEURE PLEINE',
+    - wait_template: "{{ states('sensor.lixee_current_price') in ['HEURE PLEINE',
         'HEURE CREUSE']\n   and has_value('sensor.thermometre_salon_temperature')\n
         \  and has_value('number.ecodan_heatpump_auto_adaptive_setpoint_bias')\n   and
         has_value('sensor.heat_pump_outdoor_temp_fused') }}\n"
@@ -398,7 +398,7 @@
     - variables:
         expected_price: "{% if trigger.id in ['transition_hc_night', 'transition_hc_afternoon']
           %}\n  HEURE CREUSE\n{% else %}\n  HEURE PLEINE\n{% endif %}\n"
-    - wait_template: '{{ is_state(''sensor.buanderie_lixee_tarif'', expected_price)
+    - wait_template: '{{ is_state(''sensor.lixee_current_price'', expected_price)
         }}'
       timeout:
         minutes: 10
@@ -788,8 +788,8 @@
         name: Heat Pump Smart Control
         message: ✓ Hors créneau / Lixee non disponible. Bias → 0.0°C (AA full control)
   variables:
-    is_hc: '{{ is_state(''sensor.buanderie_lixee_tarif'', ''HEURE CREUSE'') }}'
-    is_hp: '{{ is_state(''sensor.buanderie_lixee_tarif'', ''HEURE PLEINE'') }}'
+    is_hc: '{{ is_state(''sensor.lixee_current_price'', ''HEURE CREUSE'') }}'
+    is_hp: '{{ is_state(''sensor.lixee_current_price'', ''HEURE PLEINE'') }}'
     off_peak_boost: '{{ states(''input_number.heat_pump_bias_off_peak'')           |
       float(1.5) }}'
     peak_reduction: '{{ states(''input_number.heat_pump_bias_peak'')               |

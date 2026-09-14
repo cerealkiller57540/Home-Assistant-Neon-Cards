@@ -33,9 +33,15 @@ from ha_secrets import MISTRAL_KEY, GEMINI_KEY, NEMOTRON_KEY
 # sur ce cas idéal (1 appel/jour, qualité prime, débit osef). À comparer à mistral/gemini.
 # "alternate" = comparaison Mistral jours PAIRS / Gemini jours IMPAIRS (mise en pause le temps
 # du test Nemotron).
-PROVIDER = "nemotron"
+# 13/09/2026 — CHAINE DE SECOURS (decidee par Chris) : gemini > mistral > nemotron.
+# PROVIDER designe le 1er maillon ; CHAIN_ORDER decrit l'ordre reel d'essai.
+PROVIDER = "gemini"
+CHAIN_ORDER = ("gemini", "mistral", "nemotron")
 
-MISTRAL_MODEL = "mistral-medium-2508"
+# ministral-8b-latest = le SEUL modele Mistral qui repond encore sur ce compte.
+# La famille mistral-small / mistral-medium a son quota mis a ZERO cote Mistral
+# (mesure par endpoint le 13/09) : mistral-medium-2508 etait donc un maillon MORT.
+MISTRAL_MODEL = "ministral-8b-latest"
 MISTRAL_URL   = "https://api.mistral.ai/v1/chat/completions"
 GEMINI_MODEL  = "gemini-3.1-flash-lite-preview"
 GEMINI_URL    = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
@@ -368,18 +374,42 @@ async def _call_nemotron_summary(journal):
     return await _call_nemotron_summary_sync(journal)
 
 
-async def _call_summary(journal):
-    """Dispatcher selon PROVIDER (gemini | mistral | nemotron | alternate).
-    "alternate" : Mistral les jours pairs, Gemini les jours impairs (comparaison).
-    Renvoie (texte, label_modele) pour tracer qui a écrit le résumé."""
-    prov = PROVIDER
-    if prov == "alternate":
-        prov = "mistral" if (date.today().day % 2 == 0) else "gemini"
+async def _call_one(prov, journal):
+    """Appelle UN fournisseur. Retourne (texte, nom_du_modele). Leve si echec."""
     if prov == "nemotron":
         return await _call_nemotron_summary(journal), NEMOTRON_MODEL
-    if prov == "gemini":
-        return await _call_gemini_summary(journal), GEMINI_MODEL
-    return await _call_mistral_summary(journal), MISTRAL_MODEL
+    if prov == "mistral":
+        return await _call_mistral_summary(journal), MISTRAL_MODEL
+    return await _call_gemini_summary(journal), GEMINI_MODEL
+
+
+async def _call_summary(journal):
+    """Parcourt CHAIN_ORDER jusqu'au premier fournisseur qui repond.
+
+    13/09/2026 — AVANT : un seul fournisseur, aucun secours. Nemotron timeoute en
+    pratique (3 x 90 s = 4 min 30 avant d'abandonner) et le secours implicite pointait
+    la famille Mistral a quota ZERO : il n'existait AUCUN chemin fonctionnel, le resume
+    du jour etait simplement perdu. Les 3 maillons sont 3 comptes DISTINCTS, donc
+    3 quotas distincts : un echec de l'un ne dit rien des deux autres.
+    """
+    if PROVIDER == "alternate":          # mode comparaison historique, laisse intact
+        prov = "mistral" if (date.today().day % 2 == 0) else "gemini"
+        return await _call_one(prov, journal)
+
+    # PROVIDER d'abord, puis le reste de la chaine dans l'ordre.
+    ordre = [PROVIDER] + [p for p in CHAIN_ORDER if p != PROVIDER]
+    erreurs = []
+    for i, prov in enumerate(ordre):
+        try:
+            texte, modele = await _call_one(prov, journal)
+            if i:                        # un secours a servi : le dire dans le log
+                log.warning(f"Resume via SECOURS {prov} (maillon {i + 1}) apres : {'; '.join(erreurs)}")
+                modele += f" (secours {i})"
+            return texte, modele
+        except Exception as e:
+            erreurs.append(f"{prov}: {str(e)[:120]}")
+            log.error(f"Resume — maillon {prov} echoue : {str(e)[:200]}")
+    raise RuntimeError("Toute la chaine a echoue — " + " | ".join(erreurs))
 
 
 @service                              # exposé : pyscript.heat_agent_summary (déclenchable à la main)
@@ -412,9 +442,15 @@ async def heat_agent_summary():
     log.info(f"Journal : {len(entries)} runs, {len(llm_deviations)} déviations, {len(journal)} chars")
 
     try:
-        summary, model_used = await _call_summary(journal)
+        summary, model_used = await _call_summary(journal)   # chaine geree dans _call_summary
     except Exception as e:
-        log.error(f"Erreur résumé ({PROVIDER}) : {e}")
+        log.error(f"Resume perdu — les 3 maillons ont echoue : {e}")
+        # On previent quand meme : un silence ressemble trop a "tout va bien".
+        persistent_notification.create(
+            title="⚠️ Heat Agent — pas de bilan ce soir",
+            message=f"Les 3 fournisseurs ont echoue. {e}",
+            notification_id="heat_agent_summary_error",
+        )
         return
 
     # En mode comparaison, on trace le modèle en fin de message (court) pour pouvoir juger.
@@ -423,13 +459,21 @@ async def heat_agent_summary():
         summary += f"\n\n— via {short}"
     log.info(f"Résumé généré ({model_used}) — envoi notification")
 
-    # Notification — service.call dynamique : suit NOTIFY_TARGET (un seul point à éditer).
-    # Telegram (notify.maison_maison_chris) n'accepte pas le paramètre `data` mobile_app.
-    service.call(
-        "notify", NOTIFY_TARGET.split(".", 1)[1],
-        message=summary,
-        title="🏠 Heat Agent — Bilan du " + date.today().strftime("%d/%m"),
-    )
+    # Notification Telegram — forme HA 2026.6 : telegram_bot est passe en config_flow,
+    # le service historique notify.<nom> N'EXISTE PLUS (service.call levait
+    # KeyError: 'maison_maison_chris', ce qui tuait la fonction AVANT la notif
+    # persistante : Chris ne recevait plus rien, nulle part). Forme actuelle =
+    # notify.send_message avec entity_id. Telegram n'accepte pas `data` mobile_app.
+    try:
+        service.call(
+            "notify", "send_message",
+            entity_id=NOTIFY_TARGET,
+            message=summary,
+            title="🏠 Heat Agent — Bilan du " + date.today().strftime("%d/%m"),
+        )
+    except Exception as e:
+        # Telegram en panne ne doit JAMAIS empecher la notif persistante ci-dessous.
+        log.error(f"Notif Telegram echouee : {e} — le bilan reste visible dans l'UI")
     # Notification persistante HA (visible dans l'UI cloche)
     persistent_notification.create(
         title="🏠 Heat Agent — Bilan du " + date.today().strftime("%d/%m"),

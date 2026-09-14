@@ -307,29 +307,19 @@ ALERT_TAG = {"Grand-froid": "froid", "Neige-verglas": "neige", "Pluie-inondation
 GATE_ALERT_EXT     = 5.0   # ext < X (°C) = assez froid pour rendre la proba opérante
 GATE_ALERT_DEFICIT = -0.5  # déficit confort <= X (°C·h) = sous-chauffe déjà amorcée
 
-# Mapping phase -> input_number de traçabilité dashboard.
+# Mapping phase -> input_number de traçabilité dashboard (purement cosmétique/debug).
 # INVARIANT : HC_NUIT = None. heat_pump_bias_off_peak appartient EXCLUSIVEMENT au
 # self-learning 06:22 (ecodan.yaml) — écrire dessus ici corromprait l'apprentissage.
-#
-# 🔴 14/09/2026 — TOUT EST A None : l'agent n'écrit PLUS AUCUN input_number.
-# Raison (Chris) : ces curseurs sont les CONSIGNES de l'automation classique
-# `smart_heat_pump_dynamic_setpoint_bias`, son mode SECOURS s'il n'a plus de
-# tokens. Tant que l'agent les réécrivait toutes les 20 min, un rallumage
-# d'urgence aurait fait lire à l'automation les valeurs de l'AGENT, pas celles
-# de Chris (mesuré : bias_peak -1.0 -> -0.5 et pre_offpeak 0.0 -> 0.5 en < 1 h).
-# Coût assumé : la carte BIAS_SOLVER n'affiche plus le bias par phase en direct ;
-# `number.ecodan_heatpump_auto_adaptive_setpoint_bias` porte la valeur appliquée.
-# Pour revenir en arrière : remettre les noms d'entités ci-dessous.
 PHASE_INPUT_MAP = {
     "HC_NUIT":    None,
-    "MORNING":    None,  # était heat_pump_bias_pre_offpeak
-    "JOURNEE":    None,  # était heat_pump_bias_journee
-    "PRE_HC_PM":  None,  # était heat_pump_bias_pre_offpeak
-    "HC_PM":      None,  # était heat_pump_bias_afternoon_hc
-    "POST_HC":    None,  # était heat_pump_bias_post_afternoon_hc
-    "PEAK_COAST": None,  # était heat_pump_bias_peak
-    "SOIREE":     None,  # était heat_pump_bias_soiree_tardive
-    "PRE_NUIT":   None,  # était heat_pump_bias_soiree_tardive
+    "MORNING":    "input_number.heat_pump_bias_pre_offpeak",
+    "JOURNEE":    "input_number.heat_pump_bias_journee",
+    "PRE_HC_PM":  "input_number.heat_pump_bias_pre_offpeak",
+    "HC_PM":      "input_number.heat_pump_bias_afternoon_hc",
+    "POST_HC":    "input_number.heat_pump_bias_post_afternoon_hc",
+    "PEAK_COAST": "input_number.heat_pump_bias_peak",
+    "SOIREE":     "input_number.heat_pump_bias_soiree_tardive",
+    "PRE_NUIT":   "input_number.heat_pump_bias_soiree_tardive",
 }
 
 # ─────────────────────────────────────────────────────────────────────────

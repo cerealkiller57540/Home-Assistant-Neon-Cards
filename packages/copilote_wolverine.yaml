@@ -1,36 +1,14 @@
 # ═══════════════════════════════════════════════════════════════════════════
-#  COPILOTE WOLVERINE — Insuline (CRITIQUE, 7j/7)
-#  Rappel injection matin + soir pour Wolverine (chat diabétique).
+#  COPILOTE WOLVERINE & MIRA — rappels médocs/entretien chats
+#  Insuline Wolverine RETIRÉE le 14/09/2026 (suivi terminé, Chris confirmé).
+#  Reste : Mira (Amodip 1j/2) + rappel mensuel chats (antipuce/fontaine).
 #  Canal : bot Telegram @Ha_maison_chris_bot (notify.maison_maison_chris).
-#  Log   : /config/logs/wolverine_insuline.jsonl (service pyscript.log_insuline).
-#
-#  LOGIQUE
-#   - MATIN : déclenché quand le Sonos chambre passe playing→paused/idle dans la
-#     fenêtre 6h45–9h30 (= ton lever après l'alarme). Filet de sécurité à 9h30
-#     (couvre week-end : l'alarme Sonos est WEEKDAYS seulement).
-#   - Au clic « Fait » : log JSONL + programme le rappel SOIR à +12h pile.
-#   - SOIR : +12h après la confirmation du matin.
-#   - ESCALADE (santé = pas de pitié) : relance toutes les 15 min jusqu'à
-#     confirmation. « Snooze » = re-ping dans 15 min.
-#   - ABSENCE : si presence_maison=off à l'heure → message d'alerte spécial.
-#
-#  Helpers, automations et timer sont tous préfixés `insuline_` / « 💉 ».
+#  Log   : /config/logs/wolverine_insuline.jsonl (service pyscript.log_insuline,
+#          nom de fichier conservé pour compat historique des entrées Mira/chats).
 # ═══════════════════════════════════════════════════════════════════════════
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 input_boolean:
-  insuline_matin_faite:
-    name: 💉 Insuline matin faite
-    icon: mdi:needle
-  insuline_soir_faite:
-    name: 💉 Insuline soir faite
-    icon: mdi:needle
-  insuline_en_cours:
-    name: 💉 Nudge insuline en cours
-    icon: mdi:bell-ring
-  insuline_escalade_declenchee:
-    name: 💉 Escalade insuline déclenchée (= en retard)
-    icon: mdi:bell-alert
   # ── Mira (Amodip 1j/2) ──
   mira_amodip_faite:
     name: 💊 Amodip Mira faite (aujourd'hui)
@@ -50,20 +28,7 @@ input_boolean:
     name: 🥤 Nudge hydratation déjà envoyé (cette session stream)
     icon: mdi:cup-water
 
-input_datetime:
-  insuline_heure_matin:
-    name: 💉 Heure injection matin (pour +12h)
-    has_date: true
-    has_time: true
-
 input_number:
-  insuline_snoozes:
-    name: 💉 Compteur snooze insuline
-    min: 0
-    max: 20
-    step: 1
-    mode: box
-    icon: mdi:counter
   mira_snoozes:
     name: 💊 Compteur snooze Amodip Mira
     min: 0
@@ -72,19 +37,7 @@ input_number:
     mode: box
     icon: mdi:counter
 
-input_text:
-  insuline_moment_courant:
-    name: 💉 Moment du nudge en cours
-    max: 10          # "matin" | "soir"
-  insuline_source_courante:
-    name: 💉 Source du nudge en cours
-    max: 16          # sonos | filet_0930 | plus12h | manuel
-
 timer:
-  insuline_relance:
-    name: 💉 Relance insuline (escalade 15 min)
-    duration: "00:15:00"
-    restore: true
   mira_relance:
     name: 💊 Relance Amodip Mira (escalade 30 min)
     duration: "00:30:00"
@@ -92,9 +45,9 @@ timer:
 
 # ── Automations ─────────────────────────────────────────────────────────────
 automation:
-  # 1) Reset quotidien des flags à 00h05 ────────────────────────────────────
-  - id: insuline_reset_quotidien
-    alias: 💉 Insuline - Reset quotidien
+  # 1) Reset quotidien des flags à 00h05 (ex-partagé avec insuline, retirée 14/09) ─
+  - id: mira_reset_quotidien
+    alias: 💊 Mira - Reset quotidien
     trigger:
       - platform: time
         at: "00:05:00"
@@ -102,10 +55,6 @@ automation:
       - service: input_boolean.turn_off
         target:
           entity_id:
-            - input_boolean.insuline_matin_faite
-            - input_boolean.insuline_soir_faite
-            - input_boolean.insuline_en_cours
-            - input_boolean.insuline_escalade_declenchee
             - input_boolean.mira_amodip_faite
             - input_boolean.mira_en_cours
             - input_boolean.mira_escalade_declenchee
@@ -113,7 +62,6 @@ automation:
       - service: timer.cancel
         target:
           entity_id:
-            - timer.insuline_relance
             - timer.mira_relance
 
   # 1bis) Reset MENSUEL du flag rappel chats (le 1er à 00h06) ────────────────
@@ -130,199 +78,21 @@ automation:
         target:
           entity_id: input_boolean.chats_mensuel_fait
 
-  # 2) Détection du lever via Sonos (playing → paused/idle, fenêtre 6h45–9h30) ─
-  - id: insuline_detection_lever_sonos
-    alias: 💉 Insuline - Détection lever (Sonos)
-    trigger:
-      - platform: state
-        entity_id: media_player.chambre
-        from: "playing"
-        to: "paused"
-      - platform: state
-        entity_id: media_player.chambre
-        from: "playing"
-        to: "idle"
-    condition:
-      - condition: time
-        after: "06:45:00"
-        before: "09:30:00"
-      - condition: state
-        entity_id: input_boolean.insuline_matin_faite
-        state: "off"
-      - condition: state
-        entity_id: input_boolean.insuline_en_cours
-        state: "off"
-    action:
-      - service: script.insuline_envoyer_nudge
-        data:
-          moment: "matin"
-          source: "sonos"
-      # le 1er du mois → nudge mensuel chats (antipuce + filtre fontaine)
-      - if:
-          - condition: template
-            value_template: "{{ now().day == 1 }}"
-          - condition: state
-            entity_id: input_boolean.chats_mensuel_fait
-            state: "off"
-        then:
-          - service: script.chats_envoyer_nudge_mensuel
-
-  # 3) Filet de sécurité matin à 9h30 (week-end / Sonos muet) ────────────────
-  - id: insuline_filet_matin_0930
-    alias: 💉 Insuline - Filet matin 9h30
+  # 2) Nudge mensuel chats à 09h30 le 1er du mois (ex-piggybacké sur les triggers
+  #    insuline, réindépendantisé le 14/09/2026 lors du retrait du suivi insuline) ─
+  - id: chats_nudge_mensuel_trigger
+    alias: 🐱 Chats - Déclenchement nudge mensuel
     trigger:
       - platform: time
         at: "09:30:00"
     condition:
-      - condition: state
-        entity_id: input_boolean.insuline_matin_faite
-        state: "off"
-    action:
-      - service: script.insuline_envoyer_nudge
-        data:
-          moment: "matin"
-          source: "filet_0930"
-      # filet aussi pour le rappel mensuel chats (1er du mois)
-      - if:
-          - condition: template
-            value_template: "{{ now().day == 1 }}"
-          - condition: state
-            entity_id: input_boolean.chats_mensuel_fait
-            state: "off"
-        then:
-          - service: script.chats_envoyer_nudge_mensuel
-
-  # 4) Rappel SOIR : +12h après l'injection du matin ────────────────────────
-  #    Vérifié toutes les 5 min ; part quand on a dépassé heure_matin + 12h.
-  - id: insuline_rappel_soir
-    alias: 💉 Insuline - Rappel soir (+12h)
-    trigger:
-      - platform: time_pattern
-        minutes: "/5"
-    condition:
-      - condition: state
-        entity_id: input_boolean.insuline_matin_faite
-        state: "on"          # le matin a été confirmé → heure_matin est valide
-      - condition: state
-        entity_id: input_boolean.insuline_soir_faite
-        state: "off"
-      - condition: state
-        entity_id: input_boolean.insuline_en_cours
-        state: "off"
       - condition: template
-        value_template: >-
-          {{ now() >= (states('input_datetime.insuline_heure_matin') | as_datetime | as_local
-                       + timedelta(hours=12)) }}
-    action:
-      - service: script.insuline_envoyer_nudge
-        data:
-          moment: "soir"
-          source: "plus12h"
-
-  # 5) ESCALADE : le timer de relance a expiré sans confirmation ─────────────
-  - id: insuline_escalade
-    alias: 💉 Insuline - Escalade (relance 15 min)
-    trigger:
-      - platform: event
-        event_type: timer.finished
-        event_data:
-          entity_id: timer.insuline_relance
-    condition:
+        value_template: "{{ now().day == 1 }}"
       - condition: state
-        entity_id: input_boolean.insuline_en_cours
-        state: "on"
+        entity_id: input_boolean.chats_mensuel_fait
+        state: "off"
     action:
-      - service: input_boolean.turn_on
-        target:
-          entity_id: input_boolean.insuline_escalade_declenchee
-      - service: script.insuline_envoyer_nudge
-        data:
-          moment: "{{ states('input_text.insuline_moment_courant') }}"
-          source: "{{ states('input_text.insuline_source_courante') }}"
-          relance: true
-
-  # 6) Handler « Fait ✅ » (callback Telegram /INSU_OK) ──────────────────────
-  - id: insuline_handler_fait
-    alias: 💉 Insuline - Handler « Fait »
-    trigger:
-      - platform: event
-        event_type: telegram_callback
-        event_data:
-          data: "/INSU_OK"
-    action:
-      # 1. stoppe l'escalade
-      - service: timer.cancel
-        target:
-          entity_id: timer.insuline_relance
-      # 2. log JSONL via pyscript
-      - service: pyscript.log_insuline
-        data:
-          moment: "{{ states('input_text.insuline_moment_courant') }}"
-          source: "{{ states('input_text.insuline_source_courante') }}"
-          snoozes: "{{ states('input_number.insuline_snoozes') | int(0) }}"
-          en_retard: "{{ is_state('input_boolean.insuline_escalade_declenchee', 'on') }}"
-      # 3. marque le moment fait + si MATIN, mémorise l'heure pour le +12h
-      - choose:
-          - conditions:
-              - condition: template
-                value_template: "{{ states('input_text.insuline_moment_courant') == 'matin' }}"
-            sequence:
-              - service: input_boolean.turn_on
-                target:
-                  entity_id: input_boolean.insuline_matin_faite
-              - service: input_datetime.set_datetime
-                target:
-                  entity_id: input_datetime.insuline_heure_matin
-                data:
-                  datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
-          - conditions:
-              - condition: template
-                value_template: "{{ states('input_text.insuline_moment_courant') == 'soir' }}"
-            sequence:
-              - service: input_boolean.turn_on
-                target:
-                  entity_id: input_boolean.insuline_soir_faite
-      # 4. fin du nudge + reset compteur snooze + flag escalade
-      - service: input_boolean.turn_off
-        target:
-          entity_id:
-            - input_boolean.insuline_en_cours
-            - input_boolean.insuline_escalade_declenchee
-      - service: input_number.set_value
-        target:
-          entity_id: input_number.insuline_snoozes
-        data:
-          value: 0
-      # 5. accusé de réception Telegram
-      - service: telegram_bot.send_message
-        data:
-          config_entry_id: 01KV0GBSBGNVQCHFJGRFERM7TY
-          message: >-
-            ✅ Noté. Injection {{ states('input_text.insuline_moment_courant') }} loggée. Merci pour Wolverine. 🐾
-
-  # 7) Handler « Snooze ⏱️ » (callback Telegram /INSU_SNOOZE) ────────────────
-  - id: insuline_handler_snooze
-    alias: 💉 Insuline - Handler « Snooze »
-    trigger:
-      - platform: event
-        event_type: telegram_callback
-        event_data:
-          data: "/INSU_SNOOZE"
-    action:
-      - service: input_number.set_value
-        target:
-          entity_id: input_number.insuline_snoozes
-        data:
-          value: "{{ states('input_number.insuline_snoozes') | int(0) + 1 }}"
-      - service: timer.start
-        target:
-          entity_id: timer.insuline_relance
-        data:
-          duration: "00:15:00"
-      - service: telegram_bot.send_message
-        data:
-          config_entry_id: 01KV0GBSBGNVQCHFJGRFERM7TY
-          message: "⏱️ OK, je te re-pingue dans 15 min. (snooze #{{ states('input_number.insuline_snoozes') | int(0) }})"
+      - service: script.chats_envoyer_nudge_mensuel
 
   # ═══ MIRA — Amodip ½ cp, le SOIR, 1 jour sur 2 (réf ON = 14/06/2026) ═══════
   # Jour ON si (now().toordinal() - 739781) % 2 == 0  (14/06=ON, 15=off, 16=ON…)
@@ -451,62 +221,6 @@ automation:
 
 # ── Script d'envoi du nudge (réutilisé matin / soir / relance) ───────────────
 script:
-  insuline_envoyer_nudge:
-    alias: 💉 Insuline - Envoyer le nudge
-    mode: single
-    fields:
-      moment:
-        description: "matin ou soir"
-      source:
-        description: "sonos | filet_0930 | plus12h | manuel"
-      relance:
-        description: "true si c'est une relance d'escalade"
-        default: false
-    sequence:
-      # mémorise le contexte courant (lu par escalade / handlers)
-      - service: input_text.set_value
-        target:
-          entity_id: input_text.insuline_moment_courant
-        data:
-          value: "{{ moment }}"
-      - service: input_text.set_value
-        target:
-          entity_id: input_text.insuline_source_courante
-        data:
-          value: "{{ source }}"
-      - service: input_boolean.turn_on
-        target:
-          entity_id: input_boolean.insuline_en_cours
-      # message : absent vs présent
-      - choose:
-          - conditions:
-              - condition: state
-                entity_id: binary_sensor.presence_maison
-                state: "off"
-            sequence:
-              - service: telegram_bot.send_message
-                data:
-                  config_entry_id: 01KV0GBSBGNVQCHFJGRFERM7TY
-                  message: >-
-                    🚨 T'es DEHORS et c'est l'heure de l'insuline de Wolverine ({{ moment }}).
-                    Qui s'en occupe ? Préviens quelqu'un ou rentre. 💉🐾
-                  inline_keyboard:
-                    - "Fait ✅:/INSU_OK, Snooze 15min ⏱️:/INSU_SNOOZE"
-        default:
-          - service: telegram_bot.send_message
-            data:
-              config_entry_id: 01KV0GBSBGNVQCHFJGRFERM7TY
-              message: >-
-                {% if relance | default(false) %}⚠️ Toujours pas confirmée — {% endif %}💉 Insuline Wolverine ({{ moment }}). Pique et confirme.
-              inline_keyboard:
-                - "Fait ✅:/INSU_OK, Snooze 15min ⏱️:/INSU_SNOOZE"
-      # (re)démarre le timer d'escalade : relance dans 15 min si pas de clic
-      - service: timer.start
-        target:
-          entity_id: timer.insuline_relance
-        data:
-          duration: "00:15:00"
-
   mira_envoyer_nudge:
     alias: 💊 Mira - Envoyer le nudge
     mode: single

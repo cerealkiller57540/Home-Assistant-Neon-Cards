@@ -15,7 +15,7 @@
 #   - number.ecodan_heatpump_auto_adaptive_setpoint_bias  -> sortie finale appliquée à la PAC
 #                                                            (écrite par heat_agent, pas ici)
 #
-#  HORLOGE vs TARIF : le tarif (sensor.buanderie_lixee_tarif) fait autorité pour
+#  HORLOGE vs TARIF : le tarif (sensor.lixee_current_price) fait autorité pour
 #  savoir si on est en heures creuses ; l'horloge ne sert qu'à donner la FORME de
 #  la courbe (quelle phase, quel niveau de bias).
 # =============================================================================
@@ -76,9 +76,8 @@ template:
         #   POST_HC     16h20-17h00  b = 0.35           (fin de charge)
         #   PEAK_COAST  17h00-21h00  b = -1.0           (pointe : on COAST sur l'inertie dalle,
         #                                                on évite l'import réseau cher)
-        #   SOIREE      21h00-22h00  b = 0.0            (neutre, on laisse retomber)
-        #   SOIREE      22h00-23h50  b = -1.0           (délestage : on attend la HC, Chris 14/09)
-        #   PRE_NUIT    23h50-00h20  b = -1.0           (suite ; coupé en 2 autour de minuit)
+        #   SOIREE      21h00-23h50  b = -0.25          (léger délestage)
+        #   PRE_NUIT    23h50-00h20  b = 0.55           (pré-charge avant la HC nuit)
         #
         # SOLAIRE = "batterie dalle" (pas de revente -> PV gratuit gagne toujours ; seule
         # limite = surchauffe, maison RT2012 étanche). marge = (consigne +1°C) − salon ;
@@ -94,7 +93,7 @@ template:
           {% set ext    = states('sensor.temperature_exterieure') | float(7) %}
           {% set opb    = states('input_number.heat_pump_bias_off_peak') | float(1.0) %}
           {% set surplus = states('sensor.surplus_solaire_disponible') | float(0) %}
-          {% set price  = states('sensor.buanderie_lixee_tarif') | lower %}
+          {% set price  = states('sensor.lixee_current_price') | lower %}
           {% set is_hc  = 'creuse' in price %}
           {% set defrost = is_state('binary_sensor.ecodan_heatpump_defrost', 'on') %}
           {% set salon  = states('sensor.thermometre_salon_temperature') | float(20) %}
@@ -119,10 +118,8 @@ template:
           {% elif m >= 860 and m < 980  %}{% set ph = 'HC_PM'       %}{% set b = [1.85 * tm + dboost, 3.0] | min %}{# 14h20-16h20 #}
           {% elif m >= 980 and m < 1020 %}{% set ph = 'POST_HC'     %}{% set b = 0.35 %}{# 16h20-17h00 #}
           {% elif m >= 1020 and m < 1260%}{% set ph = 'PEAK_COAST'  %}{% set b = -1.0 %}{# 17h00-21h00 pointe #}
-          {% elif m >= 1260 and m < 1320%}{% set ph = 'SOIREE'      %}{% set b = 0.0 %}{# 21h00-22h00 : neutre, on laisse retomber #}
-          {% elif m >= 1320 and m < 1430%}{% set ph = 'SOIREE'      %}{% set b = -1.0 %}{# 22h00-23h50 : delestage, on attend la HC #}
-          {% elif m >= 1430             %}{% set ph = 'PRE_NUIT'   %}{% set b = -1.0 %}{# 23h50-24h00 : suite du delestage #}
-          {% else                        %}{% set ph = 'PRE_NUIT'   %}{% set b = -1.0 %}{% endif %}{# 00h00-00h20 : suite apres minuit #}
+          {% elif m >= 1260 and m < 1430%}{% set ph = 'SOIREE'      %}{% set b = -0.25 %}{# 21h00-23h50 #}
+          {% else                        %}{% set ph = 'PRE_NUIT'   %}{% set b = 0.55 %}{% endif %}{# 23h50-00h20 #}
 
           {# --- "Batterie dalle" : pas de revente => le PV gratuit gagne TOUJOURS ; la seule
                  limite est la surchauffe (RT2012 étanche : le free heat solaire+interne ne sort
@@ -159,9 +156,8 @@ template:
             {% elif m >= 980 and m < 1020 %}POST_HC
             {% elif m >= 1020 and m < 1260%}PEAK_COAST
             {% elif m >= 1260 and m < 1430%}SOIREE
-            {% elif m >= 1430             %}PRE_NUIT
             {% else %}PRE_NUIT{% endif %}
-          tariff: "{{ 'HC' if 'creuse' in states('sensor.buanderie_lixee_tarif') | lower else 'HP' }}"
+          tariff: "{{ 'HC' if 'creuse' in states('sensor.lixee_current_price') | lower else 'HP' }}"
           # float(none) VOLONTAIRE (≠ float(7) de l'état) : capteur mort -> attribut None ->
           # heat_agent escalade "capteur_ext" -> mode DÉGRADÉ LLM. Un défaut numérique ici
           # masquait la panne au gate (le mode dégradé était inatteignable). L'ÉTAT du

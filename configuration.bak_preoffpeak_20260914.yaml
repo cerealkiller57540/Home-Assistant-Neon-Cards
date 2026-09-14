@@ -98,12 +98,8 @@ input_number:
     icon: mdi:weather-night
 
   heat_pump_bias_pre_offpeak:
-    # 14/09/2026 : min 0 -> -2. L'automation de secours applique cette valeur
-    # TELLE QUELLE comme bias sur 23h50-00h20 (automations.yaml l.418 et l.445),
-    # or ecodan.yaml met -1.0 sur cette meme tranche (phase PRE_NUIT, delestage).
-    # Avec min: 0 le mode secours ne pouvait pas delester et chauffait en pointe.
     name: "Pre-Off-Peak Ramp (°C)"
-    min: -2
+    min: 0
     max: 1
     step: 0.25
     icon: mdi:arrow-up-circle
