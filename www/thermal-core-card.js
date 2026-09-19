@@ -4,7 +4,10 @@
    ecrasera. Toute correction va dans le banc.
    ═══════════════════════════════════════════════════════════════════ */
 
-const TCC_CSS = `  :root{
+const TCC_CSS = `
+  /* Tokens du banc, transplantes de :root sur .card (voir gen_card.py).
+     .card est le porteur prouve : les 36 --c-* y vivent deja. */
+  .card{
     --f-disp:'Orbitron','Eurostile','Bahnschrift','DIN Alternate',system-ui,sans-serif;
     --f-mono:'Share Tech Mono','JetBrains Mono','Cascadia Mono',Consolas,ui-monospace,monospace;
 
@@ -16,88 +19,120 @@ const TCC_CSS = `  :root{
     --bg:#f4f2f9; --fg:#241d38; --note:#5f5680; --hair:rgba(98,0,234,.22);
     --card-bg:#0b0813; --card-bg2:#140d23;
   }
-  @media (prefers-color-scheme:dark){
-    :root:not([data-theme="light"]){
-      --bg:#07050d; --fg:#d6cdec; --note:#8c81ab; --hair:rgba(98,0,234,.3);
-    }
-  }
-  :root[data-theme="dark"]{
+  @media (prefers-color-scheme:dark){ .card{
     --bg:#07050d; --fg:#d6cdec; --note:#8c81ab; --hair:rgba(98,0,234,.3);
+  } }
+  .card{ color:var(--fg); font-family:var(--f-mono);
+         font-size:13.5px; line-height:1.6; }
+  /* line-height est HERITE, et ha-neon-css l interdit explicitement sur
+     .nmc-title : c est le piege n1 du calage icone/titre du header. Le
+     poser sur .card le faisait descendre pareil. On le neutralise LA. */
+  .card .nmc-title{ line-height:normal; }
+
+  /* ---- LA RACINE <ha-card>, ajoutee au markup mais SANS regle jusqu ici.
+     Lovelace attend <ha-card> comme racine : c est elle que le theme, les
+     themes card-mod et le layout en sections dimensionnent. Nue, elle
+     apporte SON fond, SON radius et SON ombre SOUS notre .card, qui a les
+     siens -- deux surfaces empilees, deux radius qui ne coincident pas, et
+     un liseré du theme qui depasse. On la rend donc TRANSPARENTE et on
+     laisse .card porter l apparence, qui est deja prouvee (36 --c-*).
+     Pas de !important : si Chris pose un card-mod, il doit gagner. */
+  ha-card{
+    background:none; border:none; box-shadow:none;
+    /* La card remplit sa colonne : c est le defaut vu le 19/09 (bride a
+       352px par une valeur de SIMULATION du banc, cf _SIMU). */
+    width:100%; display:block;
+    /* overflow visible : les drop-shadow du neon debordent volontairement
+       de .card. Un overflow:hidden du theme les couperait net. */
+    overflow:visible;
   }
-
-  *{box-sizing:border-box}
-  /* Le CSS de la page hote du banc (body, .wrap, h1, .bar, .seg,
-     .live) est elague au build : dans la card il n a rien a
-     styliser, et body{} s appliquerait au shadow root. */
-
-  /* TAILLE REELLE : colonne de dashboard-test (sections, max_columns 3) ~352px.
-     Sans ce bridage le SVG s etire a 860px et ment sur la lisibilite. */
-  /* ===================== HEADER CANONIQUE =====================
-     Bloc recopie de heat-pump-card.js (_neonHeaderCss, l.356-443), avec les
-     DEFAUTS DE CETTE CARD -- pas ceux de la skill. C est un SNIPPET, jamais
-     un import : decision du 22/08/2026, le hacstag ne bumpe que la ressource
-     Lovelace enregistree, un import vers un fichier /local/ voisin ne serait
-     jamais cache-buste.
-
-     Deux ecarts assumes, tous deux documentes :
-       - pas de <span id="badge"> : le statut vit dans le bandeau bas
-         (st-txt), decision de Chris -- un seul statut, un seul endroit.
-       - polices = piles --f-disp/--f-mono du banc, car la CSP de l Artifact
-         bloque Google Fonts. La vraie card charge Orbitron ; ici le titre
-         retombe sur la pile locale. Structure fidele, hauteur approchee.
-
-     PIEGES (skill ha-neon-css, incident du 26/08/2026) :
-       - jamais de line-height sur .nmc-title ;
-       - jamais de width/height en dur sur l icone : --mdc-icon-size pilote
-         seul, car ha-icon monte un <ha-svg-icon> dans son propre shadow DOM
-         qui ne suit que cette variable.
-     Taille du titre : clamp(14px, clamp(8px,2vw,11px), clamp(8px,2vw,11px)).
-     La borne BASSE (14px) est superieure aux deux autres, donc le titre sort
-     a 14px, jamais a 11. Mesure, pas deduit. */
-  .neon-hdr{display:flex; align-items:center; gap:8px; padding:8px 4px 8px}
-  .neon-hdr-group{display:flex; flex-direction:row; align-items:center; gap:8px;
+  .card{ width:100%; box-sizing:border-box; }
+  .neon-hdr {display:flex; align-items:center; gap:8px; padding:8px 4px 8px}
+  .neon-hdr-group {display:flex; flex-direction:row; align-items:center; gap:8px;
     flex:1; min-width:0}
-  .nmc-icon-wrap{display:flex; align-items:center; justify-content:center;
+  .nmc-icon-wrap {display:flex; align-items:center; justify-content:center;
     flex-shrink:0; overflow:visible}
-  .nmc-icon-wrap ha-icon, .nmc-icon-wrap svg{
+  .nmc-icon-wrap ha-icon, .nmc-icon-wrap svg {
     display:flex; align-items:center; justify-content:center;
     /* calc(11px * 1.125) = 12.375 -> le clamp rend 16px en pratique, jamais 18 */
-    --mdc-icon-size:clamp(16px, calc(clamp(8px,2vw,11px) * 1.125), 18px);
+    /* header.icon_size force la taille ; sinon le clamp derive de la
+       taille du titre, comme avant. */
+    --mdc-icon-size:var(--tcc-t-icon-size,
+      clamp(16px, calc(var(--tcc-t-size, clamp(8px,2vw,11px)) * 1.125), 18px));
     width:var(--mdc-icon-size); height:var(--mdc-icon-size);
-    color:rgba(232,224,255,.85); overflow:visible}
-  .neon-hdr-body{flex:1; min-width:0; display:flex; flex-direction:column;
+    /* RECETTE CANONIQUE : ha-neon-css/SKILL.md 3ter, checklist point 1.
+       Defaut FIXE blanc casse, JAMAIS herite de --tcc-t-color : si l icone
+       retombe sur la couleur du titre, elle prend la meme teinte que le
+       glow et le halo se noie au lieu de trancher (piege vecu NAS/switch/
+       storey, 26/08). \`icon_color\` reste personnalisable normalement. */
+    color:var(--tcc-t-icon-color, rgba(232,224,255,.85));
+    /* Glow 4 couches (SKILL.md 3ter, point 2). Le pont ne pose
+       --tcc-t-icon-glow QUE si header.glow est coche : opt-in strict.
+       AUCUNE couche fixe ici -- une drop-shadow permanente en plus du
+       bloc conditionnel se cumule en silence et le reflexe (reduire
+       .2/.4/.8/1) serait un FAUX FIX (piege linux-terminal, 24/08). */
+    filter:var(--tcc-t-icon-glow, none);
+    overflow:visible}
+  .neon-hdr-body {flex:1; min-width:0; display:flex; flex-direction:column;
     gap:1px; justify-content:center}
-  .nmc-title{
-    font-family:var(--f-disp);
-    font-size:clamp(14px, clamp(8px,2vw,11px), clamp(8px,2vw,11px));
-    font-weight:600; text-transform:uppercase; font-style:normal;
+  .nmc-title {
+    /* --tcc-t-font / --tcc-t-size : posees par le pont depuis header.font
+       et header.title_size. La vraie card charge Orbitron ; au banc la
+       pile --f-disp prend le relais (la CSP de l Artifact bloque Google
+       Fonts). Meme forme de clamp que \`_neonHeaderCss\` l.365. */
+    font-family:var(--tcc-t-font, var(--f-disp));
+    font-size:clamp(14px, var(--tcc-t-size, clamp(8px,2vw,11px)),
+                    var(--tcc-t-size, clamp(8px,2vw,11px)));
+    /* Lus par le pont depuis header.font_weight / italic / uppercase.
+       Defauts = ceux de thermal-core, pas ceux d une autre card. */
+    font-weight:var(--tcc-t-weight, 600);
+    text-transform:var(--tcc-t-transform, uppercase);
+    font-style:var(--tcc-t-style, normal);
     /* l ordre compte : la couleur (ou le gradient) AVANT le text-shadow,
        parce qu un gradient pose -webkit-text-fill-color:transparent */
-    color:rgba(180,130,255,.55);
-    padding-left:8px; letter-spacing:.02em;
-    text-shadow:0 0 14px rgba(180,130,255,.45);
+    /* SKILL.md l.1160 : le canon tranche le 26/08 est .02em (le clamp
+       etait la valeur historique d entities/climate, pas le canon). */
+    color:var(--tcc-t-color, rgba(180,130,255,.55));
+    padding-left:8px; letter-spacing:var(--tcc-t-ls, .02em);
+    /* Gradient : pose -webkit-text-fill-color:transparent, donc il DOIT
+       venir avant le text-shadow -- et sur un titre en gradient c est un
+       filter:drop-shadow qu il faut, jamais un text-shadow (SKILL.md
+       l.507-509). Le pont choisit lequel des deux il alimente. */
+    background:var(--tcc-t-grad, none);
+    -webkit-background-clip:var(--tcc-t-clip, border-box);
+    background-clip:var(--tcc-t-clip, border-box);
+    -webkit-text-fill-color:var(--tcc-t-fill, currentColor);
+    /* Glow titre = _neonGlow(), memes 4 couches (SKILL.md l.440).
+       header.title_shadow, s il est renseigne, REMPLACE le glow. */
+    text-shadow:var(--tcc-t-glow, none);
+    filter:var(--tcc-t-title-filter, none);
+    animation:var(--tcc-t-flicker, none);
     white-space:nowrap; overflow:visible; text-overflow:ellipsis}
-  .neon-hdr-subtitle{font-size:clamp(10px, calc(clamp(8px,2vw,11px) * .75), 12px);
-    color:color-mix(in srgb, rgba(180,130,255,.55) 55%, transparent);
+  @keyframes nmc-flicker {
+    0%,100%{opacity:1} 41%{opacity:1} 42%{opacity:.62}
+    43%{opacity:1} 77%{opacity:1} 78%{opacity:.7} 79%{opacity:1}}
+  .neon-hdr-subtitle {
+    font-family:var(--tcc-t-font, var(--f-disp));
+    font-size:clamp(10px, calc(var(--tcc-t-size, clamp(8px,2vw,11px)) * .75), 12px);
+    color:color-mix(in srgb, var(--tcc-t-color, rgba(180,130,255,.55)) 55%,
+                    transparent);
     letter-spacing:2px; text-transform:uppercase; line-height:1.2}
-  .neon-main-div{height:1px;
-    background:linear-gradient(90deg, transparent, rgba(98,0,234,.55),
-                               rgba(0,255,249,.25), transparent);
+  .neon-main-div {height:1px;
+    /* VERBATIM \`_neonHeaderCss\` (l.386-390) : les deux couleurs sont en
+       DUR dans toutes les cards, pas configurables. Ce filet etait absent
+       de la card livree jusqu au 19/09 -- le filtre _CARD connaissait
+       \`.neon-hdr\` mais pas \`.neon-main-div\` : regle elaguee en silence. */
+    background:linear-gradient(90deg, transparent, rgba(98,0,234,0.55),
+                               rgba(0,255,249,0.25), transparent);
     margin:0 14px 4px}
-  /* etat reel de la card deployee, recopie verbatim -- pas un detail de banc */
-  @media (orientation:landscape) and (max-height:850px){
+  @media (orientation:landscape) and (max-height:850px) {
     .neon-hdr{flex-direction:column; align-items:flex-start; gap:3px}
     .nmc-icon-wrap{position:absolute}
     .neon-hdr-body{padding-left:28px}
   }
-
-  /* .inner : padding 10px 10px 12px, recopie de la card (l.526). Sans lui le
-     SVG s affichait sur 352px au lieu de 332 -- le banc etait 6 % trop grand,
-     et toute l echelle de calage avec. */
-  .card .inner{padding:10px 10px 12px; position:relative; z-index:2;
+  .card .inner {padding:10px 10px 12px; position:relative; z-index:2;
     box-sizing:border-box}
-
-  .card{max-width:352px;
+  .card {
       /* ===== PALETTE : 27 teintes du dessin + 9 etats =====
          Chaque occurrence du SVG porte AUSSI son litteral en
          fallback : une var mal orthographiee rend donc la
@@ -154,52 +189,87 @@ const TCC_CSS = `  :root{
     background:linear-gradient(160deg,var(--card-bg) 0%,var(--card-bg2) 100%);
     border:1px solid rgba(var(--uv),.55); border-radius:10px; overflow:hidden;
     box-shadow:0 0 0 1px rgba(var(--uv),.12), 0 14px 44px -18px rgba(var(--uv),.8);}
-  /* Le canvas du fluide se cale exactement sous le SVG (meme ratio), et le SVG
-     se dessine par-dessus. Le tore a un fond quasi transparent : c est par la
-     que le fluide se voit. Aucun clip-path -- il echoue silencieusement selon
-     les unites objectBoundingBox, alors qu une simple superposition non. */
-  .card{position:relative}
-  /* \`.card svg\` attrapait aussi l icone du header et l etirait a 100% de la
-     card (mesure : 300px au lieu de 16). Le selecteur vise donc le SVG
-     ENFANT DIRECT de .inner, pas n importe quel svg de la card. */
-  /* overflow:visible -- LE GLOW NE DOIT PAS ETRE GUILLOTINE AU BORD.
-     Ce n est pas nous qui coupions : la feuille par defaut du navigateur
-     pose svg:root{overflow:hidden}. Mesure du symptome signale par Chris
-     (coupure NETTE a gauche de « 20.0° » et de « OFF ») :
-       st-txt : flou 12px = 12,22 u pour 12,00 u de marge gauche -> coupe ;
-                et 10,95 u de marge basse -> coupe aussi en bas ;
-       v-ext  : flou 7px = 7,13 u pour 9,00 u de marge. Il passait sur le
-                rayon NOMINAL, mais un flou gaussien s etend a ~1,5x son
-                rayon (10,7 u) : la frange debordait de 1,7 u, et sur fond
-                sombre elle se voit.
-     En visible, le halo sort dans .stage puis .inner (10px de padding) et
-     c est .card qui le borne (overflow:hidden + border-radius) : il s eteint
-     dans le fond au lieu d etre tranche. L alternative -- elargir le viewBox
-     de 336 a ~364 -- retrecissait tout de 8% et invalidait TOUS les calages
-     mesures en unites SVG, pour 0,22 u de debord. Non. */
-  .card .stage > svg{display:block; width:100%; height:auto; position:relative;
-    z-index:1; overflow:visible}
-  /* Le canvas doit couvrir le SVG EXACTEMENT. Le caler sur .inner ne
-     suffit plus : depuis le recadrage du viewBox (181 au lieu de 212)
-     le SVG est plus court que la zone de .inner, et un bottom:12px
-     faisait deborder le fluide de 34px sous la card -- mesure, pas
-     suppose. On enveloppe donc le SVG dans .stage, positionne, et le
-     canvas s y colle en inset:0 : quel que soit le viewBox, les deux
-     rectangles restent identiques. */
-  .card .stage{position:relative}
-  .card .stage #fx{position:absolute; inset:0;
+  .card {position:relative}
+  .card .stage {position:relative}
+  .card .stage #fx {position:absolute; inset:0;
             width:100%; height:100%;
             display:block; z-index:0; pointer-events:none}
-
-  /* une erreur GL doit se VOIR sur la page : il n y a pas de console dans
-     l app HA, et c est cette ligne qui livre la cause en une lecture */
-  #gl-err{display:block; margin:10px 0 0; padding:8px 11px; border-radius:4px;
+  #gl-err {display:block; margin:10px 0 0; padding:8px 11px; border-radius:4px;
     background:rgba(255,61,80,.14); border:1px solid rgba(255,61,80,.5);
     color:#ff8d99; font-size:12px; font-family:var(--f-mono)}
-
-  /* Le CSS des curseurs, de la copybox, de la legende et du
-     tableau de mesures est elague au build : ce sont les outils
-     de reglage du banc, pas la card. */
+  .card .on-plasma {
+    filter:drop-shadow(0 0 2px rgba(8,5,16,.95))
+           drop-shadow(0 0 7px rgba(8,5,16,.85));
+  }
+  .card .neon {
+    filter:drop-shadow(0 0 1px #fff)
+           drop-shadow(0 0 5px currentColor)
+           drop-shadow(0 0 12px currentColor);
+  }
+  .card .neon.off { filter:none }
+  .card .ext-glow {
+    filter:drop-shadow(0 0 2px rgba(8,5,16,.95))
+           drop-shadow(0 0 7px rgba(8,5,16,.85))
+           drop-shadow(0 0 2px currentColor)
+           drop-shadow(0 0 7px currentColor);
+  }
+  .card .dt-glow {
+    filter:drop-shadow(0 0 3px rgba(8,5,16,.95))
+           drop-shadow(0 0 8px rgba(8,5,16,.85))
+           drop-shadow(0 0 2px currentColor)
+           drop-shadow(0 0 9px currentColor);
+  }
+  .tbtn {cursor:pointer}
+  .tbtn rect {transition:fill .15s ease, stroke .15s ease}
+  .tbtn:hover rect,.tbtn:focus-visible rect {fill:rgba(232,224,255,.2); stroke:rgba(232,224,255,.9)}
+  .tbtn:active rect {fill:rgba(232,224,255,.34)}
+  .tbtn:focus {outline:none}
+  .tbtn:focus-visible rect {stroke-width:1.8}
+  @media (prefers-reduced-motion:reduce) { .tbtn rect{transition:none} }
+  .ok {color:rgb(var(--grn))}
+  .warn {color:rgb(var(--amb))}
+  .flow path {animation-play-state:paused}
+  .flow-dep {
+    stroke-dasharray:8.6 4.021;            /* 12.621 = 75.73/6 */
+    animation:flow-dep var(--fdep,1.9s) linear infinite;
+  }
+  .flow-dep.b {
+    stroke-dasharray:3.2 9.421;
+    animation-duration:var(--fdepb,1.27s); /* non multiple -> dephasage continu */
+  }
+  .flow-ret {
+    stroke-dasharray:7.4 3.767;            /* 11.167 = 67/6 */
+    animation:flow-ret var(--fret,2.2s) linear infinite;
+  }
+  .flow-ret.b {
+    stroke-dasharray:2.8 8.367;
+    animation-duration:var(--fretb,1.49s);
+  }
+  .flowbed {animation:bed-breathe 3.4s ease-in-out infinite}
+  @keyframes bed-breathe {0%,100%{opacity:.22}50%{opacity:.36}}
+  .intake ellipse {
+    opacity:0;
+    transform-box:fill-box;
+    transform-origin:center;
+    animation:intake 2.9s cubic-bezier(.35,0,.7,1) infinite;
+    animation-delay:var(--d,0s);
+  }
+  @keyframes intake {
+    0%   {opacity:0;   transform:translate(0,0) scaleX(1)}
+    14%  {opacity:.9;  transform:translate(calc(var(--dx,20px)*.14), calc(var(--dy,0px)*.14)) scaleX(1.1)}
+    62%  {opacity:.75}
+    /* extinction a 84% et non 88% : MESURE, avec la trainee (scaleX 2.6) le
+       BORD DROIT de la particule atteignait x=35.4 alors que la paroi est a
+       35 -- elle mordait dedans de 0.4 u. C est le bord qu il faut mesurer,
+       pas le centre, des lors que la forme s etire. */
+    84%  {opacity:0}
+    100% {opacity:0;   transform:translate(var(--dx,20px), var(--dy,0px)) scaleX(2.6)}
+  }
+  @media (prefers-reduced-motion:reduce) {*{animation:none!important; transition:none!important}}
+  /* Sans ca, #gl-err[hidden] s affiche quand meme : un display pose
+     par #id bat le [hidden] de la feuille UA. Barre rouge vide
+     pleine largeur sous la card (mesure du 19/09). */
+  #gl-err[hidden]{display:none !important}
 `;
 
 const TCC_HTML = `  <div class="card">
@@ -218,6 +288,9 @@ const TCC_HTML = `  <div class="card">
         </div>
         <div class="neon-hdr-body">
           <span class="nmc-title">Thermal Core</span>
+          <!-- Le sous-titre existe dans \`_buildNeonHeaderHTML\` : le pont le
+               remplit depuis header.subtitle et le masque s il est vide. -->
+          <span class="neon-hdr-subtitle" style="display:none"></span>
         </div>
       </div>
     </div>
@@ -1098,7 +1171,7 @@ function TCC_MONTER(root, host, params, getCfg, getHass) {
       if (P.pipe !== lastPipe) {
         lastPipe = P.pipe;
         var k = 1.615 / Math.max(P.pipe, 0.05);
-        var rt = document.documentElement.style;
+        var rt = (root.querySelector('.card') || cvs).style;
         rt.setProperty('--fdep',  (k).toFixed(3) + 's');
         rt.setProperty('--fdepb', (k * 0.668).toFixed(3) + 's');
         rt.setProperty('--fret',  (k * 1.158).toFixed(3) + 's');
@@ -1396,7 +1469,15 @@ function TCC_MONTER(root, host, params, getCfg, getHass) {
       var next = Math.round((setpoint + delta) * 2) / 2;
       setpoint = Math.min(SP_MAX, Math.max(SP_MIN, next));
       renderSp();
-      // en vrai : hass.callService('climate','set_temperature', {...})
+      /* On ECRIT dans HA. Le rendu reste optimiste (renderSp() vient
+         d etre appele juste au-dessus) : HA confirmera au tick suivant
+         via readState(), ou corrigera si le thermostat refuse la
+         valeur. Sans cet appel, depuis le correctif de apply(), le
+         nombre reviendrait en arriere en clignotant apres chaque clic. */
+      if (hass && hass.callService && cfg.climate) {
+        hass.callService('climate', 'set_temperature',
+                         { entity_id: cfg.climate, temperature: setpoint });
+      }
     }
 
     ['minus','plus'].forEach(function(k){
@@ -1427,6 +1508,15 @@ function TCC_MONTER(root, host, params, getCfg, getHass) {
       s.col = cs(s.kCol, s.col);
       s.c1  = cs(s.kC + '-c1', s.c1);
       s.c2  = cs(s.kC + '-c2', s.c2);
+      /* La consigne est une DONNEE live : readState() la lit depuis le
+         climate, mais renderSp() n etait appele qu au montage et dans
+         adjust() (clic +/-). apply() est le SEUL chemin de refresh
+         (api.refresh -> apply(readState())) : sans ce rappel la
+         consigne reste figee sur le litteral du SVG (14.0), sans
+         erreur et sans qu aucune garde de forme puisse le voir.
+         Sans risque : renderSp() compare l ancien texte avant flick(),
+         donc un tick sans changement reste silencieux. */
+      renderSp();
 
       set('v-ext', s.ext);
       set('v-dep', s.dep);
@@ -1697,7 +1787,7 @@ function TCC_MONTER(root, host, params, getCfg, getHass) {
   return api;
 }
 
-/* thermal-core-card v1.0.0 -- PAC Ecodan, chambre a plasma + circuit d eau.
+/* thermal-core-card v1.1.0 -- PAC Ecodan, chambre a plasma + circuit d eau.
  *
  * GENERE par gen_card.py : ne pas editer ce fichier a la main. Le banc
  * (head.txt + svg_new.txt + fluid_js.txt + tail.txt) est la source de
@@ -1738,7 +1828,10 @@ class TCCCardEditor extends HTMLElement {
     if (!this._rendered) { this._rendered = true; this._render(); }
     else this._syncValues();
   }
-  set hass(h) { this._hass = h; }          // JAMAIS de render ici
+  // JAMAIS de render ici (il ecraserait le champ en cours de frappe) --
+  // mais la datalist, elle, se remplit : c est du contenu ajoute, pas un
+  // redessin, et hass arrive souvent APRES le premier rendu.
+  set hass(h) { this._hass = h; if (this._rendered) this._populateEntities(); }
   disconnectedCallback() { this._rendered = false; }
 
   // Clone profond, mais limite aux objets/tableaux nus d un YAML : pas de
@@ -1820,6 +1913,51 @@ class TCCCardEditor extends HTMLElement {
     inp.value = this._read(key) ?? '';
     inp.addEventListener('input', () => this._set(key, inp.value));
     row.wrap.appendChild(inp); return inp;
+  }
+
+  _toggle(key, label, def = false) {
+    const row = this._row(label);
+    const inp = document.createElement('input');
+    inp.type = 'checkbox'; inp.dataset.key = key;
+    const v = this._read(key);
+    inp.checked = (v === undefined || v === null) ? def : !!v;
+    // On ECRIT toujours le booleen, meme quand il retombe sur le defaut :
+    // un decochage qui n ecrirait rien serait indistinguable du champ
+    // jamais touche, et la card reprendrait le defaut au prochain rendu.
+    inp.addEventListener('change', () => this._set(key, inp.checked));
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  // Entite : <input list> peuple depuis hass.states, motif de
+  // heat-pump-card.js (l.1348). Pas <ha-entity-picker> : il n est pas
+  // garanti charge dans le contexte de l editeur, et un picker absent
+  // rend un champ MUET sans aucune erreur.
+  _entity(key, label) {
+    const row = this._row(label);
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.dataset.key = key;
+    inp.setAttribute('list', 'tcc-entities');
+    inp.placeholder = 'sensor.xxx';
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => this._set(key, inp.value));
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  // Peuple la datalist. Appelee au rendu ET depuis set hass : `set hass`
+  // ne redessine jamais (commentaire l.28), donc un remplissage fait
+  // uniquement au rendu resterait vide si hass arrive apres.
+  _populateEntities() {
+    if (!this._hass) return;
+    const dl = this.querySelector('#tcc-entities');
+    if (!dl || dl.dataset.n === String(Object.keys(this._hass.states).length))
+      return;
+    const ids = Object.keys(this._hass.states).sort();
+    dl.textContent = '';
+    for (const e of ids) {
+      const o = document.createElement('option');
+      o.value = e; dl.appendChild(o);
+    }
+    dl.dataset.n = String(ids.length);
   }
 
   // Couleur : TEXTE libre (accepte var/rgb/hex) + picker.
@@ -1964,15 +2102,54 @@ class TCCCardEditor extends HTMLElement {
   // ║  ne jamais les retaper ici, ils mentiraient en silence.  ║
   // ╚══════════════════════════════════════════════════════════╝
   _schema() {
+    // -- ENTITES -------------------------------------------------
+    // Demande de Chris : les regler dans l UI, pas dans le YAML.
+    // Motif recopie de heat-pump-card.js (l.1348) : <input list> +
+    // datalist peuplee depuis hass.states.
+    const dl = document.createElement('datalist');
+    dl.id = 'tcc-entities';
+    (this._appendTo || this).appendChild(dl);
+
+    this._section('Entites');
+    this._hint('Tape pour filtrer : la liste vient de ton installation.');
+    this._entity('climate', 'Thermostat (climate)');
+    this._entity('entities.temp_outside', 'Temperature exterieure');
+    this._entity('entities.temp_water_out', 'Depart d eau');
+    this._entity('entities.temp_water_ret', 'Retour d eau');
+    this._entity('entities.fan_rpm', 'Vitesse ventilateur');
+    this._entity('entities.comp_freq', 'Frequence compresseur');
+    this._entity('entities.power', 'Puissance (W)');
+    this._entity('entities.status', 'Mode operation');
+    this._populateEntities();
+
+    // -- EN-TETE : gabarit CANON, ha-neon-css/SKILL.md l.1126 ----
+    // « UN SEUL groupe repliable -- jamais 2, jamais 3 ». La base a
+    // plat, tout le reste dans le groupe, dans l ordre du MD.
     this._section('En-tete');
-    this._group('Titre & filet', false, () => {
-      this._hint('Cles header.* : ce sont elles qui pilotent le haut de la card, jamais une cle de palette.');
-      this._text('header.title', 'Titre', 'Thermal Core');
-      this._color('header.color', 'Couleur du titre', 'rgba(180,130,255,.55)');
-      this._color('header.glow_color', 'Halo du titre', 'rgba(180,130,255,.45)');
+    this._text('header.title', 'Titre', 'Thermal Core');
+    this._text('header.subtitle', 'Sous-titre', '');
+    this._text('header.icon', 'Icone (mdi)', 'mdi:heat-pump');
+    this._text('header.title_size', 'Taille titre (px)', '11');
+    this._color('header.color', 'Couleur titre', 'rgba(180,130,255,.55)');
+    this._text('header.font', 'Police', 'theme HA');
+    this._toggle('header.uppercase', 'Majuscules', true);
+    this._toggle('header.show', 'Afficher l en-tete', true);
+
+    this._group('Effets avances du titre', false, () => {
+      this._text('header.font_weight', 'Epaisseur', '600');
+      this._text('header.letter_spacing', 'Espacement', '.02em');
+      this._toggle('header.italic', 'Italique', false);
+      this._text('header.title_shadow', 'Text-shadow', '0 0 8px rgba(0,212,255,.7)');
+      this._toggle('header.gradient', 'Titre en degrade');
+      this._color('header.gradient_from', 'Degrade - depart', 'var(--primary-color)');
+      this._color('header.gradient_to', 'Degrade - arrivee', 'var(--accent-color)');
+      this._toggle('header.glow', 'Glow du titre');
+      this._text('header.glow_size', 'Taille du glow', '14');
+      this._color('header.glow_color', 'Couleur du glow', 'var(--primary-color)');
+      this._toggle('header.flicker', 'Scintillement du titre');
       this._color('header.icon_color', 'Couleur de l icone', 'rgba(232,224,255,.85)');
-      this._color('header.gradient_from', 'Filet : depart', 'rgba(98,0,234,.55)');
-      this._color('header.gradient_to', 'Filet : arrivee', 'rgba(0,255,249,.25)');
+      this._text('header.icon_size', 'Taille icone (px)', '18');
+      this._hint('Memes reglages que la neon-entities-card. Le text-shadow ci-dessus, si renseigne, remplace le glow.');
     });
 
     this._section('Couleurs du dessin');
@@ -2112,7 +2289,7 @@ class ThermalCoreCard extends HTMLElement {
        l apercu du selecteur de cards (preview: true) sort casse. */
     return {
       type: 'custom:' + TCC_TAG,
-      climate: 'climate.pac_ecodan',
+      climate: 'climate.ecodan_heatpump_virtual_thermostat_z1',
       entities: {
         temp_outside:   'sensor.ecodan_heatpump_outside_temp',
         temp_water_out: 'sensor.ecodan_heatpump_feed_temp',
@@ -2131,7 +2308,24 @@ class ThermalCoreCard extends HTMLElement {
        couper la boucle rAF precedente AVANT d ecraser le DOM -- sinon
        elle tourne sur un canvas orphelin et mange du GPU pour rien. */
     if (this._api && this._api.stop) { try { this._api.stop(); } catch (e) {} }
-    root.innerHTML = '<style>' + TCC_CSS + '</style>' + TCC_HTML;
+    /* <ha-card> est la racine que Lovelace ATTEND : c est par elle que
+       passent le layout en sections, le dimensionnement de colonne et les
+       selecteurs de card-mod. Le banc, lui, est une page HTML dont la
+       racine est un <div class="card"> nu ; recopie verbatim, la card
+       n avait aucune racine reconnue -- mesure du 19/09 sur le dashboard
+       reel : `ha-card = no el`.
+       ⚠️ Le wrap sert le CONTRAT DE LAYOUT, PAS l apparence. La regle
+       `ha-card{background:none;border:none;box-shadow:none}` du CSS la
+       rend deliberement transparente : sinon elle empile SON fond, SON
+       radius et SON ombre de theme SOUS .card, qui a deja les siens --
+       deux surfaces, deux radius qui ne coincident pas, un lisere qui
+       depasse. C est .card qui garde l apparence, elle est prouvee
+       (36 --c-*, le degrade --card-bg, les drop-shadow du neon).
+       Les deux se tiennent : ne pas « reparer » l un sans l autre.
+       Le wrap est ADDITIF : .card reste le porteur des --c-* et de
+       __reapply, donc le pont et querySelector('.card') sont intacts. */
+    root.innerHTML = '<style>' + TCC_CSS + '</style>'
+                   + '<ha-card>' + TCC_HTML + '</ha-card>';
     /* Parametres PAR INSTANCE (au banc : window.FLUID_PARAMS). apply() et la
        boucle de rendu doivent partager le MEME objet -- pas deux objets de
        meme forme, sinon les facteurs de plasma partent dans le vide. */
@@ -2194,6 +2388,112 @@ class ThermalCoreCard extends HTMLElement {
         s.style.removeProperty("--c-" + v);
       else s.style.setProperty("--c-" + v, val);
     }
+    /* ── HEADER : RECETTE CANONIQUE ha-neon-css/SKILL.md §3ter ──────
+       Le MD est la source, PAS une autre card : « LA recette canonique,
+       a copier telle quelle (ne PAS re-comparer les cards) » -- piege
+       vecu 3 fois, et une 4e le 19/09 quand j ai recopie heat-pump-card
+       (que le MD cite justement comme ayant improvise son decoupage).
+       Reference = neon-markdown-card.js.
+
+       Seule la LOGIQUE vient du MD. Les defauts restent ceux de
+       thermal-core, dans le CSS (MD l.465-470 : copier les constantes
+       d une autre card = regression silencieuse). */
+    const h = (c.header && typeof c.header === "object") ? c.header : {};
+
+    /* _neonGlow : 4 couches, couche blanche + 3 colorees croissantes
+       (MD l.438-441). Se calcule en JS parce que le CSS ne sait ni
+       multiplier une taille ni deriver une couleur. */
+    const _glow = (col, size, drop) => {
+      const n = parseFloat(size) || 14;   /* 14 = canon 26/08 */
+      const r = [.2, .4, .8, 1].map(f => Math.round(n * f));
+      const p = drop
+        ? x => "drop-shadow(0 0 " + x[0] + "px " + x[1] + ")"
+        : x => "0 0 " + x[0] + "px " + x[1];
+      const l = [p([r[0], "#fff"]), p([r[1], col]), p([r[2], col]), p([r[3], col])];
+      return l.join(drop ? " " : ",");
+    };
+
+    /* Les deux defauts FIXES du MD : ni l un ni l autre ne doit heriter
+       de header.color. glow_color qui retombe sur la couleur du titre =
+       halo noye dans le texte (piege NAS/switch, 26/08). */
+    const gCol = h.glow_color || "var(--primary-color, #00E8FF)";
+
+    /* title_shadow, s il est renseigne, REMPLACE le glow (MD l.453 et
+       le _hint de l editeur l.1158). */
+    const tShadow = h.title_shadow ? h.title_shadow
+                  : (h.glow ? _glow(gCol, h.glow_size, false) : null);
+
+    /* Sur un titre en DEGRADE, le glow doit passer par filter:drop-shadow
+       et jamais par text-shadow : le gradient pose
+       -webkit-text-fill-color:transparent, et une ombre de texte se
+       dessinerait sous un texte devenu invisible (MD l.507-509). */
+    const grad = h.gradient
+      ? "linear-gradient(90deg," + (h.gradient_from || "var(--primary-color, #00E8FF)") +
+        "," + (h.gradient_to || "var(--accent-color, #FF50A0)") + ")"
+      : null;
+
+    const HV = [
+      ["color",        h.color],
+      ["icon-color",   h.icon_color],    /* defaut FIXE dans le CSS, PAS h.color */
+      ["size",         h.title_size ? parseFloat(h.title_size) + "px" : null],
+      ["font",         h.font ? "'" + h.font + "'" : null],
+      ["ls",           h.letter_spacing],
+      ["weight",       h.font_weight],
+      ["style",        h.italic ? "italic" : null],
+      ["transform",    h.uppercase === false ? "none" : null],
+      ["icon-size",    h.icon_size ? parseFloat(h.icon_size) + "px" : null],
+      /* glow icone : opt-in STRICT sur h.glow (jamais h.glow !== false) */
+      ["icon-glow",    h.glow ? _glow(gCol, h.glow_size, true) : null],
+      ["glow",         grad ? null : tShadow],
+      ["title-filter", grad && tShadow ? _glow(gCol, h.glow_size, true) : null],
+      ["grad",         grad],
+      ["clip",         grad ? "text" : null],
+      ["fill",         grad ? "transparent" : null],
+      ["flicker",      h.flicker
+                       ? "nmc-flicker " + (3.5 + Math.random() * 2).toFixed(2) +
+                         "s ease-in-out infinite" : null],
+    ];
+    for (const [v, val] of HV) {
+      if (val === undefined || val === null || val === "")
+        s.style.removeProperty("--tcc-t-" + v);
+      else s.style.setProperty("--tcc-t-" + v, val);
+    }
+
+    /* Le TITRE et le SOUS-TITRE : textContent, pas des variables. Seuls
+       champs du header a emprunter le chemin DOM. */
+    const _t = s.querySelector(".nmc-title");
+    if (_t) _t.textContent = (h.title === undefined || h.title === null ||
+                              h.title === "") ? "Thermal Core" : h.title;
+    const _sub = s.querySelector(".neon-hdr-subtitle");
+    if (_sub) {
+      const v = h.subtitle || "";
+      _sub.textContent = v;
+      _sub.style.display = v ? "" : "none";
+    }
+
+    /* header.show : masquer tout le bloc (checklist MD point 3, « souvent
+       oublie »). */
+    const _hd = s.querySelector(".neon-hdr");
+    const _dv = s.querySelector(".neon-main-div");
+    const _off = h.show === false;
+    if (_hd) _hd.style.display = _off ? "none" : "";
+    if (_dv) _dv.style.display = _off ? "none" : "";
+
+    /* L ICONE : createElement, jamais innerHTML (MD l.253). Le <svg> de
+       secours du banc reste tant que Chris n a pas choisi d icone, car
+       hors HA <ha-icon> n existe pas et rendrait du vide. */
+    const _w = s.querySelector(".nmc-icon-wrap");
+    if (_w && h.icon) {
+      let ic = _w.querySelector("ha-icon");
+      if (!ic) {
+        ic = document.createElement("ha-icon");
+        const svg = _w.querySelector("svg");
+        if (svg) svg.remove();
+        _w.appendChild(ic);
+      }
+      if (ic.getAttribute("icon") !== h.icon) ic.setAttribute("icon", h.icon);
+    }
+
     /* Les 9 cles d etat ne mordent qu au prochain apply() : on le
        force, sinon elles sont inertes pendant tout le reglage.
        Le nom __reapply est celui POSE par tail.txt sur .card ; il
@@ -2222,7 +2522,7 @@ window.customCards.push({
 });
 
 console.info(
-  '%c \u26A1 thermal-core-card v1.0.0 %c Tokamak ',
+  '%c \u26A1 thermal-core-card v1.1.0 %c Tokamak ',
   'background:#00FFF9;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;',
   'background:#0A0118;color:#00FFF9;padding:2px 4px;border-radius:0 3px 3px 0;'
 );
