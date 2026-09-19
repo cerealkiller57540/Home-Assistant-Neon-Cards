@@ -44,8 +44,15 @@ const TCC_CSS = `
      s injecte APRES nous dans le shadow root (mesure entities l.254-261).
      Sur .card il n a aucune regle, donc aucun !important n y est requis --
      et il bloquerait le card-mod que Chris pourrait poser lui-meme. */
+  /* UNE SEULE surface. card-mod pose sur :host un overflow:hidden et un
+     ::before qui dessinent l arrondi EN DUR a 18px (theme l.442-444) :
+     tant que .card gardait son propre rayon, les deux ne coincidaient
+     pas et le filet du theme debordait dans les coins haut/bas gauche
+     (capture du 19/09). .card renonce donc a fond, bordure, ombre ET
+     rayon : c est :host qui clippe, seul. */
   :host([data-theme-card]) .card{
-    background:none !important; border:none !important; box-shadow:none !important;}
+    background:none !important; border:none !important; box-shadow:none !important;
+    border-radius:0 !important;}
   :host([data-theme-card]) ha-card{
     background:var(--ha-card-background) !important;
     border:var(--ha-card-border-width,1px) solid
@@ -563,10 +570,6 @@ const TCC_HTML = `  <div class="card">
               stroke="var(--c-plasma-core, rgb(232,224,255))" stroke-width="1.1" opacity=".45"/>
       </g>
 
-      <!-- vanne 3 voies -->
-      <circle id="v3v" cx="200" cy="106" r="6" fill="color-mix(in srgb, var(--c-pipe, rgb(98,0,234)) 15%, transparent)"
-              stroke="color-mix(in srgb, var(--c-pipe, rgb(98,0,234)) 75%, transparent)" stroke-width="1"/>
-
       <!-- Depart / retour. Les deux fleches ▶/◀ ont ete RETIREES (demande de
            Chris) : c etait une bequille du temps ou le flux etait fige. Le
            sens se lit maintenant au defilement des tirets, verifie par sonde
@@ -644,7 +647,6 @@ const TCC_HTML = `  <div class="card">
       </g>
 
       <!-- ===== bandeau bas : pastilles d etat + statut ===== -->
-      <line x1="12" y1="180" x2="324" y2="180" stroke="color-mix(in srgb, var(--c-chamber-wall, rgb(98,0,234)) 30%, transparent)" stroke-width="1"/>
       <!-- Les 4 pastilles d etat ont ete retirees a la demande de Chris.
            La place liberee (x=12..60) accueille le libelle du POWER CORE. -->
       <!-- statut : texte lumineux, jamais un badge -->
@@ -1714,7 +1716,6 @@ function TCC_MONTER(root, host, params, getCfg, getHass) {
         el.style.animation = flowing ? '' : 'none';
         el.style.opacity   = flowing ? '' : '0';
       });
-      $('v3v').setAttribute('opacity', flowing ? '1' : '.4');
 
       /* Les 4 pastilles d etat sont retirees du SVG (demande de Chris) : piloter
          #s-def & co. ici jetterait une TypeError sur null et casserait TOUT le
@@ -1817,7 +1818,7 @@ function TCC_MONTER(root, host, params, getCfg, getHass) {
   return api;
 }
 
-/* thermal-core-card v1.2.0 -- PAC Ecodan, chambre a plasma + circuit d eau.
+/* thermal-core-card v1.3.0 -- PAC Ecodan, chambre a plasma + circuit d eau.
  *
  * GENERE par gen_card.py : ne pas editer ce fichier a la main. Le banc
  * (head.txt + svg_new.txt + fluid_js.txt + tail.txt) est la source de
@@ -2285,6 +2286,15 @@ class ThermalCoreCard extends HTMLElement {
        boucle rAF precedente sur un canvas orphelin. Mesure du 19/09 :
        `meme_canvas: false` au second setConfig. Le pont couvre les 36
        couleurs, et refresh() reprend les donnees. */
+    /* L heritage du theme se decide AVANT le rendu et SANS attendre le
+       montage. Symptome rapporte par Chris le 19/09 : « l heritage marche
+       a moitie, je suis oblige de faire F5 ». Cause : l attribut n etait
+       pose que par _applyLiveConfig(), lui-meme appele depuis _render()
+       APRES root.innerHTML -- donc apres que la surface soit calee. C est
+       un attribut sur le HOST : il ne depend d aucun DOM interne, rien ne
+       justifie de le retarder. Pose ici, il est la avant le premier CSS. */
+    this.toggleAttribute("data-theme-card", !!this._config.use_theme_card);
+
     if (this._monte) {
       this._applyLiveConfig(this._config, this.shadowRoot);
       if (this._api && this._api.refresh) this._api.refresh(this._hass);
@@ -2476,8 +2486,14 @@ class ThermalCoreCard extends HTMLElement {
        -webkit-text-fill-color:transparent, et une ombre de texte se
        dessinerait sous un texte devenu invisible (MD l.507-509). */
     const grad = h.gradient
-      ? "linear-gradient(90deg," + (h.gradient_from || "var(--primary-color, #00E8FF)") +
-        "," + (h.gradient_to || "var(--accent-color, #FF50A0)") + ")"
+      /* Defaut du DEPART eclairci. Mesure du 19/09 : le theme pose
+         primary-color:#6200EA (UV tres sombre) ; un degrade qui demarre
+         la rend « THERMAL » illisible sur fond sombre, ce que montre la
+         capture de Chris. #B478FF est le violet clair lisible de la card
+         d origine. L arrivee garde l accent du theme (cyan). Ces deux
+         defauts ne mordent QUE si gradient_from/to ne sont pas poses. */
+      ? "linear-gradient(90deg," + (h.gradient_from || "#B478FF") +
+        "," + (h.gradient_to || "var(--accent-color, #00fff9)") + ")"
       : null;
 
     const HV = [
@@ -2570,7 +2586,7 @@ window.customCards.push({
 });
 
 console.info(
-  '%c \u26A1 thermal-core-card v1.2.0 %c Tokamak ',
+  '%c \u26A1 thermal-core-card v1.3.0 %c Tokamak ',
   'background:#00FFF9;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;',
   'background:#0A0118;color:#00FFF9;padding:2px 4px;border-radius:0 3px 3px 0;'
 );
