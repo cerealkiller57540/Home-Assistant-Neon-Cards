@@ -52,7 +52,11 @@ const TCC_CSS = `
      rayon : c est :host qui clippe, seul. */
   :host([data-theme-card]) .card{
     background:none !important; border:none !important; box-shadow:none !important;
-    border-radius:0 !important;}
+    border-radius:0 !important;
+    /* overflow AUSSI, sinon le glow reste clippe -- et prive de rayon il
+       l est a angles droits : « coupe net », le mot de Chris le 20/09.
+       Sous cette branche c est :host (card-mod, 18px) qui clippe, seul. */
+    overflow:visible !important;}
   :host([data-theme-card]) ha-card{
     background:var(--ha-card-background) !important;
     border:var(--ha-card-border-width,1px) solid
@@ -72,7 +76,8 @@ const TCC_CSS = `
     overflow:visible;
   }
   .card{ width:100%; box-sizing:border-box; }
-  .neon-hdr {display:flex; align-items:center; gap:8px; padding:8px 4px 8px}
+  .neon-hdr {display:flex; align-items:center; gap:8px; padding:11px 14px 8px;
+    container-type:inline-size}
   .neon-hdr-group {display:flex; flex-direction:row; align-items:center; gap:8px;
     flex:1; min-width:0}
   .nmc-icon-wrap {display:flex; align-items:center; justify-content:center;
@@ -123,7 +128,15 @@ const TCC_CSS = `
        sont opt-in. Fallback du triplet obligatoire : hors HA la var
        n existe pas et la couleur serait invalide. */
     color:var(--tcc-t-color, rgba(var(--rgb-primary-text-color, 232,224,255),.85));
-    padding-left:8px; letter-spacing:var(--tcc-t-ls, .02em);
+    padding-left:8px;
+    /* Canon du MD 3ter l.457 : clamp(1px, 0.5cqi, 3px). L ancien
+       defaut .02em valait ~0,32px a 16px -- un titre bien plus serre
+       que les autres cards, ce que Chris signale le 20/09 par « a
+       parametre equivalent ne rend pas comme les autres ».
+       Le \`cqi\` EXIGE un conteneur declare : cf container-type pose
+       sur .neon-hdr plus bas. Sans lui il se resout sur le viewport
+       et l espacement bougerait avec la largeur de la fenetre. */
+    letter-spacing:var(--tcc-t-ls, clamp(1px, 0.5cqi, 3px));
     /* Gradient : pose -webkit-text-fill-color:transparent, donc il DOIT
        venir avant le text-shadow -- et sur un titre en gradient c est un
        filter:drop-shadow qu il faut, jamais un text-shadow (SKILL.md
@@ -442,7 +455,7 @@ const TCC_HTML = `  <div class="card">
              \`color\` est indispensable en plus de \`fill\` : sur un <text> SVG
              currentColor se resout par \`color\`, jamais par \`fill\`. -->
         <text id="v-ext" class="ext-glow" x="9" y="53" font-family="var(--f-mono)" font-size="16"
-              fill="var(--c-ext-temp, rgb(0,255,249))" color="var(--c-ext-temp, rgb(0,255,249))">20.0&#176;</text>
+              fill="var(--c-ext-temp, rgb(0,255,249))" color="var(--c-ext-temp, rgb(0,255,249))">20.0&#176;C</text>
         <!-- ADMISSION : Chris demande des PARTICULES ASPIREES, pas des
              chevrons qui derivent. Chacune part d un point different de la
              colonne et CONVERGE vers la paroi gauche de la chambre, qui est
@@ -583,9 +596,9 @@ const TCC_HTML = `  <div class="card">
            lime = chaud qui part, cyan = tiede qui revient. -->
       <g font-family="var(--f-mono)" font-size="12">
         <text id="v-dep" class="neon" x="164" y="70" fill="var(--c-flow-out, rgb(204,255,0))"
-              color="var(--c-flow-out, rgb(204,255,0))">25.5&#176;</text>
+              color="var(--c-flow-out, rgb(204,255,0))">25.5&#176;C</text>
         <text id="v-ret" class="neon" x="164" y="128" fill="var(--c-flow-back, rgb(0,255,249))"
-              color="var(--c-flow-back, rgb(0,255,249))">25.5&#176;</text>
+              color="var(--c-flow-back, rgb(0,255,249))">25.5&#176;C</text>
       </g>
 
       <!-- ===== ZONE 1 = LE THERMOSTAT (interactif) =====
@@ -609,11 +622,10 @@ const TCC_HTML = `  <div class="card">
              signalerait quelque chose qui n existe pas. -->
         <text id="thermo-sp" class="neon" x="55" y="45" text-anchor="middle"
               font-family="var(--f-disp)" font-size="26"
-              fill="var(--c-setpoint, rgb(232,224,255))" color="var(--c-setpoint, rgb(232,224,255))">14.0<tspan font-size="12"
-              fill="color-mix(in srgb, var(--c-setpoint, rgb(232,224,255)) 55%, transparent)">&#176;</tspan></text>
+              fill="var(--c-setpoint, rgb(232,224,255))" color="var(--c-setpoint, rgb(232,224,255))">14.0&#176;C</text>
         <text id="thermo-cur" x="55" y="59" text-anchor="middle"
               font-family="var(--f-mono)" font-size="10"
-              fill="var(--c-thermo-cur, rgb(0,255,249))">&#8226; 24.8&#176;</text>
+              fill="var(--c-thermo-cur, rgb(0,255,249))">&#8226; 24.8&#176;C</text>
         <g class="tbtn" id="thermo-minus">
           <rect x="8" y="68" width="44" height="18" rx="4" fill="color-mix(in srgb, var(--c-btn-bg, rgb(6,2,20)) 55%, transparent)"
                 stroke="color-mix(in srgb, var(--c-btn-minus, rgb(0,255,249)) 55%, transparent)" stroke-width=".9"/>
@@ -1481,20 +1493,17 @@ function TCC_MONTER(root, host, params, getCfg, getHass) {
       /* Le nombre AVANT reecriture : t.textContent porte encore le « ° » du
          tspan precedent, on ne peut pas le comparer tel quel. */
       var prev = parseFloat(t.textContent);
-      var next = setpoint.toFixed(1);
+        var next = setpoint.toFixed(1) + '\u00B0C';
       t.textContent = next;
-      if (!isNaN(prev) && prev.toFixed(1) !== next) flick(t);
-      var u = document.createElementNS('http://www.w3.org/2000/svg','tspan');
-      u.setAttribute('font-size','12');
-      /* var() DANS l attribut, surtout pas cs() : ce tspan est RECREE a chaque
-         changement de consigne (t.textContent efface ses enfants juste au
-         dessus), donc un cs() serait resolu une fois a la creation et cuit dans
-         la chaine -- le meme piege que dans S, remonte d un etage. Avec la var,
-         c est le moteur qui reresout a chaque repeinte. Verifie au spike : une
-         var() dans un attribut de presentation SVG est bien honoree. */
-      u.setAttribute('fill','color-mix(in srgb, var(--c-setpoint, rgb(232,224,255)) 55%, transparent)');
-      u.textContent = '°';
-      t.appendChild(u);
+      /* next porte desormais « °C » : comparer prev.toFixed(1) (un
+         nombre nu) a next serait TOUJOURS vrai et la consigne
+         clignoterait a chaque tick. On compare des nombres. */
+      if (!isNaN(prev) && prev.toFixed(1) !== setpoint.toFixed(1)) flick(t);
+      /* Le degre etait un tspan font-size 12 appende ici : un EXPOSANT,
+         et sans le C, alors que tout le reste de la card ecrit °C a la
+         taille du texte (Chris, 20/09). On ecrit desormais l unite dans
+         la chaine, donc plus aucun enfant a recreer -- et le piege du
+         cs() cuit dans l attribut disparait avec lui. */
     }
 
     function adjust(delta){
@@ -1813,12 +1822,25 @@ function TCC_MONTER(root, host, params, getCfg, getHass) {
     if (c && c.__reapply) c.__reapply();
   };
   api.stop = function () {
-    try { if (api.loop && api.loop.stop) api.loop.stop(); } catch (e) {}
+    /* api.loop vaut {running, raf} : il n a JAMAIS eu de methode
+       stop(), donc cette garde etait toujours fausse et api.stop()
+       un no-op complet, avale par le try/catch. Mesure du 20/09 :
+       chaque _render() laissait donc tourner une boucle rAF WebGL
+       sur un canvas orphelin, et elles s accumulaient -- sur une
+       machine de TRAVAIL c est exactement ce qu il ne faut pas.
+       Couper le drapeau NE SUFFIT PAS : une frame peut deja etre
+       programmee et s executera une fois de plus. On l annule. */
+    try {
+      if (api.loop) {
+        api.loop.running = false;
+        if (api.loop.raf) { cancelAnimationFrame(api.loop.raf); api.loop.raf = 0; }
+      }
+    } catch (e) {}
   };
   return api;
 }
 
-/* thermal-core-card v1.3.0 -- PAC Ecodan, chambre a plasma + circuit d eau.
+/* thermal-core-card v1.4.0 -- PAC Ecodan, chambre a plasma + circuit d eau.
  *
  * GENERE par gen_card.py : ne pas editer ce fichier a la main. Le banc
  * (head.txt + svg_new.txt + fluid_js.txt + tail.txt) est la source de
@@ -2462,7 +2484,9 @@ class ThermalCoreCard extends HTMLElement {
        (MD l.438-441). Se calcule en JS parce que le CSS ne sait ni
        multiplier une taille ni deriver une couleur. */
     const _glow = (col, size, drop) => {
-      const n = parseFloat(size) || 14;   /* 14 = canon 26/08 */
+      /* 12 = canon du MD 3ter l.459. Etait a 14 : la card glowait plus
+         fort que les autres a parametre egal (Chris, 20/09). */
+      const n = parseFloat(size) || 12;
       const r = [.2, .4, .8, 1].map(f => Math.round(n * f));
       const p = drop
         ? x => "drop-shadow(0 0 " + x[0] + "px " + x[1] + ")"
@@ -2486,14 +2510,17 @@ class ThermalCoreCard extends HTMLElement {
        -webkit-text-fill-color:transparent, et une ombre de texte se
        dessinerait sous un texte devenu invisible (MD l.507-509). */
     const grad = h.gradient
-      /* Defaut du DEPART eclairci. Mesure du 19/09 : le theme pose
-         primary-color:#6200EA (UV tres sombre) ; un degrade qui demarre
-         la rend « THERMAL » illisible sur fond sombre, ce que montre la
-         capture de Chris. #B478FF est le violet clair lisible de la card
-         d origine. L arrivee garde l accent du theme (cyan). Ces deux
-         defauts ne mordent QUE si gradient_from/to ne sont pas poses. */
-      ? "linear-gradient(90deg," + (h.gradient_from || "#B478FF") +
-        "," + (h.gradient_to || "var(--accent-color, #00fff9)") + ")"
+      /* DEFAUTS CANONIQUES, MD 3ter l.461-462. Le #B478FF que j avais
+         pose le 19/09 etait une couleur INVENTEE pour contrer un titre
+         sombre : aucune autre card ne l a, d ou « ne rend pas comme les
+         autres » (Chris, 20/09). Le vrai defaut est var(--primary-color),
+         comme partout ailleurs.
+         ⚠️ Le fallback #00E8FF n est PAS atteint sous HA : --primary-color
+         y existe (#6200EA). Si le titre ressort trop sombre, le remede est
+         header.gradient_from dans le YAML -- pas une couleur en dur ici,
+         qui desalignerait de nouveau cette card des autres. */
+      ? "linear-gradient(90deg," + (h.gradient_from || "var(--primary-color, #00E8FF)") +
+        "," + (h.gradient_to || "var(--accent-color, #FF50A0)") + ")"
       : null;
 
     const HV = [
@@ -2586,7 +2613,7 @@ window.customCards.push({
 });
 
 console.info(
-  '%c \u26A1 thermal-core-card v1.3.0 %c Tokamak ',
+  '%c \u26A1 thermal-core-card v1.4.0 %c Tokamak ',
   'background:#00FFF9;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;',
   'background:#0A0118;color:#00FFF9;padding:2px 4px;border-radius:0 3px 3px 0;'
 );
