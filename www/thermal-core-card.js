@@ -37,6 +37,24 @@ const TCC_CSS = `
      un liseré du theme qui depasse. On la rend donc TRANSPARENTE et on
      laisse .card porter l apparence, qui est deja prouvee (36 --c-*).
      Pas de !important : si Chris pose un card-mod, il doit gagner. */
+  /* use_theme_card=true : la surface DEMENAGE sur ha-card, qui herite du
+     card-mod du theme (fond translucide + backdrop-filter = le verre).
+     .card se neutralise alors -- deux surfaces empilees, c est justement
+     le bug. !important ICI seulement : card-mod cible ha-card/:host et
+     s injecte APRES nous dans le shadow root (mesure entities l.254-261).
+     Sur .card il n a aucune regle, donc aucun !important n y est requis --
+     et il bloquerait le card-mod que Chris pourrait poser lui-meme. */
+  :host([data-theme-card]) .card{
+    background:none !important; border:none !important; box-shadow:none !important;}
+  :host([data-theme-card]) ha-card{
+    background:var(--ha-card-background) !important;
+    border:var(--ha-card-border-width,1px) solid
+           var(--ha-card-border-color, rgba(var(--uv),.45)) !important;
+    box-shadow:var(--ha-card-box-shadow, 0 8px 32px rgba(0,0,0,.55)) !important;
+    backdrop-filter:var(--ha-card-backdrop-filter, blur(12px) saturate(150%));
+    -webkit-backdrop-filter:var(--ha-card-backdrop-filter, blur(12px) saturate(150%));
+    border-radius:var(--ha-card-border-radius,18px);}
+
   ha-card{
     background:none; border:none; box-shadow:none;
     /* La card remplit sa colonne : c est le defaut vu le 19/09 (bride a
@@ -92,7 +110,12 @@ const TCC_CSS = `
        parce qu un gradient pose -webkit-text-fill-color:transparent */
     /* SKILL.md l.1160 : le canon tranche le 26/08 est .02em (le clamp
        etait la valeur historique d entities/climate, pas le canon). */
-    color:var(--tcc-t-color, rgba(180,130,255,.55));
+    /* Defaut = blanc casse du theme, comme neon-entities-card.js l.176
+       (la card de REFERENCE ; le md 3ter dit var(--primary-color) et il
+       est perime). La couleur neon n arrive que par glow/degrade, qui
+       sont opt-in. Fallback du triplet obligatoire : hors HA la var
+       n existe pas et la couleur serait invalide. */
+    color:var(--tcc-t-color, rgba(var(--rgb-primary-text-color, 232,224,255),.85));
     padding-left:8px; letter-spacing:var(--tcc-t-ls, .02em);
     /* Gradient : pose -webkit-text-fill-color:transparent, donc il DOIT
        venir avant le text-shadow -- et sur un titre en gradient c est un
@@ -114,7 +137,7 @@ const TCC_CSS = `
   .neon-hdr-subtitle {
     font-family:var(--tcc-t-font, var(--f-disp));
     font-size:clamp(10px, calc(var(--tcc-t-size, clamp(8px,2vw,11px)) * .75), 12px);
-    color:color-mix(in srgb, var(--tcc-t-color, rgba(180,130,255,.55)) 55%,
+    color:color-mix(in srgb, var(--tcc-t-color, rgba(var(--rgb-primary-text-color, 232,224,255),.85)) 55%,
                     transparent);
     letter-spacing:2px; text-transform:uppercase; line-height:1.2}
   .neon-main-div {height:1px;
@@ -187,7 +210,14 @@ const TCC_CSS = `
       --c-def-c2:         rgb(98,0,234);   /* degivrage : paroi */
 
     background:linear-gradient(160deg,var(--card-bg) 0%,var(--card-bg2) 100%);
-    border:1px solid rgba(var(--uv),.55); border-radius:10px; overflow:hidden;
+    border:1px solid rgba(var(--uv),.55);
+    /* MEME rayon que le theme. card-mod-card (neo-tokyo-v5.yaml l.442)
+       pose border-radius:18px + overflow:hidden sur :host, et son
+       :host::before dessine le filet UV/xenon SUR cet arrondi, en haut
+       et a gauche. A 10px nos coins rentraient sous le filet du theme :
+       c est le debord signale par Chris le 19/09, et gen_card.py:270
+       l avait predit (« deux radius qui ne coincident pas »). */
+    border-radius:var(--ha-card-border-radius, 10px); overflow:hidden;
     box-shadow:0 0 0 1px rgba(var(--uv),.12), 0 14px 44px -18px rgba(var(--uv),.8);}
   .card {position:relative}
   .card .stage {position:relative}
@@ -1787,7 +1817,7 @@ function TCC_MONTER(root, host, params, getCfg, getHass) {
   return api;
 }
 
-/* thermal-core-card v1.1.0 -- PAC Ecodan, chambre a plasma + circuit d eau.
+/* thermal-core-card v1.2.0 -- PAC Ecodan, chambre a plasma + circuit d eau.
  *
  * GENERE par gen_card.py : ne pas editer ce fichier a la main. Le banc
  * (head.txt + svg_new.txt + fluid_js.txt + tail.txt) est la source de
@@ -2102,6 +2132,14 @@ class TCCCardEditor extends HTMLElement {
   // ║  ne jamais les retaper ici, ils mentiraient en silence.  ║
   // ╚══════════════════════════════════════════════════════════╝
   _schema() {
+    // -- APPARENCE GENERALE --------------------------------------
+    // Le classique repris de neon-entities-card.js (l.1576) : sans lui la
+    // card pose un fond OPAQUE en dur qui casse le verre du theme.
+    this._section('Apparence');
+    this._toggle('use_theme_card', 'Heriter du card-mod theme', false);
+    this._hint('Coche : la card prend le fond translucide et le flou du theme '
+             + '(neo-tokyo-v5). Decoche : fond en dur, opaque.');
+
     // -- ENTITES -------------------------------------------------
     // Demande de Chris : les regler dans l UI, pas dans le YAML.
     // Motif recopie de heat-pump-card.js (l.1348) : <input list> +
@@ -2388,6 +2426,16 @@ class ThermalCoreCard extends HTMLElement {
         s.style.removeProperty("--c-" + v);
       else s.style.setProperty("--c-" + v, val);
     }
+    /* -- FOND : heriter du card-mod du theme, ou fond en dur ------
+       Bascule un BLOC de regles (fond+bordure+ombre+backdrop, sur deux
+       selecteurs), donc un ATTRIBUT sur le host -- une variable CSS ne
+       sait pas faire ca. Le host est `root.host` quand root est un
+       shadowRoot ; sur un banc sans shadow DOM, root EST l element. */
+    const _host = root && (root.host || root);
+    if (_host && _host.toggleAttribute) {
+      _host.toggleAttribute("data-theme-card", !!c.use_theme_card);
+    }
+
     /* ── HEADER : RECETTE CANONIQUE ha-neon-css/SKILL.md §3ter ──────
        Le MD est la source, PAS une autre card : « LA recette canonique,
        a copier telle quelle (ne PAS re-comparer les cards) » -- piege
@@ -2522,7 +2570,7 @@ window.customCards.push({
 });
 
 console.info(
-  '%c \u26A1 thermal-core-card v1.1.0 %c Tokamak ',
+  '%c \u26A1 thermal-core-card v1.2.0 %c Tokamak ',
   'background:#00FFF9;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;',
   'background:#0A0118;color:#00FFF9;padding:2px 4px;border-radius:0 3px 3px 0;'
 );
