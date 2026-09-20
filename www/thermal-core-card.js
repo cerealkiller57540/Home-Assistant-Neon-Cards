@@ -1840,7 +1840,7 @@ function TCC_MONTER(root, host, params, getCfg, getHass) {
   return api;
 }
 
-/* thermal-core-card v1.4.0 -- PAC Ecodan, chambre a plasma + circuit d eau.
+/* thermal-core-card v1.4.1 -- PAC Ecodan, chambre a plasma + circuit d eau.
  *
  * GENERE par gen_card.py : ne pas editer ce fichier a la main. Le banc
  * (head.txt + svg_new.txt + fluid_js.txt + tail.txt) est la source de
@@ -2328,6 +2328,23 @@ class ThermalCoreCard extends HTMLElement {
        moment l element est DANS le document, donc getComputedStyle rend de
        vraies valeurs et cs() resout les --c-* de l editeur. */
     this._monte = true;
+
+    /* L attribut de theme se repose a CHAQUE entree dans le DOM, pas
+       seulement dans setConfig. Symptome de Chris, 19 et 20/09 :
+       « l heritage du theme a du mal, je suis oblige de faire F5 ».
+       Deux theories precedentes, mesurees FAUSSES toutes les deux :
+       l attribut n arrive pas trop tard (il EST dans setConfig), et le
+       poser avant l insertion suffirait en principe. Ce qu elles ne
+       couvraient pas : HA RE-PARENTE / CLONE la card en passant de
+       l editeur ou du preview au vrai dashboard. L attribut est alors
+       bien pose -- sur un host qui n est pas celui qui finit a l ecran.
+       Le reposer ici rend le deplacement sans effet.
+       Si cette hypothese est fausse a son tour, ces deux lignes sont
+       inertes : reposer un attribut deja present ne coute rien. */
+    if (this._config) {
+      this.toggleAttribute("data-theme-card", !!this._config.use_theme_card);
+    }
+
     if (this._config) this._render();
   }
 
@@ -2515,11 +2532,21 @@ class ThermalCoreCard extends HTMLElement {
          sombre : aucune autre card ne l a, d ou « ne rend pas comme les
          autres » (Chris, 20/09). Le vrai defaut est var(--primary-color),
          comme partout ailleurs.
-         ⚠️ Le fallback #00E8FF n est PAS atteint sous HA : --primary-color
-         y existe (#6200EA). Si le titre ressort trop sombre, le remede est
-         header.gradient_from dans le YAML -- pas une couleur en dur ici,
-         qui desalignerait de nouveau cette card des autres. */
-      ? "linear-gradient(90deg," + (h.gradient_from || "var(--primary-color, #00E8FF)") +
+         ⚠️ MESURE, et c est pour ca que le canon NE s applique PAS ici :
+         sous le theme neo-tokyo-v5, --primary-color vaut #6200EA, un
+         violet quasi NOIR. Un degrade qui en PART rend « THERMAL »
+         illisible sur fond sombre -- essaye le 20/09, verdict de Chris :
+         « le header c est pire qu avant ». Le fallback #00E8FF, lui,
+         n est jamais atteint sous HA puisque la var existe.
+         Le defaut revient donc a #B478FF, qui n est pas une couleur
+         choisie au jugé : c est --c-run-c2 rgb(180,0,255) remonte en
+         luminosite pour passer sur fond sombre. L arrivee garde l accent
+         du theme, donc le degrade reste theme-aware.
+         Ne pas « recorriger » vers var(--primary-color) en invoquant le
+         canon du MD 3ter : ca a ete fait le 20/09, mesure, et annule le
+         jour meme. Le canon sert a ce que les cards se ressemblent ; il
+         ne sert a rien si le titre devient illisible sous CE theme. */
+      ? "linear-gradient(90deg," + (h.gradient_from || "#B478FF") +
         "," + (h.gradient_to || "var(--accent-color, #FF50A0)") + ")"
       : null;
 
@@ -2613,7 +2640,7 @@ window.customCards.push({
 });
 
 console.info(
-  '%c \u26A1 thermal-core-card v1.4.0 %c Tokamak ',
+  '%c \u26A1 thermal-core-card v1.4.1 %c Tokamak ',
   'background:#00FFF9;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;',
   'background:#0A0118;color:#00FFF9;padding:2px 4px;border-radius:0 3px 3px 0;'
 );
