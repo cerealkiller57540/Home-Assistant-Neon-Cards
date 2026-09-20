@@ -111,8 +111,18 @@ const TCC_CSS = `
        pile --f-disp prend le relais (la CSP de l Artifact bloque Google
        Fonts). Meme forme de clamp que \`_neonHeaderCss\` l.365. */
     font-family:var(--tcc-t-font, var(--f-disp));
-    font-size:clamp(14px, var(--tcc-t-size, clamp(8px,2vw,11px)),
-                    var(--tcc-t-size, clamp(8px,2vw,11px)));
+    /* \`cqi\` et pas \`vw\` : MESURE du 20/09 en lisant les 4 cards que
+       Chris a nommees. entities derive sa taille du CONTENEUR
+       (clamp(6px, 2.6cqi, 11px)) ; thermal-core la derivait du
+       VIEWPORT (2vw). A largeur de card egale mais fenetre
+       differente, les deux titres n avaient donc pas la meme taille.
+       Le container-type pose sur .neon-hdr sert enfin a quelque chose.
+       ⚠️ Chez Chris ce defaut est ECRASE : sa config pose
+       header.title_size "18", donc le pont met --tcc-t-size:18px et
+       le clamp ne mord pas. Le corriger sert au DEFAUT, pas a sa
+       card -- ne pas croire qu il y change quelque chose. */
+    font-size:clamp(14px, var(--tcc-t-size, clamp(6px,2.6cqi,11px)),
+                    var(--tcc-t-size, clamp(6px,2.6cqi,11px)));
     /* Lus par le pont depuis header.font_weight / italic / uppercase.
        Defauts = ceux de thermal-core, pas ceux d une autre card. */
     font-weight:var(--tcc-t-weight, 600);
@@ -1840,7 +1850,7 @@ function TCC_MONTER(root, host, params, getCfg, getHass) {
   return api;
 }
 
-/* thermal-core-card v1.4.2 -- PAC Ecodan, chambre a plasma + circuit d eau.
+/* thermal-core-card v1.5.0 -- PAC Ecodan, chambre a plasma + circuit d eau.
  *
  * GENERE par gen_card.py : ne pas editer ce fichier a la main. Le banc
  * (head.txt + svg_new.txt + fluid_js.txt + tail.txt) est la source de
@@ -2653,7 +2663,7 @@ window.customCards.push({
 });
 
 console.info(
-  '%c \u26A1 thermal-core-card v1.4.2 %c Tokamak ',
+  '%c \u26A1 thermal-core-card v1.5.0 %c Tokamak ',
   'background:#00FFF9;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;',
   'background:#0A0118;color:#00FFF9;padding:2px 4px;border-radius:0 3px 3px 0;'
 );
