@@ -1840,7 +1840,7 @@ function TCC_MONTER(root, host, params, getCfg, getHass) {
   return api;
 }
 
-/* thermal-core-card v1.4.1 -- PAC Ecodan, chambre a plasma + circuit d eau.
+/* thermal-core-card v1.4.2 -- PAC Ecodan, chambre a plasma + circuit d eau.
  *
  * GENERE par gen_card.py : ne pas editer ce fichier a la main. Le banc
  * (head.txt + svg_new.txt + fluid_js.txt + tail.txt) est la source de
@@ -2551,7 +2551,20 @@ class ThermalCoreCard extends HTMLElement {
       : null;
 
     const HV = [
-      ["color",        h.color],
+      /* `color` seulement si le degrade est OFF -- forme de
+         neon-entities-card, essayee a la demande de Chris le 20/09.
+         ⚠️ MESURE faite avant d ecrire : sous degrade, head.txt l.145
+         pose -webkit-text-fill-color:transparent, qui ECRASE `color`
+         pour le remplissage des glyphes. Le TITRE ne bouge donc pas
+         d un pixel. En revanche --tcc-t-color alimente AUSSI
+         .neon-hdr-subtitle (l.160, color-mix 55%), que rien ne
+         neutralise : le vrai effet de cette ligne est de faire passer
+         le SOUS-TITRE de h.color au fallback blanc-lavande des que le
+         degrade est actif. L audit d ou vient ce patch ne parle que du
+         titre -- il n avait pas vu l.160.
+         Si le sous-titre change et pas le titre : revertir, ca ne
+         corrige rien et ca degrade le sous-titre. */
+      ["color",        grad ? null : h.color],
       ["icon-color",   h.icon_color],    /* defaut FIXE dans le CSS, PAS h.color */
       ["size",         h.title_size ? parseFloat(h.title_size) + "px" : null],
       ["font",         h.font ? "'" + h.font + "'" : null],
@@ -2640,7 +2653,7 @@ window.customCards.push({
 });
 
 console.info(
-  '%c \u26A1 thermal-core-card v1.4.1 %c Tokamak ',
+  '%c \u26A1 thermal-core-card v1.4.2 %c Tokamak ',
   'background:#00FFF9;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;',
   'background:#0A0118;color:#00FFF9;padding:2px 4px;border-radius:0 3px 3px 0;'
 );
