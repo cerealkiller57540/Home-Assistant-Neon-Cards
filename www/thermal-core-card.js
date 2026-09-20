@@ -149,8 +149,16 @@ const TCC_CSS = `
     letter-spacing:var(--tcc-t-ls, clamp(1px, 0.5cqi, 3px));
     /* Gradient : pose -webkit-text-fill-color:transparent, donc il DOIT
        venir avant le text-shadow.
-       ⚠️ Le SKILL.md l.507-509 prescrit ici un filter:drop-shadow « et
-       jamais un text-shadow ». C est FAUX, mesure le 20/09 sur
+       ⚠️ Un commentaire de ce fichier a longtemps prescrit ici un
+       filter:drop-shadow « et jamais un text-shadow », en citant
+       « SKILL.md l.507-509 ». Cette regle N EXISTE DANS AUCUN
+       document : grep du 20/09 sur tout .claude/skills/ -- elle ne
+       vivait que dans mes propres commentaires. ha-neon-css/SKILL.md
+       l.516 dit L INVERSE (text-shadow sur le titre, drop-shadow
+       reserve a ha-icon qui ne rend pas de texte) et impose l ordre
+       gradient-puis-text-shadow precisement « pour rester visible
+       par-dessus le texte rendu transparent ».
+       Le bon comportement, mesure le 20/09 sur
        neon-entities-card.js l.205/218 : cette card pose les deux en
        meme temps, et c est ce qui produit le titre blanc a halo
        colore de toutes les autres cards. Un text-shadow se dessine a
@@ -2542,10 +2550,10 @@ class ThermalCoreCard extends HTMLElement {
     const tShadow = h.title_shadow ? h.title_shadow
                   : (h.glow ? _glow(gCol, h.glow_size, false) : null);
 
-    /* Sur un titre en DEGRADE, le glow doit passer par filter:drop-shadow
-       et jamais par text-shadow : le gradient pose
-       -webkit-text-fill-color:transparent, et une ombre de texte se
-       dessinerait sous un texte devenu invisible (MD l.507-509). */
+    /* Le glow passe par text-shadow, degrade ou pas : voir le
+       commentaire de ["glow"] dans HV plus bas. Un commentaire
+       prescrivait ici l inverse en citant « MD l.507-509 » -- regle
+       inexistante, que j avais inventee et sourcee a tort. */
     const grad = h.gradient
       /* DEFAUTS CANONIQUES, MD 3ter l.461-462 et neon-entities-card
          l.215-216 : var(--primary-color) -> var(--accent-color).
@@ -2600,11 +2608,14 @@ class ThermalCoreCard extends HTMLElement {
          de neon-entities-card, et c est le rendu VOULU.
          MESURE du 20/09, neon-entities-card.js l.205 et l.218 : cette
          card pose _neonGlow() (donc text-shadow) ET
-         -webkit-text-fill-color:transparent en meme temps. Le MD 3ter
-         l.507-509 dit que c est un bug (« une ombre de texte se
-         dessinerait sous un texte devenu invisible ») et prescrit
-         filter:drop-shadow a la place. J ai suivi le MD : c est LUI
-         qui a tort, et ca m a coute trois versions.
+         -webkit-text-fill-color:transparent en meme temps, et c est
+         AUSSI ce que prescrit ha-neon-css/SKILL.md l.516.
+         ⚠️ J ai pourtant fait l inverse pendant cinq versions, en
+         suivant une regle « drop-shadow et jamais text-shadow » que
+         j attribuais a « MD 3ter l.507-509 ». Verifie le 20/09 par
+         grep : cette regle n existe dans AUCUN document, je l avais
+         inventee puis sourcee d une fausse citation. Le skill etait
+         juste depuis le debut.
          Pourquoi : un text-shadow se dessine a partir de la FORME des
          glyphes, pas de leur remplissage. Remplissage transparent =
          l ombre reste et se voit A TRAVERS le texte evide. La couche
