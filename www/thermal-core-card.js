@@ -148,9 +148,19 @@ const TCC_CSS = `
        et l espacement bougerait avec la largeur de la fenetre. */
     letter-spacing:var(--tcc-t-ls, clamp(1px, 0.5cqi, 3px));
     /* Gradient : pose -webkit-text-fill-color:transparent, donc il DOIT
-       venir avant le text-shadow -- et sur un titre en gradient c est un
-       filter:drop-shadow qu il faut, jamais un text-shadow (SKILL.md
-       l.507-509). Le pont choisit lequel des deux il alimente. */
+       venir avant le text-shadow.
+       ⚠️ Le SKILL.md l.507-509 prescrit ici un filter:drop-shadow « et
+       jamais un text-shadow ». C est FAUX, mesure le 20/09 sur
+       neon-entities-card.js l.205/218 : cette card pose les deux en
+       meme temps, et c est ce qui produit le titre blanc a halo
+       colore de toutes les autres cards. Un text-shadow se dessine a
+       partir de la FORME des glyphes, pas de leur remplissage : sous
+       fill transparent il reste visible A TRAVERS le texte evide, et
+       sa couche \`#fff\` serree remplit l interieur des lettres.
+       Un drop-shadow, lui, s applique au rendu deja compose : texte
+       transparent = pas de coeur blanc, juste un contour.
+       Le pont alimente donc --tcc-t-glow dans TOUS les cas, et laisse
+       --tcc-t-title-filter vide. */
     background:var(--tcc-t-grad, none);
     -webkit-background-clip:var(--tcc-t-clip, border-box);
     background-clip:var(--tcc-t-clip, border-box);
@@ -1850,7 +1860,7 @@ function TCC_MONTER(root, host, params, getCfg, getHass) {
   return api;
 }
 
-/* thermal-core-card v1.5.0 -- PAC Ecodan, chambre a plasma + circuit d eau.
+/* thermal-core-card v1.6.0 -- PAC Ecodan, chambre a plasma + circuit d eau.
  *
  * GENERE par gen_card.py : ne pas editer ce fichier a la main. Le banc
  * (head.txt + svg_new.txt + fluid_js.txt + tail.txt) est la source de
@@ -2537,26 +2547,21 @@ class ThermalCoreCard extends HTMLElement {
        -webkit-text-fill-color:transparent, et une ombre de texte se
        dessinerait sous un texte devenu invisible (MD l.507-509). */
     const grad = h.gradient
-      /* DEFAUTS CANONIQUES, MD 3ter l.461-462. Le #B478FF que j avais
-         pose le 19/09 etait une couleur INVENTEE pour contrer un titre
-         sombre : aucune autre card ne l a, d ou « ne rend pas comme les
-         autres » (Chris, 20/09). Le vrai defaut est var(--primary-color),
-         comme partout ailleurs.
-         ⚠️ MESURE, et c est pour ca que le canon NE s applique PAS ici :
-         sous le theme neo-tokyo-v5, --primary-color vaut #6200EA, un
-         violet quasi NOIR. Un degrade qui en PART rend « THERMAL »
-         illisible sur fond sombre -- essaye le 20/09, verdict de Chris :
-         « le header c est pire qu avant ». Le fallback #00E8FF, lui,
-         n est jamais atteint sous HA puisque la var existe.
-         Le defaut revient donc a #B478FF, qui n est pas une couleur
-         choisie au jugé : c est --c-run-c2 rgb(180,0,255) remonte en
-         luminosite pour passer sur fond sombre. L arrivee garde l accent
-         du theme, donc le degrade reste theme-aware.
-         Ne pas « recorriger » vers var(--primary-color) en invoquant le
-         canon du MD 3ter : ca a ete fait le 20/09, mesure, et annule le
-         jour meme. Le canon sert a ce que les cards se ressemblent ; il
-         ne sert a rien si le titre devient illisible sous CE theme. */
-      ? "linear-gradient(90deg," + (h.gradient_from || "#B478FF") +
+      /* DEFAUTS CANONIQUES, MD 3ter l.461-462 et neon-entities-card
+         l.215-216 : var(--primary-color) -> var(--accent-color).
+         Le #B478FF que j avais pose le 19/09 est retire. Il visait un
+         vrai symptome -- sous neo-tokyo-v5, --primary-color vaut
+         #6200EA, un violet quasi noir -- mais le diagnostic etait faux,
+         et ca a coute trois versions.
+         Ce qui rendait le titre sombre n etait PAS la couleur de depart
+         du degrade : c etait filter:drop-shadow, qui supprimait le
+         coeur blanc du glow (voir le commentaire de ["glow"] plus bas).
+         Avec text-shadow, le remplissage du titre reste transparent et
+         ne se voit jamais : la couleur de depart du degrade n a plus
+         d effet visible sur le TEXTE. Eclaircir ce defaut ne corrigeait
+         donc rien -- ca ne faisait que desaligner cette card des
+         autres, exactement ce que Chris reprochait. */
+      ? "linear-gradient(90deg," + (h.gradient_from || "var(--primary-color, #00E8FF)") +
         "," + (h.gradient_to || "var(--accent-color, #FF50A0)") + ")"
       : null;
 
@@ -2574,7 +2579,13 @@ class ThermalCoreCard extends HTMLElement {
          titre -- il n avait pas vu l.160.
          Si le sous-titre change et pas le titre : revertir, ca ne
          corrige rien et ca degrade le sous-titre. */
-      ["color",        grad ? null : h.color],
+      /* Retour a l inconditionnel. Le conditionnel de v1.4.2 venait du
+         meme audit que le drop-shadow, et de la meme fausse premisse :
+         il supposait que `color` gênait sous degrade. Sous degrade le
+         fill est transparent, `color` est donc deja sans effet sur le
+         TITRE -- mais --tcc-t-color alimente AUSSI .neon-hdr-subtitle
+         (head.txt l.160), que le conditionnel degradait pour rien. */
+      ["color",        h.color],
       ["icon-color",   h.icon_color],    /* defaut FIXE dans le CSS, PAS h.color */
       ["size",         h.title_size ? parseFloat(h.title_size) + "px" : null],
       ["font",         h.font ? "'" + h.font + "'" : null],
@@ -2585,8 +2596,30 @@ class ThermalCoreCard extends HTMLElement {
       ["icon-size",    h.icon_size ? parseFloat(h.icon_size) + "px" : null],
       /* glow icone : opt-in STRICT sur h.glow (jamais h.glow !== false) */
       ["icon-glow",    h.glow ? _glow(gCol, h.glow_size, true) : null],
-      ["glow",         grad ? null : tShadow],
-      ["title-filter", grad && tShadow ? _glow(gCol, h.glow_size, true) : null],
+      /* text-shadow TOUJOURS, degrade ou pas -- c est le « golden bug »
+         de neon-entities-card, et c est le rendu VOULU.
+         MESURE du 20/09, neon-entities-card.js l.205 et l.218 : cette
+         card pose _neonGlow() (donc text-shadow) ET
+         -webkit-text-fill-color:transparent en meme temps. Le MD 3ter
+         l.507-509 dit que c est un bug (« une ombre de texte se
+         dessinerait sous un texte devenu invisible ») et prescrit
+         filter:drop-shadow a la place. J ai suivi le MD : c est LUI
+         qui a tort, et ca m a coute trois versions.
+         Pourquoi : un text-shadow se dessine a partir de la FORME des
+         glyphes, pas de leur remplissage. Remplissage transparent =
+         l ombre reste et se voit A TRAVERS le texte evide. La couche
+         `#fff` a 0.2*size est si serree qu elle remplit l interieur
+         des lettres : le titre parait BLANC PLEIN, entoure du halo
+         colore des 3 couches suivantes. C est ce que rendent
+         ACCES & SECURITE et heat-pump sur la vue 0 de Chris.
+         Un filter:drop-shadow, lui, s applique au rendu DEJA compose :
+         texte transparent = rien a ombrer au centre, il ne produit
+         qu un contour. Le coeur blanc disparait, et le titre prend la
+         couleur du degrade au lieu du blanc. C est exactement l ecart
+         que Chris signale depuis le 19/09.
+         Ne pas « recorriger » vers drop-shadow en invoquant le MD. */
+      ["glow",         tShadow],
+      ["title-filter", null],
       ["grad",         grad],
       ["clip",         grad ? "text" : null],
       ["fill",         grad ? "transparent" : null],
@@ -2663,7 +2696,7 @@ window.customCards.push({
 });
 
 console.info(
-  '%c \u26A1 thermal-core-card v1.5.0 %c Tokamak ',
+  '%c \u26A1 thermal-core-card v1.6.0 %c Tokamak ',
   'background:#00FFF9;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;',
   'background:#0A0118;color:#00FFF9;padding:2px 4px;border-radius:0 3px 3px 0;'
 );
