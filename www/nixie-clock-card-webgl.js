@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  NixieClockCardWebgl — Home Assistant Custom Card  v1.1.0
+ *  NixieClockCardWebgl — Home Assistant Custom Card  v1.2.0
  *  Usage: add to resources as /local/nixie-clock-card-webgl.js
  * ============================================================
  *
@@ -30,9 +30,12 @@
  *    glass:    0.35   # reflets sur les bords du tube
  *    sep:      1.00   # intensite des LED des separateurs
  *
- *    # -- GLITCH le chat : apparait AU CENTRE de la card (en debord il etait tronque) --
+ *    # -- GLITCH le chat : assis sur le dome d'un tube (Chris, 25/09) --
  *    glitch: true  glitch_size: 64
- *    glitch_x: 0  glitch_y: 0     # decalage depuis le centre, px (glitch_right/top ignores)
+ *    glitch_tube: 3               # tube sur lequel il s'assoit (1 = le plus a gauche)
+ *    glitch_x: 0  glitch_y: 0     # petit decalage en px depuis cette position
+ *    # La card reserve la hauteur du chat au-dessus des tubes (sinon la vue le tronque).
+ *    # glitch_right / glitch_top de nixie-clock-card sont ignores.
  *    glitch_color: (default: under_color)  glitch_opacity: 0.8
  *    glitch_dur: 2400  glitch_gap: 25
  *
@@ -58,7 +61,7 @@
 (function(){
 'use strict';
 
-const NCW_VERSION = '1.1.0';
+const NCW_VERSION = '1.2.0';
 const NCW_TAG = 'nixie-clock-card-webgl';
 
 const NCW_IS_IPAD = /iPad/.test(navigator.userAgent) ||
@@ -603,20 +606,28 @@ class NixieClockCardWebgl extends HTMLElement {
   // soon = reglage en cours dans l'editeur : on le montre tout de suite
   _initGhost(anchor, soon){
     this._stopGhost();
+    if (this._card) this._card.style.paddingTop = '';      // pas de chat, pas de marge
     if (!anchor) return;
     if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const cfg = this._config || {};
     if (cfg.glitch === false) return;
     const size  = cfg.glitch_size  || 64;
-    // Centre de la card : dans le coin haut-droit d'origine (right:-26, top:-40) il
-    // debordait et le conteneur de la vue le tronquait (Chris, 25/09).
+    // Assis sur le dome d'un tube. En debord (right:-26, top:-40 d'origine) le conteneur
+    // de la vue le tronquait : la card reserve donc sa hauteur au-dessus des tubes.
+    // padding-top en % = % de la LARGEUR, comme l'echelle du dessin : marge exacte a toute taille.
     const gx = Number(cfg.glitch_x) || 0, gy = Number(cfg.glitch_y) || 0;
+    const L = this._L;
+    const tube = Math.max(1, Math.min(this._nT, Math.round(Number(cfg.glitch_tube) || 3))) - 1;
+    const feet = L.top - L.tw * 0.14;                       // sommet du teton du tube, px logiques
+    if (this._card) this._card.style.paddingTop =
+      'max(0px, calc(' + (size - gy) + 'px - ' + (feet / NCW_W * 100) + '%))';
     const color = cfg.glitch_color || this._underCss;
     const g = document.createElement('div');
     g.style.cssText = 'position:absolute;pointer-events:none;z-index:6;opacity:0;'
       + 'width:' + size + 'px;height:' + size + 'px;'
-      + 'left:calc(50% + ' + gx + 'px);top:calc(50% + ' + gy + 'px);'
-      + 'transform:translate(-50%,-50%);color:' + color + ';';
+      + 'left:calc(' + (L.TX[tube] / NCW_W * 100) + '% + ' + gx + 'px);'
+      + 'top:calc(' + (feet / NCW_H * 100) + '% - ' + (size - gy) + 'px);'
+      + 'transform:translateX(-50%);color:' + color + ';';
     g.innerHTML = '<svg viewBox="15 28 666 666" style="width:100%;height:100%;'
       + 'filter:drop-shadow(0 0 5px currentColor) drop-shadow(0 0 12px currentColor);">'
       + '<g transform="matrix(1.25 0 0 -1.25 0 1000)"><g transform="matrix(.8765 0 0 .8765 327.75 398.73)">'
@@ -653,7 +664,7 @@ class NixieClockCardWebgl extends HTMLElement {
       const flick = stable ? 1 : (Math.random() < 0.5 ? 0.55 : 1);
       const float = Math.sin(p * Math.PI * 6) * 1.2 * (1 - env * 0.4);
       g.style.opacity = opMax * env * flick;
-      g.style.transform = 'translate(-50%,-50%) translateY(' + float + 'px)';
+      g.style.transform = 'translateX(-50%) translateY(' + float + 'px)';
       this._ghostRaf = requestAnimationFrame(step);
     };
     this._ghostRaf = requestAnimationFrame(step);
@@ -890,14 +901,15 @@ class NixieClockCardWebglEditor extends HTMLElement {
     this._group('Glitch le chat', false, () => {
       this._toggle('glitch', 'Afficher Glitch', true);
       this._range('glitch_size',    'Taille (px)',           { min: 24,   max: 110, step: 2,    def: 64 });
-      this._range('glitch_x',       'Décalage horizontal',   { min: -200, max: 200, step: 2,    def: 0 });
-      this._range('glitch_y',       'Décalage vertical',     { min: -60,  max: 60,  step: 2,    def: 0 });
+      this._range('glitch_tube',    'Assis sur le tube n°',  { min: 1,    max: 6,   step: 1,    def: 3 });
+      this._range('glitch_x',       'Décalage horizontal',   { min: -40,  max: 40,  step: 1,    def: 0 });
+      this._range('glitch_y',       'Décalage vertical',     { min: -20,  max: 20,  step: 1,    def: 0 });
       this._range('glitch_opacity', 'Opacité',               { min: 0.1,  max: 1,   step: 0.05, def: 0.8 });
       this._color('glitch_color', 'Couleur', 'var(--accent-color, #00fff9)');
       this._hint('Vide = même couleur que les LED.');
       this._number('glitch_dur', 'Durée d\'apparition (ms)', { min: 500, step: 100, ph: '2400' });
       this._number('glitch_gap', 'Intervalle moyen (s)',     { min: 3,   step: 1,   ph: '25' });
-      this._hint('Chaque réglage fait apparaître Glitch tout de suite dans l\'aperçu.');
+      this._hint('Chaque réglage fait apparaître Glitch tout de suite dans l\'aperçu ; la card lui garde sa place au-dessus des tubes.');
     });
   }
 }
