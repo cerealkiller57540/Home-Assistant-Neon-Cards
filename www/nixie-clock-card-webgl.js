@@ -1,6 +1,6 @@
 /*
  * ============================================================
- *  NixieClockCardWebgl — Home Assistant Custom Card  v1.0.0
+ *  NixieClockCardWebgl — Home Assistant Custom Card  v1.1.0
  *  Usage: add to resources as /local/nixie-clock-card-webgl.js
  * ============================================================
  *
@@ -30,12 +30,15 @@
  *    glass:    0.35   # reflets sur les bords du tube
  *    sep:      1.00   # intensite des LED des separateurs
  *
- *    # -- GLITCH le chat (identique a nixie-clock-card) --
- *    glitch: true  glitch_size: 64  glitch_right: -26  glitch_top: -40
+ *    # -- GLITCH le chat : apparait AU CENTRE de la card (en debord il etait tronque) --
+ *    glitch: true  glitch_size: 64
+ *    glitch_x: 0  glitch_y: 0     # decalage depuis le centre, px (glitch_right/top ignores)
  *    glitch_color: (default: under_color)  glitch_opacity: 0.8
  *    glitch_dur: 2400  glitch_gap: 25
  *
- *  Pas d'editeur (choix delibere) : tout se regle en YAML.
+ *  Editeur visuel : template canonique strategie A (sync in-place), curseurs = bornes du banc.
+ *  Les reglages s'appliquent a chaud, sans recreer le contexte WebGL
+ *  (seul hide_seconds reconstruit la card : le nombre de tubes change le layout).
  * ============================================================
  */
 
@@ -55,7 +58,7 @@
 (function(){
 'use strict';
 
-const NCW_VERSION = '1.0.0';
+const NCW_VERSION = '1.1.0';
 const NCW_TAG = 'nixie-clock-card-webgl';
 
 const NCW_IS_IPAD = /iPad/.test(navigator.userAgent) ||
@@ -249,6 +252,7 @@ class NixieClockCardWebgl extends HTMLElement {
   }
 
   static getStubConfig(){ return { use_military: true, hide_seconds: false }; }
+  static getConfigElement(){ return document.createElement(NCW_TAG + '-editor'); }
   getCardSize(){ return 2; }
 
   setConfig(config){
@@ -263,8 +267,20 @@ class NixieClockCardWebgl extends HTMLElement {
     P.fade = Math.max(0, P.fade);
     this._P = P;
     this._military = config.use_military != null ? !!config.use_military : true;
+    const prevNT = this._nT;
     this._nT = config.hide_seconds ? 4 : 6;
     this._underCss = config.under_color || 'var(--accent-color, #00fff9)';
+    const gk = Object.keys(config).filter(k => k.startsWith('glitch')).sort()
+      .map(k => k + '=' + config[k]).join('|') + '|' + this._underCss;
+    if (this._built && prevNT === this._nT){
+      // a chaud (curseurs de l'editeur) : meme contexte GL, _draw relit _P
+      this._resolveColors(); this._dirty = true; this._lastSec = -1;
+      if (this._reducedTick) this._reducedTick();
+      if (gk !== this._ghostKey && this.isConnected && this._ro) this._initGhost(this._wrap, true);
+      this._ghostKey = gk;
+      return;
+    }
+    this._ghostKey = gk;
     if (this._built) this._teardown();
     if (this.isConnected) this._build();
   }
@@ -299,15 +315,8 @@ class NixieClockCardWebgl extends HTMLElement {
     const wrap = document.createElement('div'); wrap.className = 'wrap';
     const cv = document.createElement('canvas');
     this._L = ncwLayout(this._nT);
-    // boite des tubes, ancre du chat (equivalent du displayWrap de la card d'origine)
-    const L0 = this._L, disp = document.createElement('div');
-    disp.style.cssText = 'position:absolute;pointer-events:none;'
-      + 'left:' + ((L0.TX[0] - L0.tw / 2) / NCW_W * 100) + '%;'
-      + 'right:' + ((NCW_W - L0.TX[this._nT - 1] - L0.tw / 2) / NCW_W * 100) + '%;'
-      + 'top:' + ((L0.top - L0.tw * 0.14) / NCW_H * 100) + '%;'
-      + 'bottom:' + ((NCW_H - L0.baseB) / NCW_H * 100) + '%;';
-    wrap.appendChild(cv); wrap.appendChild(disp); card.appendChild(wrap); sr.appendChild(card);
-    this._card = card; this._wrap = wrap; this._canvas = cv; this._disp = disp;
+    wrap.appendChild(cv); card.appendChild(wrap); sr.appendChild(card);
+    this._card = card; this._wrap = wrap; this._canvas = cv;
 
     this._digits = { cur:[0,0,0,0,0,0], prev:[0,0,0,0,0,0], t0:[-1e9,-1e9,-1e9,-1e9,-1e9,-1e9] };
     this._first = true;
@@ -578,7 +587,7 @@ class NixieClockCardWebgl extends HTMLElement {
     } else if (this._locks === 0){
       this._startLoop();
     }
-    this._initGhost(this._disp);
+    this._initGhost(this._wrap);
   }
 
   _pause(){
@@ -591,20 +600,23 @@ class NixieClockCardWebgl extends HTMLElement {
   }
 
   /* ── GLITCH le chat : recopie de nixie-clock-card ── */
-  _initGhost(anchor){
+  // soon = reglage en cours dans l'editeur : on le montre tout de suite
+  _initGhost(anchor, soon){
     this._stopGhost();
     if (!anchor) return;
     if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const cfg = this._config || {};
     if (cfg.glitch === false) return;
     const size  = cfg.glitch_size  || 64;
-    const right = cfg.glitch_right != null ? cfg.glitch_right : -26;
-    const top   = cfg.glitch_top   != null ? cfg.glitch_top   : -40;
+    // Centre de la card : dans le coin haut-droit d'origine (right:-26, top:-40) il
+    // debordait et le conteneur de la vue le tronquait (Chris, 25/09).
+    const gx = Number(cfg.glitch_x) || 0, gy = Number(cfg.glitch_y) || 0;
     const color = cfg.glitch_color || this._underCss;
     const g = document.createElement('div');
     g.style.cssText = 'position:absolute;pointer-events:none;z-index:6;opacity:0;'
       + 'width:' + size + 'px;height:' + size + 'px;'
-      + 'right:' + right + 'px;top:' + top + 'px;color:' + color + ';';
+      + 'left:calc(50% + ' + gx + 'px);top:calc(50% + ' + gy + 'px);'
+      + 'transform:translate(-50%,-50%);color:' + color + ';';
     g.innerHTML = '<svg viewBox="15 28 666 666" style="width:100%;height:100%;'
       + 'filter:drop-shadow(0 0 5px currentColor) drop-shadow(0 0 12px currentColor);">'
       + '<g transform="matrix(1.25 0 0 -1.25 0 1000)"><g transform="matrix(.8765 0 0 .8765 327.75 398.73)">'
@@ -612,7 +624,7 @@ class NixieClockCardWebgl extends HTMLElement {
     anchor.appendChild(g);
     this._ghostEl = g;
     this._ghostTimers = new Set();
-    const t = setTimeout(() => this._spawnGhost(), 4000 + Math.random() * 8000);
+    const t = setTimeout(() => this._spawnGhost(), soon ? 250 : 4000 + Math.random() * 8000);
     this._ghostTimers.add(t);
   }
 
@@ -641,7 +653,7 @@ class NixieClockCardWebgl extends HTMLElement {
       const flick = stable ? 1 : (Math.random() < 0.5 ? 0.55 : 1);
       const float = Math.sin(p * Math.PI * 6) * 1.2 * (1 - env * 0.4);
       g.style.opacity = opMax * env * flick;
-      g.style.transform = 'translateY(' + float + 'px)';
+      g.style.transform = 'translate(-50%,-50%) translateY(' + float + 'px)';
       this._ghostRaf = requestAnimationFrame(step);
     };
     this._ghostRaf = requestAnimationFrame(step);
@@ -655,13 +667,252 @@ class NixieClockCardWebgl extends HTMLElement {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+ *  EDITOR — template unifié (stratégie A, sync in-place)
+ *  N'éditer QUE _schema() ; le reste est canonique et identique partout.
+ *  Ajouts propres a cette card : _range (recopie de neon-dual-gauge-card,
+ *  + defaut affiche quand la cle est absente) et _group (ha-expansion-panel).
+ * ═══════════════════════════════════════════════════════════════════ */
+class NixieClockCardWebglEditor extends HTMLElement {
+  constructor() { super(); this._config = {}; this._hass = null; this._rendered = false; }
+
+  // ── Cycle de vie (NE PAS toucher) ──────────────────────────────────
+  setConfig(c) {
+    this._config = { ...(c || {}) };
+    if (!this._rendered) { this._rendered = true; this._render(); }
+    else this._syncValues();
+  }
+  set hass(h) { this._hass = h; this._fillDatalists(); }   // JAMAIS de render ici
+  disconnectedCallback() { this._rendered = false; }
+
+  // ── Lecture / écriture config (clés imbriquées via ".") ────────────
+  _read(key) {
+    return key.includes('.')
+      ? key.split('.').reduce((o, p) => (o && o[p] !== undefined ? o[p] : undefined), this._config)
+      : this._config[key];
+  }
+  _set(key, value) {
+    const empty = (value === undefined || value === '' || value === null);
+    if (key.includes('.')) {
+      const parts = key.split('.');
+      let o = this._config;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!o[parts[i]] || typeof o[parts[i]] !== 'object') o[parts[i]] = {};
+        o = o[parts[i]];
+      }
+      const last = parts[parts.length - 1];
+      if (empty) delete o[last]; else o[last] = value;
+      const parent = parts.slice(0, -1).reduce((a, k) => a && a[k], this._config);
+      if (parent && typeof parent === 'object' && !Object.keys(parent).length) delete this._config[parts[0]];
+    } else if (empty) { delete this._config[key]; }
+    else { this._config[key] = value; }
+    this.dispatchEvent(new CustomEvent('config-changed',
+      { detail: { config: { ...this._config } }, bubbles: true, composed: true }));
+  }
+
+  // ── Sync in-place (guard focus + clés imbriquées) ──────────────────
+  _syncValues() {
+    const active = this.querySelector(':focus') || document.activeElement;
+    this.querySelectorAll('[data-key]').forEach(el => {
+      if (el === active) return;
+      const v = this._read(el.dataset.key);
+      if (el.type === 'checkbox') el.checked = el.dataset.defaultOn ? (v !== false) : !!v;
+      else if (el.type === 'range') {
+        el.value = (v == null ? el._def : v);                // '' mettrait le curseur au milieu
+        if (el._rngLbl) el._rngLbl.textContent = el.value;
+      }
+      else {
+        el.value = (v == null ? '' : v);
+        if (el._pick) el._pick.value = this._toHex(el.value) || (el._cssDefault ? this._resolveColor(el._cssDefault) : null) || '#6200EA';
+      }
+    });
+    this._bindIconPreviews(true);   // resync previews sans recâbler
+  }
+
+  // ── Helpers de champ (signatures FIXES — ne pas réinventer) ────────
+  _section(t) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = t; (this._appendTo || this).appendChild(d); return d; }
+  _hint(t)    { const d = document.createElement('div'); d.className = 'hint'; d.textContent = t; (this._appendTo || this).appendChild(d); return d; }
+
+  _number(key, label, { min, max, step = 1, ph = '' } = {}) {
+    const row = this._row(label);
+    const inp = document.createElement('input');
+    inp.type = 'number'; if (min != null) inp.min = min; if (max != null) inp.max = max;
+    inp.step = step; inp.placeholder = ph; inp.dataset.key = key;
+    inp.value = this._read(key) ?? '';
+    inp.addEventListener('input', () => { const n = parseFloat(inp.value); this._set(key, isNaN(n) ? undefined : n); });
+    row.wrap.appendChild(inp); return inp;
+  }
+
+  // N'ecrit la cle que si elle differe du defaut (YAML minimal).
+  _toggle(key, label, defaultOn = false) {
+    const row = this._row(label);
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.dataset.key = key;
+    if (defaultOn) cb.dataset.defaultOn = '1';
+    const v = this._read(key);
+    cb.checked = defaultOn ? (v !== false) : !!v;
+    cb.style.cssText = 'width:38px;height:20px;cursor:pointer;accent-color:var(--primary-color);flex:none;';
+    cb.addEventListener('change', () => this._set(key, cb.checked === defaultOn ? undefined : cb.checked));
+    row.wrap.appendChild(cb); return cb;
+  }
+
+  // Curseur (recopie de neon-dual-gauge-card) : cle absente -> affiche le defaut ;
+  // revenir exactement au defaut retire la cle du YAML.
+  _range(key, label, { min = 0, max = 1, step = 0.01, def = min } = {}) {
+    const row = this._row(label);
+    const box = document.createElement('div'); box.className = 'range-row';
+    const inp = document.createElement('input'); inp.type = 'range'; inp.min = min; inp.max = max; inp.step = step;
+    inp.dataset.key = key; inp._def = def;
+    const v = this._read(key); inp.value = (v == null ? def : v);
+    const lbl = document.createElement('span'); lbl.className = 'range-val'; lbl.textContent = inp.value;
+    inp._rngLbl = lbl;
+    inp.addEventListener('input', () => {
+      lbl.textContent = inp.value;
+      const n = parseFloat(inp.value);
+      this._set(key, Math.abs(n - def) < step / 2 ? undefined : n);
+    });
+    box.appendChild(inp); box.appendChild(lbl); row.wrap.appendChild(box); return inp;
+  }
+
+  // Couleur : TEXTE libre (accepte var/rgb/hex) + picker.
+  //  cssDefault DOIT etre la constante reelle du code de rendu.
+  _color(key, label, cssDefault = null, ph = 'ex: #FF3366 / rgb(var(--rgb-lavande)) / var(--primary-color)') {
+    const row = this._row(label);
+    const box = document.createElement('div'); box.className = 'color-row';
+    const txt = document.createElement('input'); txt.type = 'text'; txt.placeholder = ph; txt.dataset.key = key;
+    txt.value = this._read(key) ?? '';
+    const pick = document.createElement('input'); pick.type = 'color';
+    txt._pick = pick; txt._cssDefault = cssDefault;          // mémorisé pour _syncValues
+    const refresh = () => { pick.value = this._toHex(txt.value) || (cssDefault ? this._resolveColor(cssDefault) : null) || '#6200EA'; };
+    txt.addEventListener('input', () => { this._set(key, txt.value); refresh(); });
+    pick.addEventListener('input', () => { txt.value = pick.value; this._set(key, pick.value); });
+    box.appendChild(txt); box.appendChild(pick); row.wrap.appendChild(box); refresh(); return txt;
+  }
+
+  _resolveColor(css) {
+    try {
+      const probe = document.createElement('span');
+      probe.style.cssText = `color:${css};position:absolute;left:-9999px;top:-9999px`;
+      this.appendChild(probe);
+      const rgb = getComputedStyle(probe).color; probe.remove();
+      const m = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
+      return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+    } catch { return null; }
+  }
+
+  // ── Groupe repliable (<ha-expansion-panel>), etat ouvert/ferme local ──
+  _group(title, expanded, buildFn) {
+    const panel = document.createElement('ha-expansion-panel');
+    panel.outlined = true;
+    panel.header = title;
+    if (expanded) panel.expanded = true;
+    (this._appendTo || this).appendChild(panel);
+    const prevAppendTo = this._appendTo;
+    this._appendTo = panel;
+    buildFn();
+    this._appendTo = prevAppendTo;
+    return panel;
+  }
+
+  // ── Mécanique commune (NE PAS toucher) ─────────────────────────────
+  _row(labelHtml, isHtml = false) {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('label');
+    if (isHtml) lbl.innerHTML = labelHtml; else lbl.textContent = labelHtml;
+    const wrap = document.createElement('div'); wrap.className = 'field-wrap';
+    row.appendChild(lbl); row.appendChild(wrap); (this._appendTo || this).appendChild(row);
+    return { row, wrap };
+  }
+
+  _toHex(c) {
+    if (!c) return null;
+    if (/^#[0-9a-f]{6}$/i.test(c)) return c;
+    const m = c.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/i);
+    return m ? '#' + [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('') : null;
+  }
+
+  _bindIconPreviews() { /* pas de champ icone sur cette card */ }
+  _fillDatalists()    { /* pas de champ entite sur cette card */ }
+
+  // ── CSS commun (identique partout, calibré sur heat-pump-card) ─────
+  _css() {
+    return `
+      :host { display:block; padding:14px; font-family:var(--primary-font-family,Roboto,sans-serif); }
+      .sec { font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary-color);margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--divider-color); }
+      .sec:first-child { margin-top:0; }
+      .row { display:flex;align-items:center;gap:8px;margin-bottom:6px; }
+      .row label { flex:0 0 160px;font-size:12px;color:var(--secondary-text-color); }
+      .field-wrap { flex:1;min-width:0;display:flex; }
+      input[type=text],input[type=number],select { flex:1;width:100%;padding:4px 8px;border:1px solid var(--divider-color);border-radius:4px;background:var(--card-background-color);color:var(--primary-text-color);font-size:12px;outline:none;box-sizing:border-box; }
+      input:focus,select:focus { box-shadow:0 0 0 1px var(--primary-color); }
+      .color-row { display:flex;gap:8px;flex:1; }
+      .color-row input[type=text] { flex:1; }
+      .color-row input[type=color] { width:36px;height:28px;flex:none;padding:0;border:none;background:none;border-radius:4px;cursor:pointer; }
+      .range-row { display:flex;gap:8px;flex:1;align-items:center; }
+      .range-row input[type=range] { flex:1;min-width:0;accent-color:var(--primary-color); }
+      .range-row .range-val { flex:none;width:36px;text-align:right;font-size:11px;color:var(--secondary-text-color); }
+      .hint { font-size:11px;color:var(--secondary-text-color);font-style:italic;margin:-2px 0 6px 168px; }
+      ha-expansion-panel { display:block;margin:10px 0; }
+      ha-expansion-panel .row:first-child { margin-top:8px; }
+    `;
+  }
+
+  _render() {
+    this.innerHTML = '';
+    const st = document.createElement('style'); st.textContent = this._css(); this.appendChild(st);
+    this._schema();
+  }
+
+  // ╔════════════════════════════════════════════════════════════════╗
+  // ║  SCHÉMA                                                         ║
+  // ╚════════════════════════════════════════════════════════════════╝
+  _schema() {
+    const D = NCW_DEF;
+    this._section('Horloge');
+    this._toggle('use_military', '24 h', true);
+    this._toggle('hide_seconds', 'Masquer les secondes');
+    this._color('under_color', 'LED (pieds + séparateurs)', 'var(--accent-color, #00fff9)');
+    this._hint('Vide = couleur d\'accent du thème.');
+
+    this._group('Rendu (réglé au banc le 25/09)', false, () => {
+      this._range('glow',    'Halo du gaz',          { min: 0,   max: 3,   step: 0.05, def: D.glow });
+      this._range('glow_r',  'Portée du halo (px)',  { min: 2,   max: 30,  step: 0.5,  def: D.glow_r });
+      this._range('core',    'Blancheur du cœur',    { min: 0,   max: 1,   step: 0.02, def: D.core });
+      this._range('flicker', 'Scintillement',        { min: 0,   max: 0.3, step: 0.01, def: D.flicker });
+      this._range('ghost',   'Cathodes éteintes',    { min: 0,   max: 0.4, step: 0.01, def: D.ghost });
+      this._range('fade',    'Fondu des chiffres (ms)', { min: 0, max: 600, step: 10,  def: D.fade });
+      this._range('under',   'Rétroéclairage LED',   { min: 0,   max: 2,   step: 0.05, def: D.under });
+      this._range('under_h', 'Hauteur de la LED',    { min: 0.1, max: 1,   step: 0.02, def: D.under_h });
+      this._range('glass',   'Reflet du verre',      { min: 0,   max: 1,   step: 0.02, def: D.glass });
+      this._range('sep',     'LED séparateurs',      { min: 0,   max: 2,   step: 0.05, def: D.sep });
+      this._hint('Remettre un curseur sur sa valeur d\'origine retire la clé du YAML.');
+    });
+
+    this._group('Glitch le chat', false, () => {
+      this._toggle('glitch', 'Afficher Glitch', true);
+      this._range('glitch_size',    'Taille (px)',           { min: 24,   max: 110, step: 2,    def: 64 });
+      this._range('glitch_x',       'Décalage horizontal',   { min: -200, max: 200, step: 2,    def: 0 });
+      this._range('glitch_y',       'Décalage vertical',     { min: -60,  max: 60,  step: 2,    def: 0 });
+      this._range('glitch_opacity', 'Opacité',               { min: 0.1,  max: 1,   step: 0.05, def: 0.8 });
+      this._color('glitch_color', 'Couleur', 'var(--accent-color, #00fff9)');
+      this._hint('Vide = même couleur que les LED.');
+      this._number('glitch_dur', 'Durée d\'apparition (ms)', { min: 500, step: 100, ph: '2400' });
+      this._number('glitch_gap', 'Intervalle moyen (s)',     { min: 3,   step: 1,   ph: '25' });
+      this._hint('Chaque réglage fait apparaître Glitch tout de suite dans l\'aperçu.');
+    });
+  }
+}
+
 if (!customElements.get(NCW_TAG)) {
   customElements.define(NCW_TAG, NixieClockCardWebgl);
+}
+if (!customElements.get(NCW_TAG + '-editor')) {
+  customElements.define(NCW_TAG + '-editor', NixieClockCardWebglEditor);
 }
 window.customCards = window.customCards || [];
 if (!window.customCards.some(c => c.type === NCW_TAG || c.type === 'custom:' + NCW_TAG)) {
   window.customCards.push({ type: NCW_TAG, name: 'Nixie Clock (WebGL)',
-    description: 'Horloge nixie en WebGL : tubes IN-14, retroeclairage cyan du theme.' });
+    description: 'Horloge nixie en WebGL : tubes IN-14, retroeclairage cyan du theme.',
+    preview: true });
 }
 
 console.info(
