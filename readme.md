@@ -62,6 +62,7 @@
 | 🔋 Neon Battery Card | `neon-battery-card.js` | `3.0.1` | EV battery gauge with HC/Solar/Charge controls and side info panels |
 | 🏭 Storey Battery Card | `storey-battery-card.js` | `14` | Isometric 3D battery for Sunology/modular storage systems — electric inter-module seam (crackle + sparks) |
 | ☀️ Neon Solar Production Card | `neon-solar-production-card.js` | — | Real-time solar panel production monitor |
+| ☀️🌀 Neon Solar Production Card (WebGL) | `neon-solar-production-card-webgl.js` | `2.1.6-webgl` | Same solar card, WebGL glass layer on the panel: sun sheen that follows the real sun angle (Fresnel, grazing highlight, slow shimmer), raindrops sliding down the glass as lenses during showers, frost when it freezes |
 | 📊 Neon Dual Gauge Card | `neon-dual-gauge-card.js` | `2.0.0` | Dual concentric LED ring gauges with cyberpunk glow and theme inheritance |
 
 ### 🌡️ Climate & Temperature
