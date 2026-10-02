@@ -1,4 +1,4 @@
-/* ── neon-header-card-v2 v2.7 ── */
+/* ── neon-header-card-v2 v4.1 ── */
 /**
  * neon-header-card-v2
  *
@@ -24,10 +24,10 @@
  *     gradient_to: null
  *     scanline: false
  *     flicker: false
- *     hover_glitch: false
+ *     glitch: false      # découpage en bandes (.cyber-title), sans RGB
  *     text_shadow: null
  *   subtitle:
- *     text: "{{ states('sensor.xxx') }}"
+ *     text: "Sous-titre"
  *     font_size: 13
  *     color: null
  *     uppercase: false
@@ -38,6 +38,7 @@
  *     gradient_from: null
  *     gradient_to: null
  *     flicker: false
+ *     glitch: false
  *   shared:
  *     padding: "8px 16px"
  *     bg_color: null
@@ -52,54 +53,17 @@
  *     tap_action: none
  *     navigation_path: null
  *     font_family: null
+ *     glitch_style: 0       # 0 = cyber-title (2 copies, continu) | 1 = cybr-btn (1 copie, à-coups, cycle 20 s)
+ *     glitch_force: 1.1     # 1 = 2 px de glissement
+ *     glitch_speed: 1.5     # 1 = cycles 2,5 s / 3 s
+ *     glitch_burst_every: 0 # s en moyenne entre deux salves, 0 = en continu
+ *     glitch_burst_len: 1   # s, durée d'une salve
  *
- * ─────────────────────────────────────────────────────────────────────────
- *  TEMPLATE ENGINE (subtitle.text / title.text)
- * ─────────────────────────────────────────────────────────────────────────
- *  A small built-in Jinja-like engine renders the text (NOT full Home
- *  Assistant Jinja — it runs client-side, no server round-trip). Supported:
- *
- *   - States:        {{ states('sensor.x') }}  is_state('x','on')
- *                    state_attr('weather.home','temperature')
- *   - Variables:     {% set deg = states('sensor.x')|float * 3.6 %}  then {{ deg }}
- *   - Arithmetic:    + - * / ( )      e.g. {{ (val/1000000)|round(1) }}
- *   - Comparisons:   == != > < >= <=
- *   - Boolean logic: and  or  not     e.g. {% if a>1 and not down %}…{% endif %}
- *   - Membership:    in / not in      e.g. {{ x in ['a','b'] }}
- *   - Ternary:       A if COND else B  (nestable)
- *   - Conditionals:  {% if C %}…{% elif C %}…{% else %}…{% endif %}
- *   - Concatenation: ~                 e.g. {{ 'val=' ~ count }}
- *   - Filters:       | round(n) float int upper lower title default thousands
- *
- *  The output HTML is sanitized: only DIV/SPAN/B/STRONG/I/EM/U/SMALL/MARK/
- *  CODE/BR/HA-ICON tags and style/class attributes survive. Forbidden in
- *  inline styles: url(), @import, expression(), javascript:, behavior, binding
- *  → so conic/linear/radial-gradient, box-shadow, clip-path, mask (without
- *  url), filter, mix-blend-mode and animation are all allowed.
- *
- *  Reusable @keyframes (use via inline `animation:`):
- *   nhv2-flicker, nhv2-scan-scroll, nhv2-scan-flicker, nhv2-card-glitch,
- *   nhv2-icon-glitch, nhv2-text-glitch, nhv2-core-pulse, nhv2-core-glow,
- *   nhv2-ring-spin, nhv2-ring-spin-rev, nhv2-data-flow, nhv2-thermo-wave,
- *   nhv2-cell-charge, nhv2-shimmer, nhv2-stream-x, nhv2-stream-x-rev,
- *   nhv2-filter-scan, nhv2-filter-glow, nhv2-block-flash, nhv2-pulse-travel,
- *   nhv2-pulse-travel-rev, nhv2-fiber-glow
- *
- *  Performance: animate transform/opacity only (GPU-composited) — avoid
- *  left/top/width/height (reflow) and prefer them to box-shadow/background-
- *  position (repaint). The subtitle DOM is only rebuilt when its rendered
- *  HTML actually changes, so long-running animations don't restart on every
- *  hass update.
- *
- *  Example data-driven header (RAM gauge that turns amber/red under load):
- *   subtitle:
- *     text: >-
- *       {% set ram = states('sensor.pi_ram')|float(0) %}
- *       {% set c = '#FF2D6B' if ram>85 else '#FFB800' if ram>70 else '#39FF9E' %}
- *       <div style="color:{{c}}; text-shadow:0 0 8px {{c}};">RAM {{ ram|round(0)|int }}%</div>
+ *  title.text / subtitle.text = texte statique (rendu en textContent).
+ *  Pour du contenu dynamique (états, templates, HTML), utiliser neon-markdown-card.
  */
 
-const NHV2_VERSION = '2.7';
+const NHV2_VERSION = '4.1';
 
 // ── Device detection — préfixé NHV2_ ────────────────────────────
 const NHV2_IS_IPAD = /iPad/.test(navigator.userAgent) ||
@@ -133,432 +97,9 @@ function nhv2LoadFont(family) {
   _nhv2FontLoaded.add(family);
 }
 
-// ── Template engine ──────────────────────────────────────────────
-function nhv2ParseTemplate(hass, text, vars) {
-  if (!hass || !text || typeof text !== 'string') return text;
-  vars = vars || {};
-
-  // ── Pré-passe : {% set nom = expression %} (collecte les variables, retire les blocs) ──
-  if (text.includes('{%')) {
-    text = text.replace(/\{\%\s*set\s+([a-zA-Z_]\w*)\s*=\s*([\s\S]+?)\s*\%\}/g, (m, name, raw) => {
-      try {
-        const { expr, filters } = nhv2SplitFilters(raw.trim());
-        let v = nhv2Eval(expr, hass, vars);
-        if (filters) v = nhv2ApplyFilters(v == null ? '' : String(v), filters);
-        // re-caster en nombre si possible (pour l'arithmétique aval)
-        const n = parseFloat(v);
-        vars[name] = (typeof v === 'string' && !isNaN(n) && String(n) === v.trim()) ? n : v;
-      } catch(e) { vars[name] = ''; }
-      return '';
-    });
-    // ── {% if COND %}...{% elif COND %}...{% else %}...{% endif %} (après les set, du plus
-    //    interne au plus externe via boucle sur les if sans if imbriqué). ──
-    text = nhv2ResolveIfBlocks(text, hass, vars);
-  }
-  if (!text.includes('{{')) return text.trim();
-
-  return text.replace(/\{\{\s*([\s\S]+?)\s*\}\}/g, (match, formula) => {
-    try {
-      formula = formula.trim();
-      // séparer la chaîne de filtres ( | xxx ) de l'expression — en ignorant les | dans les parenthèses/quotes
-      const { expr, filters } = nhv2SplitFilters(formula);
-      const val = nhv2Eval(expr, hass, vars);
-      return nhv2ApplyFilters(val == null ? '' : String(val), filters);
-    } catch(e) { return match; }
-  });
-}
-
-// Résout les blocs {% if %}/{% elif %}/{% else %}/{% endif %} en remplaçant chaque bloc par
-// la branche dont la condition est vraie (ou ''). Traite du plus INTERNE au plus externe :
-// la regex ne matche qu'un if SANS autre {% if %} dedans, et on boucle jusqu'à épuisement.
-function nhv2ResolveIfBlocks(text, hass, vars) {
-  if (!text.includes('{% if') && !text.includes('{%if')) return text;
-  const reInner = /\{\%\s*if\s+([\s\S]+?)\s*\%\}((?:(?!\{\%\s*if\s)[\s\S])*?)\{\%\s*endif\s*\%\}/;
-  let guard = 0;
-  while (reInner.test(text) && guard++ < 50) {
-    text = text.replace(reInner, (m, firstCond, body) => {
-      // découper body en branches sur les {% elif %} / {% else %} de CE bloc (pas d'if interne ici)
-      const parts = body.split(/\{\%\s*(elif\s+[\s\S]+?|else)\s*\%\}/);
-      // parts = [body0, kw1, body1, kw2, body2, ...] ; kw = "elif COND" | "else"
-      const branches = [{ cond: firstCond, content: parts[0] }];
-      for (let i = 1; i < parts.length; i += 2) {
-        const kw = parts[i].trim();
-        const content = parts[i + 1] || '';
-        if (kw === 'else') branches.push({ cond: null, content });
-        else branches.push({ cond: kw.replace(/^elif\s+/, ''), content });
-      }
-      for (const br of branches) {
-        if (br.cond === null) return br.content; // else
-        try { if (nhv2Truthy(nhv2Eval(br.cond, hass, vars))) return br.content; } catch(e) {}
-      }
-      return '';
-    });
-  }
-  return text;
-}
-
-// Sépare "expr | f1 | f2(arg)" → { expr, filters:"| f1 | f2(arg)" } sans couper les | internes.
-// IMPORTANT : si l'expression contient un opérateur de niveau 0 (ternaire if/else, and/or, ~,
-// comparaison), les "|" appartiennent à des SOUS-expressions et sont gérés par nhv2Eval lui-même
-// → on ne coupe PAS ici (sinon "'a' if x|int>1 else 'b'" serait charcuté). On ne sépare le filtre
-// que pour une expression "simple" (atome + filtres), ex "states(x)|int|round(1)".
-function nhv2SplitFilters(s) {
-  let depth = 0, inStr = '', pipeIdx = -1, hasOp = false;
-  for (let i = 0; i < s.length; i++) {
-    const c = s[i];
-    if (inStr) { if (c === inStr) inStr = ''; continue; }
-    if (c === '"' || c === "'") { inStr = c; continue; }
-    if (c === '(' ) { depth++; continue; }
-    if (c === ')') { depth--; continue; }
-    if (depth !== 0) continue;
-    if (c === '|' && pipeIdx < 0) pipeIdx = i;           // 1er pipe de niveau 0
-    else if (c === '~') hasOp = true;                     // concat
-    else if (c === '<' || c === '>' || c === '=' || c === '!') hasOp = true; // comparaison
-    else if (s.substr(i, 4) === ' if ' || s.substr(i, 6) === ' else ' ||
-             s.substr(i, 5) === ' and ' || s.substr(i, 4) === ' or ') hasOp = true; // logique/ternaire
-  }
-  // pipe présent ET aucun opérateur de niveau 0 → c'est un vrai filtre global
-  if (pipeIdx >= 0 && !hasOp) return { expr: s.slice(0, pipeIdx).trim(), filters: s.slice(pipeIdx) };
-  return { expr: s.trim(), filters: '' };
-}
-
-/* ── Évaluateur d'expression sûr (pas d'eval) ──
- * Gère : nombres, chaînes, variables (set), states(...), is_state(...),
- * arithmétique + - * / ( ), comparaisons, et ternaire "A if COND else B". */
-function nhv2Eval(expr, hass, vars) {
-  expr = String(expr).trim();
-
-  // ternaire : <A> if <cond> else <B>  (récursif, gère l'imbrication via le 1er if/else de niveau 0)
-  const tern = nhv2SplitTernary(expr);
-  if (tern) {
-    return nhv2Truthy(nhv2Eval(tern.cond, hass, vars))
-      ? nhv2Eval(tern.t, hass, vars)
-      : nhv2Eval(tern.f, hass, vars);
-  }
-
-  // logique booléenne niveau 0 : "or" puis "and" (or moins prioritaire). 'not' géré dans l'atome.
-  // Évalué AVANT les comparaisons pour que "a > 1 and b < 2" se découpe en deux comparaisons.
-  const orSplit = nhv2SplitLogic(expr, 'or');
-  if (orSplit) {
-    return (nhv2Truthy(nhv2Eval(orSplit.a, hass, vars)) || nhv2Truthy(nhv2Eval(orSplit.b, hass, vars))) ? 1 : 0;
-  }
-  const andSplit = nhv2SplitLogic(expr, 'and');
-  if (andSplit) {
-    return (nhv2Truthy(nhv2Eval(andSplit.a, hass, vars)) && nhv2Truthy(nhv2Eval(andSplit.b, hass, vars))) ? 1 : 0;
-  }
-  // négation : "not <expr>"
-  if (/^not\s+/.test(expr)) {
-    return nhv2Truthy(nhv2Eval(expr.replace(/^not\s+/, ''), hass, vars)) ? 0 : 1;
-  }
-
-  // appartenance : "<val> in [a,b,c]" / "<val> not in [a,b,c]" (niveau 0, hors quotes)
-  {
-    const inM = nhv2SplitIn(expr);
-    if (inM) {
-      const val = String(nhv2Eval(inM.val, hass, vars));
-      // parser la liste [..] : éléments littéraux (chaînes quotées ou nombres)
-      const items = inM.list.replace(/^\[|\]$/g, '').split(',').map(x => {
-        x = x.trim();
-        return (/^['"][\s\S]*['"]$/.test(x)) ? x.slice(1, -1) : x;
-      });
-      const found = items.includes(val);
-      return (inM.neg ? !found : found) ? 1 : 0;
-    }
-  }
-
-  // comparaisons de niveau 0 — applique les filtres ( |int etc.) présents dans CHAQUE membre
-  // (sinon "states(x)|int > 10" ne convertit pas le membre gauche). Fait ici, pas plus haut,
-  // pour ne pas casser le découpage ternaire/logique qui peut contenir des | dans ses branches.
-  const cmp = nhv2SplitCompare(expr);
-  if (cmp) {
-    const evalSide = (side) => {
-      const sf = nhv2SplitFilters(side.trim());
-      let v = nhv2Eval(sf.expr, hass, vars);
-      if (sf.filters) v = nhv2ApplyFilters(v == null ? '' : String(v), sf.filters);
-      return v;
-    };
-    const a = evalSide(cmp.a), b = evalSide(cmp.b);
-    const na = parseFloat(a), nb = parseFloat(b);
-    const num = !isNaN(na) && !isNaN(nb);
-    switch (cmp.op) {
-      case '==': return (num ? na === nb : String(a) === String(b)) ? 1 : 0;
-      case '!=': return (num ? na !== nb : String(a) !== String(b)) ? 1 : 0;
-      case '>':  return na >  nb ? 1 : 0;
-      case '<':  return na <  nb ? 1 : 0;
-      case '>=': return na >= nb ? 1 : 0;
-      case '<=': return na <= nb ? 1 : 0;
-    }
-  }
-
-  // concaténation Jinja "~" au niveau 0 (string concat). Découpe sur le 1er ~ hors parenthèses/quotes.
-  {
-    let depth = 0, inStr = '';
-    for (let i = 0; i < expr.length; i++) {
-      const c = expr[i];
-      if (inStr) { if (c === inStr) inStr = ''; continue; }
-      if (c === '"' || c === "'") { inStr = c; continue; }
-      if (c === '(') depth++; else if (c === ')') depth--;
-      else if (c === '~' && depth === 0) {
-        const a = nhv2Eval(expr.slice(0, i), hass, vars);
-        const b = nhv2Eval(expr.slice(i + 1), hass, vars);
-        return (a == null ? '' : String(a)) + (b == null ? '' : String(b));
-      }
-    }
-  }
-
-  // arithmétique : seulement s'il reste un vrai opérateur APRÈS avoir masqué
-  // les appels de fonction (states(...), etc.) et les chaînes — pour ne pas
-  // confondre les parenthèses de states() avec un groupement, ni un point d'IP avec un nombre.
-  if (!/^['"]/.test(expr)) {
-    const masked = expr
-      .replace(/(states|is_state|state_attr)\([^)]*\)/g, '0')  // appels → token neutre
-      .replace(/['"][^'"]*['"]/g, '0');                          // chaînes → token neutre
-    if (/[+\-*/]/.test(masked) || /\([^)]*[+\-*/]/.test(expr)) {
-      const r = nhv2EvalArith(expr, hass, vars);
-      if (r !== undefined) return r;
-    }
-  }
-  return nhv2Atom(expr, hass, vars);
-}
-
-// atome : littéral nombre/chaîne, variable, states(), is_state()
-function nhv2Atom(s, hass, vars) {
-  s = s.trim();
-  if (s === '') return '';
-  if (/^-?\d+(\.\d+)?$/.test(s)) return parseFloat(s);
-  if (/^['"][\s\S]*['"]$/.test(s)) return s.slice(1, -1);
-  let m = s.match(/^states\(\s*['"](.+?)['"]\s*\)$/);
-  if (m) { const st = hass.states[m[1]]; return st ? st.state : ''; }
-  m = s.match(/^is_state\(\s*['"](.+?)['"]\s*,\s*['"](.+?)['"]\s*\)$/);
-  if (m) { const st = hass.states[m[1]]; return (st && st.state === m[2]) ? 1 : 0; }
-  m = s.match(/^state_attr\(\s*['"](.+?)['"]\s*,\s*['"](.+?)['"]\s*\)$/);
-  if (m) { const st = hass.states[m[1]]; return st && st.attributes ? (st.attributes[m[2]] ?? '') : ''; }
-  if (Object.prototype.hasOwnProperty.call(vars, s)) return vars[s];
-  // expression entre parenthèses pures
-  if (s.startsWith('(') && s.endsWith(')')) return nhv2Eval(s.slice(1, -1), hass, vars);
-  return s; // chaîne nue
-}
-
-function nhv2Truthy(v) {
-  if (v === '' || v === 0 || v === '0' || v == null) return false;
-  if (v === 'off' || v === 'false' || v === 'unavailable' || v === 'unknown' || v === 'None') return false;
-  return true;
-}
-
-// trouve un " if ... else " au niveau 0 de parenthèses/quotes
-function nhv2SplitTernary(s) {
-  let depth = 0, inStr = '', ifIdx = -1, elseIdx = -1;
-  for (let i = 0; i < s.length; i++) {
-    const c = s[i];
-    if (inStr) { if (c === inStr) inStr = ''; continue; }
-    if (c === '"' || c === "'") { inStr = c; continue; }
-    if (c === '(') depth++; else if (c === ')') depth--;
-    else if (depth === 0) {
-      if (ifIdx < 0 && s.substr(i, 4) === ' if ') ifIdx = i;
-      else if (ifIdx >= 0 && s.substr(i, 6) === ' else ') { elseIdx = i; break; }
-    }
-  }
-  if (ifIdx >= 0 && elseIdx > ifIdx)
-    return { t: s.slice(0, ifIdx).trim(), cond: s.slice(ifIdx + 4, elseIdx).trim(), f: s.slice(elseIdx + 6).trim() };
-  return null;
-}
-
-// découpe sur le DERNIER " and "/" or " au niveau 0 (assoc. gauche). op = 'and' | 'or'.
-// Ne matche pas un mot qui CONTIENT and/or (ex: "android") grâce aux espaces requis.
-function nhv2SplitLogic(s, op) {
-  const tok = ' ' + op + ' ';
-  let depth = 0, inStr = '', idx = -1;
-  for (let i = 0; i < s.length; i++) {
-    const c = s[i];
-    if (inStr) { if (c === inStr) inStr = ''; continue; }
-    if (c === '"' || c === "'") { inStr = c; continue; }
-    if (c === '(') depth++; else if (c === ')') depth--;
-    else if (depth === 0 && s.substr(i, tok.length) === tok) idx = i; // dernier = assoc gauche
-  }
-  if (idx >= 0) return { a: s.slice(0, idx).trim(), b: s.slice(idx + tok.length).trim() };
-  return null;
-}
-
-// détecte "<val> in [..]" ou "<val> not in [..]" au niveau 0 → { val, list, neg }
-function nhv2SplitIn(s) {
-  let depth = 0, inStr = '';
-  for (let i = 0; i < s.length; i++) {
-    const c = s[i];
-    if (inStr) { if (c === inStr) inStr = ''; continue; }
-    if (c === '"' || c === "'") { inStr = c; continue; }
-    if (c === '(' || c === '[') depth++;
-    else if (c === ')' || c === ']') depth--;
-    else if (depth === 0) {
-      if (s.substr(i, 8) === ' not in ') return { val: s.slice(0, i).trim(), list: s.slice(i + 8).trim(), neg: true };
-      if (s.substr(i, 4) === ' in ')    return { val: s.slice(0, i).trim(), list: s.slice(i + 4).trim(), neg: false };
-    }
-  }
-  return null;
-}
-
-// trouve un opérateur de comparaison au niveau 0
-function nhv2SplitCompare(s) {
-  let depth = 0, inStr = '';
-  const ops = ['==', '!=', '>=', '<=', '>', '<'];
-  for (let i = 0; i < s.length; i++) {
-    const c = s[i];
-    if (inStr) { if (c === inStr) inStr = ''; continue; }
-    if (c === '"' || c === "'") { inStr = c; continue; }
-    if (c === '(') depth++; else if (c === ')') depth--;
-    else if (depth === 0) {
-      for (const op of ops) {
-        if (s.substr(i, op.length) === op) {
-          // éviter de confondre > avec >= déjà capturé : ops triés, ok
-          return { a: s.slice(0, i), op, b: s.slice(i + op.length) };
-        }
-      }
-    }
-  }
-  return null;
-}
-
-// arithmétique : tokenise puis shunting-yard → RPN → eval
-function nhv2EvalArith(expr, hass, vars) {
-  const toks = nhv2Tokenize(expr, hass, vars);
-  if (!toks) return undefined;
-  const out = [], ops = [], prec = { '+': 1, '-': 1, '*': 2, '/': 2 };
-  for (const t of toks) {
-    if (typeof t === 'number') out.push(t);
-    else if (t === '(') ops.push(t);
-    else if (t === ')') { while (ops.length && ops[ops.length-1] !== '(') out.push(ops.pop()); ops.pop(); }
-    else { while (ops.length && prec[ops[ops.length-1]] >= prec[t]) out.push(ops.pop()); ops.push(t); }
-  }
-  while (ops.length) out.push(ops.pop());
-  const st = [];
-  for (const t of out) {
-    if (typeof t === 'number') st.push(t);
-    else { const b = st.pop(), a = st.pop();
-      st.push(t === '+' ? a+b : t === '-' ? a-b : t === '*' ? a*b : (b === 0 ? 0 : a/b)); }
-  }
-  return st.length === 1 ? st[0] : undefined;
-}
-
-// découpe en nombres / opérateurs / parenthèses ; les atomes non-numériques sont résolus puis castés en nombre
-function nhv2Tokenize(expr, hass, vars) {
-  const toks = []; let i = 0;
-  const re = /\s*(states\([^)]*\)|is_state\([^)]*\)|state_attr\([^)]*\)|[a-zA-Z_]\w*|-?\d+\.?\d*|[()+\-*/])/g;
-  let m, last = 0;
-  while ((m = re.exec(expr)) !== null) {
-    if (m.index !== last && expr.slice(last, m.index).trim() !== '') return null; // caractère inconnu
-    last = re.lastIndex;
-    const tk = m[1];
-    if (tk === '(' || tk === ')' || tk === '+' || tk === '*' || tk === '/') toks.push(tk);
-    else if (tk === '-') {
-      // moins unaire vs binaire
-      const prev = toks[toks.length-1];
-      if (toks.length === 0 || prev === '(' || prev === '+' || prev === '-' || prev === '*' || prev === '/') toks.push(0, '-');
-      else toks.push('-');
-    } else {
-      const v = parseFloat(nhv2Atom(tk, hass, vars));
-      toks.push(isNaN(v) ? 0 : v);
-    }
-  }
-  if (last < expr.length && expr.slice(last).trim() !== '') return null;
-  return toks;
-}
-
-function nhv2ApplyFilters(val, filterStr) {
-  if (!filterStr || !filterStr.trim()) return val;
-  let result = val;
-  (filterStr.match(/\|\s*(\w+)(?:\(([^)]*)\))?/g) || []).forEach(expr => {
-    const m = expr.match(/\|\s*(\w+)(?:\(([^)]*)\))?/);
-    if (!m) return;
-    switch(m[1]) {
-      case 'round': { const n=parseInt(m[2])||0; const f=parseFloat(result); result=isNaN(f)?result:f.toFixed(n); break; }
-      case 'float':  result = parseFloat(result)||0; break;
-      case 'int':    result = parseInt(result)||0; break;
-      case 'upper':  result = String(result).toUpperCase(); break;
-      case 'lower':  result = String(result).toLowerCase(); break;
-      case 'title':  result = String(result).charAt(0).toUpperCase()+String(result).slice(1); break;
-      case 'default': if (!result||result==='None'||result==='unknown') result=(m[2]||'').replace(/^['"]|['"]$/g,''); break;
-      case 'thousands': {
-        const sep = (m[2]||'').replace(/^['"]|['"]$/g,'').trim() || ' ';
-        const parts = String(result).split('.');
-        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, sep);
-        result = parts.join('.');
-        break;
-      }
-    }
-  });
-  return result;
-}
-
-// ── Subtitle HTML sanitizer ──────────────────────────────────────
-const NHV2_ALLOWED_TAGS = new Set(['BR','B','STRONG','I','EM','U','SMALL','MARK','CODE','SPAN','DIV','HA-ICON']);
-const NHV2_ALLOWED_ATTRS = new Set(['style','class']);
-// SVG : balises géométriques/présentation autorisées (pas de script/foreignObject/image/use)
-// tagName des éléments SVG est en minuscules (≠ HTML majuscules) → on teste les deux casses.
-const NHV2_ALLOWED_SVG_TAGS = new Set(['svg','g','path','polyline','polygon','line','circle','ellipse','rect','text','tspan','defs','lineargradient','radialgradient','stop','image','clippath']);
-const NHV2_ALLOWED_SVG_ATTRS = new Set([
-  'd','points','x','y','x1','y1','x2','y2','cx','cy','r','rx','ry','width','height',
-  'viewbox','preserveaspectratio','transform','fill','fill-opacity','stroke','stroke-width',
-  'stroke-opacity','stroke-linecap','stroke-linejoin','stroke-dasharray','stroke-dashoffset',
-  'opacity','font-size','font-family','text-anchor','offset','stop-color','stop-opacity',
-  'gradientunits','vector-effect','style','class','dominant-baseline','href','xlink:href','clip-path','id']);
-// href SVG : autoriser uniquement des chemins locaux /local/... ou /www/... (PAS javascript:/data:/http)
-const NHV2_SAFE_HREF_RE = /^\/(local|www|api)\//i;
-const NHV2_UNSAFE_STYLE_RE = /expression\s*\(|javascript\s*:|url\s*\(|@import|behavior\s*:|binding\s*:|moz-binding/i;
-
-function nhv2SanitizeStyle(styleStr) {
-  if (!styleStr) return null;
-  const clean = styleStr.replace(/\/\*[\s\S]*?\*\//g, '');
-  if (NHV2_UNSAFE_STYLE_RE.test(clean)) return null;
-  return clean;
-}
-
-function nhv2SanitizeSubtitle(raw) {
-  if (raw == null) return '';
-  let html = String(raw).replace(/\[mdi:([a-zA-Z0-9_-]+)\]/g, '<ha-icon icon="mdi:$1"></ha-icon>');
-  if (!html.includes('<')) return html;
-  const tpl = document.createElement('template');
-  tpl.innerHTML = html;
-  const walker = document.createTreeWalker(tpl.content, NodeFilter.SHOW_ELEMENT);
-  const nodes = [];
-  while (walker.nextNode()) nodes.push(walker.currentNode);
-  nodes.forEach(el => {
-    const tnLower = el.tagName.toLowerCase();
-    const isSvg = NHV2_ALLOWED_SVG_TAGS.has(tnLower);
-    if (!NHV2_ALLOWED_TAGS.has(el.tagName) && !isSvg) { el.replaceWith(document.createTextNode(el.textContent||'')); return; }
-    if (el.tagName === 'HA-ICON') {
-      const icon = el.getAttribute('icon')||'';
-      if (!icon.match(/^mdi:[a-zA-Z0-9_-]+$/)) { el.replaceWith(document.createTextNode('')); return; }
-      [...el.attributes].forEach(a => { if (a.name !== 'icon') el.removeAttribute(a.name); });
-      return;
-    }
-    // SVG : liste blanche d'attributs géométriques/présentation (insensible à la casse)
-    if (isSvg) {
-      [...el.attributes].forEach(a => {
-        const an = a.name.toLowerCase();
-        if (an.startsWith('on')) { el.removeAttribute(a.name); return; }  // pas d'event handler
-        if (!NHV2_ALLOWED_SVG_ATTRS.has(an)) { el.removeAttribute(a.name); return; }
-        // href (image SVG) : seulement des chemins locaux sûrs (pas javascript:/data:/http externe)
-        if (an === 'href' || an === 'xlink:href') {
-          if (!NHV2_SAFE_HREF_RE.test(a.value.trim())) { el.removeAttribute(a.name); return; }
-        }
-        if (a.name === 'style') {
-          const safe = nhv2SanitizeStyle(a.value);
-          if (safe) el.setAttribute('style', safe); else el.removeAttribute('style');
-        }
-      });
-      return;
-    }
-    [...el.attributes].forEach(a => {
-      if (!NHV2_ALLOWED_ATTRS.has(a.name)) { el.removeAttribute(a.name); return; }
-      if (a.name === 'style') {
-        const safe = nhv2SanitizeStyle(a.value);
-        if (safe) el.setAttribute('style', safe); else el.removeAttribute('style');
-      }
-    });
-  });
-  return tpl.innerHTML;
-}
-
 // ── Config normalizer ────────────────────────────────────────────
+function nhv2Num(v, d) { const n = parseFloat(v); return Number.isFinite(n) ? n : d; }
+
 function nhv2BuildConfig(raw) {
   const r = raw || {};
 
@@ -583,7 +124,7 @@ function nhv2BuildConfig(raw) {
     gradient_to:    r.title?.gradient_to   ?? null,
     scanline:       NHV2_IS_LOW_POWER ? false : (r.title?.scanline ?? false),
     flicker:        NHV2_IS_LOW_POWER ? false : (r.title?.flicker  ?? false),
-    hover_glitch:   NHV2_IS_LOW_POWER ? false : (r.title?.hover_glitch ?? false),
+    glitch:         NHV2_IS_LOW_POWER ? false : (r.title?.glitch   ?? false),
     text_shadow:    r.title?.text_shadow   ?? null,
   };
 
@@ -606,6 +147,7 @@ function nhv2BuildConfig(raw) {
     gradient_from:  r.subtitle?.gradient_from ?? null,
     gradient_to:    r.subtitle?.gradient_to   ?? null,
     flicker:        NHV2_IS_LOW_POWER ? false : (r.subtitle?.flicker ?? false),
+    glitch:         NHV2_IS_LOW_POWER ? false : (r.subtitle?.glitch  ?? false),
   };
 
   const shared = {
@@ -622,6 +164,12 @@ function nhv2BuildConfig(raw) {
     tap_action:     r.shared?.tap_action     ?? 'none',
     navigation_path: r.shared?.navigation_path ?? null,
     entity:         r.shared?.entity         ?? null,
+    // glitch : défauts = banc validé par Chris le 02/10
+    glitch_style:       nhv2Num(r.shared?.glitch_style, 0) ? 1 : 0,
+    glitch_force:       nhv2Num(r.shared?.glitch_force, 1.1),
+    glitch_speed:       Math.max(.1, nhv2Num(r.shared?.glitch_speed, 1.5)),
+    glitch_burst_every: Math.max(0, nhv2Num(r.shared?.glitch_burst_every, 0)),
+    glitch_burst_len:   Math.max(.1, nhv2Num(r.shared?.glitch_burst_len, 1)),
   };
 
   return {
@@ -645,6 +193,8 @@ class NeonHeaderCardV2Editor extends HTMLElement {
     this._hass    = null;
     this._built   = false;
     this._tab     = 'title';
+    // groupes ouverts : état LOCAL à l'éditeur, jamais dans _config (sinon un config-changed les referme)
+    this._open    = new Set(['title.text', 'subtitle.text', 'shared.layout']);
     this._listeners = [];
   }
 
@@ -749,24 +299,57 @@ class NeonHeaderCardV2Editor extends HTMLElement {
         .section-hidden { display:none; }
         .icon-row { display:flex; gap:8px; align-items:center; }
         .icon-row .icon-input { flex:1; }
+        ha-expansion-panel { display:block; margin:8px 0; --expansion-panel-content-padding:6px 12px 10px; }
+        ha-expansion-panel ha-expansion-panel { margin:6px 0; }
+        .dep-off { display:none; }
         .icon-preview { width:32px; height:32px; display:flex; align-items:center; justify-content:center;
                         border:1px solid var(--divider-color); border-radius:6px; flex-shrink:0;
                         color:var(--primary-text-color); }
       </style>
 
-      <div class="tabs">
-        <div class="tab-btn ${this._tab==='title'?'active':''}" data-tab="title">Titre</div>
-        <div class="tab-btn ${this._tab==='subtitle'?'active':''}" data-tab="subtitle">Sous-titre</div>
-        <div class="tab-btn ${this._tab==='shared'?'active':''}" data-tab="shared">Commun</div>
-      </div>
-
       ${this._renderModeSelect()}
+
+      <div class="tabs">
+        ${this._tabs().map(([k, l]) => `<div class="tab-btn ${this._tab===k?'active':''}" data-tab="${k}">${l}</div>`).join('')}
+      </div>
 
       <div id="tab-title"   class="${this._tab==='title'   ? '' : 'section-hidden'}">${this._renderTitleTab()}</div>
       <div id="tab-subtitle"class="${this._tab==='subtitle' ? '' : 'section-hidden'}">${this._renderSubtitleTab()}</div>
       <div id="tab-shared"  class="${this._tab==='shared'  ? '' : 'section-hidden'}">${this._renderSharedTab()}</div>
     `;
     this._attachListeners();
+    this._applyDeps();
+  }
+
+  // onglets utiles selon le mode (titre seul → pas d'onglet Sous-titre, et inversement)
+  _tabs() {
+    const mode = this._config?.mode ?? 'title';
+    const tabs = [['title','Titre'],['subtitle','Sous-titre'],['shared','Commun']]
+      .filter(([k]) => k === 'shared' || mode === 'both' || mode === k);
+    if (!tabs.some(([k]) => k === this._tab)) this._tab = tabs[0][0];
+    return tabs;
+  }
+
+  // groupe repliable (pattern neon-compact-light / neon-switch-card), imbricable
+  _grp(id, title, body) {
+    return `<ha-expansion-panel outlined data-grp="${id}" header="${title}" ${this._open.has(id) ? 'expanded' : ''}>${body}</ha-expansion-panel>`;
+  }
+
+  // bloc visible seulement si la condition tient : 'section.cle' (vrai), 'section.cle=valeur', alternatives par '|', '!' en tête = négation
+  _dep(spec, body) { return `<div data-dep="${spec}">${body}</div>`; }
+
+  _depOk(spec) {
+    if (spec[0] === '!') return !this._depOk(spec.slice(1));
+    return spec.split('|').some(s => {
+      const [path, want] = s.split('=');
+      const [sec, key] = path.split('.');
+      const v = this._get(sec, key);
+      return want === undefined ? !!v : String(v) === want;
+    });
+  }
+
+  _applyDeps() {
+    this.querySelectorAll('[data-dep]').forEach(el => el.classList.toggle('dep-off', !this._depOk(el.dataset.dep)));
   }
 
   _renderModeSelect() {
@@ -781,107 +364,167 @@ class NeonHeaderCardV2Editor extends HTMLElement {
 
   _renderTitleTab() {
     return `
-      <h3>Texte</h3>
-      ${this._textarea('Titre', 'title', 'text', 'Mon Dashboard — templates {{ states("entity") }} supportés')}
-      ${this._iconPicker('Icône', 'title', 'icon')}
-      ${this._select('Position icône', 'title', 'icon_position', [['left','Gauche'],['right','Droite'],['top','Dessus']])}
+      ${this._grp('title.text', 'Texte et icône', `
+        ${this._textarea('Titre', 'title', 'text', 'Mon Dashboard')}
+        ${this._iconPicker('Icône', 'title', 'icon')}
+        <div class="row2">
+          ${this._select('Position icône', 'title', 'icon_position', [['left','Gauche'],['right','Droite'],['top','Dessus']])}
+          ${this._px('Taille icône', 'title', 'icon_size', 'auto (1.2× police)')}
+        </div>
+      `)}
 
-      <h3>Typographie</h3>
-      ${this._fontSelect('Police', 'title', 'font_family')}
-      <div class="row2">
-        ${this._px('Taille police', 'title', 'font_size', '24')}
-        ${this._px('Épaisseur', 'title', 'font_weight', '600')}
-      </div>
-      <div class="row2">
-        ${this._toggle('Majuscules', 'title', 'uppercase')}
-        ${this._toggle('Italique', 'title', 'italic')}
-      </div>
-      ${this._px('Espacement lettres', 'title', 'letter_spacing', '0')}
+      ${this._grp('title.typo', 'Typographie', `
+        ${this._fontSelect('Police', 'title', 'font_family')}
+        <div class="row2">
+          ${this._px('Taille police', 'title', 'font_size', '24')}
+          ${this._px('Épaisseur', 'title', 'font_weight', '600')}
+        </div>
+        <div class="row2">
+          ${this._toggle('Majuscules', 'title', 'uppercase')}
+          ${this._toggle('Italique', 'title', 'italic')}
+        </div>
+        ${this._px('Espacement lettres', 'title', 'letter_spacing', '0')}
+      `)}
 
-      <h3>Couleurs</h3>
-      ${this._color('Couleur texte', 'title', 'color', '#ffffff')}
-      ${this._color('Couleur icône', 'title', 'icon_color', '#ffffff')}
-      ${this._px('Taille icône', 'title', 'icon_size', 'auto (1.2× police)')}
+      ${this._grp('title.color', 'Couleurs', `
+        ${this._color('Couleur texte', 'title', 'color', '#ffffff')}
+        ${this._color('Couleur icône', 'title', 'icon_color', '#ffffff')}
+      `)}
 
-      <h3>Effets</h3>
-      <div class="row2">
-        ${this._toggle('Glow', 'title', 'glow')}
-        ${this._toggle('Gradient', 'title', 'gradient')}
-      </div>
-      ${this._color('Couleur glow', 'title', 'glow_color', '#00fff9')}
-      ${this._px('Taille glow', 'title', 'glow_size', '12')}
-      ${this._color('Gradient début', 'title', 'gradient_from', '#00E8FF')}
-      ${this._color('Gradient fin', 'title', 'gradient_to', '#FF50A0')}
-      ${this._input('Text-shadow custom', 'title', 'text_shadow', 'text', '0 0 10px #00fff9')}
-      <div class="row2">
-        ${this._toggle('Flicker', 'title', 'flicker')}
-        ${this._toggle('Scanline CRT', 'title', 'scanline')}
-      </div>
-      ${this._toggle('Hover Glitch', 'title', 'hover_glitch')}
+      ${this._grp('title.fx', 'Effets', `
+        ${this._grp('title.fx.glow', 'Lueur', `
+          ${this._toggle('Glow', 'title', 'glow')}
+          ${this._dep('title.glow', `
+            ${this._color('Couleur glow', 'title', 'glow_color', '#00fff9')}
+            ${this._px('Taille glow', 'title', 'glow_size', '12')}
+          `)}
+        `)}
+        ${this._grp('title.fx.grad', 'Dégradé', `
+          ${this._toggle('Gradient', 'title', 'gradient')}
+          ${this._dep('title.gradient', `
+            ${this._color('Gradient début', 'title', 'gradient_from', '#00E8FF')}
+            ${this._color('Gradient fin', 'title', 'gradient_to', '#FF50A0')}
+          `)}
+        `)}
+        ${this._grp('title.fx.anim', 'Animations', `
+          <div class="row2">
+            ${this._toggle('Flicker', 'title', 'flicker')}
+            ${this._toggle('Scanline CRT', 'title', 'scanline')}
+          </div>
+          ${this._toggle('Glitch découpage', 'title', 'glitch')}
+          ${this._dep('title.glitch', `<p class="hint">Style, force, vitesse et salves du glitch : onglet Commun.</p>`)}
+        `)}
+        ${this._grp('title.fx.adv', 'Avancé', `
+          ${this._input('Text-shadow custom (remplace le glow)', 'title', 'text_shadow', 'text', '0 0 10px #00fff9')}
+        `)}
+      `)}
     `;
   }
 
   _renderSubtitleTab() {
     return `
-      <h3>Texte</h3>
-      ${this._textarea('Sous-titre', 'subtitle', 'text', 'Texte, templates {{ states("entity") }}, [mdi:icon], HTML <br><b>')}
-      ${this._iconPicker('Icône', 'subtitle', 'icon')}
-      ${this._select('Position icône', 'subtitle', 'icon_position', [['left','Gauche'],['right','Droite'],['top','Dessus']])}
+      ${this._grp('subtitle.text', 'Texte et icône', `
+        ${this._textarea('Sous-titre', 'subtitle', 'text', 'Sous-titre')}
+        ${this._iconPicker('Icône', 'subtitle', 'icon')}
+        <div class="row2">
+          ${this._select('Position icône', 'subtitle', 'icon_position', [['left','Gauche'],['right','Droite'],['top','Dessus']])}
+          ${this._px('Taille icône', 'subtitle', 'icon_size', 'même que police')}
+        </div>
+      `)}
 
-      <h3>Typographie</h3>
-      ${this._fontSelect('Police', 'subtitle', 'font_family')}
-      ${this._px('Taille police', 'subtitle', 'font_size', '13')}
-      <div class="row2">
-        ${this._toggle('Majuscules', 'subtitle', 'uppercase')}
-        ${this._toggle('Italique', 'subtitle', 'italic')}
-      </div>
-      ${this._px('Espacement lettres', 'subtitle', 'letter_spacing', '0')}
+      ${this._grp('subtitle.typo', 'Typographie', `
+        ${this._fontSelect('Police', 'subtitle', 'font_family')}
+        ${this._px('Taille police', 'subtitle', 'font_size', '13')}
+        <div class="row2">
+          ${this._toggle('Majuscules', 'subtitle', 'uppercase')}
+          ${this._toggle('Italique', 'subtitle', 'italic')}
+        </div>
+        ${this._px('Espacement lettres', 'subtitle', 'letter_spacing', '0')}
+      `)}
 
-      <h3>Couleurs</h3>
-      ${this._color('Couleur texte', 'subtitle', 'color', '#888888')}
-      ${this._color('Couleur icônes inline', 'subtitle', 'icon_color', '#888888')}
-      ${this._px('Taille icônes inline', 'subtitle', 'icon_size', 'même que police')}
+      ${this._grp('subtitle.color', 'Couleurs', `
+        ${this._color('Couleur texte', 'subtitle', 'color', '#888888')}
+        ${this._color('Couleur icône', 'subtitle', 'icon_color', '#888888')}
+      `)}
 
-      <h3>Effets</h3>
-      <div class="row2">
-        ${this._toggle('Glow', 'subtitle', 'glow')}
-        ${this._toggle('Gradient', 'subtitle', 'gradient')}
-      </div>
-      ${this._color('Couleur glow', 'subtitle', 'glow_color', '#00fff9')}
-      ${this._px('Taille glow', 'subtitle', 'glow_size', '6')}
-      ${this._color('Gradient début', 'subtitle', 'gradient_from', '#00E8FF')}
-      ${this._color('Gradient fin', 'subtitle', 'gradient_to', '#FF50A0')}
-      ${this._toggle('Flicker', 'subtitle', 'flicker')}
+      ${this._grp('subtitle.fx', 'Effets', `
+        ${this._grp('subtitle.fx.glow', 'Lueur', `
+          ${this._toggle('Glow', 'subtitle', 'glow')}
+          ${this._dep('subtitle.glow', `
+            ${this._color('Couleur glow', 'subtitle', 'glow_color', '#00fff9')}
+            ${this._px('Taille glow', 'subtitle', 'glow_size', '6')}
+          `)}
+        `)}
+        ${this._grp('subtitle.fx.grad', 'Dégradé', `
+          ${this._toggle('Gradient', 'subtitle', 'gradient')}
+          ${this._dep('subtitle.gradient', `
+            ${this._color('Gradient début', 'subtitle', 'gradient_from', '#00E8FF')}
+            ${this._color('Gradient fin', 'subtitle', 'gradient_to', '#FF50A0')}
+          `)}
+        `)}
+        ${this._grp('subtitle.fx.anim', 'Animations', `
+          <div class="row2">
+            ${this._toggle('Flicker', 'subtitle', 'flicker')}
+            ${this._toggle('Glitch découpage', 'subtitle', 'glitch')}
+          </div>
+          ${this._dep('subtitle.glitch', `<p class="hint">Style, force, vitesse et salves du glitch : onglet Commun.</p>`)}
+        `)}
+      `)}
     `;
   }
 
   _renderSharedTab() {
     return `
-      <h3>Police globale</h3>
-      ${this._fontSelect('Police (titre + sous-titre)', 'shared', 'font_family')}
+      ${this._grp('shared.layout', 'Mise en page', `
+        ${this._fontSelect('Police (titre + sous-titre)', 'shared', 'font_family')}
+        ${this._padding()}
+        <div class="row2">
+          ${this._select('Alignement H', 'shared', 'align_h', [['left','Gauche'],['center','Centre'],['right','Droite']])}
+          ${this._select('Alignement V', 'shared', 'align_v', [['top','Haut'],['center','Centre'],['bottom','Bas']])}
+        </div>
+      `)}
 
-      <h3>Mise en page</h3>
-      ${this._padding()}
-      ${this._select('Alignement H', 'shared', 'align_h', [['left','Gauche'],['center','Centre'],['right','Droite']])}
-      ${this._select('Alignement V', 'shared', 'align_v', [['top','Haut'],['center','Centre'],['bottom','Bas']])}
+      ${this._grp('shared.box', 'Fond et bordure', `
+        ${this._grp('shared.box.bg', 'Fond', `
+          ${this._color('Couleur fond', 'shared', 'bg_color', '#1a1a2e')}
+          <div class="row2">
+            ${this._number('Opacité fond (0–1)', 'shared', 'bg_opacity', '0', '1', '0.05')}
+            ${this._toggle('Flou fond', 'shared', 'bg_blur')}
+          </div>
+        `)}
+        ${this._grp('shared.box.border', 'Bordure', `
+          ${this._color('Couleur bordure', 'shared', 'border_color', '#444444')}
+          <div class="row2">
+            ${this._px('Épaisseur', 'shared', 'border_width', '1')}
+            ${this._px('Radius', 'shared', 'border_radius', '12')}
+          </div>
+          ${this._select('Style', 'shared', 'border_style', [['solid','Solide'],['dashed','Tirets'],['dotted','Points'],['none','Aucun']])}
+        `)}
+      `)}
 
-      <h3>Fond</h3>
-      ${this._color('Couleur fond', 'shared', 'bg_color', '#1a1a2e')}
-      ${this._number('Opacité fond (0–1)', 'shared', 'bg_opacity', '0', '1', '0.05')}
-      ${this._toggle('Flou fond', 'shared', 'bg_blur')}
+      ${this._grp('shared.glitch', 'Glitch découpage', `
+        ${['title','both'].includes(this._config?.mode ?? 'title') ? this._toggle('Sur le titre', 'title', 'glitch') : ''}
+        ${['subtitle','both'].includes(this._config?.mode ?? 'title') ? this._toggle('Sur le sous-titre', 'subtitle', 'glitch') : ''}
+        <p class="hint">Coupé sur mobile et iPad, comme le flicker.</p>
+        ${this._select('Style', 'shared', 'glitch_style', [['0','cyber-title (2 copies, continu)'],['1','cybr-btn (1 copie, à-coups)']])}
+        <div class="row2">
+          ${this._number('Force (1 = 2 px)', 'shared', 'glitch_force', '0', '5', '0.1', '1.1')}
+          ${this._number('Vitesse', 'shared', 'glitch_speed', '0.1', '5', '0.1', '1.5')}
+        </div>
+        ${this._grp('shared.glitch.burst', 'Salves aléatoires', `
+          <p class="hint">0 = glitch en continu. Chaque header tire son propre rythme.</p>
+          <div class="row2">
+            ${this._number('Salve toutes les (s)', 'shared', 'glitch_burst_every', '0', '120', '1', '0')}
+            ${this._number('Durée salve (s)', 'shared', 'glitch_burst_len', '0.1', '10', '0.1', '1')}
+          </div>
+        `)}
+      `)}
 
-      <h3>Bordure</h3>
-      ${this._color('Couleur bordure', 'shared', 'border_color', '#444444')}
-      <div class="row2">
-        ${this._px('Épaisseur', 'shared', 'border_width', '1')}
-        ${this._px('Radius', 'shared', 'border_radius', '12')}
-      </div>
-      ${this._select('Style', 'shared', 'border_style', [['solid','Solide'],['dashed','Tirets'],['dotted','Points'],['none','Aucun']])}
-
-      <h3>Interaction</h3>
-      ${this._select('Action au tap', 'shared', 'tap_action', [['none','Aucune'],['navigate','Navigation'],['more-info','Plus d\'info']])}
-      ${this._input('Chemin navigation', 'shared', 'navigation_path', 'text', '/lovelace/0')}
-      ${this._input('Entité (more-info)', 'shared', 'entity', 'text', 'light.salon')}
+      ${this._grp('shared.tap', 'Interaction', `
+        ${this._select('Action au tap', 'shared', 'tap_action', [['none','Aucune'],['navigate','Navigation'],['more-info','Plus d\'info']])}
+        ${this._dep('shared.tap_action=navigate', this._input('Chemin navigation', 'shared', 'navigation_path', 'text', '/lovelace/0'))}
+        ${this._dep('shared.tap_action=more-info', this._input('Entité (more-info)', 'shared', 'entity', 'text', 'light.salon'))}
+      `)}
     `;
   }
 
@@ -962,11 +605,11 @@ class NeonHeaderCardV2Editor extends HTMLElement {
       </div></div>`;
   }
 
-  _number(label, section, key, min='0', max='100', step='1') {
+  _number(label, section, key, min='0', max='100', step='1', placeholder='') {
     const v = this._get(section, key);
     return `<div class="field"><label>${label}</label>
       <input type="number" data-section="${section}" data-key="${key}"
-             value="${v}" min="${min}" max="${max}" step="${step}"/>
+             value="${v}" min="${min}" max="${max}" step="${step}" placeholder="${placeholder}"/>
     </div>`;
   }
 
@@ -990,6 +633,13 @@ class NeonHeaderCardV2Editor extends HTMLElement {
         const el = this.querySelector(`#tab-${t}`);
         if (el) el.classList.toggle('section-hidden', t !== this._tab);
       });
+    });
+
+    // Groupes : mémorise ouvert/fermé (survit au rebuild sur changement de mode)
+    this._on(this, 'expanded-changed', (e) => {
+      const id = e.target?.dataset?.grp;
+      if (!id) return;
+      if (e.detail?.expanded) this._open.add(id); else this._open.delete(id);
     });
 
     // Mode select (root level)
@@ -1041,6 +691,7 @@ class NeonHeaderCardV2Editor extends HTMLElement {
         else if (isNumber) val = inp.value !== '' ? parseFloat(inp.value) : null;
         else               val = inp.value || null;
         this._set(section, key, val);
+        this._applyDeps();
       });
     });
   }
@@ -1075,6 +726,7 @@ class NeonHeaderCardV2Editor extends HTMLElement {
     const hEl = this.querySelector('[data-padding="h"]');
     if (vEl && document.activeElement !== vEl && parseFloat(vEl.value) !== pv) vEl.value = pv;
     if (hEl && document.activeElement !== hEl && parseFloat(hEl.value) !== ph) hEl.value = ph;
+    this._applyDeps();
   }
 }
 
@@ -1090,8 +742,6 @@ class NeonHeaderCardV2 extends HTMLElement {
     this._hass      = null;
     this._config    = null;
     this._rendered  = false;
-    this._rafId     = null;
-    this._ro        = null;
     this._ac        = null;
     this._renderKey = null;
     this._fontLoaded = new Set();
@@ -1099,6 +749,8 @@ class NeonHeaderCardV2 extends HTMLElement {
     this._flickDur  = nhv2Rnd(3.5, 5.5);
     this._flickOff  = nhv2Rnd(-2, 0);
     this._scanDur   = nhv2Rnd(6, 10);
+    this._gPhase    = Math.random();   // déphasage du glitch : les headers ne glitchent pas en chœur
+    this._gTimer    = null;
   }
 
   static getConfigElement() { return document.createElement('neon-header-card-v2-editor'); }
@@ -1124,32 +776,47 @@ class NeonHeaderCardV2 extends HTMLElement {
     if (!this._config) return;
     const hasCard = !!this.shadowRoot.querySelector('ha-card.nhv2-card');
     const hasBaseStyle = !!this.shadowRoot.querySelector('#nhv2-style');
-    if (!hasCard || !hasBaseStyle) { this._render(); return; }
-    if (this._rafId) return;
-    this._rafId = requestAnimationFrame(() => {
-      this._rafId = 0;
-      this._updateText();
-    });
+    if (!hasCard || !hasBaseStyle || !this._rendered) { this._cleanup(); this._render(); }
   }
 
   getCardSize() {
     const mode = this._config?.mode ?? 'title';
-    return mode === 'subtitle' ? 1 : mode === 'both' ? 2 : 2;
+    return mode === 'subtitle' ? 1 : 2;
   }
 
   _cleanup() {
-    if (this._ac)    { this._ac.abort();                  this._ac = null; }
-    if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
-    if (this._ro)    { this._ro.disconnect();             this._ro = null; }
+    if (this._ac) { this._ac.abort(); this._ac = null; }
+    this._glitchStop();
+  }
+
+  /* salves aléatoires : attente burst_every × (0,5..1,5), puis classe nhv2-gon pendant burst_len (banc 02/10) */
+  _glitchStart() {
+    this._glitchStop();
+    const c = this._config, sh = c?.shared;
+    if (!sh || !(c.title.glitch || c.subtitle.glitch) || !(sh.glitch_burst_every > 0)) return;
+    const next = () => {
+      this._gTimer = setTimeout(() => {
+        this.shadowRoot.querySelector('ha-card.nhv2-card')?.classList.add('nhv2-gon');
+        this._gTimer = setTimeout(() => {
+          this.shadowRoot.querySelector('ha-card.nhv2-card')?.classList.remove('nhv2-gon');
+          next();
+        }, sh.glitch_burst_len * 1000);
+      }, sh.glitch_burst_every * (.5 + Math.random()) * 1000);
+    };
+    next();
+  }
+
+  _glitchStop() {
+    if (this._gTimer) { clearTimeout(this._gTimer); this._gTimer = null; }
   }
 
   connectedCallback() {
     // Tab switch: shadow DOM content persists — just re-attach observers, no re-render
+    if (!this._rendered && this._config && this._hass) { this._cleanup(); this._render(); return; }
     const card = this.shadowRoot && this.shadowRoot.querySelector('ha-card.nhv2-card');
     if (card && this._rendered) {
       this._reattachObservers(card);
-      // Refresh text in case hass updated while disconnected
-      if (this._hass) this._updateText();
+      this._glitchStart();
     }
   }
 
@@ -1177,19 +844,20 @@ class NeonHeaderCardV2 extends HTMLElement {
     const c = this._config;
     const mode = c.mode;
 
-    if (mode === 'title' || mode === 'both') {
-      const el = this.shadowRoot.querySelector('.nhv2-title');
-      if (el) el.textContent = nhv2ParseTemplate(this._hass, c.title.text) || '';
-    }
-    if (mode === 'subtitle' || mode === 'both') {
-      const el = this.shadowRoot.querySelector('.nhv2-subtitle');
-      if (el) {
-        const html = nhv2SanitizeSubtitle(nhv2ParseTemplate(this._hass, c.subtitle.text) || '');
-        // ne réécrire que si le HTML a changé → sinon innerHTML= détruirait le DOM
-        // et RELANCERAIT toutes les animations CSS à 0% (saccade des headers animés)
-        if (el.innerHTML !== html) el.innerHTML = html;
-      }
-    }
+    // glitch : <span.gt data-text><span.t><span.t2>texte</span></span></span> (::before/::after = les copies)
+    // sur un span et pas sur le div : en mode both, .nhv2-subtitle::before est déjà le divider
+    const fill = (el, txt, glitch) => {
+      if (!el) return;
+      if (!glitch || !txt) { el.textContent = txt; return; }
+      const gt = document.createElement('span'), a = document.createElement('span'), b = document.createElement('span');
+      gt.className = 'gt'; a.className = 't'; b.className = 't2';
+      gt.dataset.text = txt; b.textContent = txt;
+      a.appendChild(b); gt.appendChild(a); el.replaceChildren(gt);
+    };
+    if (mode === 'title' || mode === 'both')
+      fill(this.shadowRoot.querySelector('.nhv2-title'), String(c.title.text ?? '').trim(), c.title.glitch);
+    if (mode === 'subtitle' || mode === 'both')
+      fill(this.shadowRoot.querySelector('.nhv2-subtitle'), String(c.subtitle.text ?? '').trim(), c.subtitle.glitch);
   }
 
 
@@ -1216,7 +884,7 @@ class NeonHeaderCardV2 extends HTMLElement {
     };
 
     // ── Title computed ─────────────────────────────────────────
-    const tFontFamily  = t.font_family  ? `'${t.font_family}', var(--primary-font-family, sans-serif)` : 'var(--primary-font-family, sans-serif)';
+    const tFontFamily  = t.font_family  ? `'${t.font_family}', var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif)` : `var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif)`;
     const tFontSize    = `${parseFloat(t.font_size)||24}px`;
     const tFontWeight  = `${t.font_weight||600}`;
     const tColor       = t.color || 'var(--ha-card-header-color, var(--primary-text-color))';
@@ -1230,22 +898,30 @@ class NeonHeaderCardV2 extends HTMLElement {
       : t.glow ? _neonGlow(tGlowColor, tGlowSize) : '';
     const tGradFrom    = t.gradient_from || 'var(--primary-color, #00E8FF)';
     const tGradTo      = t.gradient_to   || 'var(--accent-color, #FF50A0)';
-    const tGradCSS     = t.gradient ? `background:linear-gradient(90deg,${tGradFrom},${tGradTo});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;` : '';
+    // glitch : le dégradé passe sur .t2 + copies (le clip-path des enfants ne troue pas le background-clip du parent)
+    const tGradCSS     = !t.gradient ? ''
+      : t.glitch ? '-webkit-text-fill-color:transparent;'
+      : `background:linear-gradient(90deg,${tGradFrom},${tGradTo});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;`;
     const tFlickAnim   = t.flicker  ? `animation:nhv2-flicker ${this._flickDur}s ease-in-out infinite ${this._flickOff}s;` : '';
 
     // ── Subtitle computed ──────────────────────────────────────
-    const sFontFamily  = s.font_family ? `'${s.font_family}', var(--primary-font-family, sans-serif)` : tFontFamily;
+    const sFontFamily  = s.font_family ? `'${s.font_family}', var(--primary-font-family, 'Rajdhani', 'Share Tech Mono', sans-serif)` : tFontFamily;
     const sFontSize    = `${parseFloat(s.font_size)||13}px`;
     const sColor       = s.color || 'var(--secondary-text-color, #888)';
     const sIconColor   = s.icon_color || sColor;
     const sIconSize    = s.icon_size ? `${parseFloat(s.icon_size)}px` : sFontSize;
     const sLetterSp    = s.letter_spacing ? `${parseFloat(s.letter_spacing)}px` : 'normal';
     const sGlowColor   = s.glow_color || 'var(--accent-color, #FF50A0)';
-    const sGlowSize    = parseFloat(s.glow_size)||10;
-    const sGlowShadow  = s.glow ? _neonGlow(sGlowColor, sGlowSize) : '';
+    const sGlowSize    = parseFloat(s.glow_size)||6;
+    // mode both : le sous-titre passe sous le titre -> une couche diffuse, sans cœur blanc
+    const sGlowShadow  = !s.glow ? ''
+      : c.mode === 'both' ? `text-shadow:0 0 ${Math.round(sGlowSize*.8)}px color-mix(in srgb, ${sGlowColor} 55%, transparent);`
+      : _neonGlow(sGlowColor, sGlowSize);
     const sGradFrom    = s.gradient_from || 'var(--primary-color, #00E8FF)';
     const sGradTo      = s.gradient_to   || 'var(--accent-color, #FF50A0)';
-    const sGradCSS     = s.gradient ? `background:linear-gradient(90deg,${sGradFrom},${sGradTo});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;` : '';
+    const sGradCSS     = !s.gradient ? ''
+      : s.glitch ? '-webkit-text-fill-color:transparent;'
+      : `background:linear-gradient(90deg,${sGradFrom},${sGradTo});-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;`;
     const sFlickAnim   = s.flicker  ? `animation:nhv2-flicker ${this._flickDur}s ease-in-out infinite ${this._flickOff}s;` : '';
 
     // ── Shared computed ────────────────────────────────────────
@@ -1268,7 +944,8 @@ class NeonHeaderCardV2 extends HTMLElement {
     // bg
     let bgStyle = '';
     if (sh.bg_color) {
-      const hex = sh.bg_color.replace('#','');
+      let hex = sh.bg_color.replace('#','');
+      if (/^[0-9a-fA-F]{3}$/.test(hex)) hex = hex.replace(/./g, m => m + m);
       if (/^[0-9a-fA-F]{6}$/.test(hex)) {
         const r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),b=parseInt(hex.slice(4,6),16);
         bgStyle = `background:rgba(${r},${g},${b},${sh.bg_opacity??1});`;
@@ -1292,7 +969,15 @@ class NeonHeaderCardV2 extends HTMLElement {
 
     const interactive = sh.tap_action !== 'none';
 
-    this.shadowRoot.innerHTML = `
+    // ── Glitch découpage (banc 02/10, port du .cyber-title sans franges RGB) ──
+    const glitchAny = t.glitch || s.glitch;
+    const glitchCss = glitchAny ? this._glitchCss(sh,
+      t.glitch && t.gradient ? `linear-gradient(90deg,${tGradFrom},${tGradTo})` : null,
+      s.glitch && s.gradient ? `linear-gradient(90deg,${sGradFrom},${sGradTo})` : null) : '';
+    const gBurst = glitchAny && sh.glitch_burst_every > 0;
+
+    const tpl = document.createElement('template');
+    tpl.innerHTML = `
       <style id="nhv2-style">
         :host {
           display: block;
@@ -1313,12 +998,9 @@ class NeonHeaderCardV2 extends HTMLElement {
           ${radiusCss || ''}
           ${blurVal ? `backdrop-filter: blur(${blurVal}); -webkit-backdrop-filter: blur(${blurVal});` : ''}
           ${hasBorder ? borderCss : ''}
-          ${t.hover_glitch ? 'transition:transform 0.25s cubic-bezier(0.4,0,0.2,1);' : ''}
           /* ── Theme RGB vars ── */
           --nhv2-uv: var(--rgb-primary-color, 98,0,234);
           --nhv2-cy: var(--rgb-accent-color, 0,255,249);
-          --nhv2-bl: var(--rgb-blacklight-color, 180,0,255);
-          --nhv2-er: var(--rgb-error-color, 255,45,107);
         }
 
         @keyframes nhv2-flicker {
@@ -1337,133 +1019,6 @@ class NeonHeaderCardV2 extends HTMLElement {
           41% { opacity:0.06; } 42% { opacity:0; }
           76% { opacity:0.03; } 77% { opacity:0; }
         }
-
-        @keyframes nhv2-card-glitch {
-          0%,100% { transform:translateY(-10px) scale(1.03) translateZ(0); }
-          15% { transform:translateY(-10px) scale(1.03) translate(-6px,4px) translateZ(0); filter:drop-shadow(6px 0 rgba(var(--nhv2-cy),1)) drop-shadow(-6px 0 rgba(var(--nhv2-er),1)); }
-          30% { transform:translateY(-10px) scale(1.03) translate(6px,-4px) translateZ(0); filter:drop-shadow(-6px 0 rgba(var(--nhv2-bl),1)) drop-shadow(6px 0 rgba(var(--nhv2-er),1)); }
-          45% { transform:translateY(-10px) scale(1.03) translate(-4px,3px) translateZ(0); filter:drop-shadow(5px 5px rgba(var(--nhv2-cy),1)) drop-shadow(-5px -5px rgba(var(--nhv2-er),1)); }
-          60% { transform:translateY(-10px) scale(1.03) translate(5px,-2px) translateZ(0); }
-          75% { transform:translateY(-10px) scale(1.03) translate(-3px,0) translateZ(0); }
-        }
-
-        @keyframes nhv2-icon-glitch {
-          0%,100% { transform:scale(1) rotate(0deg) translateZ(0); }
-          20% { transform:scale(1.15) rotate(-12deg) translateZ(0); }
-          40% { transform:scale(1.2) rotate(12deg) translateZ(0); }
-          60% { transform:scale(1.15) rotate(-8deg) translateZ(0); }
-          80% { transform:scale(1.08) rotate(5deg) translateZ(0); }
-        }
-
-        @keyframes nhv2-text-glitch {
-          0%,100% { transform:translate(0,0) translateZ(0); }
-          25% { transform:translate(-4px,0) translateZ(0); text-shadow:4px 0 rgba(var(--nhv2-cy),1),-4px 0 rgba(var(--nhv2-er),1); }
-          50% { transform:translate(4px,0) translateZ(0);  text-shadow:-4px 0 rgba(var(--nhv2-bl),1),4px 0 rgba(var(--nhv2-er),1); }
-          75% { transform:translate(-3px,0) translateZ(0); text-shadow:3px 0 rgba(var(--nhv2-bl),1),0 0 15px rgba(var(--nhv2-cy),0.8); }
-        }
-
-        /* ── Keyframes "réacteur" (headers monitoring type Pi) ── */
-        @keyframes nhv2-core-pulse {
-          0%,100% { transform:scale(1) translateZ(0); filter:brightness(1); }
-          50%     { transform:scale(1.04) translateZ(0); filter:brightness(1.25); }
-        }
-        /* glow qui respire SANS transform (pas de conflit géométrique avec les rotations) */
-        @keyframes nhv2-core-glow {
-          0%,100% { filter:brightness(0.96); }
-          50%     { filter:brightness(1.18); }
-        }
-        @keyframes nhv2-ring-spin {
-          from { transform:rotate(0deg) translateZ(0); }
-          to   { transform:rotate(360deg) translateZ(0); }
-        }
-        @keyframes nhv2-ring-spin-rev {
-          from { transform:rotate(360deg) translateZ(0); }
-          to   { transform:rotate(0deg) translateZ(0); }
-        }
-        @keyframes nhv2-data-flow {
-          from { transform:translateY(0) translateZ(0); }
-          to   { transform:translateY(-50%) translateZ(0); }
-        }
-        /* GPU pur : pulse via opacity seul (le glow box-shadow reste STATIQUE en inline) */
-        @keyframes nhv2-thermo-wave {
-          0%,100% { opacity:0.8; }
-          50%     { opacity:1; }
-        }
-        @keyframes nhv2-cell-charge {
-          0%,100% { opacity:0.75; }
-          50%     { opacity:1; }
-        }
-        /* GPU pur : la bande brillante (width:60%) traverse via transform */
-        @keyframes nhv2-shimmer {
-          from { transform:translateX(-180%) translateZ(0); }
-          to   { transform:translateX(280%) translateZ(0); }
-        }
-        /* ── Keyframes "flux de données" (headers type Pi-hole / filtre DNS) ── */
-        @keyframes nhv2-stream-x {
-          from { transform:translateX(-50%) translateZ(0); }
-          to   { transform:translateX(0) translateZ(0); }
-        }
-        @keyframes nhv2-stream-x-rev {
-          from { transform:translateX(0) translateZ(0); }
-          to   { transform:translateX(-50%) translateZ(0); }
-        }
-        /* impulsion qui parcourt TOUTE la fibre, d'un bord a l'autre.
-           On anime left (relatif a la LARGEUR DE LA PISTE) et non transform
-           (relatif a la largeur de l'IMPULSION, ~14-22px -> trajet trop court qui
-           s'arretait au milieu). De -10% (hors champ gauche) a 100% (sort a droite). */
-        @keyframes nhv2-pulse-travel {
-          0%   { left:-10%; opacity:0; }
-          8%   { opacity:1; }
-          92%  { opacity:1; }
-          100% { left:100%; opacity:0; }
-        }
-        @keyframes nhv2-pulse-travel-rev {
-          0%   { left:100%; opacity:0; }
-          8%   { opacity:1; }
-          92%  { opacity:1; }
-          100% { left:-10%; opacity:0; }
-        }
-        @keyframes nhv2-fiber-glow {
-          0%,100% { opacity:0.5; }
-          50%     { opacity:0.85; }
-        }
-        @keyframes nhv2-filter-scan {
-          0%,100% { transform:translateY(-50%) translateZ(0); opacity:0; }
-          12%     { opacity:0.9; }
-          50%     { transform:translateY(50%) translateZ(0); opacity:0.9; }
-          88%     { opacity:0.9; }
-        }
-        /* GPU pur : pulse via opacity seul (le glow box-shadow reste STATIQUE en inline) */
-        @keyframes nhv2-filter-glow {
-          0%,100% { opacity:0.65; }
-          50%     { opacity:1; }
-        }
-        @keyframes nhv2-block-flash {
-          0%,100% { opacity:0.35; transform:scale(1) translateZ(0); }
-          50%     { opacity:1;    transform:scale(1.25) translateZ(0); }
-        }
-        @keyframes nhv2-pew-flow {
-          /* fait "couler" le dash le long du path (pew-pew map) sans déplacer le path */
-          from { stroke-dashoffset: 3080; }
-          to   { stroke-dashoffset: 0; }
-        }
-        @keyframes nhv2-blip-pulse {
-          /* pulse d'un blip SVG via opacity SEULEMENT (pas de scale -> le cercle ne se déplace pas) */
-          0%,100% { opacity: 0.4; }
-          50%     { opacity: 1; }
-        }
-
-        /* scrollbar néon pour les zones scrollables injectées dans le subtitle
-           (ex: Wall of Shame). Le sanitizer interdit <style> inline -> on la stylise ici. */
-        .nhv2-subtitle .shame-scroll::-webkit-scrollbar { width: 6px; }
-        .nhv2-subtitle .shame-scroll::-webkit-scrollbar-track {
-          background: rgba(0,0,0,0.25); border-radius: 3px;
-        }
-        .nhv2-subtitle .shame-scroll::-webkit-scrollbar-thumb {
-          background: linear-gradient(180deg, #FF2D6B, #B400FF);
-          border-radius: 3px; box-shadow: 0 0 5px #FF2D6B88;
-        }
-        .nhv2-subtitle .shame-scroll::-webkit-scrollbar-thumb:hover { background: #FF2D6B; }
 
         .nhv2-wrap, .nhv2-wrap *, .nhv2-icon-wrap, .nhv2-text-wrap, .nhv2-title, .nhv2-subtitle {
           box-sizing: border-box; margin: 0; padding: 0;
@@ -1488,12 +1043,6 @@ class NeonHeaderCardV2 extends HTMLElement {
           background:rgba(18,16,16,0.08); opacity:0;
           animation:nhv2-scan-flicker 4s step-end infinite;
         }
-        ` : ''}
-
-        ${t.hover_glitch ? `
-        ha-card.nhv2-card:hover { transform:translateY(-8px) scale(1.02) translateZ(0); animation:nhv2-card-glitch 0.4s cubic-bezier(0.4,0,0.2,1); }
-        ha-card.nhv2-card:hover .nhv2-title { animation:nhv2-text-glitch 0.4s cubic-bezier(0.4,0,0.2,1); }
-        ha-card.nhv2-card:hover .nhv2-icon-wrap ha-icon { animation:nhv2-icon-glitch 0.4s cubic-bezier(0.4,0,0.2,1); }
         ` : ''}
 
         .nhv2-wrap {
@@ -1551,12 +1100,11 @@ class NeonHeaderCardV2 extends HTMLElement {
           --mdc-icon-size: ${activeIconSize};
           color: ${activeIconColor};
           overflow: visible;
-          ${activeGlowEnabled
-            ? mode === 'subtitle'
-              ? `filter:drop-shadow(0 0 ${Math.round(activeGlowSize*.3)}px ${activeGlowColor}) drop-shadow(0 0 ${Math.round(activeGlowSize*.6)}px ${activeGlowColor});`
-              : `filter:drop-shadow(0 0 ${Math.round(activeGlowSize*.2)}px #fff) drop-shadow(0 0 ${Math.round(activeGlowSize*.4)}px ${activeGlowColor}) drop-shadow(0 0 ${Math.round(activeGlowSize*.8)}px ${activeGlowColor}) drop-shadow(0 0 ${activeGlowSize}px ${activeGlowColor});`
-            : ''}
-          ${t.flicker && !t.hover_glitch ? tFlickAnim : ''}
+          ${!activeGlowEnabled ? ''
+            : mode === 'subtitle'
+            ? `filter:drop-shadow(0 0 ${Math.round(activeGlowSize*.3)}px ${activeGlowColor}) drop-shadow(0 0 ${Math.round(activeGlowSize*.6)}px ${activeGlowColor});`
+            : `filter:drop-shadow(0 0 ${Math.round(activeGlowSize*.2)}px #fff) drop-shadow(0 0 ${Math.round(activeGlowSize*.4)}px ${activeGlowColor}) drop-shadow(0 0 ${Math.round(activeGlowSize*.8)}px ${activeGlowColor}) drop-shadow(0 0 ${activeGlowSize}px ${activeGlowColor});`}
+          ${t.flicker ? tFlickAnim : ''}
         }
 
         .nhv2-text-wrap {
@@ -1581,9 +1129,8 @@ class NeonHeaderCardV2 extends HTMLElement {
           ${t.uppercase ? 'text-transform:uppercase;' : ''}
           ${t.italic    ? 'font-style:italic;' : ''}
           ${tGradCSS || `color:${tColor};`}
-          ${!t.hover_glitch ? tGlowShadow : ''}
-          ${!t.hover_glitch ? tFlickAnim  : ''}
-          ${t.hover_glitch  ? 'transition:transform 0.2s, text-shadow 0.2s;' : ''}
+          ${tGlowShadow}
+          ${tFlickAnim}
         }
 
         .nhv2-subtitle {
@@ -1599,16 +1146,6 @@ class NeonHeaderCardV2 extends HTMLElement {
           ${sGradCSS || `color:${sColor};`}
           ${sGlowShadow}
           ${sFlickAnim}
-        }
-
-        .nhv2-subtitle ha-icon {
-          --mdc-icon-size: ${sIconSize};
-          color: ${sIconColor};
-          vertical-align: middle;
-          display: inline-flex;
-          align-items: center;
-          line-height: 1;
-          margin: 0 2px;
         }
 
         @media (max-width: 1100px) {
@@ -1630,9 +1167,18 @@ class NeonHeaderCardV2 extends HTMLElement {
             transparent);
           pointer-events: none;
         }` : ''}
+
+        ${glitchCss}
+
+        @media (prefers-reduced-motion: reduce) {
+          .nhv2-title, .nhv2-subtitle, .nhv2-icon-wrap ha-icon,
+          .nhv2-scanlines::before, .nhv2-scanlines::after,
+          .gt .t, .gt .t2 { animation: none !important; }
+          .gt::before, .gt::after { animation: none !important; visibility: hidden; }
+        }
       </style>
 
-      <ha-card class="nhv2-card"${interactive?' style="cursor:pointer"':''}>
+      <ha-card class="nhv2-card${gBurst ? ' nhv2-gb' : ''}"${interactive?' style="cursor:pointer"':''}>
         <div class="nhv2-wrap">
           ${t.scanline ? '<div class="nhv2-scanlines" aria-hidden="true"></div>' : ''}
           <div class="nhv2-icon-wrap"></div>
@@ -1643,6 +1189,7 @@ class NeonHeaderCardV2 extends HTMLElement {
         </div>
       </ha-card>
     `;
+    this.shadowRoot.insertBefore(tpl.content, this._clearShadow());
 
     // ha-icon via createElement (§13)
     if (hasIcon) {
@@ -1653,28 +1200,71 @@ class NeonHeaderCardV2 extends HTMLElement {
 
     this._updateText();
 
-    // Attach observers + click handler
+    // Click handler
     this._reattachObservers(this.shadowRoot.querySelector('ha-card.nhv2-card'));
+    this._glitchStart();
 
     this._rendered = true;
   }
 
+  /* CSS du glitch : 2 copies (attr(data-text)) découpées en bandes et décalées ; le texte d'origine (.t/.t2)
+   * est troué EXACTEMENT là où passe chaque copie (polygon evenodd, mêmes durées -> synchrones). Pas de franges :
+   * les copies héritent couleur, dégradé et halo. Style 1 = glitch du bouton cybr-btn (1 copie, à-coups). */
+  _glitchCss(sh, tGrad, sGrad) {
+    const f = sh.glitch_force, v = sh.glitch_speed;
+    const band = (a, b) => `inset(${a}% -30% ${100 - b}% -30%)`;
+    const hole = (a, b) => `polygon(evenodd,-30% -60%,130% -60%,130% 160%,-30% 160%,-30% -60%,-40% ${a}%,140% ${a}%,140% ${b}%,-40% ${b}%,-40% ${a}%)`;
+    // cyber-title : [%, haut, bas, skew relatif] — valeurs de la démo
+    const A = [[0,10,30,.625],[10,50,70,.25],[20,20,60,1],[100,80,100,.125]];
+    const B = [[0,60,80,.75],[10,10,30,.375],[100,90,100,.125]];
+    const kf = (n, K) => `@keyframes ${n}{` + K.map(([p,a,b,k]) => `${p}%{clip-path:${band(a,b)};transform:skewX(${(.8*f*k).toFixed(3)}deg);}`).join('') + '}'
+                       + `@keyframes ${n}h{` + K.map(([p,a,b]) => `${p}%{clip-path:${hole(a,b)};}`).join('') + '}';
+    // cybr-btn : [%, bande, sens du décalage] ; 'four' = bande vide (silence)
+    const BB = { one:[2,95], two:[78,100], three:[44,54], four:[0,0], six:[40,85], seven:[63,80] };
+    const Y = [[0,'one',0],[2,'two',-1],[6,'two',1],[8,'two',-1],[9,'two',0],[10,'three',1],[13,'three',0],[14,'four',1],[21,'four',1],
+               [25,'four',1],[30,'four',-1],[31,'four',0],[35,'six',-1],[40,'six',1],[45,'six',-1],[50,'six',0],[55,'seven',1],[60,'seven',0],[61,'four',0],[100,'four',0]];
+    const shift = +(2 * f).toFixed(2);
+    const grad = (sel, g) => g ? `${sel} .t2, ${sel} .gt::before, ${sel} .gt::after { background:${g}; -webkit-background-clip:text; background-clip:text; }` : '';
+    // délai négatif propre à l'instance : même durée => copie et trou restent synchrones entre eux
+    const anim = (name, dur, extra = '') => `animation:${name} ${dur.toFixed(2)}s infinite ${extra};animation-delay:${(-this._gPhase * dur).toFixed(2)}s;`;
+    return `
+        .gt { position:relative; display:inline-block; max-width:100%; }
+        .gt .t, .gt .t2 { display:inline-block; max-width:100%; }
+        .gt::before, .gt::after {
+          content:attr(data-text); position:absolute; top:0; left:0; width:100%; height:100%;
+          white-space:inherit; pointer-events:none; color:inherit;
+        }
+        ${grad('.nhv2-title', tGrad)}
+        ${grad('.nhv2-subtitle', sGrad)}
+        ${sh.glitch_style ? `
+        .gt::before { display:none; }
+        .gt::after  { ${anim('nhv2-gy', 20 / v)} }
+        .gt .t      { ${anim('nhv2-gyh', 20 / v)} }
+        @keyframes nhv2-gy{${Y.map(([p,k,d]) => `${p}%{clip-path:${band(...BB[k])};transform:translateX(${d * shift}px);}`).join('')}}
+        @keyframes nhv2-gyh{${Y.map(([p,k]) => `${p}%{clip-path:${hole(...BB[k])};}`).join('')}}
+        ` : `
+        .gt::before { left:${shift}px;  ${anim('nhv2-gxb', 3 / v, 'linear alternate-reverse')} }
+        .gt::after  { left:${-shift}px; ${anim('nhv2-gxa', 2.5 / v, 'linear alternate-reverse')} }
+        .gt .t      { ${anim('nhv2-gxah', 2.5 / v, 'linear alternate-reverse')} }
+        .gt .t2     { ${anim('nhv2-gxbh', 3 / v, 'linear alternate-reverse')} }
+        ${kf('nhv2-gxa', A)}
+        ${kf('nhv2-gxb', B)}
+        `}
+        .nhv2-gb:not(.nhv2-gon) .gt::before, .nhv2-gb:not(.nhv2-gon) .gt::after { animation:none; visibility:hidden; }
+        .nhv2-gb:not(.nhv2-gon) .gt .t, .nhv2-gb:not(.nhv2-gon) .gt .t2 { animation:none; }`;
+  }
+
+  /* vider le shadowRoot SAUF le <card-mod> posé par le thème (card-mod-card) à la création :
+   * card-mod ne le remet pas quand la card se reconstruit. Renvoie ce <card-mod> (ou null) :
+   * _render insère ses nœuds AVANT lui, ordre d'origine gardé. (mécanisme nixie 1.4.1) */
+  _clearShadow() {
+    const sr = this.shadowRoot;
+    for (const n of [...sr.childNodes]) if (n.localName !== 'card-mod') n.remove();
+    return [...sr.children].find(n => n.localName === 'card-mod') || null;
+  }
+
   _reattachObservers(card) {
     if (!card) return;
-    // ResizeObserver
-    if (!this._ro && window.ResizeObserver) {
-      this._ro = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-          if (entry.contentRect.width === 0) return;
-        }
-        if (this._rafId) return;
-        this._rafId = requestAnimationFrame(() => {
-          this._rafId = 0;
-          this._updateText();
-        });
-      });
-      this._ro.observe(card);
-    }
     // Click handler
     const sh = this._config?.shared;
     const interactive = sh && sh.tap_action !== 'none';
@@ -1702,10 +1292,4 @@ console.info(
   '%c NEON-HEADER-CARD-V2 %c v' + NHV2_VERSION + ' ',
   'color:#00fff9;font-weight:bold;background:#0A0A14;padding:2px 6px;border-radius:3px 0 0 3px',
   'color:#FF50A0;font-weight:bold;background:#0A0A14;padding:2px 6px;border-radius:0 3px 3px 0',
-);
-
-console.info(
-  '%c 🏠 neon-header-card-v2 v' + NHV2_VERSION + ' %c Neo Tokyo ',
-  'background:#1E90FF;color:#000;padding:2px 4px;border-radius:3px 0 0 3px;font-weight:bold;',
-  'background:#040811;color:#00D4FF;padding:2px 4px;border-radius:0 3px 3px 0;'
 );

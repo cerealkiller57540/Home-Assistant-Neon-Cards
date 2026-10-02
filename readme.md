@@ -96,7 +96,7 @@
 | Card | File | Version | Description |
 |------|------|:-------:|-------------|
 | 🏷️ Neon Header Card | `neon-header-card.js` | `1.4.2` | Stylish neon section header |
-| 🏷️ Neon Header Card v2 | `neon-header-card-v2.js` | `2.7` | Advanced header with a built-in Jinja-like template engine — build fully data-driven, animated HTML headers right in YAML. Supports `{% set %}`, `{% if/elif/else %}`, `and/or/not`, `in`, arithmetic, ternaries, filters, concatenation, + 20 reusable neon `@keyframes`, + inline SVG (sanitized) for charts/maps. See the [demo](#-header-card-v2--template-engine) |
+| 🏷️ Neon Header Card v2 | `neon-header-card-v2.js` | `4.1` | Lightweight neon title/subtitle header: glow, gradient, flicker, scanline, and a **slice glitch** (`.cyber-title` style, no RGB split) with random bursts that are de-phased per card; grouped UI editor. ⚠️ v3+ no longer renders templates — see [below](#-header-card-v2--v4) |
 | 📋 Neon Entities Card | `neon-entities-card.js` | `1.14.0` | Multi-entity card (switch, sensor, cover, climate, number + dividers) — theme-agnostic colors, collapsible grouped UI editor with per-entity icon preview |
 | 📝 Neon Markdown Card | `neon-markdown-card.js` | `4.2` | Neon header + full HTML/Markdown/Jinja-like body — client-side template engine (set/if/for/loop, filters), sparklines, scoped `<style>` |
 
@@ -131,60 +131,38 @@
 
 ---
 
-## 🧩 Header Card v2 — template engine
+## 🧩 Header Card v2 — v4
 
-`neon-header-card-v2` is more than a title bar: its `subtitle.text` is rendered by a small
-**Jinja-like engine that runs in the browser** (no Home Assistant server round-trip). That means
-you can build **fully data-driven, animated HTML headers straight from YAML** — gauges, status
-panels, live monitoring widgets — without writing a single custom JS card.
+`neon-header-card-v2` is a **static** neon header: `title.text` and `subtitle.text` are plain text.
 
-https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards/raw/main/assets/neon-headers-demo.mp4
+> ⚠️ **Breaking change in v3.0** — the in-browser Jinja-like template engine, the HTML subtitle
+> and the reusable `@keyframes` were removed to keep the card light (it is used for every section
+> header). If your `subtitle.text` contains `{{ … }}` / `{% … %}` or HTML, move it to
+> **`neon-markdown-card`**, which ships the same engine (and more: loops, sparklines, scoped `<style>`).
+> The tag name stays `neon-header-card-v2`, so existing static headers keep working unchanged.
 
-*Three live headers built only with YAML templates: a Raspberry Pi "reactor" (RAM core that
-pulses with load), a Pi-hole "DNS filter stream", and a fiber uplink — all animated, all
-driven by real entity states.*
-
-**What the engine supports**
-
-| Feature | Example |
-|---------|---------|
-| States / attributes | `{{ states('sensor.x') }}` · `is_state('x','on')` · `state_attr('weather.home','temperature')` |
-| Variables | `{% set deg = states('sensor.x')|float * 3.6 %}` |
-| Conditionals | `{% if cpu>85 %}…{% elif cpu>60 %}…{% else %}…{% endif %}` |
-| Boolean logic | `and` · `or` · `not` |
-| Membership | `{{ x in ['a','b'] }}` · `not in` |
-| Ternary (nestable) | `{{ 'R' if v>85 else 'A' if v>60 else 'V' }}` |
-| Arithmetic | `+ - * / ( )` |
-| Filters | `\| round(n) float int upper lower title default thousands` |
-| Concatenation | `{{ 'val=' ~ count }}` |
-
-**Reusable neon `@keyframes`** (use via inline `animation:` in your template):
-`nhv2-flicker`, `nhv2-core-pulse`, `nhv2-core-glow`, `nhv2-ring-spin`, `nhv2-data-flow`,
-`nhv2-thermo-wave`, `nhv2-shimmer`, `nhv2-stream-x`, `nhv2-pulse-travel`, `nhv2-fiber-glow`, … (20 total).
-
-**Example — a RAM gauge that turns amber/red under load:**
+**Slice glitch (v4)** — the text is sliced into bands that slide sideways (two copies, no RGB
+fringes), inheriting the text's color, gradient and glow. Opt-in per text, tuned in `shared`:
 
 ```yaml
 type: custom:neon-header-card-v2
-mode: both
+mode: title
 title:
-  text: RASPBERRY_PI
-  icon: mdi:raspberry-pi
+  text: DNS_CORE
+  icon: mdi:dns
   glow: true
-subtitle:
-  text: >-
-    {% set ram = states('sensor.pi_ram')|float(0) %}
-    {% set c = '#FF2D6B' if ram>85 else '#FFB800' if ram>70 else '#39FF9E' %}
-    <div style="color:{{c}}; font-weight:900; text-shadow:0 0 8px {{c}};">
-      RAM {{ ram|round(0)|int }}%
-    </div>
+  gradient: true
+  glitch: true            # switch it on (also: subtitle.glitch)
+shared:
+  glitch_style: 0         # 0 = cyber-title (continuous) | 1 = cybr-btn (jerky, 20 s cycle)
+  glitch_force: 1.1       # 1 = 2 px slide
+  glitch_speed: 1.5
+  glitch_burst_every: 10  # mean seconds between random bursts, 0 = continuous
+  glitch_burst_len: 1.5   # seconds per burst
 ```
 
-> ⚠️ **Sanitized output** — only `DIV/SPAN/B/STRONG/I/EM/U/SMALL/MARK/CODE/BR/HA-ICON`
-> tags and `style`/`class` attributes are kept. Inline styles may use any gradient,
-> `box-shadow`, `clip-path`, `mask`, `filter`, `mix-blend-mode` or `animation`, but
-> `url()`, `@import`, `expression()`, `javascript:` are stripped.
-> For smooth animation, animate `transform`/`opacity` (GPU) and avoid `left/top/width/height`.
+Each card draws its own random phase and burst timing, so several headers on a page never
+glitch in sync. Disabled on phones/tablets (like `flicker`) and under `prefers-reduced-motion`.
 
 ---
 
@@ -310,8 +288,9 @@ title:
   gradient: true
   gradient_from: "#00fff9"
   gradient_to: "#ff10f0"
+  glitch: true
 subtitle:
-  text: "{{ states('sensor.date') }}"
+  text: "Night City"
 ```
 </details>
 
