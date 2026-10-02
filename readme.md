@@ -64,6 +64,7 @@
 | ☀️ Neon Solar Production Card | `neon-solar-production-card.js` | — | Real-time solar panel production monitor |
 | ☀️🌀 Neon Solar Production Card (WebGL) | `neon-solar-production-card-webgl.js` | `2.1.6-webgl` | Same solar card, WebGL glass layer on the panel: sun sheen that follows the real sun angle (Fresnel, grazing highlight, slow shimmer), raindrops sliding down the glass as lenses during showers, frost when it freezes |
 | 📊 Neon Dual Gauge Card | `neon-dual-gauge-card.js` | `2.0.0` | Dual concentric LED ring gauges with cyberpunk glow and theme inheritance |
+| 📊🌀 Neon Dual Gauge Card (WebGL) | `neon-dual-gauge-card-webgl.js` | `1.0.0` | Same dual gauge, LED rings and glows redrawn in one WebGL canvas: plasma globe between the core and the inner ring (filaments follow the power flow, direction = charge/discharge), four outer halos to choose from (resonance ring, flow waves, fill-level reservoir, nebula); falls back to the classic LED rendering without WebGL; collapsible grouped UI editor |
 
 ### 🌡️ Climate & Temperature
 
