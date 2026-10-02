@@ -2,13 +2,13 @@
 
 # ⚡ Home Assistant Neon Cards
 
-**Cyberpunk / Neo Tokyo custom cards and themes for Home Assistant.**
+**Cyberpunk / Neo Tokyo custom cards for Home Assistant.**
 
 [![License: MIT][license-badge]][license-url]
 
 </div>
 
-Each card now lives in its own repository, so HACS can install and update it on its own. This page is the index of the collection; the themes stay here.
+Each card now lives in its own repository, so HACS can install and update it on its own. This page is the index of the collection.
 
 ## ✨ Cards
 
@@ -24,23 +24,6 @@ Each card now lives in its own repository, so HACS can install and update it on 
 | <img src="https://raw.githubusercontent.com/cerealkiller57540/neon-markdown-card/main/images/main.png" alt="Neon Markdown Card" width="240"> | [**Neon Markdown Card**](https://github.com/cerealkiller57540/neon-markdown-card)<br>Markdown with client-side Jinja templates, a full HTML/SVG/CSS body and a neon header. | [![Open in HACS][hacs-btn]](https://my.home-assistant.io/redirect/hacs_repository/?owner=cerealkiller57540&repository=neon-markdown-card&category=plugin) |
 
 More cards will move to their own repositories over time. The older single-file versions were removed from this repository; they remain in its git history.
-
-## 🎨 Themes
-
-| Theme | File | Description |
-|-------|------|-------------|
-| 🌙 Neo Tokyo v3 | [`themes/neo-tokyo-v3.yaml`](themes/neo-tokyo-v3.yaml) | Main dark theme: full neon palette, CSS variables used by all the cards |
-| 🌙 Neon Night Joi HDR | [`themes/neon-night-joi-hdr.yaml`](themes/neon-night-joi-hdr.yaml) | HDR-style neon dark theme |
-| 🕶️ Netrunner 2 | [`themes/netrunner2.yaml`](themes/netrunner2.yaml) | Cyberpunk netrunner variant |
-
-**Installing a theme:**
-1. Copy the `.yaml` file into your `config/themes/` folder.
-2. In `configuration.yaml`:
-   ```yaml
-   frontend:
-     themes: !include_dir_merge_named themes
-   ```
-3. Restart Home Assistant, then **Profile → Theme** and select it.
 
 ---
 
