@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Neon Header Card — custom card for Home Assistant</title>
+<meta name="description" content="Neon title and subtitle header for Home Assistant: glow, gradient text, flicker, scanline, slice glitch. HACS ready.">
+<link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-header-card-v2.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Neon Header Card — custom card for Home Assistant">
+<meta property="og:description" content="Neon title and subtitle header for Home Assistant: glow, gradient text, flicker, scanline, slice glitch. HACS ready.">
+<meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-header-card-v2.html">
+<meta property="og:site_name" content="Neon Cards for Home Assistant">
+<meta property="og:image" content="https://raw.githubusercontent.com/cerealkiller57540/neon-header-card-v2/main/images/main.png">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/cerealkiller57540/neon-header-card-v2/main/images/main.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Neon Header Card", "description": "Neon title and subtitle header for Home Assistant: glow, gradient text, flicker, scanline, slice glitch. HACS ready.", "codeRepository": "https://github.com/cerealkiller57540/neon-header-card-v2", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-header-card-v2.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-10-21", "keywords": "custom-card, cyberpunk, dashboard, hacs, header, home-assistant, lovelace, neon", "image": "https://raw.githubusercontent.com/cerealkiller57540/neon-header-card-v2/main/images/main.png"}</script>
+<link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
+<nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Dashboard cards</nav>
+<header class="page-head"><h1>Neon Header Card</h1>
+<p class="lead">Neon title and subtitle header for Home Assistant: glow, gradient text, flicker, scanline, slice glitch. HACS ready.</p>
+<div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/neon-header-card-v2">View on GitHub</a><a class="btn alt" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=cerealkiller57540&amp;repository=neon-header-card-v2&amp;category=plugin">Open in HACS</a></div></header>
+<main class="markdown-body">
+<div align="center">
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-header-card-v2/main/images/logo.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-header-card-v2/main/images/logo.png" alt="Neon Header Card v2" width="480" style="max-width: 100%;" loading="lazy"></a>
+<p><strong>A light, static title and subtitle header for Home Assistant, with neon glow, gradient text, flicker, CRT scanline and a slice glitch.</strong></p>
+
+
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-header-card-v2/main/images/main.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-header-card-v2/main/images/main.png" alt="Six neon headers: a gradient title with an icon, a yellow title with a subtitle, a glitching red-to-orange title, a green flickering title with scanlines, a centred title with the icon on top, and a framed pink title" width="760" style="max-width: 100%;" loading="lazy"></a>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-header-card-v2/main/images/live.webp"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-header-card-v2/main/images/live.webp" alt="Three neon section headers (Meteo, Energie, Confort) animating: scanlines, a glitching title" width="760" style="max-width: 100%;" loading="lazy"></a>
+</div>
+<p>A section header you can put above any group of cards. It draws a title, a subtitle or both, with an <code>mdi:</code> icon, and nothing else: no template engine, no entity states, so it stays cheap even when a dashboard carries thirty of them. Every effect is opt-in and switched off on phones and tablets (like <code>flicker</code>), and under <code>prefers-reduced-motion</code>.</p>
+<p><em>Screenshots taken on a dashboard with the Neo Tokyo theme. The card has no background of its own: the frame and the blurred city come from the theme.</em></p>
+<div class="markdown-heading"><h2 class="heading-element">✨ Features</h2><span id="-features"></span></div>
+<ul>
+<li><strong>Title, subtitle, or both</strong> (<code>mode</code>), each with its own font, size, weight, letter spacing, colour, <code>uppercase</code> and <code>italic</code>. Fonts such as Orbitron, Rajdhani or Share Tech Mono are loaded from Google Fonts on demand.</li>
+<li><strong>Icon</strong> from <code>mdi:</code>, on the left, on the right or on top of the text.</li>
+<li><strong>Neon glow</strong> (<code>glow</code>, <code>glow_color</code>, <code>glow_size</code>), <strong>two-colour gradient text</strong>, raw <code>text_shadow</code>.</li>
+<li><strong>Flicker</strong> and <strong>CRT scanline</strong> on the title, <strong>flicker</strong> on the subtitle.</li>
+<li><strong>Slice glitch</strong>: the text is cut into bands that slide sideways, with no RGB fringes. The copies inherit the colour, gradient and glow of the text. Continuous or in random bursts, tuned in <code>shared</code>.</li>
+<li><strong>Frame</strong>: padding, background colour and opacity, optional blur, border colour, width, style and radius, horizontal and vertical alignment.</li>
+<li><strong>Tap action</strong>: none, navigate to a path, or open an entity's more-info dialog.</li>
+<li><strong>Visual editor</strong> with collapsible groups; options that depend on others only show when relevant.</li>
+</ul>
+<div align="center">
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-header-card-v2/main/images/glitch.gif"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-header-card-v2/main/images/glitch.gif" alt="A DNS_CORE title with a red-to-orange gradient, sliced into bands that slide sideways" width="640" data-animated-image="" style="max-width: 100%;" loading="lazy"></a>
+</div>
+<div class="markdown-heading"><h2 class="heading-element">📦 Installation</h2><span id="-installation"></span></div>
+<div class="markdown-heading"><h3 class="heading-element">HACS (recommended)</h3><span id="hacs-recommended"></span></div>
+<ol>
+<li>Click the <strong>Open in HACS</strong> button above, or add this repository as a custom repository in HACS (category <strong>Dashboard</strong>): <code>https://github.com/cerealkiller57540/neon-header-card-v2</code>.</li>
+<li>Download <strong>Neon Header Card v2</strong>.</li>
+<li>Reload your browser.</li>
+</ol>
+<div class="markdown-heading"><h3 class="heading-element">Manual</h3><span id="manual"></span></div>
+<ol>
+<li>Copy <a href="https://github.com/cerealkiller57540/neon-header-card-v2/blob/main/dist/neon-header-card-v2.js"><code>dist/neon-header-card-v2.js</code></a> to <code>config/www/neon-header-card-v2/</code>.</li>
+<li>Add a dashboard resource: URL <code>/local/neon-header-card-v2/neon-header-card-v2.js</code>, type <strong>JavaScript module</strong>.</li>
+</ol>
+<div class="markdown-heading"><h2 class="heading-element">🚀 Usage</h2><span id="-usage"></span></div>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="type: custom:neon-header-card-v2
+mode: both
+title:
+  text: NEO TOKYO
+  icon: mdi:city-variant-outline
+  font_family: Orbitron
+  uppercase: true
+  letter_spacing: 4
+  gradient: true
+  gradient_from: &quot;#00fff9&quot;
+  gradient_to: &quot;#ff10f0&quot;
+subtitle:
+  text: Night City
+  uppercase: true"><pre><span class="pl-ent">type</span>: <span class="pl-s">custom:neon-header-card-v2</span>
+<span class="pl-ent">mode</span>: <span class="pl-s">both</span>
+<span class="pl-ent">title</span>:
+  <span class="pl-ent">text</span>: <span class="pl-s">NEO TOKYO</span>
+  <span class="pl-ent">icon</span>: <span class="pl-s">mdi:city-variant-outline</span>
+  <span class="pl-ent">font_family</span>: <span class="pl-s">Orbitron</span>
+  <span class="pl-ent">uppercase</span>: <span class="pl-c1">true</span>
+  <span class="pl-ent">letter_spacing</span>: <span class="pl-c1">4</span>
+  <span class="pl-ent">gradient</span>: <span class="pl-c1">true</span>
+  <span class="pl-ent">gradient_from</span>: <span class="pl-s"><span class="pl-pds">"</span>#00fff9<span class="pl-pds">"</span></span>
+  <span class="pl-ent">gradient_to</span>: <span class="pl-s"><span class="pl-pds">"</span>#ff10f0<span class="pl-pds">"</span></span>
+<span class="pl-ent">subtitle</span>:
+  <span class="pl-ent">text</span>: <span class="pl-s">Night City</span>
+  <span class="pl-ent">uppercase</span>: <span class="pl-c1">true</span></pre></div>
+<p>With the slice glitch, in random bursts:</p>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="type: custom:neon-header-card-v2
+mode: title
+title:
+  text: DNS_CORE
+  icon: mdi:dns
+  glow: true
+  gradient: true
+  glitch: true              # switches the effect on (also available as subtitle.glitch)
+shared:
+  glitch_burst_every: 10    # mean seconds between bursts, 0 = continuous
+  glitch_burst_len: 1.5     # seconds per burst"><pre><span class="pl-ent">type</span>: <span class="pl-s">custom:neon-header-card-v2</span>
+<span class="pl-ent">mode</span>: <span class="pl-s">title</span>
+<span class="pl-ent">title</span>:
+  <span class="pl-ent">text</span>: <span class="pl-s">DNS_CORE</span>
+  <span class="pl-ent">icon</span>: <span class="pl-s">mdi:dns</span>
+  <span class="pl-ent">glow</span>: <span class="pl-c1">true</span>
+  <span class="pl-ent">gradient</span>: <span class="pl-c1">true</span>
+  <span class="pl-ent">glitch</span>: <span class="pl-s">true              </span><span class="pl-c"><span class="pl-c">#</span> switches the effect on (also available as subtitle.glitch)</span>
+<span class="pl-ent">shared</span>:
+  <span class="pl-ent">glitch_burst_every</span>: <span class="pl-c1">10</span>    <span class="pl-c"><span class="pl-c">#</span> mean seconds between bursts, 0 = continuous</span>
+  <span class="pl-ent">glitch_burst_len</span>: <span class="pl-c1">1.5</span>     <span class="pl-c"><span class="pl-c">#</span> seconds per burst</span></pre></div>
+<p>Each card draws its own random phase and burst timing, so several headers on a page never glitch in sync.</p>
+<div class="markdown-heading"><h2 class="heading-element">⚙️ Options</h2><span id="️-options"></span></div>
+<p><strong>Top level</strong></p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mode</code></td>
+<td><code>title</code></td>
+<td><code>title</code>, <code>subtitle</code> or <code>both</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>title:</code> and <code>subtitle:</code></strong></p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>text</code></td>
+<td>—</td>
+<td>Static text, rendered as plain text</td>
+</tr>
+<tr>
+<td><code>icon</code> / <code>icon_position</code></td>
+<td>— / <code>left</code></td>
+<td><code>mdi:</code> icon, placed <code>left</code>, <code>right</code> or <code>top</code></td>
+</tr>
+<tr>
+<td><code>icon_color</code> / <code>icon_size</code></td>
+<td>text colour</td>
+<td>Icon colour and size</td>
+</tr>
+<tr>
+<td><code>font_family</code> / <code>font_size</code> / <code>font_weight</code></td>
+<td>theme / <code>24</code> (title), <code>13</code> (subtitle) / <code>600</code></td>
+<td>Font</td>
+</tr>
+<tr>
+<td><code>letter_spacing</code></td>
+<td><code>0</code></td>
+<td>In pixels</td>
+</tr>
+<tr>
+<td><code>uppercase</code> / <code>italic</code></td>
+<td><code>false</code></td>
+<td>Text style</td>
+</tr>
+<tr>
+<td><code>color</code></td>
+<td>theme</td>
+<td>Text colour</td>
+</tr>
+<tr>
+<td><code>glow</code> / <code>glow_color</code> / <code>glow_size</code></td>
+<td><code>false</code> / — / <code>12</code> (title), <code>6</code> (subtitle)</td>
+<td>Neon glow</td>
+</tr>
+<tr>
+<td><code>icon_glow_size</code></td>
+<td><code>glow_size</code></td>
+<td>Icon glow radius, independent of the text glow — a larger value spreads the halo thinner and keeps thin icons crisp</td>
+</tr>
+<tr>
+<td><code>gradient</code> / <code>gradient_from</code> / <code>gradient_to</code></td>
+<td><code>false</code></td>
+<td>Two-colour gradient text</td>
+</tr>
+<tr>
+<td><code>flicker</code></td>
+<td><code>false</code></td>
+<td>Neon flicker</td>
+</tr>
+<tr>
+<td><code>scanline</code></td>
+<td><code>false</code></td>
+<td>CRT scanline (title only)</td>
+</tr>
+<tr>
+<td><code>glitch</code></td>
+<td><code>false</code></td>
+<td>Slice glitch, tuned by the <code>glitch_*</code> options in <code>shared</code></td>
+</tr>
+<tr>
+<td><code>text_shadow</code></td>
+<td>—</td>
+<td>Raw <code>text-shadow</code> (title only)</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>shared:</code></strong> (frame, action and glitch)</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>padding</code></td>
+<td><code>8px 16px</code></td>
+<td>CSS padding</td>
+</tr>
+<tr>
+<td><code>align_h</code> / <code>align_v</code></td>
+<td><code>left</code> / <code>center</code></td>
+<td>Horizontal and vertical alignment</td>
+</tr>
+<tr>
+<td><code>bg_color</code> / <code>bg_opacity</code> / <code>bg_blur</code></td>
+<td>— / — / <code>false</code></td>
+<td>Background, with optional backdrop blur</td>
+</tr>
+<tr>
+<td><code>border_color</code> / <code>border_width</code> / <code>border_style</code> / <code>border_radius</code></td>
+<td>— / — / <code>solid</code> / —</td>
+<td>Frame</td>
+</tr>
+<tr>
+<td><code>font_family</code></td>
+<td>—</td>
+<td>Default font for both texts</td>
+</tr>
+<tr>
+<td><code>tap_action</code></td>
+<td><code>none</code></td>
+<td><code>none</code>, <code>navigate</code> or <code>more-info</code></td>
+</tr>
+<tr>
+<td><code>navigation_path</code> / <code>entity</code></td>
+<td>—</td>
+<td>Target of <code>navigate</code> / <code>more-info</code></td>
+</tr>
+<tr>
+<td><code>glitch_style</code></td>
+<td><code>0</code></td>
+<td><code>0</code> = two copies, continuous (<code>.cyber-title</code>); <code>1</code> = one copy, jerky, 20 s cycle (<code>.cybr-btn</code>)</td>
+</tr>
+<tr>
+<td><code>glitch_force</code></td>
+<td><code>1.1</code></td>
+<td>Slide amplitude, <code>1</code> = 2 px</td>
+</tr>
+<tr>
+<td><code>glitch_speed</code></td>
+<td><code>1.5</code></td>
+<td>Speed, <code>1</code> = cycles of 2.5 s / 3 s</td>
+</tr>
+<tr>
+<td><code>glitch_burst_every</code></td>
+<td><code>0</code></td>
+<td>Mean seconds between random bursts, <code>0</code> = continuous</td>
+</tr>
+<tr>
+<td><code>glitch_burst_len</code></td>
+<td><code>1</code></td>
+<td>Seconds per burst</td>
+</tr>
+</tbody>
+</table>
+<div class="markdown-heading"><h2 class="heading-element">❓ FAQ</h2><span id="-faq"></span></div>
+<p><strong>Can the text come from an entity or a template?</strong> No. Since v3 the text is static: the in-browser template engine, the HTML subtitle and the reusable <code>@keyframes</code> were removed to keep the card light. For dynamic content use <a href="https://github.com/cerealkiller57540/neon-markdown-card">neon-markdown-card</a>, which ships the engine and the same header.</p>
+<p><strong>Why does nothing glitch?</strong> The effect is opt-in per text: set <code>title.glitch: true</code> (or <code>subtitle.glitch: true</code>). It is also off on phones and tablets, and when the system asks for reduced motion.</p>
+<p><strong>Which languages are supported?</strong> English and French. The editor and the card texts follow your Home Assistant language: French if it is French, English otherwise. Reload the page after changing the language. Every option can also be set in YAML.</p>
+<p><strong>Which theme is in the screenshots?</strong> Neo Tokyo, the author's own dark theme (not published). The card works with any theme.</p>
+<div class="markdown-heading"><h2 class="heading-element">🙏 Credits</h2><span id="-credits"></span></div>
+<p>The slice glitch (style 0) is a port of the <code>.cyber-title</code> effect seen on <a href="https://ahmodmusa.com" rel="nofollow">ahmodmusa.com</a>, rebuilt without the RGB colour split.</p>
+<div class="markdown-heading"><h2 class="heading-element">🌃 More neon cards</h2><span id="-more-neon-cards"></span></div>
+<p>This card is part of a family. See the full collection at <a href="https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards"><strong>Home-Assistant-Neon-Cards</strong></a>.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🐾 Support this project</h2><span id="-support-this-project"></span></div>
+<p>If you enjoy these cards, please consider donating to <strong>Quatre Pattes</strong>, an animal rescue organization.</p>
+
+<blockquote>
+<p>💛 No need to support me — just help the animals. Thank you!</p>
+</blockquote>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🤝 Contributing</h2><span id="-contributing"></span></div>
+<ol>
+<li>Fork the repo</li>
+<li>Create your branch: <code>git checkout -b feature/my-card</code></li>
+<li>Commit and push</li>
+<li>Open a Pull Request</li>
+</ol>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">📄 License</h2><span id="-license"></span></div>
+<p><a href="https://github.com/cerealkiller57540/neon-header-card-v2/tree/main/LICENSE">MIT License</a></p>
+</main>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/neon-header-card-v2">cerealkiller57540/neon-header-card-v2</a> · Updated 2026-10-21 · <a href="../index.html">All projects</a></footer>
+</div></body></html>

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Storey Battery Card — custom card for Home Assistant</title>
+<meta name="description" content="Home battery card for Home Assistant: a 3D Storey battery stack with live electric arcs (WebGL), dot-matrix panels, neon theme. HACS.">
+<link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/storey-battery-card.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Storey Battery Card — custom card for Home Assistant">
+<meta property="og:description" content="Home battery card for Home Assistant: a 3D Storey battery stack with live electric arcs (WebGL), dot-matrix panels, neon theme. HACS.">
+<meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/storey-battery-card.html">
+<meta property="og:site_name" content="Neon Cards for Home Assistant">
+<meta property="og:image" content="https://raw.githubusercontent.com/cerealkiller57540/storey-battery-card/main/images/charge.gif">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/cerealkiller57540/storey-battery-card/main/images/charge.gif">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Storey Battery Card", "description": "Home battery card for Home Assistant: a 3D Storey battery stack with live electric arcs (WebGL), dot-matrix panels, neon theme. HACS.", "codeRepository": "https://github.com/cerealkiller57540/storey-battery-card", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/storey-battery-card.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-10-21", "keywords": "battery, custom-card, cyberpunk, dashboard, energy, hacs, home-assistant, home-battery, lovelace, neon, sunology, webgl", "image": "https://raw.githubusercontent.com/cerealkiller57540/storey-battery-card/main/images/charge.gif"}</script>
+<link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
+<nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Dashboard cards</nav>
+<header class="page-head"><h1>Storey Battery Card</h1>
+<p class="lead">Home battery card for Home Assistant: a 3D Storey battery stack with live electric arcs (WebGL), dot-matrix panels, neon theme. HACS.</p>
+<div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/storey-battery-card">View on GitHub</a><a class="btn alt" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=cerealkiller57540&amp;repository=storey-battery-card&amp;category=plugin">Open in HACS</a></div></header>
+<main class="markdown-body">
+<div align="center">
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/storey-battery-card/main/images/logo.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/storey-battery-card/main/images/logo.png" alt="Storey Battery Card" width="480" style="max-width: 100%;" loading="lazy"></a>
+<p><strong>A home-battery card for Home Assistant: a 3D battery stack whose joints crackle with electricity, rendered in WebGL.</strong></p>
+
+
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/storey-battery-card/main/images/charge.gif"><img src="https://raw.githubusercontent.com/cerealkiller57540/storey-battery-card/main/images/charge.gif" alt="Storey Battery Card while charging: electric arcs run along the module joints" width="448" data-animated-image="" style="max-width: 100%;" loading="lazy"></a>
+</div>
+<p>The stack is drawn from the real footprint of a Sunology STOREY battery, from 1 to 4 modules. The joints between modules carry a live electric arc (yellow when charging, blue when discharging; cyan and magenta in Neo Tokyo mode), with sparks, a crackling filament, and a trace that runs in the direction of the power flow. The dot-matrix panels show the state of charge, the power and the direction.</p>
+<p>It works with <strong>any</strong> home battery that exposes a state-of-charge sensor and a power sensor. The look is Storey's; the data can come from anywhere.</p>
+<p><a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/storey-battery-card/main/images/discharge.webp"><img src="https://raw.githubusercontent.com/cerealkiller57540/storey-battery-card/main/images/discharge.webp" alt="Storey Battery Card while discharging" width="400" style="max-width: 100%;" loading="lazy"></a></p>
+<div class="markdown-heading"><h2 class="heading-element">✨ Features</h2><span id="-features"></span></div>
+<ul>
+<li><code>storey-battery-card-gl</code>: electric joints rendered by a WebGL shader.</li>
+<li><strong>1 to 4 modules</strong>, fixed in the config or read from a sensor. Capacity is shown as stored / total kWh (2.2 kWh per module).</li>
+<li><strong>Dot-matrix panels</strong> for SOC, power and direction, with an animated transition when a value changes.</li>
+<li><strong>Full battery animation</strong> above a configurable SOC threshold.</li>
+<li><strong>Neo Tokyo mode</strong> (cyan / magenta palette) or your own accent and background colours.</li>
+<li><strong>Error state</strong>: if the status sensor goes <code>unavailable</code>, the whole card turns red instead of showing stale numbers.</li>
+<li><strong>Full visual editor</strong>: every arc setting is a slider, no YAML needed.</li>
+<li>Releases its WebGL context when removed (Android WebViews cap a page at 8 contexts), and falls back to SVG if WebGL is not available.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">📦 Installation</h2><span id="-installation"></span></div>
+<div class="markdown-heading"><h3 class="heading-element">HACS (recommended)</h3><span id="hacs-recommended"></span></div>
+<ol>
+<li>Click the <strong>Open in HACS</strong> button above, or add this repository as a custom repository in HACS (category <strong>Dashboard</strong>): <code>https://github.com/cerealkiller57540/storey-battery-card</code>.</li>
+<li>Download <strong>Storey Battery Card</strong>.</li>
+<li>Reload your browser.</li>
+</ol>
+<p>HACS registers one resource, <code>storey-battery-card.js</code>. The card type is <code>custom:storey-battery-card-gl</code>.</p>
+<p>If you used the former CSS card (<code>custom:storey-battery-card</code>), change its type to <code>custom:storey-battery-card-gl</code>: the CSS version is no longer shipped.</p>
+<div class="markdown-heading"><h3 class="heading-element">Manual</h3><span id="manual"></span></div>
+<ol>
+<li>Copy <a href="https://github.com/cerealkiller57540/storey-battery-card/blob/main/dist/storey-battery-card.js"><code>dist/storey-battery-card.js</code></a> to <code>config/www/storey-battery-card/</code>.</li>
+<li>Add a dashboard resource: URL <code>/local/storey-battery-card/storey-battery-card.js</code>, type <strong>JavaScript module</strong>.</li>
+</ol>
+<div class="markdown-heading"><h2 class="heading-element">🚀 Usage</h2><span id="-usage"></span></div>
+<p>Add a card from the dashboard editor and search for <strong>Storey</strong>, or use YAML:</p>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="type: custom:storey-battery-card-gl
+modules: 2                                # extra modules on top of the base: 0–3
+soc_entity: sensor.battery_soc            # %
+power_entity: sensor.battery_power        # W, positive = charging
+master_status_entity: sensor.battery_status   # optional
+cyberpunk_mode: true
+header:
+  title: POWER CELL
+  icon: mdi:battery-charging"><pre><span class="pl-ent">type</span>: <span class="pl-s">custom:storey-battery-card-gl</span>
+<span class="pl-ent">modules</span>: <span class="pl-c1">2</span>                                <span class="pl-c"><span class="pl-c">#</span> extra modules on top of the base: 0–3</span>
+<span class="pl-ent">soc_entity</span>: <span class="pl-s">sensor.battery_soc            </span><span class="pl-c"><span class="pl-c">#</span> %</span>
+<span class="pl-ent">power_entity</span>: <span class="pl-s">sensor.battery_power        </span><span class="pl-c"><span class="pl-c">#</span> W, positive = charging</span>
+<span class="pl-ent">master_status_entity</span>: <span class="pl-s">sensor.battery_status   </span><span class="pl-c"><span class="pl-c">#</span> optional</span>
+<span class="pl-ent">cyberpunk_mode</span>: <span class="pl-c1">true</span>
+<span class="pl-ent">header</span>:
+  <span class="pl-ent">title</span>: <span class="pl-s">POWER CELL</span>
+  <span class="pl-ent">icon</span>: <span class="pl-s">mdi:battery-charging</span></pre></div>
+<div class="markdown-heading"><h3 class="heading-element">How the direction is decided</h3><span id="how-the-direction-is-decided"></span></div>
+<ol>
+<li>If <code>|power|</code> is below <code>power_threshold</code>, the battery is <strong>idle</strong>.</li>
+<li>Otherwise, if <code>master_status_entity</code> is set, its state decides: <code>CHARGING</code> = charging, <code>OFF</code> = idle, anything else = discharging.</li>
+<li>Otherwise the sign of <code>power_entity</code> decides: positive = charging.</li>
+</ol>
+<p><code>master_status_entity</code> is optional. Leave it out if your integration has no status sensor; the power sign is enough.</p>
+<div class="markdown-heading"><h2 class="heading-element">⚙️ Options</h2><span id="️-options"></span></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>soc_entity</code></td>
+<td>string</td>
+<td>—</td>
+<td>State of charge sensor (%)</td>
+</tr>
+<tr>
+<td><code>power_entity</code></td>
+<td>string</td>
+<td>—</td>
+<td>Battery power sensor (W)</td>
+</tr>
+<tr>
+<td><code>master_status_entity</code></td>
+<td>string</td>
+<td>—</td>
+<td>Status sensor, see above</td>
+</tr>
+<tr>
+<td><code>modules</code></td>
+<td>number</td>
+<td><code>0</code></td>
+<td>Extra modules (0–3), so 1 to 4 in the stack</td>
+</tr>
+<tr>
+<td><code>modules_entity</code></td>
+<td>string</td>
+<td>—</td>
+<td>Sensor holding the module count; overrides <code>modules</code> when it holds an integer</td>
+</tr>
+<tr>
+<td><code>module_0_entity</code> … <code>module_3_entity</code></td>
+<td>string</td>
+<td>—</td>
+<td>Optional per-module sensor</td>
+</tr>
+<tr>
+<td><code>module_0_unit</code> … <code>module_3_unit</code></td>
+<td>string</td>
+<td>—</td>
+<td>Unit shown with it</td>
+</tr>
+<tr>
+<td><code>power_threshold</code></td>
+<td>number</td>
+<td><code>50</code></td>
+<td>Watts under which the battery counts as idle (steadies the arrow)</td>
+</tr>
+<tr>
+<td><code>soc_full_threshold</code></td>
+<td>number</td>
+<td><code>97</code></td>
+<td>SOC from which the "full" animation plays</td>
+</tr>
+<tr>
+<td><code>renderer</code></td>
+<td>string</td>
+<td><code>auto</code></td>
+<td><code>auto</code> (WebGL, then SVG), <code>webgl</code>, <code>svg</code> — WebGL card</td>
+</tr>
+<tr>
+<td><code>cyberpunk_mode</code></td>
+<td>bool</td>
+<td><code>false</code></td>
+<td>Neo Tokyo palette</td>
+</tr>
+<tr>
+<td><code>color_accent</code> / <code>color_bg</code></td>
+<td>colour</td>
+<td><code>#edff00</code> / <code>#181818</code></td>
+<td>Accent and background (Neo Tokyo: <code>#00fff9</code> / <code>#0d0d1a</code>)</td>
+</tr>
+<tr>
+<td><code>card_mod_bg</code></td>
+<td>bool</td>
+<td><code>false</code></td>
+<td>Transparent background, to inherit the one from your theme or card-mod</td>
+</tr>
+<tr>
+<td><code>glow_enabled</code></td>
+<td>bool</td>
+<td><code>false</code></td>
+<td>Glow along the module joints</td>
+</tr>
+<tr>
+<td><code>neon_glow</code></td>
+<td>bool</td>
+<td><code>false</code></td>
+<td>Neon glow on the panels</td>
+</tr>
+<tr>
+<td><code>elec_color_charge</code> / <code>elec_color_discharge</code></td>
+<td>colour</td>
+<td>auto</td>
+<td>Arc colour per direction</td>
+</tr>
+<tr>
+<td><code>glitch_cat</code> / <code>glitch_color</code></td>
+<td>bool / colour</td>
+<td><code>true</code> / accent</td>
+<td>A small glitching cat hides in the card</td>
+</tr>
+<tr>
+<td><code>panel_anim</code></td>
+<td>string</td>
+<td><code>fade</code></td>
+<td>Dot-matrix transition: <code>off</code>, <code>fade</code>, <code>flip</code></td>
+</tr>
+<tr>
+<td><code>panel_ms</code> / <code>panel_stagger</code></td>
+<td>number</td>
+<td><code>500</code> / <code>30</code></td>
+<td>Transition length and per-column delay (ms)</td>
+</tr>
+<tr>
+<td><code>header</code></td>
+<td>object</td>
+<td>—</td>
+<td><code>title</code>, <code>icon</code>, <code>color</code>, <code>font</code>, <code>title_size</code>, <code>icon_size</code>, <code>glow</code>, <code>glow_color</code>, <code>glow_size</code>, <code>gradient</code>, <code>gradient_from</code>, <code>gradient_to</code>, <code>letter_spacing</code>, <code>font_weight</code></td>
+</tr>
+</tbody>
+</table>
+<p>The arc itself has about twenty <code>elec_*</code> settings (crackle speed, spark rate and amplitude, field range, filament, halo, breathing, flow speed and density, flow indexed on the watts…). They are easiest to tune from the visual editor, where each one is a slider with its range.</p>
+<div class="markdown-heading"><h2 class="heading-element">❓ FAQ</h2><span id="-faq"></span></div>
+<p><strong>Which languages are supported?</strong> English and French. The editor and the card texts follow your Home Assistant language: French if it is French, English otherwise. Reload the page after changing the language.</p>
+<p><strong>My battery is not a Storey.</strong> That is fine. The drawing is a Storey, but any SOC + power pair works.</p>
+<p><strong>The arrow flickers between charging and discharging.</strong> Raise <code>power_threshold</code>: small readings around zero then count as idle.</p>
+<p><strong>Some cards go blank on my Android phone.</strong> Android WebViews keep at most 8 WebGL contexts per page. This card uses one, and gives it back when it leaves the screen.</p>
+<p><strong>Which theme is in the screenshots?</strong> Neo Tokyo, the author's own dark theme (not published). The card works with any theme.</p>
+<div class="markdown-heading"><h2 class="heading-element">🌃 More neon cards</h2><span id="-more-neon-cards"></span></div>
+<p>This card is part of a family. See the full collection at <a href="https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards"><strong>Home-Assistant-Neon-Cards</strong></a>.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🐾 Support this project</h2><span id="-support-this-project"></span></div>
+<p>If you enjoy these cards, please consider donating to <strong>Quatre Pattes</strong>, an animal rescue organization.</p>
+
+<blockquote>
+<p>💛 No need to support me — just help the animals. Thank you!</p>
+</blockquote>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🤝 Contributing</h2><span id="-contributing"></span></div>
+<ol>
+<li>Fork the repo</li>
+<li>Create your branch: <code>git checkout -b feature/my-card</code></li>
+<li>Commit and push</li>
+<li>Open a Pull Request</li>
+</ol>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">📄 License</h2><span id="-license"></span></div>
+<p><a href="https://github.com/cerealkiller57540/storey-battery-card/tree/main/LICENSE">MIT License</a></p>
+</main>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/storey-battery-card">cerealkiller57540/storey-battery-card</a> · Updated 2026-10-21 · <a href="../index.html">All projects</a></footer>
+</div></body></html>

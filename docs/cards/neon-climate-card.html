@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Neon Climate Card — custom card for Home Assistant</title>
+<meta name="description" content="Cyberpunk climate card for Home Assistant — airflow rendered by a real WebGL fluid solver">
+<link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-climate-card.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Neon Climate Card — custom card for Home Assistant">
+<meta property="og:description" content="Cyberpunk climate card for Home Assistant — airflow rendered by a real WebGL fluid solver">
+<meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-climate-card.html">
+<meta property="og:site_name" content="Neon Cards for Home Assistant">
+<meta property="og:image" content="https://raw.githubusercontent.com/cerealkiller57540/neon-climate-card/main/images/heat.gif">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/cerealkiller57540/neon-climate-card/main/images/heat.gif">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Neon Climate Card", "description": "Cyberpunk climate card for Home Assistant — airflow rendered by a real WebGL fluid solver", "codeRepository": "https://github.com/cerealkiller57540/neon-climate-card", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-climate-card.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-10-21", "keywords": "climate, cyberpunk, hacs, home-assistant, home-assistant-card, hvac, lovelace, lovelace-custom-card, neon, webgl", "image": "https://raw.githubusercontent.com/cerealkiller57540/neon-climate-card/main/images/heat.gif"}</script>
+<link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
+<nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Dashboard cards</nav>
+<header class="page-head"><h1>Neon Climate Card</h1>
+<p class="lead">Cyberpunk climate card for Home Assistant — airflow rendered by a real WebGL fluid solver</p>
+<div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/neon-climate-card">View on GitHub</a><a class="btn alt" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=cerealkiller57540&amp;repository=neon-climate-card&amp;category=plugin">Open in HACS</a></div></header>
+<main class="markdown-body">
+<div align="center">
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-climate-card/main/images/logo.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-climate-card/main/images/logo.png" alt="Neon Climate Card" width="480" style="max-width: 100%;" loading="lazy"></a>
+<p><strong>A cyberpunk climate card for Home Assistant, with a real fluid simulation for the airflow.</strong></p>
+
+
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-climate-card/main/images/heat.gif"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-climate-card/main/images/heat.gif" alt="Neon Climate Card in heating mode, airflow animated by a WebGL fluid solver" width="434" data-animated-image="" style="max-width: 100%;" loading="lazy"></a>
+</div>
+<p>The air under the louvres is not a looping animation: it is a small Navier–Stokes solver running on the GPU. One jet per slot, the colour follows the HVAC mode, the strength follows the fan speed, and the slats follow <code>swing_mode</code>.</p>
+<p>
+  <a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-climate-card/main/images/heat.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-climate-card/main/images/heat.png" alt="Neon Climate Card in heating mode" width="400" style="max-width: 100%;" loading="lazy"></a>
+  <a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-climate-card/main/images/off.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-climate-card/main/images/off.png" alt="Neon Climate Card switched off" width="400" style="max-width: 100%;" loading="lazy"></a>
+</p>
+<div class="markdown-heading"><h2 class="heading-element">✨ Features</h2><span id="-features"></span></div>
+<ul>
+<li><code>neon-climate-card-webgl</code>: airflow rendered by a WebGL fluid solver.</li>
+<li><strong>Every HVAC mode</strong> your entity supports (heat, cool, dry, fan only, auto, off), each with its own colour.</li>
+<li><strong>Draggable setpoint slider</strong> whose scale follows your entity's <code>min_temp</code>, <code>max_temp</code> and <code>target_temp_step</code>.</li>
+<li><strong>Fan speed and swing controls</strong> read from <code>fan_modes</code> and <code>swing_modes</code>.</li>
+<li><strong>Optional real-power gating</strong>: point <code>power_entity</code> at a power sensor and the airflow only shows when the unit actually draws power.</li>
+<li><strong>Full visual editor</strong>, with no YAML needed. The WebGL card exposes all 19 airflow settings as sliders.</li>
+<li><strong>Built for phones and tablets</strong>: decorative animations are toned down on mobile, the solver sleeps when the card is off-screen, and it releases its WebGL context when it is removed (Android WebViews cap a page at 8 contexts).</li>
+<li>Respects <code>prefers-reduced-motion</code>.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">📦 Installation</h2><span id="-installation"></span></div>
+<div class="markdown-heading"><h3 class="heading-element">HACS (recommended)</h3><span id="hacs-recommended"></span></div>
+<ol>
+<li>Click the <strong>Open in HACS</strong> button above, or add this repository as a custom repository in HACS (category <strong>Dashboard</strong>): <code>https://github.com/cerealkiller57540/neon-climate-card</code>.</li>
+<li>Download <strong>Neon Climate Card</strong>.</li>
+<li>Reload your browser.</li>
+</ol>
+<p>HACS registers one resource, <code>neon-climate-card.js</code>. The card type is <code>custom:neon-climate-card-webgl</code>.</p>
+<p>If you used the former CSS card (<code>custom:neon-climate-card</code>), change its type to <code>custom:neon-climate-card-webgl</code>: the CSS version is no longer shipped.</p>
+<div class="markdown-heading"><h3 class="heading-element">Manual</h3><span id="manual"></span></div>
+<ol>
+<li>Copy <a href="https://github.com/cerealkiller57540/neon-climate-card/blob/main/dist/neon-climate-card.js"><code>dist/neon-climate-card.js</code></a> to <code>config/www/neon-climate-card/</code>.</li>
+<li>Add a dashboard resource: URL <code>/local/neon-climate-card/neon-climate-card.js</code>, type <strong>JavaScript module</strong>.</li>
+</ol>
+<div class="markdown-heading"><h2 class="heading-element">🚀 Usage</h2><span id="-usage"></span></div>
+<p>Add a card from the dashboard editor and search for <strong>Neon Climate</strong>, or use YAML:</p>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="type: custom:neon-climate-card-webgl
+entity: climate.living_room
+name: Living Room
+humidity_entity: sensor.living_room_humidity   # optional
+header:
+  title: Climate
+  icon: mdi:heat-pump"><pre><span class="pl-ent">type</span>: <span class="pl-s">custom:neon-climate-card-webgl</span>
+<span class="pl-ent">entity</span>: <span class="pl-s">climate.living_room</span>
+<span class="pl-ent">name</span>: <span class="pl-s">Living Room</span>
+<span class="pl-ent">humidity_entity</span>: <span class="pl-s">sensor.living_room_humidity   </span><span class="pl-c"><span class="pl-c">#</span> optional</span>
+<span class="pl-ent">header</span>:
+  <span class="pl-ent">title</span>: <span class="pl-s">Climate</span>
+  <span class="pl-ent">icon</span>: <span class="pl-s">mdi:heat-pump</span></pre></div>
+<div class="markdown-heading"><h2 class="heading-element">⚙️ Options</h2><span id="️-options"></span></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>entity</code></td>
+<td>string</td>
+<td><strong>required</strong></td>
+<td>A <code>climate.*</code> entity</td>
+</tr>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td><code>friendly_name</code></td>
+<td>Label shown above the display</td>
+</tr>
+<tr>
+<td><code>humidity_entity</code></td>
+<td>string</td>
+<td>—</td>
+<td>Sensor used for the humidity readout (otherwise <code>current_humidity</code>)</td>
+</tr>
+<tr>
+<td><code>show_wind</code></td>
+<td>bool</td>
+<td><code>true</code></td>
+<td>Show the airflow under the louvres</td>
+</tr>
+<tr>
+<td><code>power_entity</code></td>
+<td>string</td>
+<td>—</td>
+<td>Power sensor: the airflow only shows above <code>power_threshold</code></td>
+</tr>
+<tr>
+<td><code>power_threshold</code></td>
+<td>number</td>
+<td><code>10</code></td>
+<td>Watts</td>
+</tr>
+<tr>
+<td><code>color_heat</code> / <code>color_cool</code> / <code>color_dry</code> / <code>color_fan</code> / <code>color_off</code></td>
+<td>colour</td>
+<td><code>#FF2D6B</code> / <code>#5B7CFF</code> / <code>#00E0C0</code> / <code>#00FFAA</code> / <code>#6a7aaa</code></td>
+<td>Colour per mode</td>
+</tr>
+<tr>
+<td><code>color_pill</code></td>
+<td>colour</td>
+<td><code>#B400FF</code></td>
+<td>Swing pill</td>
+</tr>
+<tr>
+<td><code>color_fan_btn</code></td>
+<td>colour</td>
+<td><code>#00FFAA</code></td>
+<td>Fan button</td>
+</tr>
+<tr>
+<td><code>color_display</code></td>
+<td>colour</td>
+<td><code>#00fff9</code></td>
+<td>Dot-matrix display</td>
+</tr>
+<tr>
+<td><code>neon_display_glow</code></td>
+<td>bool</td>
+<td><code>true</code></td>
+<td>Triple glow on the display digits</td>
+</tr>
+<tr>
+<td><code>header</code></td>
+<td>object</td>
+<td>—</td>
+<td><code>title</code>, <code>subtitle</code>, <code>icon</code>, <code>icon_color</code>, <code>icon_size</code>, <code>title_size</code>, <code>glow</code>, <code>glow_color</code>, <code>glow_size</code>, <code>gradient</code>, <code>gradient_from</code>, <code>gradient_to</code></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>flow_quality</code></td>
+<td><code>auto</code></td>
+<td><code>auto</code> (1 device pixel per CSS pixel on dense screens), <code>full</code> (up to 2×), <code>light</code>, <code>off</code></td>
+</tr>
+<tr>
+<td><code>flow_count</code></td>
+<td><code>5</code></td>
+<td>Number of slots, one jet each</td>
+</tr>
+<tr>
+<td><code>flow_alpha</code></td>
+<td><code>0.39</code></td>
+<td>Overall exposure</td>
+</tr>
+<tr>
+<td><code>flow_smoke</code></td>
+<td><code>2.32</code></td>
+<td>Dye rate, multiplied by fan speed</td>
+</tr>
+<tr>
+<td><code>flow_curl</code></td>
+<td><code>19</code></td>
+<td>Vorticity (turbulence)</td>
+</tr>
+<tr>
+<td><code>flow_hue</code></td>
+<td><code>-1</code></td>
+<td><code>-1</code> = colour from the HVAC mode, otherwise a fixed hue (0–360)</td>
+</tr>
+</tbody>
+</table>
+<p>The other <code>flow_*</code> settings (<code>fan</code>, <code>wobble</code>, <code>speed</code>, <code>taper</code>, <code>glow</code>, <code>smoke_scale</code>, <code>smoke_speed</code>, <code>louver</code>, <code>force</code>, <code>v_dissip</code>, <code>d_dissip</code>, <code>sparkle</code>, <code>sparkle_size</code>, <code>fade</code>) are easiest to tune from the visual editor, where each slider is documented.</p>
+<div class="markdown-heading"><h2 class="heading-element">❓ FAQ</h2><span id="-faq"></span></div>
+<p><strong>Which languages are supported?</strong> English and French. The editor and the card texts follow your Home Assistant language: French if it is French, English otherwise. Reload the page after changing the language.</p>
+<p><strong>The airflow does not show.</strong> It only shows when the unit is not <code>off</code>. If you set <code>power_entity</code>, it also needs the sensor to read above <code>power_threshold</code>.</p>
+<p><strong>Some cards go blank on my Android phone.</strong> Android WebViews keep at most 8 WebGL contexts per page and drop the oldest one. This card uses a single context and only while the airflow is visible. If you run many WebGL cards on one view, use <code>flow_quality: off</code> on some of them.</p>
+<p><strong>Which theme is in the screenshots?</strong> Neo Tokyo, the author's own dark theme (not published). The card works with any theme.</p>
+<div class="markdown-heading"><h2 class="heading-element">🌃 More neon cards</h2><span id="-more-neon-cards"></span></div>
+<p>This card is part of a family. See the full collection at <a href="https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards"><strong>Home-Assistant-Neon-Cards</strong></a>.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🐾 Support this project</h2><span id="-support-this-project"></span></div>
+<p>If you enjoy these cards, please consider donating to <strong>Quatre Pattes</strong>, an animal rescue organization.</p>
+
+<blockquote>
+<p>💛 No need to support me — just help the animals. Thank you!</p>
+</blockquote>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🤝 Contributing</h2><span id="-contributing"></span></div>
+<ol>
+<li>Fork the repo</li>
+<li>Create your branch: <code>git checkout -b feature/my-card</code></li>
+<li>Commit and push</li>
+<li>Open a Pull Request</li>
+</ol>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">📄 License</h2><span id="-license"></span></div>
+<p><a href="https://github.com/cerealkiller57540/neon-climate-card/tree/main/LICENSE">MIT License</a></p>
+</main>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/neon-climate-card">cerealkiller57540/neon-climate-card</a> · Updated 2026-10-21 · <a href="../index.html">All projects</a></footer>
+</div></body></html>

@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Neon Entities Card — custom card for Home Assistant</title>
+<meta name="description" content="Neon entities card for Home Assistant: per-domain neon controls, alert rows, momentary switches, glowing header. HACS ready.">
+<link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-entities-card.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Neon Entities Card — custom card for Home Assistant">
+<meta property="og:description" content="Neon entities card for Home Assistant: per-domain neon controls, alert rows, momentary switches, glowing header. HACS ready.">
+<meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-entities-card.html">
+<meta property="og:site_name" content="Neon Cards for Home Assistant">
+<meta property="og:image" content="https://raw.githubusercontent.com/cerealkiller57540/neon-entities-card/main/images/main.gif">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/cerealkiller57540/neon-entities-card/main/images/main.gif">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Neon Entities Card", "description": "Neon entities card for Home Assistant: per-domain neon controls, alert rows, momentary switches, glowing header. HACS ready.", "codeRepository": "https://github.com/cerealkiller57540/neon-entities-card", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-entities-card.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-10-21", "keywords": "custom-card, cyberpunk, dashboard, entities, hacs, home-assistant, lovelace, neon", "image": "https://raw.githubusercontent.com/cerealkiller57540/neon-entities-card/main/images/main.gif"}</script>
+<link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
+<nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Dashboard cards</nav>
+<header class="page-head"><h1>Neon Entities Card</h1>
+<p class="lead">Neon entities card for Home Assistant: per-domain neon controls, alert rows, momentary switches, glowing header. HACS ready.</p>
+<div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/neon-entities-card">View on GitHub</a><a class="btn alt" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=cerealkiller57540&amp;repository=neon-entities-card&amp;category=plugin">Open in HACS</a></div></header>
+<main class="markdown-body">
+<div align="center">
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-entities-card/main/images/logo.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-entities-card/main/images/logo.png" alt="Neon Entities Card" width="480" style="max-width: 100%;" loading="lazy"></a>
+<p><strong>An entities card for Home Assistant with neon controls for switches, covers, climates, numbers and sensors, and rows that light up when something needs attention.</strong></p>
+
+
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-entities-card/main/images/main.gif"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-entities-card/main/images/main.gif" alt="Neon Entities Card with a gate, a garage door, a shutter, a lamp, an air conditioner, a boiler setpoint and three sensors; the smoke detector battery row pulses red" width="440" data-animated-image="" style="max-width: 100%;" loading="lazy"></a>
+</div>
+<p>A drop-in replacement for the built-in entities card. Each row picks its control from the entity's domain: a neon toggle for switches, open / stop / close buttons and a position bar for covers, − / + steppers for climates and numbers, a state badge for binary sensors, a glowing value for sensors. The header uses the same neon title engine as <a href="https://github.com/cerealkiller57540/neon-markdown-card">neon-markdown-card</a>, so both cards sit side by side with matching titles.</p>
+<p><em>Screenshot taken with made-up entities and the Neo Tokyo theme. The screenshot shows the French interface.</em></p>
+<div class="markdown-heading"><h2 class="heading-element">✨ Features</h2><span id="-features"></span></div>
+<ul>
+<li><strong>One control per domain</strong>: <code>switch</code>, <code>light</code>, <code>input_boolean</code> (toggle), <code>cover</code> (buttons and position bar), <code>climate</code>, <code>number</code>, <code>input_number</code> (steppers), <code>binary_sensor</code> (state badge by device class: door, window, garage door, moisture…), <code>sensor</code> (value with unit).</li>
+<li><strong>Alerts</strong>: a row turns red and pulses when a smoke, leak, gas, CO, problem, heat or cold sensor is <code>on</code>, or when a battery sensor drops below <code>battery_threshold</code>. Add your own rule per row with <code>alert_state</code>, <code>alert_below</code> or <code>alert_above</code>, or switch it off with <code>alert: false</code>.</li>
+<li><strong><code>status_entity</code></strong>: show a second entity on the same row, for example the contact sensor next to the gate switch that opens it.</li>
+<li><strong><code>tap_action: impulse</code></strong>: for momentary relays (gates, garage openers), the toggle turns on and back off after <code>impulse_duration</code> ms.</li>
+<li><strong>Neon header and footer</strong>: icon, glow, two-colour gradient, flicker; optional footer line.</li>
+<li><strong>Entry cascade</strong>: rows slide in one after the other when the card appears.</li>
+<li>Inherits your theme colours by default. Looping decorations are switched off on phones and tablets to save battery.</li>
+<li><strong>Visual editor</strong>.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">📦 Installation</h2><span id="-installation"></span></div>
+<div class="markdown-heading"><h3 class="heading-element">HACS (recommended)</h3><span id="hacs-recommended"></span></div>
+<ol>
+<li>Click the <strong>Open in HACS</strong> button above, or add this repository as a custom repository in HACS (category <strong>Dashboard</strong>): <code>https://github.com/cerealkiller57540/neon-entities-card</code>.</li>
+<li>Download <strong>Neon Entities Card</strong>.</li>
+<li>Reload your browser.</li>
+</ol>
+<div class="markdown-heading"><h3 class="heading-element">Manual</h3><span id="manual"></span></div>
+<ol>
+<li>Copy <a href="https://github.com/cerealkiller57540/neon-entities-card/blob/main/dist/neon-entities-card.js"><code>dist/neon-entities-card.js</code></a> to <code>config/www/neon-entities-card/</code>.</li>
+<li>Add a dashboard resource: URL <code>/local/neon-entities-card/neon-entities-card.js</code>, type <strong>JavaScript module</strong>.</li>
+</ol>
+<div class="markdown-heading"><h2 class="heading-element">🚀 Usage</h2><span id="-usage"></span></div>
+<p>This is the configuration of the screenshot above.</p>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="type: custom:neon-entities-card
+header:
+  title: HOME CONTROL
+  icon: mdi:home-lightning-bolt
+  glow: true
+  gradient: true
+footer:
+  enabled: true
+  text: HOME · NEON ENTITIES CARD
+entities:
+  - entity: switch.gate
+    name: Gate
+    icon: mdi:gate
+    status_entity: binary_sensor.gate_contact
+    tap_action: impulse
+  - entity: binary_sensor.garage_door
+    name: Garage door
+  - entity: cover.living_room_shutter
+    name: Shutter
+    secondary_info: state
+  - type: divider
+  - entity: switch.desk_lamp
+    name: Desk lamp
+  - entity: climate.bedroom
+    name: Bedroom AC
+  - entity: number.boiler_target
+    name: Boiler target
+  - type: divider
+  - entity: sensor.outdoor_temperature
+    name: Outdoor
+  - entity: sensor.smoke_detector_battery
+    name: Smoke detector battery
+  - entity: binary_sensor.kitchen_leak
+    name: Kitchen leak"><pre><span class="pl-ent">type</span>: <span class="pl-s">custom:neon-entities-card</span>
+<span class="pl-ent">header</span>:
+  <span class="pl-ent">title</span>: <span class="pl-s">HOME CONTROL</span>
+  <span class="pl-ent">icon</span>: <span class="pl-s">mdi:home-lightning-bolt</span>
+  <span class="pl-ent">glow</span>: <span class="pl-c1">true</span>
+  <span class="pl-ent">gradient</span>: <span class="pl-c1">true</span>
+<span class="pl-ent">footer</span>:
+  <span class="pl-ent">enabled</span>: <span class="pl-c1">true</span>
+  <span class="pl-ent">text</span>: <span class="pl-s">HOME · NEON ENTITIES CARD</span>
+<span class="pl-ent">entities</span>:
+  - <span class="pl-ent">entity</span>: <span class="pl-s">switch.gate</span>
+    <span class="pl-ent">name</span>: <span class="pl-s">Gate</span>
+    <span class="pl-ent">icon</span>: <span class="pl-s">mdi:gate</span>
+    <span class="pl-ent">status_entity</span>: <span class="pl-s">binary_sensor.gate_contact</span>
+    <span class="pl-ent">tap_action</span>: <span class="pl-s">impulse</span>
+  - <span class="pl-ent">entity</span>: <span class="pl-s">binary_sensor.garage_door</span>
+    <span class="pl-ent">name</span>: <span class="pl-s">Garage door</span>
+  - <span class="pl-ent">entity</span>: <span class="pl-s">cover.living_room_shutter</span>
+    <span class="pl-ent">name</span>: <span class="pl-s">Shutter</span>
+    <span class="pl-ent">secondary_info</span>: <span class="pl-s">state</span>
+  - <span class="pl-ent">type</span>: <span class="pl-s">divider</span>
+  - <span class="pl-ent">entity</span>: <span class="pl-s">switch.desk_lamp</span>
+    <span class="pl-ent">name</span>: <span class="pl-s">Desk lamp</span>
+  - <span class="pl-ent">entity</span>: <span class="pl-s">climate.bedroom</span>
+    <span class="pl-ent">name</span>: <span class="pl-s">Bedroom AC</span>
+  - <span class="pl-ent">entity</span>: <span class="pl-s">number.boiler_target</span>
+    <span class="pl-ent">name</span>: <span class="pl-s">Boiler target</span>
+  - <span class="pl-ent">type</span>: <span class="pl-s">divider</span>
+  - <span class="pl-ent">entity</span>: <span class="pl-s">sensor.outdoor_temperature</span>
+    <span class="pl-ent">name</span>: <span class="pl-s">Outdoor</span>
+  - <span class="pl-ent">entity</span>: <span class="pl-s">sensor.smoke_detector_battery</span>
+    <span class="pl-ent">name</span>: <span class="pl-s">Smoke detector battery</span>
+  - <span class="pl-ent">entity</span>: <span class="pl-s">binary_sensor.kitchen_leak</span>
+    <span class="pl-ent">name</span>: <span class="pl-s">Kitchen leak</span></pre></div>
+<div class="markdown-heading"><h2 class="heading-element">⚙️ Options</h2><span id="️-options"></span></div>
+<p><strong>Card</strong></p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>entities</code></td>
+<td><strong>required</strong></td>
+<td>List of rows (see below)</td>
+</tr>
+<tr>
+<td><code>header</code> / <code>footer</code></td>
+<td>—</td>
+<td>See below</td>
+</tr>
+<tr>
+<td><code>color_primary</code> / <code>color_accent</code></td>
+<td>theme</td>
+<td>Main and accent colours</td>
+</tr>
+<tr>
+<td><code>name_color</code> / <code>value_color</code> / <code>icon_color</code></td>
+<td>theme</td>
+<td>Text and icon colours</td>
+</tr>
+<tr>
+<td><code>card_bg</code> / <code>bg_blur</code></td>
+<td>theme</td>
+<td>Card background and backdrop blur</td>
+</tr>
+<tr>
+<td><code>use_theme_card</code></td>
+<td><code>false</code></td>
+<td>Let the theme's own card style win</td>
+</tr>
+<tr>
+<td><code>pulse_active</code></td>
+<td><code>true</code></td>
+<td>Active icons breathe</td>
+</tr>
+<tr>
+<td><code>value_glow</code></td>
+<td><code>true</code></td>
+<td>Glowing values</td>
+</tr>
+<tr>
+<td><code>flash_on_change</code></td>
+<td><code>false</code></td>
+<td>Flash a row when its state changes</td>
+</tr>
+<tr>
+<td><code>show_label</code></td>
+<td><code>false</code></td>
+<td>Show the domain label under each name</td>
+</tr>
+<tr>
+<td><code>ctrl_width</code> / <code>ctrl_align</code></td>
+<td><code>12</code> / <code>center</code></td>
+<td>Width and alignment of the control column</td>
+</tr>
+<tr>
+<td><code>alerts</code></td>
+<td><code>true</code></td>
+<td>Enable alert rows</td>
+</tr>
+<tr>
+<td><code>battery_threshold</code></td>
+<td><code>20</code></td>
+<td>Battery level (%) that raises an alert</td>
+</tr>
+<tr>
+<td><code>alert_color</code> / <code>alert_period</code></td>
+<td><code>#FF2E4A</code> / <code>2.8</code></td>
+<td>Alert colour and pulse period (s)</td>
+</tr>
+<tr>
+<td><code>alert_glow</code> / <code>alert_bg</code> / <code>alert_name_white</code></td>
+<td><code>1</code> / <code>0.08</code> / <code>false</code></td>
+<td>Alert glow strength, background opacity, keep the name white</td>
+</tr>
+<tr>
+<td><code>enter_anim</code></td>
+<td><code>true</code></td>
+<td>Entry cascade</td>
+</tr>
+<tr>
+<td><code>enter_spread</code> / <code>enter_min</code> / <code>enter_dur</code> / <code>enter_dx</code></td>
+<td><code>360</code> / <code>50</code> / <code>0.38</code> / <code>10</code></td>
+<td>Total spread (ms), minimum step (ms), row duration (s), slide distance (px)</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>header:</code></strong></p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>enabled</code></td>
+<td><code>true</code></td>
+<td>Show the header</td>
+</tr>
+<tr>
+<td><code>title</code> / <code>icon</code></td>
+<td>—</td>
+<td>Title text and <code>mdi:</code> icon</td>
+</tr>
+<tr>
+<td><code>title_size</code> / <code>font</code> / <code>font_weight</code> / <code>letter_spacing</code></td>
+<td>theme</td>
+<td>Title font</td>
+</tr>
+<tr>
+<td><code>uppercase</code> / <code>italic</code></td>
+<td>—</td>
+<td>Text style</td>
+</tr>
+<tr>
+<td><code>color</code> / <code>icon_color</code> / <code>icon_size</code></td>
+<td>theme</td>
+<td>Colours and icon size</td>
+</tr>
+<tr>
+<td><code>glow</code> / <code>glow_color</code> / <code>glow_size</code></td>
+<td>— / primary / <code>12</code></td>
+<td>Neon glow</td>
+</tr>
+<tr>
+<td><code>icon_glow_size</code></td>
+<td><code>glow_size</code></td>
+<td>Header icon glow radius, independent of the title glow — a larger value spreads the halo thinner and keeps thin icons crisp</td>
+</tr>
+<tr>
+<td><code>title_shadow</code></td>
+<td>—</td>
+<td>Raw <code>text-shadow</code>, replaces <code>glow</code></td>
+</tr>
+<tr>
+<td><code>gradient</code> / <code>gradient_from</code> / <code>gradient_to</code></td>
+<td>—</td>
+<td>Two-colour gradient text</td>
+</tr>
+<tr>
+<td><code>flicker</code></td>
+<td><code>false</code></td>
+<td>Neon flicker</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>footer:</code></strong> <code>enabled</code>, <code>text</code>.</p>
+<p><strong>Per row</strong> (<code>entities:</code>)</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>entity</code> / <code>name</code> / <code>icon</code></td>
+<td>Entity, display name, <code>mdi:</code> icon</td>
+</tr>
+<tr>
+<td><code>secondary_info: state</code></td>
+<td>Show the state under the name</td>
+</tr>
+<tr>
+<td><code>decimal_places</code></td>
+<td>Rounding for numeric values</td>
+</tr>
+<tr>
+<td><code>status_entity</code> / <code>status_decimal_places</code></td>
+<td>Second entity shown on the same row</td>
+</tr>
+<tr>
+<td><code>tap_action: impulse</code> / <code>impulse_duration</code></td>
+<td>Momentary toggle, back off after N ms (default <code>500</code>)</td>
+</tr>
+<tr>
+<td><code>alert</code></td>
+<td><code>false</code> disables the alert for this row</td>
+</tr>
+<tr>
+<td><code>alert_state</code></td>
+<td>State (or list of states) that raises an alert</td>
+</tr>
+<tr>
+<td><code>alert_below</code> / <code>alert_above</code></td>
+<td>Numeric thresholds that raise an alert</td>
+</tr>
+<tr>
+<td><code>type: divider</code></td>
+<td>A separator line instead of an entity</td>
+</tr>
+</tbody>
+</table>
+<div class="markdown-heading"><h2 class="heading-element">❓ FAQ</h2><span id="-faq"></span></div>
+<p><strong>Why is my door sensor not red when it is open?</strong> Only danger device classes (smoke, moisture, gas, carbon monoxide, safety, problem, battery, heat, cold) alert on their own. For anything else, add <code>alert_state: 'on'</code> to the row.</p>
+<p><strong>Which languages are supported?</strong> English and French. The editor and the card texts follow your Home Assistant language: French if it is French, English otherwise. Reload the page after changing the language. Every option can also be set in YAML.</p>
+<p><strong>Which theme is in the screenshots?</strong> Neo Tokyo, the author's own dark theme (not published). The card works with any theme.</p>
+<div class="markdown-heading"><h2 class="heading-element">🌃 More neon cards</h2><span id="-more-neon-cards"></span></div>
+<p>This card is part of a family. See the full collection at <a href="https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards"><strong>Home-Assistant-Neon-Cards</strong></a>.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🐾 Support this project</h2><span id="-support-this-project"></span></div>
+<p>If you enjoy these cards, please consider donating to <strong>Quatre Pattes</strong>, an animal rescue organization.</p>
+
+<blockquote>
+<p>💛 No need to support me — just help the animals. Thank you!</p>
+</blockquote>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🤝 Contributing</h2><span id="-contributing"></span></div>
+<ol>
+<li>Fork the repo</li>
+<li>Create your branch: <code>git checkout -b feature/my-card</code></li>
+<li>Commit and push</li>
+<li>Open a Pull Request</li>
+</ol>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">📄 License</h2><span id="-license"></span></div>
+<p><a href="https://github.com/cerealkiller57540/neon-entities-card/tree/main/LICENSE">MIT License</a></p>
+</main>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/neon-entities-card">cerealkiller57540/neon-entities-card</a> · Updated 2026-10-21 · <a href="../index.html">All projects</a></footer>
+</div></body></html>

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nixie Clock Card — custom card for Home Assistant</title>
+<meta name="description" content="Nixie tube clock card for Home Assistant: six IN-14 tubes with glowing gas, cyan underlights and acrylic base (WebGL), plus a CSS variant. HACS.">
+<link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/nixie-clock-card.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Nixie Clock Card — custom card for Home Assistant">
+<meta property="og:description" content="Nixie tube clock card for Home Assistant: six IN-14 tubes with glowing gas, cyan underlights and acrylic base (WebGL), plus a CSS variant. HACS.">
+<meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/nixie-clock-card.html">
+<meta property="og:site_name" content="Neon Cards for Home Assistant">
+<meta property="og:image" content="https://raw.githubusercontent.com/cerealkiller57540/nixie-clock-card/main/images/main.png">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/cerealkiller57540/nixie-clock-card/main/images/main.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Nixie Clock Card", "description": "Nixie tube clock card for Home Assistant: six IN-14 tubes with glowing gas, cyan underlights and acrylic base (WebGL), plus a CSS variant. HACS.", "codeRepository": "https://github.com/cerealkiller57540/nixie-clock-card", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/nixie-clock-card.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-10-21", "keywords": "clock, custom-card, cyberpunk, dashboard, hacs, home-assistant, lovelace, neon, nixie, retro, webgl", "image": "https://raw.githubusercontent.com/cerealkiller57540/nixie-clock-card/main/images/main.png"}</script>
+<link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
+<nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Dashboard cards</nav>
+<header class="page-head"><h1>Nixie Clock Card</h1>
+<p class="lead">Nixie tube clock card for Home Assistant: six IN-14 tubes with glowing gas, cyan underlights and acrylic base (WebGL), plus a CSS variant. HACS.</p>
+<div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/nixie-clock-card">View on GitHub</a><a class="btn alt" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=cerealkiller57540&amp;repository=nixie-clock-card&amp;category=plugin">Open in HACS</a></div></header>
+<main class="markdown-body">
+<div align="center">
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/nixie-clock-card/main/images/logo.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/nixie-clock-card/main/images/logo.png" alt="Nixie Clock Card" width="480" style="max-width: 100%;" loading="lazy"></a>
+<p><strong>A nixie tube clock for Home Assistant: six IN-14 tubes with glowing gas, cyan underlights and an acrylic base, rendered in WebGL.</strong></p>
+
+
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/nixie-clock-card/main/images/main.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/nixie-clock-card/main/images/main.png" alt="Nixie Clock Card: six glass tubes with orange glowing digits and cyan LEDs at their feet" width="455" style="max-width: 100%;" loading="lazy"></a>
+</div>
+<p>The WebGL card is drawn after a real desk nixie clock: six separate IN-14 tubes, orange digits behind a fine wire mesh, a cyan LED at the foot of each tube, two-dot LED separators and a black acrylic base. The gas flickers, unlit digits show faintly through the glass, and each change cross-fades from one digit to the next.</p>
+<div class="markdown-heading"><h2 class="heading-element">✨ Features</h2><span id="-features"></span></div>
+<ul>
+<li><code>nixie-clock-card-webgl</code>: glass tubes, gas glow and LEDs rendered by a WebGL shader.</li>
+<li><strong>No entity needed</strong>: it reads your device clock.</li>
+<li><strong>12 h or 24 h</strong>, with or without seconds (6 or 4 tubes).</li>
+<li><strong>Underlights follow your theme's accent colour</strong> by default.</li>
+<li><strong>Full visual editor</strong> on the WebGL card: every glow, glass and LED setting is a slider, applied live.</li>
+<li>Pauses when off-screen, releases its WebGL context when removed (Android WebViews cap a page at 8 contexts), respects <code>prefers-reduced-motion</code>.</li>
+<li>A small ghost cat called Glitch shows up now and then. Turn it off with <code>glitch: false</code>.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">📦 Installation</h2><span id="-installation"></span></div>
+<div class="markdown-heading"><h3 class="heading-element">HACS (recommended)</h3><span id="hacs-recommended"></span></div>
+<ol>
+<li>Click the <strong>Open in HACS</strong> button above, or add this repository as a custom repository in HACS (category <strong>Dashboard</strong>): <code>https://github.com/cerealkiller57540/nixie-clock-card</code>.</li>
+<li>Download <strong>Nixie Clock Card</strong>.</li>
+<li>Reload your browser.</li>
+</ol>
+<p>HACS registers one resource, <code>nixie-clock-card.js</code>. The card type is <code>custom:nixie-clock-card-webgl</code>.</p>
+<p>If you used the former CSS card (<code>custom:nixie-clock-card</code>), change its type to <code>custom:nixie-clock-card-webgl</code>: the CSS version is no longer shipped.</p>
+<div class="markdown-heading"><h3 class="heading-element">Manual</h3><span id="manual"></span></div>
+<ol>
+<li>Copy <a href="https://github.com/cerealkiller57540/nixie-clock-card/blob/main/dist/nixie-clock-card.js"><code>dist/nixie-clock-card.js</code></a> to <code>config/www/nixie-clock-card/</code>.</li>
+<li>Add a dashboard resource: URL <code>/local/nixie-clock-card/nixie-clock-card.js</code>, type <strong>JavaScript module</strong>.</li>
+</ol>
+<div class="markdown-heading"><h2 class="heading-element">🚀 Usage</h2><span id="-usage"></span></div>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="type: custom:nixie-clock-card-webgl"><pre><span class="pl-ent">type</span>: <span class="pl-s">custom:nixie-clock-card-webgl</span></pre></div>
+<p>That is all it needs. With a few options:</p>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="type: custom:nixie-clock-card-webgl
+use_military: false      # 12 h
+hide_seconds: true       # 4 tubes
+under_color: &quot;#ff2d6b&quot;   # LEDs and separators"><pre><span class="pl-ent">type</span>: <span class="pl-s">custom:nixie-clock-card-webgl</span>
+<span class="pl-ent">use_military</span>: <span class="pl-s">false      </span><span class="pl-c"><span class="pl-c">#</span> 12 h</span>
+<span class="pl-ent">hide_seconds</span>: <span class="pl-s">true       </span><span class="pl-c"><span class="pl-c">#</span> 4 tubes</span>
+<span class="pl-ent">under_color</span>: <span class="pl-s"><span class="pl-pds">"</span>#ff2d6b<span class="pl-pds">"</span></span>   <span class="pl-c"><span class="pl-c">#</span> LEDs and separators</span></pre></div>
+<div class="markdown-heading"><h2 class="heading-element">⚙️ Options</h2><span id="️-options"></span></div>
+<p><strong>Both cards</strong></p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>use_military</code></td>
+<td>bool</td>
+<td><code>true</code></td>
+<td>24 h format</td>
+</tr>
+<tr>
+<td><code>hide_seconds</code></td>
+<td>bool</td>
+<td><code>false</code></td>
+<td>Hide the seconds (4 tubes instead of 6)</td>
+</tr>
+<tr>
+<td><code>glitch</code></td>
+<td>bool</td>
+<td><code>true</code></td>
+<td>The ghost cat</td>
+</tr>
+<tr>
+<td><code>glitch_color</code> / <code>glitch_opacity</code></td>
+<td>colour / number</td>
+<td>card colour / <code>0.8</code></td>
+<td>Its colour and maximum opacity</td>
+</tr>
+<tr>
+<td><code>glitch_dur</code> / <code>glitch_gap</code></td>
+<td>number</td>
+<td><code>2400</code> / <code>25</code></td>
+<td>Length of one appearance (ms), average gap between two (s)</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>under_color</code></td>
+<td>theme accent</td>
+<td>LEDs at the foot of the tubes and separators</td>
+</tr>
+<tr>
+<td><code>glow</code> / <code>glow_r</code></td>
+<td><code>1.20</code> / <code>10.0</code></td>
+<td>Orange halo intensity and radius (px)</td>
+</tr>
+<tr>
+<td><code>core</code></td>
+<td><code>0.35</code></td>
+<td>How much the digit stroke turns yellow-white</td>
+</tr>
+<tr>
+<td><code>flicker</code> / <code>flk_core</code></td>
+<td><code>0.26</code> / <code>0.00</code></td>
+<td>Gas flicker, and how much of it reaches the digit itself (<code>0</code> = steady digit, only the halo breathes)</td>
+</tr>
+<tr>
+<td><code>ghost</code></td>
+<td><code>0.12</code></td>
+<td>Visibility of unlit digits and the mesh</td>
+</tr>
+<tr>
+<td><code>fade</code></td>
+<td><code>180</code></td>
+<td>Cross-fade between two digits (ms)</td>
+</tr>
+<tr>
+<td><code>under</code> / <code>under_h</code></td>
+<td><code>1.00</code> / <code>0.45</code></td>
+<td>Underlight intensity, and how high the cyan climbs in the tube</td>
+</tr>
+<tr>
+<td><code>glass</code></td>
+<td><code>0.35</code></td>
+<td>Reflections on the tube edges</td>
+</tr>
+<tr>
+<td><code>sep</code> / <code>sep_core</code></td>
+<td><code>1.05</code> / <code>1.20</code></td>
+<td>Separator LED intensity and their white-hot centre</td>
+</tr>
+<tr>
+<td><code>base_refl</code></td>
+<td><code>0.75</code></td>
+<td>Edge and gradient of the acrylic base</td>
+</tr>
+<tr>
+<td><code>glitch_size</code> / <code>glitch_sep</code> / <code>glitch_x</code> / <code>glitch_y</code></td>
+<td><code>30</code> / <code>2</code> / <code>0</code> / <code>0</code></td>
+<td>Cat size, which separator it sits on, offset in px</td>
+</tr>
+</tbody>
+</table>
+<div class="markdown-heading"><h2 class="heading-element">❓ FAQ</h2><span id="-faq"></span></div>
+<p><strong>Which languages are supported?</strong> English and French. The editor and the card texts follow your Home Assistant language: French if it is French, English otherwise. Reload the page after changing the language.</p>
+<p><strong>The WebGL clock stays blank.</strong> Your browser has no WebGL.</p>
+<p><strong>Some cards go blank on my Android phone.</strong> Android WebViews keep at most 8 WebGL contexts per page and drop the oldest one. This card uses one and gives it back when it leaves the page.</p>
+<p><strong>Which theme is in the screenshots?</strong> Neo Tokyo, the author's own dark theme (not published). The card works with any theme.</p>
+<div class="markdown-heading"><h2 class="heading-element">🎨 Credits</h2><span id="-credits"></span></div>
+<p>The nixie tube digit images embedded in both cards are <strong>© 2007-08 Cestmir Hybl</strong> (<a href="http://cestmir.freeside.sk/projects/dhtml-nixie-display" rel="nofollow">DHTML Nixie Display</a>), <em>free for non-commercial use, copyright must be preserved</em>. They are <strong>not</strong> covered by the MIT licence of this repository's code (see <a href="https://github.com/cerealkiller57540/nixie-clock-card/blob/main/NOTICE.md">NOTICE</a>). The Glitch cat silhouette comes from <a href="https://openclipart.org" rel="nofollow">openclipart</a> (public domain).</p>
+<div class="markdown-heading"><h2 class="heading-element">🌃 More neon cards</h2><span id="-more-neon-cards"></span></div>
+<p>This card is part of a family. See the full collection at <a href="https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards"><strong>Home-Assistant-Neon-Cards</strong></a>.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🐾 Support this project</h2><span id="-support-this-project"></span></div>
+<p>If you enjoy these cards, please consider donating to <strong>Quatre Pattes</strong>, an animal rescue organization.</p>
+
+<blockquote>
+<p>💛 No need to support me — just help the animals. Thank you!</p>
+</blockquote>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🤝 Contributing</h2><span id="-contributing"></span></div>
+<ol>
+<li>Fork the repo</li>
+<li>Create your branch: <code>git checkout -b feature/my-card</code></li>
+<li>Commit and push</li>
+<li>Open a Pull Request</li>
+</ol>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">📄 License</h2><span id="-license"></span></div>
+<p><a href="https://github.com/cerealkiller57540/nixie-clock-card/tree/main/LICENSE">MIT License</a></p>
+</main>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/nixie-clock-card">cerealkiller57540/nixie-clock-card</a> · Updated 2026-10-21 · <a href="../index.html">All projects</a></footer>
+</div></body></html>

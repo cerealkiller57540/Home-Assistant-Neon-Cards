@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Livebox TV NG — Home Assistant integration</title>
+<meta name="description" content="Intégration Home Assistant pour décodeurs Orange Livebox TV UHD (config flow, SSDP/DHCP, UPnP volume/mute, EPG dynamique, multi-box)">
+<link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/liveboxtv_ng.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Livebox TV NG — Home Assistant integration">
+<meta property="og:description" content="Intégration Home Assistant pour décodeurs Orange Livebox TV UHD (config flow, SSDP/DHCP, UPnP volume/mute, EPG dynamique, multi-box)">
+<meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/liveboxtv_ng.html">
+<meta property="og:site_name" content="Neon Cards for Home Assistant">
+<meta name="twitter:card" content="summary">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Livebox TV NG", "description": "Intégration Home Assistant pour décodeurs Orange Livebox TV UHD (config flow, SSDP/DHCP, UPnP volume/mute, EPG dynamique, multi-box)", "codeRepository": "https://github.com/cerealkiller57540/liveboxtv_ng", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/liveboxtv_ng.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-06-05", "keywords": "custom-integration, hacs, home-assistant, homeassistant, livebox, media-player, orange, upnp"}</script>
+<link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
+<nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Integrations</nav>
+<header class="page-head"><h1>Livebox TV NG</h1>
+<p class="lead">Intégration Home Assistant pour décodeurs Orange Livebox TV UHD (config flow, SSDP/DHCP, UPnP volume/mute, EPG dynamique, multi-box)</p>
+<div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/liveboxtv_ng">View on GitHub</a><a class="btn alt" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=cerealkiller57540&amp;repository=liveboxtv_ng&amp;category=integration">Open in HACS</a></div></header>
+<main class="markdown-body">
+<div class="markdown-heading"><h2 class="heading-element">Orange Livebox TV UHD — intégration Home Assistant</h2><span id="orange-livebox-tv-uhd--intégration-home-assistant"></span></div>
+<p>Intégration <strong>Home Assistant</strong> moderne pour les décodeurs <strong>Orange Livebox TV UHD</strong>
+(modèle WHD94 / SoftAtHome et compatibles), pilotés via leur API locale <code>remoteControl</code>
+et leur <strong>MediaRenderer UPnP</strong>.</p>
+<p>Refonte complète (config flow, coordinator async, EPG dynamique, UPnP) de l'intégration
+historique <a href="https://github.com/AkA57/liveboxtvuhd">AkA57/liveboxtvuhd</a> — voir
+<a href="https://github.com/cerealkiller57540/liveboxtv_ng/blob/main/custom_components/liveboxtv_ng/CREDITS.md">CREDITS</a>.</p>
+<div class="markdown-heading"><h2 class="heading-element">✨ Fonctionnalités</h2><span id="-fonctionnalités"></span></div>
+<ul>
+<li>🔌 <strong>Configuration par l'interface</strong> (config flow) — plus de YAML.</li>
+<li>🔎 <strong>Découverte automatique</strong> des décodeurs sur le réseau (<strong>SSDP</strong> <em>et</em> <strong>DHCP</strong>).</li>
+<li>🧭 <strong>Multi-décodeurs</strong> : gère plusieurs box (salon, chambre…) sans conflit.</li>
+<li>📡 <strong>Liste des chaînes dynamique</strong> depuis l'EPG officiel Orange (pas de liste figée
+dans le code → suit l'évolution du bouquet).</li>
+<li>🎬 <strong>EPG enrichi</strong> : programme en cours (titre, image) sur la chaîne regardée.</li>
+<li>🔊 <strong>Volume / mute réels</strong> via UPnP <code>RenderingControl</code> (MediaRenderer du décodeur).</li>
+<li><g-emoji class="g-emoji" alias="arrow_forward">▶️</g-emoji> <strong>État de lecture</strong> via UPnP <code>AVTransport</code>.</li>
+<li>📺 <strong>Zapping</strong> (sélection de source), <strong>télécommande</strong> (entité <code>remote</code>, toutes les touches).</li>
+<li>💤 <strong>Robuste à la veille / coupure</strong> : si le décodeur est éteint au démarrage de HA,
+l'entité devient simplement <code>unavailable</code> (jamais perdue) et revient seule au réveil.</li>
+<li>🌐 <strong>IP non réservée gérée</strong> : l'identité repose sur l'adresse MAC ; un changement d'IP
+(DHCP) est suivi automatiquement via SSDP/DHCP.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">📦 Installation</h2><span id="-installation"></span></div>
+<div class="markdown-heading"><h3 class="heading-element">Installation via HACS</h3><span id="installation-via-hacs"></span></div>
+<ol>
+<li>Ajouter ce dépôt comme <strong>dépôt personnalisé</strong> dans HACS :</li>
+</ol>
+
+<ol start="2">
+<li>Installer l'intégration <strong>Orange Livebox TV UHD</strong> via HACS.</li>
+<li>Redémarrer Home Assistant.</li>
+<li>Configurer l'intégration (généralement le décodeur est déjà <strong>découvert</strong> automatiquement) :</li>
+</ol>
+
+<div class="markdown-heading"><h3 class="heading-element">Installation manuelle</h3><span id="installation-manuelle"></span></div>
+<ol>
+<li>Télécharger les fichiers de l'intégration depuis ce dépôt.</li>
+<li>Copier le dossier <code>custom_components/liveboxtv_ng/</code> dans le répertoire <code>custom_components/</code>
+de votre configuration Home Assistant.</li>
+<li>Redémarrer Home Assistant.</li>
+<li>Configurer l'intégration :</li>
+</ol>
+
+<div class="markdown-heading"><h2 class="heading-element">⚙️ Configuration</h2><span id="️-configuration"></span></div>
+<ul>
+<li>En général, le décodeur est <strong>découvert automatiquement</strong> (SSDP/DHCP) : il apparaît dans
+<strong>Paramètres → Appareils et services</strong>, il suffit de confirmer.</li>
+<li>Sinon : <strong>Ajouter une intégration → Orange Livebox TV UHD</strong>, et saisir l'IP du décodeur.</li>
+</ul>
+<blockquote>
+<p>Prérequis : l'UPnP doit être actif sur la Livebox (Configuration avancée → Réseau → UPnP),
+ce qui est le cas par défaut.</p>
+</blockquote>
+<div class="markdown-heading"><h2 class="heading-element">🧩 Entités créées (par décodeur)</h2><span id="-entités-créées-par-décodeur"></span></div>
+<table>
+<thead>
+<tr>
+<th>Entité</th>
+<th>Rôle</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>media_player.&lt;nom&gt;</code></td>
+<td>État, chaîne, volume/mute, zapping, EPG en cours</td>
+</tr>
+<tr>
+<td><code>remote.&lt;nom&gt;_telecommande</code></td>
+<td>Envoi de touches (<code>send_command</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Touches disponibles pour <code>remote.send_command</code> : <code>POWER</code>, <code>0</code>–<code>9</code>, <code>CH+</code>/<code>CH-</code>,
+<code>VOL+</code>/<code>VOL-</code>, <code>MUTE</code>, <code>UP</code>/<code>DOWN</code>/<code>LEFT</code>/<code>RIGHT</code>/<code>OK</code>, <code>BACK</code>, <code>MENU</code>, <code>PLAY/PAUSE</code>,
+<code>FFWD</code>/<code>FBWD</code>, <code>REC</code>, <code>VOD</code>, <code>GUIDE</code>.</p>
+<div class="markdown-heading"><h2 class="heading-element"><g-emoji class="g-emoji" alias="warning">⚠️</g-emoji> Limites</h2><span id="️-limites"></span></div>
+<ul>
+<li>Le décodeur ne liste pas ses chaînes via l'API locale : la liste vient de l'EPG Orange
+(France). Hors France, un mapping de secours minimal est utilisé.</li>
+<li>L'API <code>remoteControl</code> n'expose pas de réglage de volume fin : le volume/mute « réels »
+passent par l'UPnP, le step volume passe par les touches télécommande.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">📝 Licence</h2><span id="-licence"></span></div>
+<p>MIT — voir <a href="https://github.com/cerealkiller57540/liveboxtv_ng/tree/main/LICENSE">LICENSE</a>.</p>
+<div class="markdown-heading"><h2 class="heading-element">🙏 Crédits</h2><span id="-crédits"></span></div>
+<p>Basé sur le travail de <a href="https://github.com/AkA57/liveboxtvuhd">AkA57</a> et d'autres projets
+de la communauté — détails dans <a href="https://github.com/cerealkiller57540/liveboxtv_ng/blob/main/custom_components/liveboxtv_ng/CREDITS.md">CREDITS</a>.</p>
+</main>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/liveboxtv_ng">cerealkiller57540/liveboxtv_ng</a> · Updated 2026-06-05 · <a href="../index.html">All projects</a></footer>
+</div></body></html>

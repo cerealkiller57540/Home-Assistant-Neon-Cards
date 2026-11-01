@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Linux Terminal Card — custom card for Home Assistant</title>
+<meta name="description" content="Sci-fi CRT terminal card for Home Assistant: CPU, GPU, RAM, temperature, battery, network and updates of a Linux PC, rendered by a WebGL shader (CSS fallback), with a ghost cat.">
+<link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/linux-terminal-card.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Linux Terminal Card — custom card for Home Assistant">
+<meta property="og:description" content="Sci-fi CRT terminal card for Home Assistant: CPU, GPU, RAM, temperature, battery, network and updates of a Linux PC, rendered by a WebGL shader (CSS fallback), with a ghost cat.">
+<meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/linux-terminal-card.html">
+<meta property="og:site_name" content="Neon Cards for Home Assistant">
+<meta property="og:image" content="https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/main.png">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/main.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Linux Terminal Card", "description": "Sci-fi CRT terminal card for Home Assistant: CPU, GPU, RAM, temperature, battery, network and updates of a Linux PC, rendered by a WebGL shader (CSS fallback), with a ghost cat.", "codeRepository": "https://github.com/cerealkiller57540/linux-terminal-card", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/linux-terminal-card.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-10-21", "keywords": "crt, custom-card, cyberpunk, dashboard, hacs, home-assistant, linux, lovelace, neon, terminal, webgl", "image": "https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/main.png"}</script>
+<link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
+<nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Dashboard cards</nav>
+<header class="page-head"><h1>Linux Terminal Card</h1>
+<p class="lead">Sci-fi CRT terminal card for Home Assistant: CPU, GPU, RAM, temperature, battery, network and updates of a Linux PC, rendered by a WebGL shader (CSS fallback), with a ghost cat.</p>
+<div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/linux-terminal-card">View on GitHub</a><a class="btn alt" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=cerealkiller57540&amp;repository=linux-terminal-card&amp;category=plugin">Open in HACS</a></div></header>
+<main class="markdown-body">
+<div align="center">
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/logo.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/logo.png" alt="Linux Terminal Card" width="480" style="max-width: 100%;" loading="lazy"></a>
+<p><strong>A sci-fi CRT terminal for Home Assistant that shows the health of a Linux PC: CPU, GPU, load, RAM, disk, temperature, battery, network and pending updates, with a ghost cat called Glitch.</strong></p>
+
+
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/main.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/main.png" alt="A CRT terminal with cyan text: OS and kernel, uptime, seven bars for CPU, GPU, load, RAM, disk, temperature and battery, network speed and a user@linux prompt. A pink-and-blue ghost cat flickers over the screen." width="560" style="max-width: 100%;" loading="lazy"></a>
+</div>
+<p>The card is a small shell session: an <code>OS … · k6.8</code> line, an <code>up …</code> line, a bar per metric and a prompt with a blinking cursor. The WebGL variant draws it on a real bulging tube (barrel distortion, chromatic aberration, scanlines, bloom, RGB phosphor mask and trails), inside a bezel plate. The CSS variant fakes the same look without WebGL.</p>
+<p>Warnings are graded: an amber or red bar, then a red <code>CRITICAL</code> banner (<code>CRITIQUE</code> in French) and a red frame when temperature or battery crosses its critical threshold. When both CPU and RAM become unavailable, the screen turns into a dead link: <code>SIGNAL LOST</code>, <code>NO CARRIER</code>.</p>
+<div align="center">
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/alert.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/alert.png" alt="The same terminal in alert: red banner, red CPU, temperature and battery bars, amber RAM bar, reboot required" width="400" style="max-width: 100%;" loading="lazy"></a>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/offline.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/offline.png" alt="The terminal when the PC is unreachable: green text smeared by noise, RGB split, SIGNAL LOST and NO CARRIER" width="400" style="max-width: 100%;" loading="lazy"></a>
+<p><em>Left: a critical alert. Right: the PC is unreachable. Screenshots taken on a dashboard with the Neo Tokyo theme, with made-up sensor values.</em></p>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/glitch.gif"><img src="https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/glitch.gif" alt="Animated terminal: the ghost cat appears with an RGB split, the screen flickers and a glitch band sweeps across" width="520" data-animated-image="" style="max-width: 100%;" loading="lazy"></a>
+</div>
+<div class="markdown-heading"><h2 class="heading-element">✨ Features</h2><span id="-features"></span></div>
+<ul>
+<li><code>linux-terminal-card-webgl</code>: the real CRT tube, rendered by a WebGL shader.</li>
+<li><strong>Metrics</strong>: CPU, GPU, load (as a percentage of your core count), RAM, disk, temperature, battery and a second battery, network down and up, process count.</li>
+<li><strong>System line</strong> from sensors of your choice: OS, kernel, uptime, pending updates, release upgrade, reboot required.</li>
+<li><strong>Graded alerts</strong>: each bar turns amber then red at its own thresholds; temperature or battery in critical state raises a banner and a red frame.</li>
+<li><strong>Dead-link screen</strong> when CPU and RAM are both unavailable, fully tunable.</li>
+<li><strong>CRT controls</strong> (WebGL): curvature, aberration, scanlines, bloom, flicker, RGB mask, power-on animation, random glitch bursts, phosphor persistence.</li>
+<li><strong>Glitch the cat</strong>: a hologram-style pixel-art cat that shows up now and then, and invades the screen when things go critical.</li>
+<li><strong>Re-label any slot</strong> (<code>cpu_label</code>, <code>proc_label</code>, …) and set its own thresholds, to show something other than the default metric.</li>
+<li><strong>Tap a line or a bar</strong> to open that entity's more-info dialog.</li>
+<li><strong>Header</strong> with icon, font, gradient, glow and flicker, in the same style as the other neon cards.</li>
+<li><strong>Visual editor</strong> with collapsible panels, in English or French. The WebGL card falls back to the CSS rendering if the browser has no WebGL.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">📦 Installation</h2><span id="-installation"></span></div>
+<div class="markdown-heading"><h3 class="heading-element">HACS (recommended)</h3><span id="hacs-recommended"></span></div>
+<ol>
+<li>Click the <strong>Open in HACS</strong> button above, or add this repository as a custom repository in HACS (category <strong>Dashboard</strong>): <code>https://github.com/cerealkiller57540/linux-terminal-card</code>.</li>
+<li>Download <strong>Linux Terminal Card</strong>.</li>
+<li>Reload your browser.</li>
+</ol>
+<p>HACS registers one resource, <code>linux-terminal-card.js</code>. The card type is <code>custom:linux-terminal-card-webgl</code>.</p>
+<p>If you used the former CSS card (<code>custom:linux-terminal-card</code>), change its type to <code>custom:linux-terminal-card-webgl</code>: the CSS version is no longer shipped.</p>
+<div class="markdown-heading"><h3 class="heading-element">Manual</h3><span id="manual"></span></div>
+<ol>
+<li>Copy <a href="https://github.com/cerealkiller57540/linux-terminal-card/blob/main/dist/linux-terminal-card.js"><code>dist/linux-terminal-card.js</code></a> to <code>config/www/linux-terminal-card/</code>.</li>
+<li>Add a dashboard resource: URL <code>/local/linux-terminal-card/linux-terminal-card.js</code>, type <strong>JavaScript module</strong>.</li>
+</ol>
+<div class="markdown-heading"><h2 class="heading-element">🚀 Usage</h2><span id="-usage"></span></div>
+<p>The card only reads entities, so any sensors work. The <a href="https://www.home-assistant.io/integrations/glances/" rel="nofollow">Glances</a> integration provides CPU, memory, disk, temperature, battery and network sensors out of the box. The OS, kernel, uptime and update lines need sensors from a small reporter of your own (MQTT, a shell command sensor…); leave them out and the lines simply disappear.</p>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="type: custom:linux-terminal-card-webgl
+header:
+  title: Linux PC
+  icon: mdi:laptop
+host: user@linux
+os_entity: sensor.linux_pc_os
+kernel_entity: sensor.linux_pc_kernel
+uptime_entity: sensor.linux_pc_uptime
+updates_entity: sensor.linux_pc_apt_pending_upgrades
+reboot_entity: binary_sensor.linux_pc_reboot_required
+cpu_entity: sensor.linux_pc_cpu_usage
+gpu_entity: sensor.linux_pc_gpu_usage
+load_entity: sensor.linux_pc_load_1m
+load_cores: 8
+ram_entity: sensor.linux_pc_memory_usage
+disk_entity: sensor.linux_pc_disk_usage
+temp_entity: sensor.linux_pc_cpu_temperature
+battery_entity: sensor.linux_pc_battery
+net_rx_entity: sensor.linux_pc_network_rx
+net_tx_entity: sensor.linux_pc_network_tx"><pre><span class="pl-ent">type</span>: <span class="pl-s">custom:linux-terminal-card-webgl</span>
+<span class="pl-ent">header</span>:
+  <span class="pl-ent">title</span>: <span class="pl-s">Linux PC</span>
+  <span class="pl-ent">icon</span>: <span class="pl-s">mdi:laptop</span>
+<span class="pl-ent">host</span>: <span class="pl-s">user@linux</span>
+<span class="pl-ent">os_entity</span>: <span class="pl-s">sensor.linux_pc_os</span>
+<span class="pl-ent">kernel_entity</span>: <span class="pl-s">sensor.linux_pc_kernel</span>
+<span class="pl-ent">uptime_entity</span>: <span class="pl-s">sensor.linux_pc_uptime</span>
+<span class="pl-ent">updates_entity</span>: <span class="pl-s">sensor.linux_pc_apt_pending_upgrades</span>
+<span class="pl-ent">reboot_entity</span>: <span class="pl-s">binary_sensor.linux_pc_reboot_required</span>
+<span class="pl-ent">cpu_entity</span>: <span class="pl-s">sensor.linux_pc_cpu_usage</span>
+<span class="pl-ent">gpu_entity</span>: <span class="pl-s">sensor.linux_pc_gpu_usage</span>
+<span class="pl-ent">load_entity</span>: <span class="pl-s">sensor.linux_pc_load_1m</span>
+<span class="pl-ent">load_cores</span>: <span class="pl-c1">8</span>
+<span class="pl-ent">ram_entity</span>: <span class="pl-s">sensor.linux_pc_memory_usage</span>
+<span class="pl-ent">disk_entity</span>: <span class="pl-s">sensor.linux_pc_disk_usage</span>
+<span class="pl-ent">temp_entity</span>: <span class="pl-s">sensor.linux_pc_cpu_temperature</span>
+<span class="pl-ent">battery_entity</span>: <span class="pl-s">sensor.linux_pc_battery</span>
+<span class="pl-ent">net_rx_entity</span>: <span class="pl-s">sensor.linux_pc_network_rx</span>
+<span class="pl-ent">net_tx_entity</span>: <span class="pl-s">sensor.linux_pc_network_tx</span></pre></div>
+<p>Network values are shown as they come, labelled <code>Mbit/s</code>: give the card sensors already in Mbit/s.</p>
+<p>Tuning the tube:</p>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="crt_curve: 0.6        # 0 = flat screen filling the card
+crt_scanlines: 0.45
+crt_bloom: 0.5
+crt_aberration: 1.8
+crt_persist: 0.6      # phosphor trails, 0 = off
+crt_boot: 0           # skip the power-on animation"><pre><span class="pl-ent">crt_curve</span>: <span class="pl-c1">0.6</span>        <span class="pl-c"><span class="pl-c">#</span> 0 = flat screen filling the card</span>
+<span class="pl-ent">crt_scanlines</span>: <span class="pl-c1">0.45</span>
+<span class="pl-ent">crt_bloom</span>: <span class="pl-c1">0.5</span>
+<span class="pl-ent">crt_aberration</span>: <span class="pl-c1">1.8</span>
+<span class="pl-ent">crt_persist</span>: <span class="pl-c1">0.6</span>      <span class="pl-c"><span class="pl-c">#</span> phosphor trails, 0 = off</span>
+<span class="pl-ent">crt_boot</span>: <span class="pl-c1">0</span>           <span class="pl-c"><span class="pl-c">#</span> skip the power-on animation</span></pre></div>
+<p>Using a slot for something else, for example a second disk:</p>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="disk_entity: sensor.linux_pc_data_disk_usage
+disk_label: DATA
+disk_warn: 85
+disk_hot: 95"><pre><span class="pl-ent">disk_entity</span>: <span class="pl-s">sensor.linux_pc_data_disk_usage</span>
+<span class="pl-ent">disk_label</span>: <span class="pl-s">DATA</span>
+<span class="pl-ent">disk_warn</span>: <span class="pl-c1">85</span>
+<span class="pl-ent">disk_hot</span>: <span class="pl-c1">95</span></pre></div>
+<div class="markdown-heading"><h2 class="heading-element">⚙️ Options</h2><span id="️-options"></span></div>
+<p>Every entity option is optional: a missing sensor hides its line.</p>
+<p><strong>Entities</strong></p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>os_entity</code> / <code>kernel_entity</code> / <code>uptime_entity</code></td>
+<td>Text sensors for the <code>OS … · k…</code> and <code>up …</code> lines</td>
+</tr>
+<tr>
+<td><code>updates_entity</code> / <code>release_entity</code> / <code>reboot_entity</code></td>
+<td>Pending updates (number), release upgrade, reboot required (binary sensor)</td>
+</tr>
+<tr>
+<td><code>proc_entity</code></td>
+<td>Process count, shown on the uptime line</td>
+</tr>
+<tr>
+<td><code>cpu_entity</code> / <code>gpu_entity</code> / <code>ram_entity</code> / <code>disk_entity</code></td>
+<td>Percentages</td>
+</tr>
+<tr>
+<td><code>load_entity</code> / <code>load_cores</code></td>
+<td>Load average and your core count (default <code>8</code>), shown as a percentage</td>
+</tr>
+<tr>
+<td><code>temp_entity</code></td>
+<td>Temperature in °C</td>
+</tr>
+<tr>
+<td><code>battery_entity</code> / <code>battery_entity_2</code></td>
+<td>Battery percentages (<em><code>battery_entity_2</code> WebGL</em>)</td>
+</tr>
+<tr>
+<td><code>net_rx_entity</code> / <code>net_tx_entity</code></td>
+<td>Network speed, in Mbit/s</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Thresholds</strong> (a bar goes amber at <code>warn</code>, red at <code>hot</code>)</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>temp_warn</code> / <code>temp_crit</code></td>
+<td><code>65</code> / <code>85</code></td>
+<td>Temperature, in °C</td>
+</tr>
+<tr>
+<td><code>batt_warn</code> / <code>batt_crit</code></td>
+<td><code>25</code> / <code>10</code></td>
+<td>Battery, in % (inverted: low is bad)</td>
+</tr>
+<tr>
+<td><code>cpu_warn</code> / <code>cpu_hot</code></td>
+<td><code>70</code> / <code>90</code></td>
+<td><em>WebGL</em></td>
+</tr>
+<tr>
+<td><code>gpu_warn</code> / <code>gpu_hot</code></td>
+<td><code>70</code> / <code>90</code></td>
+<td><em>WebGL</em></td>
+</tr>
+<tr>
+<td><code>load_warn</code> / <code>load_hot</code></td>
+<td><code>80</code> / <code>100</code></td>
+<td><em>WebGL</em></td>
+</tr>
+<tr>
+<td><code>ram_warn</code> / <code>ram_hot</code></td>
+<td><code>75</code> / <code>92</code></td>
+<td><em>WebGL</em></td>
+</tr>
+<tr>
+<td><code>disk_warn</code> / <code>disk_hot</code></td>
+<td><code>80</code> / <code>93</code></td>
+<td><em>WebGL</em></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Labels</strong> (<em>WebGL</em>): <code>cpu_label</code>, <code>gpu_label</code>, <code>load_label</code>, <code>ram_label</code>, <code>disk_label</code>, <code>temp_label</code>, <code>batt_label</code>, <code>batt2_label</code> (with <code>batt2_warn</code> / <code>batt2_crit</code>) and <code>proc_label</code> replace the text in front of a bar.</p>
+<p><strong>Look</strong></p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>host</code></td>
+<td><code>user@linux</code></td>
+<td>Text of the prompt</td>
+</tr>
+<tr>
+<td><code>header</code></td>
+<td>—</td>
+<td><code>title</code>, <code>icon</code>, <code>icon_color</code>, <code>icon_size</code>, <code>font</code>, <code>font_weight</code>, <code>color</code>, <code>glow</code>, <code>glow_color</code>, <code>glow_size</code>, <code>gradient</code> (<code>gradient_from</code> / <code>gradient_to</code>), <code>flicker</code></td>
+</tr>
+<tr>
+<td><code>title</code></td>
+<td>—</td>
+<td>Shortcut for <code>header.title</code></td>
+</tr>
+<tr>
+<td><code>col_txt</code> / <code>col_dim</code> / <code>col_prompt</code> / <code>col_primary</code></td>
+<td>cyan and green defaults</td>
+<td>Text colours (<em>WebGL</em>)</td>
+</tr>
+<tr>
+<td><code>col_up</code> / <code>col_down</code> / <code>col_warn</code> / <code>col_crit</code></td>
+<td>—</td>
+<td>Network and alert colours (<em>WebGL</em>)</td>
+</tr>
+<tr>
+<td><code>col_frame</code></td>
+<td>theme accent</td>
+<td>Colour of the thin frame around the screen (<em>WebGL</em>)</td>
+</tr>
+<tr>
+<td><code>screen_bg</code> / <code>color_bg</code></td>
+<td>dark neutral</td>
+<td>Screen background</td>
+</tr>
+</tbody>
+</table>
+<p><strong>CRT</strong> (<em>WebGL</em>)</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>crt_curve</code></td>
+<td><code>0</code></td>
+<td>Tube curvature, <code>0</code> = flat</td>
+</tr>
+<tr>
+<td><code>crt_aberration</code></td>
+<td><code>1.8</code></td>
+<td>Chromatic aberration strength</td>
+</tr>
+<tr>
+<td><code>crt_scanlines</code></td>
+<td><code>0.45</code></td>
+<td>Scanline strength</td>
+</tr>
+<tr>
+<td><code>crt_bloom</code></td>
+<td><code>0.5</code></td>
+<td>Glow around bright text</td>
+</tr>
+<tr>
+<td><code>crt_flicker</code></td>
+<td><code>0.04</code></td>
+<td>Brightness flicker</td>
+</tr>
+<tr>
+<td><code>crt_mask</code></td>
+<td><code>0.35</code></td>
+<td>RGB aperture grille, <code>0</code> = off</td>
+</tr>
+<tr>
+<td><code>crt_glitch</code></td>
+<td><code>0.7</code></td>
+<td>Glitch burst intensity, <code>0</code> = off</td>
+</tr>
+<tr>
+<td><code>crt_boot</code></td>
+<td><code>1</code></td>
+<td>Power-on animation at mount, <code>0</code> = off</td>
+</tr>
+<tr>
+<td><code>crt_persist</code></td>
+<td><code>0.6</code></td>
+<td>Phosphor persistence, <code>0</code> = off</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Dead-link screen</strong> (<em>WebGL</em>): <code>offline_dim</code> (<code>0.46</code>), <code>offline_warp</code> (<code>1</code>), <code>offline_noise</code> (<code>6</code>), <code>offline_burst</code> (<code>1.5</code>), <code>offline_period</code> (<code>8</code> s between bursts) and <code>offline_split</code> (<code>8.5</code> px of RGB split).</p>
+<p><strong>Log at the prompt</strong> (<em>WebGL</em>)</p>
+<p>Point <code>log_entity</code> at a sensor whose attribute holds recent log lines: each new line is typed after the prompt, then cleared. With <code>journal: true</code> the card becomes a scrolling log (like <code>tail -f</code>): new lines are typed, then scroll up.</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>log_entity</code></td>
+<td>—</td>
+<td>Sensor holding the lines</td>
+</tr>
+<tr>
+<td><code>log_attribute</code></td>
+<td><code>lines</code></td>
+<td>Attribute to read: a list, or multi-line text</td>
+</tr>
+<tr>
+<td><code>log_type_ms</code></td>
+<td><code>55</code></td>
+<td>Typing speed, in ms per character</td>
+</tr>
+<tr>
+<td><code>log_hold</code></td>
+<td><code>4</code> (<code>1.5</code> in journal mode)</td>
+<td>Seconds before Enter / clearing</td>
+</tr>
+<tr>
+<td><code>journal</code></td>
+<td><code>false</code></td>
+<td>Dedicated scrolling log instead of the system screen</td>
+</tr>
+<tr>
+<td><code>journal_lines</code></td>
+<td><code>10</code></td>
+<td>Lines kept in journal mode (3 to 30)</td>
+</tr>
+</tbody>
+</table>
+<div class="markdown-heading"><h2 class="heading-element">❓ FAQ</h2><span id="-faq"></span></div>
+<p><strong>The WebGL card shows the CSS look.</strong> Your browser or WebView has no WebGL, so the card falls back to the CSS rendering. That is expected.</p>
+<p><strong>Some cards go blank on my Android phone.</strong> Android WebViews keep at most 8 WebGL contexts per page and drop the oldest one. This card uses one.</p>
+<p><strong>Where do the OS, kernel and update lines come from?</strong> From any sensors you point the options at. The author feeds them from a small script that publishes over MQTT; Glances covers the rest. Without them the lines are hidden.</p>
+<p><strong>Which languages are supported?</strong> English and French. The editor and the card texts follow your Home Assistant language: French if it is French, English otherwise. Reload the page after changing the language.</p>
+<p><strong>Does it load anything from the internet?</strong> Only the JetBrains Mono and Orbitron fonts, from Google Fonts. No data leaves your Home Assistant.</p>
+<p><strong>Which theme is in the screenshots?</strong> Neo Tokyo, the author's own dark theme (not published). The card works with any theme: the glow follows <code>--rgb-primary-color</code> when the theme sets it, otherwise it is cyan.</p>
+<div class="markdown-heading"><h2 class="heading-element">🙏 Credits</h2><span id="-credits"></span></div>
+<ul>
+<li>The CRT look of the CSS card follows the <a href="https://css-tricks.com/old-timey-terminal-styling/" rel="nofollow">old-timey terminal</a> technique from CSS-Tricks.</li>
+<li>The hologram glitch of the cat is inspired by the Johnny Silverhand apparitions in <em>Cyberpunk 2077</em>. The pixel-art cat is the author's own mascot.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">🌃 More neon cards</h2><span id="-more-neon-cards"></span></div>
+<p>This card is part of a family. See the full collection at <a href="https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards"><strong>Home-Assistant-Neon-Cards</strong></a>.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🐾 Support this project</h2><span id="-support-this-project"></span></div>
+<p>If you enjoy these cards, please consider donating to <strong>Quatre Pattes</strong>, an animal rescue organization.</p>
+
+<blockquote>
+<p>💛 No need to support me — just help the animals. Thank you!</p>
+</blockquote>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🤝 Contributing</h2><span id="-contributing"></span></div>
+<ol>
+<li>Fork the repo</li>
+<li>Create your branch: <code>git checkout -b feature/my-card</code></li>
+<li>Commit and push</li>
+<li>Open a Pull Request</li>
+</ol>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">📄 License</h2><span id="-license"></span></div>
+<p><a href="https://github.com/cerealkiller57540/linux-terminal-card/tree/main/LICENSE">MIT License</a></p>
+</main>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/linux-terminal-card">cerealkiller57540/linux-terminal-card</a> · Updated 2026-10-21 · <a href="../index.html">All projects</a></footer>
+</div></body></html>

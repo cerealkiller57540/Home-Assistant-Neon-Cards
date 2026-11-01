@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Neon Markdown Card — custom card for Home Assistant</title>
+<meta name="description" content="Neon Markdown card for Home Assistant: client-side Jinja templates, full HTML/SVG/CSS body, neon header. HACS-ready.">
+<link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-markdown-card.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Neon Markdown Card — custom card for Home Assistant">
+<meta property="og:description" content="Neon Markdown card for Home Assistant: client-side Jinja templates, full HTML/SVG/CSS body, neon header. HACS-ready.">
+<meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-markdown-card.html">
+<meta property="og:site_name" content="Neon Cards for Home Assistant">
+<meta property="og:image" content="https://raw.githubusercontent.com/cerealkiller57540/neon-markdown-card/main/images/main.png">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/cerealkiller57540/neon-markdown-card/main/images/main.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Neon Markdown Card", "description": "Neon Markdown card for Home Assistant: client-side Jinja templates, full HTML/SVG/CSS body, neon header. HACS-ready.", "codeRepository": "https://github.com/cerealkiller57540/neon-markdown-card", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-markdown-card.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-10-21", "keywords": "custom-card, cyberpunk, dashboard, hacs, home-assistant, jinja, lovelace, markdown, neon, svg, template", "image": "https://raw.githubusercontent.com/cerealkiller57540/neon-markdown-card/main/images/main.png"}</script>
+<link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
+<nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Dashboard cards</nav>
+<header class="page-head"><h1>Neon Markdown Card</h1>
+<p class="lead">Neon Markdown card for Home Assistant: client-side Jinja templates, full HTML/SVG/CSS body, neon header. HACS-ready.</p>
+<div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/neon-markdown-card">View on GitHub</a><a class="btn alt" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=cerealkiller57540&amp;repository=neon-markdown-card&amp;category=plugin">Open in HACS</a></div></header>
+<main class="markdown-body">
+<div align="center">
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-markdown-card/main/images/logo.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-markdown-card/main/images/logo.png" alt="Neon Markdown Card" width="480" style="max-width: 100%;" loading="lazy"></a>
+<p><strong>A Markdown card for Home Assistant that renders full HTML, SVG and CSS from Jinja templates in the browser, under a neon header.</strong></p>
+
+
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-markdown-card/main/images/main.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-markdown-card/main/images/main.png" alt="Seven dashboards built with Neon Markdown Card: a PC monitor, a network uplink panel, a world threat map, a solar farm, network ports and a weather station" width="900" style="max-width: 100%;" loading="lazy"></a>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-markdown-card/main/images/live.webp"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-markdown-card/main/images/live.webp" alt="The PC monitor panel, live: CPU ring, GPU fan, power feed, liquid loop and core matrix animating" width="380" style="max-width: 100%;" loading="lazy"></a>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-markdown-card/main/images/live-dns.webp"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-markdown-card/main/images/live-dns.webp" alt="A DNS filter panel, live: two resolvers with query rings, a packet flow animation and block rate" width="380" style="max-width: 100%;" loading="lazy"></a>
+</div>
+<p>Every panel above is <strong>one <code>neon-markdown-card</code></strong>: no other custom card, no template sensor written for it. The body is HTML (or Markdown) with Jinja-style templates, evaluated in the browser against the live states: <code>{% for %}</code> over an attribute list, <code>{% set %}</code>, macros, filters, SVG sparklines from the recorder history, <code>&lt;style&gt;</code> blocks with <code>@container</code> queries and keyframe animations. The header on top is a neon title with glow, gradient, flicker and CRT scanline.</p>
+<p><em>These screenshots are examples of what the templates can do, taken from the author's dashboard (French labels, real data, Neo Tokyo theme). The card ships the engine and the header, not these layouts: you write the body.</em></p>
+<div class="markdown-heading"><h2 class="heading-element">✨ Features</h2><span id="-features"></span></div>
+<ul>
+<li><strong>Client-side template engine</strong>: <code>set</code>, <code>if / elif / else</code>, <code>for</code> (with <code>loop.*</code> and <code>else</code>), <code>macro</code>, <code>range()</code>, <code>now()</code>, <code>states()</code>, <code>state_attr()</code>, <code>states.domain.entity.attribute</code>, <code>as_timestamp()</code>, ternaries, <code>~</code> concatenation, and about thirty filters (<code>round</code>, <code>int</code>, <code>default</code>, <code>sort</code>, <code>map</code>, <code>selectattr</code>, <code>sum</code>, <code>clamp</code>, <code>format</code>, <code>zfill</code>, <code>thousands</code>…). No round-trip to the server: the card only re-renders when one of the entities it reads changes.</li>
+<li><strong>Full HTML and SVG body</strong>, sanitised: layout tags, tables, images from <code>/local</code>, inline SVG, <code>&lt;style&gt;</code> blocks scoped to the card (classes, <code>@container</code>, <code>@media</code>, gradients, <code>clip-path</code>, <code>mask</code>, animations). Scripts, event handlers, external URLs and <code>javascript:</code> links are removed.</li>
+<li><strong>History sparklines</strong>: declare <code>history: [{entity, hours}]</code> and draw <code>hist['sensor.x'].pts</code> straight into an SVG <code>&lt;polyline&gt;</code>.</li>
+<li><strong><code>data-entity="sensor.x"</code></strong> on any element opens the native more-info dialog on tap.</li>
+<li><strong>Neon header</strong>, the same as <a href="https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards">neon-header-card</a>: icon, glow, two-colour gradient, flicker, scanline, hover glitch. Use <code>mode: title</code>, <code>body</code> or <code>both</code>.</li>
+<li><strong>25 ready-made keyframes</strong> (<code>nmc-flicker</code>, <code>nmc-scan-scroll</code>, <code>nmc-ring-spin</code>, <code>nmc-data-flow</code>, <code>nmc-pulse-travel</code>, <code>nmc-dash-crawl</code>…) to use in inline <code>animation:</code>.</li>
+<li><strong>Visual editor</strong> for the header and frame; the body is edited as text.</li>
+<li><code>debug: true</code> prints template errors under the body. Guard rails cap output size, loop iterations and nesting depth, so a broken template cannot freeze the dashboard.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">📦 Installation</h2><span id="-installation"></span></div>
+<div class="markdown-heading"><h3 class="heading-element">HACS (recommended)</h3><span id="hacs-recommended"></span></div>
+<ol>
+<li>Click the <strong>Open in HACS</strong> button above, or add this repository as a custom repository in HACS (category <strong>Dashboard</strong>): <code>https://github.com/cerealkiller57540/neon-markdown-card</code>.</li>
+<li>Download <strong>Neon Markdown Card</strong>.</li>
+<li>Reload your browser.</li>
+</ol>
+<div class="markdown-heading"><h3 class="heading-element">Manual</h3><span id="manual"></span></div>
+<ol>
+<li>Copy <a href="https://github.com/cerealkiller57540/neon-markdown-card/blob/main/dist/neon-markdown-card.js"><code>dist/neon-markdown-card.js</code></a> to <code>config/www/neon-markdown-card/</code>.</li>
+<li>Add a dashboard resource: URL <code>/local/neon-markdown-card/neon-markdown-card.js</code>, type <strong>JavaScript module</strong>.</li>
+</ol>
+<div class="markdown-heading"><h2 class="heading-element">🚀 Usage</h2><span id="-usage"></span></div>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="type: custom:neon-markdown-card
+mode: both
+title:
+  text: BATTERIES
+  icon: mdi:battery-high
+  glow: true
+  gradient: true
+history:
+  - entity: sensor.home_battery
+    hours: 24
+body:
+  format: html
+  content: &gt;-
+    &lt;style&gt;
+      .row { display:flex; justify-content:space-between; padding:4px 0; }
+      .low { color:#ff2d6b; animation: nmc-flicker 2s infinite; }
+    &lt;/style&gt;
+    {% set devices = [
+      {&#x27;n&#x27;:&#x27;Phone&#x27;,  &#x27;e&#x27;:&#x27;sensor.phone_battery_level&#x27;},
+      {&#x27;n&#x27;:&#x27;Tablet&#x27;, &#x27;e&#x27;:&#x27;sensor.tablet_battery_level&#x27;},
+      {&#x27;n&#x27;:&#x27;Remote&#x27;, &#x27;e&#x27;:&#x27;sensor.remote_battery&#x27;}
+    ] %}
+    {% for d in devices|sort(attribute=&#x27;n&#x27;) %}
+      {% set v = states(d.e)|int(0) %}
+      &lt;div class=&quot;row&quot; data-entity=&quot;{{ d.e }}&quot;&gt;
+        &lt;span&gt;{{ loop.index }}. {{ d.n }}&lt;/span&gt;
+        &lt;b class=&quot;{{ &#x27;low&#x27; if v &lt; 20 else &#x27;&#x27; }}&quot;&gt;{{ v }} %&lt;/b&gt;
+      &lt;/div&gt;
+    {% endfor %}
+    {% if hist[&#x27;sensor.home_battery&#x27;] is defined %}
+    &lt;svg viewBox=&quot;0 0 100 30&quot; preserveAspectRatio=&quot;none&quot; style=&quot;width:100%;height:40px&quot;&gt;
+      &lt;polyline points=&quot;{{ hist[&#x27;sensor.home_battery&#x27;].pts }}&quot; fill=&quot;none&quot; stroke=&quot;#00f0ff&quot;
+                vector-effect=&quot;non-scaling-stroke&quot;/&gt;
+    &lt;/svg&gt;
+    {% endif %}"><pre><span class="pl-ent">type</span>: <span class="pl-s">custom:neon-markdown-card</span>
+<span class="pl-ent">mode</span>: <span class="pl-s">both</span>
+<span class="pl-ent">title</span>:
+  <span class="pl-ent">text</span>: <span class="pl-s">BATTERIES</span>
+  <span class="pl-ent">icon</span>: <span class="pl-s">mdi:battery-high</span>
+  <span class="pl-ent">glow</span>: <span class="pl-c1">true</span>
+  <span class="pl-ent">gradient</span>: <span class="pl-c1">true</span>
+<span class="pl-ent">history</span>:
+  - <span class="pl-ent">entity</span>: <span class="pl-s">sensor.home_battery</span>
+    <span class="pl-ent">hours</span>: <span class="pl-c1">24</span>
+<span class="pl-ent">body</span>:
+  <span class="pl-ent">format</span>: <span class="pl-s">html</span>
+  <span class="pl-ent">content</span>: <span class="pl-s">&gt;-</span>
+<span class="pl-s">    &lt;style&gt;</span>
+<span class="pl-s">      .row { display:flex; justify-content:space-between; padding:4px 0; }</span>
+<span class="pl-s">      .low { color:#ff2d6b; animation: nmc-flicker 2s infinite; }</span>
+<span class="pl-s">    &lt;/style&gt;</span>
+<span class="pl-s">    {% set devices = [</span>
+<span class="pl-s">      {'n':'Phone',  'e':'sensor.phone_battery_level'},</span>
+<span class="pl-s">      {'n':'Tablet', 'e':'sensor.tablet_battery_level'},</span>
+<span class="pl-s">      {'n':'Remote', 'e':'sensor.remote_battery'}</span>
+<span class="pl-s">    ] %}</span>
+<span class="pl-s">    {% for d in devices|sort(attribute='n') %}</span>
+<span class="pl-s">      {% set v = states(d.e)|int(0) %}</span>
+<span class="pl-s">      &lt;div class="row" data-entity="{{ d.e }}"&gt;</span>
+<span class="pl-s">        &lt;span&gt;{{ loop.index }}. {{ d.n }}&lt;/span&gt;</span>
+<span class="pl-s">        &lt;b class="{{ 'low' if v &lt; 20 else '' }}"&gt;{{ v }} %&lt;/b&gt;</span>
+<span class="pl-s">      &lt;/div&gt;</span>
+<span class="pl-s">    {% endfor %}</span>
+<span class="pl-s">    {% if hist['sensor.home_battery'] is defined %}</span>
+<span class="pl-s">    &lt;svg viewBox="0 0 100 30" preserveAspectRatio="none" style="width:100%;height:40px"&gt;</span>
+<span class="pl-s">      &lt;polyline points="{{ hist['sensor.home_battery'].pts }}" fill="none" stroke="#00f0ff"</span>
+<span class="pl-s">                vector-effect="non-scaling-stroke"/&gt;</span>
+<span class="pl-s">    &lt;/svg&gt;</span>
+<span class="pl-s">    {% endif %}</span></pre></div>
+<div class="markdown-heading"><h2 class="heading-element">⚙️ Options</h2><span id="️-options"></span></div>
+<p><strong>Top level</strong></p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mode</code></td>
+<td><code>both</code></td>
+<td><code>title</code>, <code>body</code> or <code>both</code></td>
+</tr>
+<tr>
+<td><code>history</code></td>
+<td>—</td>
+<td>List of <code>{entity, hours}</code>; exposes <code>hist['entity'] = {pts, min, max, first, last, n}</code> (refreshed about every 5 min)</td>
+</tr>
+<tr>
+<td><code>debug</code></td>
+<td><code>false</code></td>
+<td>Show template errors under the body</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>title:</code></strong></p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>text</code> / <code>icon</code> / <code>icon_position</code></td>
+<td>—</td>
+<td>Title text, <code>mdi:</code> icon, icon left or right</td>
+</tr>
+<tr>
+<td><code>color</code> / <code>icon_color</code></td>
+<td>theme</td>
+<td>Text and icon colour</td>
+</tr>
+<tr>
+<td><code>font_family</code> / <code>font_size</code> / <code>font_weight</code> / <code>letter_spacing</code></td>
+<td>theme</td>
+<td>Font (Orbitron, Rajdhani… load automatically from Google Fonts)</td>
+</tr>
+<tr>
+<td><code>uppercase</code> / <code>italic</code></td>
+<td><code>false</code></td>
+<td>Text style</td>
+</tr>
+<tr>
+<td><code>glow</code> / <code>glow_color</code> / <code>glow_size</code></td>
+<td>—</td>
+<td>Neon glow</td>
+</tr>
+<tr>
+<td><code>icon_glow_size</code></td>
+<td><code>glow_size</code></td>
+<td>Title icon glow radius, independent of the text glow — a larger value spreads the halo thinner and keeps thin icons crisp</td>
+</tr>
+<tr>
+<td><code>gradient</code> / <code>gradient_from</code> / <code>gradient_to</code></td>
+<td>—</td>
+<td>Two-colour gradient text</td>
+</tr>
+<tr>
+<td><code>flicker</code> / <code>scanline</code> / <code>hover_glitch</code></td>
+<td><code>false</code></td>
+<td>Animations</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>body:</code></strong></p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>format</code></td>
+<td><code>html</code></td>
+<td><code>html</code> or <code>markdown</code></td>
+</tr>
+<tr>
+<td><code>content</code></td>
+<td>—</td>
+<td>The template</td>
+</tr>
+<tr>
+<td><code>color</code> / <code>font_family</code> / <code>font_size</code></td>
+<td>theme</td>
+<td>Default text style</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>shared:</code></strong> (frame and action)</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>align_h</code> / <code>align_v</code></td>
+<td>—</td>
+<td>Content alignment</td>
+</tr>
+<tr>
+<td><code>bg_color</code> / <code>bg_opacity</code> / <code>bg_blur</code></td>
+<td>theme</td>
+<td>Background, with optional backdrop blur</td>
+</tr>
+<tr>
+<td><code>border_color</code> / <code>border_width</code> / <code>border_style</code> / <code>border_radius</code></td>
+<td>theme</td>
+<td>Frame</td>
+</tr>
+<tr>
+<td><code>font_family</code></td>
+<td>—</td>
+<td>Font for the whole card</td>
+</tr>
+<tr>
+<td><code>tap_action</code> / <code>navigation_path</code> / <code>entity</code></td>
+<td>—</td>
+<td>Tap on the card: more-info, navigate, or none</td>
+</tr>
+</tbody>
+</table>
+<div class="markdown-heading"><h2 class="heading-element">❓ FAQ</h2><span id="-faq"></span></div>
+<p><strong>Is this the same Jinja as Home Assistant?</strong> No. It is a separate engine that runs in your browser and covers the common subset listed above. A template that works in the HA developer tools may need small changes (no <code>{% call %}</code>, no keyword arguments in macros, no <code>|</code> inside a composed arithmetic expression: use <code>floor()</code> instead of <code>|int</code> there). Turn on <code>debug: true</code> to see what fails.</p>
+<p><strong>Why are some of my tags or styles gone?</strong> The body is sanitised. Scripts, <code>on*</code> attributes, external images, <code>@import</code>, external fonts and non-local <code>url()</code> are stripped on purpose.</p>
+<p><strong>Can several cards share a macro?</strong> Four macros ship with the engine (<code>fmt_eta</code>, <code>tuile</code>, <code>spark</code>, <code>hp_style</code>). Your own macros live in each card's body.</p>
+<p><strong>Which languages are supported?</strong> English and French. The editor and the card texts follow your Home Assistant language: French if it is French, English otherwise. Reload the page after changing the language. Every option can also be set in YAML.</p>
+<p><strong>Which theme is in the screenshots?</strong> Neo Tokyo, the author's own dark theme (not published). The card works with any theme.</p>
+<div class="markdown-heading"><h2 class="heading-element">🌃 More neon cards</h2><span id="-more-neon-cards"></span></div>
+<p>This card is part of a family. See the full collection at <a href="https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards"><strong>Home-Assistant-Neon-Cards</strong></a>.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🐾 Support this project</h2><span id="-support-this-project"></span></div>
+<p>If you enjoy these cards, please consider donating to <strong>Quatre Pattes</strong>, an animal rescue organization.</p>
+
+<blockquote>
+<p>💛 No need to support me — just help the animals. Thank you!</p>
+</blockquote>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🤝 Contributing</h2><span id="-contributing"></span></div>
+<ol>
+<li>Fork the repo</li>
+<li>Create your branch: <code>git checkout -b feature/my-card</code></li>
+<li>Commit and push</li>
+<li>Open a Pull Request</li>
+</ol>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">📄 License</h2><span id="-license"></span></div>
+<p><a href="https://github.com/cerealkiller57540/neon-markdown-card/tree/main/LICENSE">MIT License</a></p>
+</main>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/neon-markdown-card">cerealkiller57540/neon-markdown-card</a> · Updated 2026-10-21 · <a href="../index.html">All projects</a></footer>
+</div></body></html>

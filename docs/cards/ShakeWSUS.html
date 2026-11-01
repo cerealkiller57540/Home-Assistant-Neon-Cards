@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ShakeWSUS — PowerShell script to reset the WSUS / Windows Update / SCCM </title>
+<meta name="description" content="PowerShell script to reset the WSUS / Windows Update / SCCM client stack on remote computers">
+<link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/ShakeWSUS.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ShakeWSUS — PowerShell script to reset the WSUS / Windows Update / SCCM ">
+<meta property="og:description" content="PowerShell script to reset the WSUS / Windows Update / SCCM client stack on remote computers">
+<meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/ShakeWSUS.html">
+<meta property="og:site_name" content="Neon Cards for Home Assistant">
+<meta name="twitter:card" content="summary">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "ShakeWSUS", "description": "PowerShell script to reset the WSUS / Windows Update / SCCM client stack on remote computers", "codeRepository": "https://github.com/cerealkiller57540/ShakeWSUS", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/ShakeWSUS.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-10-05", "keywords": "endpoint, mecm, powershell, sccm, server, windows-update, wsus"}</script>
+<link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
+<nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Other projects</nav>
+<header class="page-head"><h1>ShakeWSUS</h1>
+<p class="lead">PowerShell script to reset the WSUS / Windows Update / SCCM client stack on remote computers</p>
+<div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/ShakeWSUS">View on GitHub</a></div></header>
+<main class="markdown-body">
+<div class="markdown-heading"><h2 class="heading-element">ShakeWSUS</h2><span id="shakewsus"></span></div>
+<p>PowerShell script that resets the WSUS / Windows Update / SCCM (MECM) client stack on one or more
+remote computers, for machines whose client is stuck (no scan, stale compliance state, broken policy).</p>
+<blockquote>
+<p><strong>Warning</strong> - this is a disruptive maintenance action. It restarts core services (including WMI),
+deletes the BITS download queue, can change the Windows Update policy and the WinHTTP proxy, and
+triggers update scans. Use a maintenance window and test on a non-production machine first.
+Provided as-is, without warranty (see <a href="https://github.com/cerealkiller57540/ShakeWSUS/tree/main/LICENSE">LICENSE</a>).</p>
+</blockquote>
+<div class="markdown-heading"><h2 class="heading-element">What it does</h2><span id="what-it-does"></span></div>
+<p>On each target, through PowerShell remoting:</p>
+<ol>
+<li>Stops <code>ccmexec</code>, <code>wuauserv</code>, <code>winmgmt</code>, <code>bits</code> and any optional extra service (dependents first).</li>
+<li>Deletes the network cache directory (BITS queue) and restarts BITS.</li>
+<li>Optionally deletes the local Windows Update policy key.</li>
+<li>Optionally resets / enforces the WinHTTP proxy.</li>
+<li>Checks <code>Registry.pol</code> and renames it to <code>registry.old</code> if its header is invalid.</li>
+<li>Runs <code>gpupdate</code>, then optionally re-applies local Windows Update policy values.</li>
+<li>Un-pauses SCCM Software Distribution, restarts the services, requests a Windows Update scan.</li>
+<li>Triggers the SCCM client schedules, removes stale PrePostActions records, refreshes compliance state.</li>
+</ol>
+<p>Services are always started again at the end, even after an error.</p>
+<div class="markdown-heading"><h2 class="heading-element">Requirements</h2><span id="requirements"></span></div>
+<ul>
+<li>Windows PowerShell 5.1 or later on the machine running the script.</li>
+<li>WinRM / PowerShell remoting enabled on each target.</li>
+<li>An account that is local administrator on each target.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">Usage</h2><span id="usage"></span></div>
+<div class="highlight highlight-source-powershell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="# Asks for confirmation (type YES) before touching anything
+.\ShakeWSUS.ps1 -ComputerName SERVER01, SERVER02
+
+# From a list, 4 at a time, no prompt
+.\ShakeWSUS.ps1 -ComputerName (Get-Content .\servers.txt) -ThrottleLimit 4 -Force"><pre><span class="pl-c"><span class="pl-c">#</span> Asks for confirmation (type YES) before touching anything</span>
+.\ShakeWSUS.ps1 <span class="pl-k">-</span>ComputerName SERVER01<span class="pl-k">,</span> SERVER02
+
+<span class="pl-c"><span class="pl-c">#</span> From a list, 4 at a time, no prompt</span>
+.\ShakeWSUS.ps1 <span class="pl-k">-</span>ComputerName (<span class="pl-c1">Get-Content</span> .\servers.txt) <span class="pl-k">-</span>ThrottleLimit <span class="pl-c1">4</span> <span class="pl-k">-</span>Force</pre></div>
+<p>Parameters: <code>-ComputerName</code>, <code>-ThrottleLimit</code> (default 16), <code>-Credential</code>, <code>-LogPath</code>, <code>-Force</code>.
+Exit code is <code>0</code> when every target completed, <code>1</code> otherwise.
+The log is written to <code>%LOCALAPPDATA%\ShakeWSUS\Logs\</code> by default.</p>
+<div class="markdown-heading"><h2 class="heading-element">Configuration</h2><span id="configuration"></span></div>
+<p>Environment-specific settings are in the <code>$Config</code> hashtable at the top of the script, and are
+<strong>empty by default</strong> (the related steps are skipped):</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ExtraServices</code></td>
+<td>Extra services (e.g. an endpoint agent) stopped before and restarted after the maintenance</td>
+</tr>
+<tr>
+<td><code>WindowsUpdatePolicy</code> / <code>WindowsUpdateAuPolicy</code></td>
+<td>Policy values re-applied after <code>gpupdate</code></td>
+</tr>
+<tr>
+<td><code>Proxy</code></td>
+<td>Legacy proxy patterns to reset, or a managed proxy to enforce (language-independent matching)</td>
+</tr>
+<tr>
+<td><code>ResetWindowsUpdatePolicy</code></td>
+<td>Delete the local Windows Update policy key before <code>gpupdate</code></td>
+</tr>
+<tr>
+<td><code>NetworkCachePath</code>, timeouts</td>
+<td>Cache directory and timeouts</td>
+</tr>
+</tbody>
+</table>
+<p>Examples are given in the comments of the script.</p>
+<div class="markdown-heading"><h2 class="heading-element">Known limitation</h2><span id="known-limitation"></span></div>
+<p>After requesting a scan, the script waits for the Windows Update service to stop, which often only
+happens at the timeout (<code>UpdateScanTimeout</code>, 300 s by default).</p>
+<div class="markdown-heading"><h2 class="heading-element">License</h2><span id="license"></span></div>
+<p><a href="https://github.com/cerealkiller57540/ShakeWSUS/tree/main/LICENSE">MIT</a></p>
+</main>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/ShakeWSUS">cerealkiller57540/ShakeWSUS</a> · Updated 2026-10-05 · <a href="../index.html">All projects</a></footer>
+</div></body></html>

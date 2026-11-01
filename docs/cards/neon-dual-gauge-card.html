@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Neon Dual Gauge Card — custom card for Home Assistant</title>
+<meta name="description" content="Two concentric neon LED gauges for Home Assistant, with a WebGL plasma core. HACS-installable.">
+<link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-dual-gauge-card.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Neon Dual Gauge Card — custom card for Home Assistant">
+<meta property="og:description" content="Two concentric neon LED gauges for Home Assistant, with a WebGL plasma core. HACS-installable.">
+<meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-dual-gauge-card.html">
+<meta property="og:site_name" content="Neon Cards for Home Assistant">
+<meta property="og:image" content="https://raw.githubusercontent.com/cerealkiller57540/neon-dual-gauge-card/main/images/main.webp">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/cerealkiller57540/neon-dual-gauge-card/main/images/main.webp">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Neon Dual Gauge Card", "description": "Two concentric neon LED gauges for Home Assistant, with a WebGL plasma core. HACS-installable.", "codeRepository": "https://github.com/cerealkiller57540/neon-dual-gauge-card", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-dual-gauge-card.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-10-21", "keywords": "battery, custom-card, cyberpunk, dashboard, energy, gauge, hacs, home-assistant, lovelace, neon, webgl", "image": "https://raw.githubusercontent.com/cerealkiller57540/neon-dual-gauge-card/main/images/main.webp"}</script>
+<link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
+<nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Dashboard cards</nav>
+<header class="page-head"><h1>Neon Dual Gauge Card</h1>
+<p class="lead">Two concentric neon LED gauges for Home Assistant, with a WebGL plasma core. HACS-installable.</p>
+<div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/neon-dual-gauge-card">View on GitHub</a><a class="btn alt" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=cerealkiller57540&amp;repository=neon-dual-gauge-card&amp;category=plugin">Open in HACS</a></div></header>
+<main class="markdown-body">
+<div align="center">
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-dual-gauge-card/main/images/logo.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-dual-gauge-card/main/images/logo.png" alt="Neon Dual Gauge Card" width="480" style="max-width: 100%;" loading="lazy"></a>
+<p><strong>Two concentric LED gauges for Home Assistant, with a WebGL plasma core that reacts to the value.</strong></p>
+
+
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-dual-gauge-card/main/images/main.webp"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-dual-gauge-card/main/images/main.webp" alt="Neon Dual Gauge Card: battery power on the inner ring, state of charge on the outer ring, plasma arcs in between" width="440" style="max-width: 100%;" loading="lazy"></a>
+</div>
+<p>Two related values in one round gauge: an inner LED ring and an outer one, each with its own range, colours, markers and zones. Built for a home battery (power in watts on the inside, charge level on the outside), it works just as well for temperature and humidity, solar production and consumption, or any pair of sensors.</p>
+<p>The WebGL variant fills the space between the core and the inner ring with plasma arcs. Their number, speed and pulses follow the inner value, they flow towards the core or the ring depending on its sign, and a halo around the outer ring breathes with the second value.</p>
+<div class="markdown-heading"><h2 class="heading-element">✨ Features</h2><span id="-features"></span></div>
+<ul>
+<li><code>neon-dual-gauge-card-webgl</code>: plasma, LEDs, shadows and halos drawn in a single WebGL canvas.</li>
+<li><strong>Bidirectional mode</strong> for values that go both ways (battery charging / discharging, grid import / export): the ring fills from zero in either direction.</li>
+<li><strong>Severity colours, markers and zones</strong> per gauge.</li>
+<li><strong>Comet head, ignition sweep, glass centre, tick marks</strong>, each one an on/off option.</li>
+<li><strong>Four halo styles</strong> around the outer ring (WebGL): resonance, reservoir, nebula, or a plain glow.</li>
+<li><strong>Visual editor</strong> with grouped sections; every plasma and halo setting is a slider.</li>
+<li>Inherits your theme colours by default. Pauses when off-screen, releases its WebGL context when removed (Android WebViews cap a page at 8 contexts), and falls back to the CSS LED rendering if WebGL is not available.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">📦 Installation</h2><span id="-installation"></span></div>
+<div class="markdown-heading"><h3 class="heading-element">HACS (recommended)</h3><span id="hacs-recommended"></span></div>
+<ol>
+<li>Click the <strong>Open in HACS</strong> button above, or add this repository as a custom repository in HACS (category <strong>Dashboard</strong>): <code>https://github.com/cerealkiller57540/neon-dual-gauge-card</code>.</li>
+<li>Download <strong>Neon Dual Gauge Card</strong>.</li>
+<li>Reload your browser.</li>
+</ol>
+<p>HACS registers one resource, <code>neon-dual-gauge-card.js</code>. The card type is <code>custom:neon-dual-gauge-card-webgl</code>.</p>
+<p>If you used the former CSS card (<code>custom:neon-dual-gauge-card</code>), change its type to <code>custom:neon-dual-gauge-card-webgl</code>: the CSS version is no longer shipped.</p>
+<div class="markdown-heading"><h3 class="heading-element">Manual</h3><span id="manual"></span></div>
+<ol>
+<li>Copy <a href="https://github.com/cerealkiller57540/neon-dual-gauge-card/blob/main/dist/neon-dual-gauge-card.js"><code>dist/neon-dual-gauge-card.js</code></a> to <code>config/www/neon-dual-gauge-card/</code>.</li>
+<li>Add a dashboard resource: URL <code>/local/neon-dual-gauge-card/neon-dual-gauge-card.js</code>, type <strong>JavaScript module</strong>.</li>
+</ol>
+<div class="markdown-heading"><h2 class="heading-element">🚀 Usage</h2><span id="-usage"></span></div>
+<p>The first gauge is the inner ring, the second the outer ring.</p>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="type: custom:neon-dual-gauge-card-webgl
+gauge_size: 240
+inner_gauge_size: 150
+inner_gauge_radius: 105
+gauges:
+  - entity: sensor.battery_power
+    min: -2000
+    max: 2000
+    unit: W
+    decimals: 0
+    bidirectional: true
+    leds_count: 200
+    severity:
+      - { value: -1000, color: &quot;#7C3AED&quot; }
+      - { value: 0, color: &quot;#A78BFA&quot; }
+      - { value: 1000, color: &quot;#00F0FF&quot; }
+    markers:
+      - { value: 0, label: 0W, color: &quot;#A78BFA&quot; }
+  - entity: sensor.battery_level
+    min: 0
+    max: 100
+    unit: &quot;%&quot;
+    decimals: 0
+    markers:
+      - { value: 20, label: Low, color: &quot;#7C3AED&quot; }
+      - { value: 80, label: Full, color: &quot;#00F0FF&quot; }"><pre><span class="pl-ent">type</span>: <span class="pl-s">custom:neon-dual-gauge-card-webgl</span>
+<span class="pl-ent">gauge_size</span>: <span class="pl-c1">240</span>
+<span class="pl-ent">inner_gauge_size</span>: <span class="pl-c1">150</span>
+<span class="pl-ent">inner_gauge_radius</span>: <span class="pl-c1">105</span>
+<span class="pl-ent">gauges</span>:
+  - <span class="pl-ent">entity</span>: <span class="pl-s">sensor.battery_power</span>
+    <span class="pl-ent">min</span>: <span class="pl-c1">-2000</span>
+    <span class="pl-ent">max</span>: <span class="pl-c1">2000</span>
+    <span class="pl-ent">unit</span>: <span class="pl-s">W</span>
+    <span class="pl-ent">decimals</span>: <span class="pl-c1">0</span>
+    <span class="pl-ent">bidirectional</span>: <span class="pl-c1">true</span>
+    <span class="pl-ent">leds_count</span>: <span class="pl-c1">200</span>
+    <span class="pl-ent">severity</span>:
+      - <span class="pl-s">{ value: -1000, color: "#7C3AED" }</span>
+      - <span class="pl-s">{ value: 0, color: "#A78BFA" }</span>
+      - <span class="pl-s">{ value: 1000, color: "#00F0FF" }</span>
+    <span class="pl-ent">markers</span>:
+      - <span class="pl-s">{ value: 0, label: 0W, color: "#A78BFA" }</span>
+  - <span class="pl-ent">entity</span>: <span class="pl-s">sensor.battery_level</span>
+    <span class="pl-ent">min</span>: <span class="pl-c1">0</span>
+    <span class="pl-ent">max</span>: <span class="pl-c1">100</span>
+    <span class="pl-ent">unit</span>: <span class="pl-s"><span class="pl-pds">"</span>%<span class="pl-pds">"</span></span>
+    <span class="pl-ent">decimals</span>: <span class="pl-c1">0</span>
+    <span class="pl-ent">markers</span>:
+      - <span class="pl-s">{ value: 20, label: Low, color: "#7C3AED" }</span>
+      - <span class="pl-s">{ value: 80, label: Full, color: "#00F0FF" }</span></pre></div>
+<div class="markdown-heading"><h2 class="heading-element">⚙️ Options</h2><span id="️-options"></span></div>
+<p><strong>Card</strong></p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>—</td>
+<td>Card title</td>
+</tr>
+<tr>
+<td><code>title_position</code></td>
+<td><code>bottom</code></td>
+<td><code>top</code>, <code>bottom</code>, <code>inside-top</code>, <code>inside-bottom</code>, <code>none</code></td>
+</tr>
+<tr>
+<td><code>title_font_size</code> / <code>_family</code> / <code>_weight</code> / <code>_color</code></td>
+<td>theme</td>
+<td>Title style</td>
+</tr>
+<tr>
+<td><code>gauge_size</code></td>
+<td><code>200</code></td>
+<td>Outer diameter (px)</td>
+</tr>
+<tr>
+<td><code>inner_gauge_size</code> / <code>inner_gauge_radius</code></td>
+<td>65 % of size / <code>65</code></td>
+<td>Inner disc diameter, radius of the inner LED ring</td>
+</tr>
+<tr>
+<td><code>primary_gauge</code></td>
+<td><code>inner</code></td>
+<td>Which value is shown large in the centre</td>
+</tr>
+<tr>
+<td><code>hide_card</code></td>
+<td><code>false</code></td>
+<td>Transparent card, no frame</td>
+</tr>
+<tr>
+<td><code>hide_shadows</code></td>
+<td><code>false</code></td>
+<td>Turn every shadow off</td>
+</tr>
+<tr>
+<td><code>card_theme</code></td>
+<td><code>default</code></td>
+<td><code>default</code>, <code>light</code>, <code>dark</code>, <code>custom</code></td>
+</tr>
+<tr>
+<td><code>custom_background</code>, <code>custom_gauge_background</code>, <code>custom_center_background</code>, <code>custom_text_color</code>, <code>custom_secondary_text_color</code></td>
+<td>theme</td>
+<td>Colour overrides</td>
+</tr>
+<tr>
+<td><code>enable_comet_head</code> / <code>enable_ignition</code></td>
+<td><code>true</code></td>
+<td>Bright head on the active LED / sweep on load</td>
+</tr>
+<tr>
+<td><code>enable_glass_center</code> / <code>enable_tick_marks</code></td>
+<td><code>true</code></td>
+<td>Glass ring around the centre / engraved ticks</td>
+</tr>
+<tr>
+<td><code>neon_value_glow</code> / <code>value_glow_dynamic</code></td>
+<td><code>true</code></td>
+<td>Glowing value text, coloured like the active LED</td>
+</tr>
+<tr>
+<td><code>enable_custom_effects</code>, <code>enable_top_glow</code>, <code>enable_pulse_animation</code>, <code>enable_glitch_hover</code></td>
+<td><code>true</code></td>
+<td>Extra effects</td>
+</tr>
+<tr>
+<td><code>power_save_mode</code> / <code>debounce_updates</code></td>
+<td>auto</td>
+<td>Pause when hidden / group fast updates. On by default on phones and tablets (debounce: iPad only)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Per gauge</strong> (<code>gauges:</code>, exactly two)</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>entity</code></td>
+<td><strong>required</strong></td>
+<td>Sensor</td>
+</tr>
+<tr>
+<td><code>min</code> / <code>max</code></td>
+<td><code>0</code> / <code>100</code></td>
+<td>Range</td>
+</tr>
+<tr>
+<td><code>unit</code> / <code>decimals</code></td>
+<td>entity unit / <code>1</code></td>
+<td>Display</td>
+</tr>
+<tr>
+<td><code>bidirectional</code></td>
+<td><code>false</code></td>
+<td>Fill from zero (or the midpoint) in both directions</td>
+</tr>
+<tr>
+<td><code>leds_count</code> / <code>led_size</code></td>
+<td><code>100</code> / <code>6</code></td>
+<td>Number and diameter (px) of LEDs</td>
+</tr>
+<tr>
+<td><code>hide_inactive_leds</code></td>
+<td><code>false</code></td>
+<td>Show only the lit LEDs</td>
+</tr>
+<tr>
+<td><code>smooth_transitions</code> / <code>animation_duration</code></td>
+<td><code>true</code> / <code>800</code></td>
+<td>Animate value changes (ms)</td>
+</tr>
+<tr>
+<td><code>severity</code></td>
+<td>—</td>
+<td>List of <code>{value, color}</code>: colour by value</td>
+</tr>
+<tr>
+<td><code>markers</code> / <code>markers_radius</code></td>
+<td>— / LED radius</td>
+<td>List of <code>{value, color, label}</code> around the ring</td>
+</tr>
+<tr>
+<td><code>zones</code></td>
+<td>—</td>
+<td>List of <code>{from, to, color, opacity}</code> arcs</td>
+</tr>
+<tr>
+<td><code>value_font_size</code> / <code>_weight</code> / <code>_color</code> / <code>_family</code>, <code>unit_font_…</code></td>
+<td>theme</td>
+<td>Value and unit style</td>
+</tr>
+<tr>
+<td><code>center_shadow</code>, <code>outer_shadow</code> (+ <code>_blur</code>, <code>_spread</code>)</td>
+<td><code>false</code></td>
+<td>Shadows</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>halo_soc</code></td>
+<td><code>resonance</code></td>
+<td>Halo around the outer ring: <code>resonance</code>, <code>reservoir</code>, <code>nebuleuse</code> (nebula), <code>v2</code> (plain CSS glow)</td>
+</tr>
+<tr>
+<td><code>halo_power</code></td>
+<td><code>ondes</code></td>
+<td>Waves pushed out by the inner value, or <code>v2</code></td>
+</tr>
+<tr>
+<td><code>halo_unavailable</code></td>
+<td><code>freeze</code></td>
+<td>When a sensor is unavailable: <code>freeze</code> the plasma or <code>fade</code> it out</td>
+</tr>
+<tr>
+<td><code>plasma_flow_charge</code></td>
+<td><code>core</code></td>
+<td>Where the arcs flow when the inner value is positive: <code>core</code> or <code>ring</code></td>
+</tr>
+<tr>
+<td><code>plasma_fil_max</code></td>
+<td><code>7</code></td>
+<td>Maximum number of arcs</td>
+</tr>
+<tr>
+<td><code>plasma_speed</code> / <code>plasma_pulse</code></td>
+<td><code>1.00</code> / <code>0.70</code></td>
+<td>Arc speed and pulses</td>
+</tr>
+<tr>
+<td><code>plasma_glow</code> / <code>plasma_haze</code></td>
+<td><code>1.25</code> / <code>1.00</code></td>
+<td>Coloured glow and background haze</td>
+</tr>
+</tbody>
+</table>
+<p>About thirty more <code>plasma_*</code> and <code>halo_*</code> settings (roughness, frequency, reach, turbulence…) are easiest to tune from the visual editor, where each is a slider with its range.</p>
+<div class="markdown-heading"><h2 class="heading-element">❓ FAQ</h2><span id="-faq"></span></div>
+<p><strong>Which value goes where?</strong> The first entry of <code>gauges:</code> is the inner ring and drives the plasma; the second is the outer ring and drives the halo.</p>
+<p><strong>Some cards go blank on my Android phone.</strong> Android WebViews keep at most 8 WebGL contexts per page and drop the oldest one. This card uses one context and gives it back when it leaves the page.</p>
+<p><strong>Which languages are supported?</strong> English and French. The editor and the card texts follow your Home Assistant language: French if it is French, English otherwise. Reload the page after changing the language. Every option can also be set in YAML.</p>
+<p><strong>Which theme is in the screenshots?</strong> Neo Tokyo, the author's own dark theme (not published). The card works with any theme.</p>
+<div class="markdown-heading"><h2 class="heading-element">🙏 Credits</h2><span id="-credits"></span></div>
+<p>This card is a fork of <a href="https://github.com/guiohm79/dual_gauge"><strong>dual_gauge</strong></a> by <a href="https://github.com/guiohm79">Guiohm79</a> (MIT). The two LED rings, the bidirectional mode, severity colours and markers come from there; the WebGL plasma, the halos and the neon styling were added on top. Go give the original a ⭐.</p>
+<div class="markdown-heading"><h2 class="heading-element">🌃 More neon cards</h2><span id="-more-neon-cards"></span></div>
+<p>This card is part of a family. See the full collection at <a href="https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards"><strong>Home-Assistant-Neon-Cards</strong></a>.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🐾 Support this project</h2><span id="-support-this-project"></span></div>
+<p>If you enjoy these cards, please consider donating to <strong>Quatre Pattes</strong>, an animal rescue organization.</p>
+
+<blockquote>
+<p>💛 No need to support me — just help the animals. Thank you!</p>
+</blockquote>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🤝 Contributing</h2><span id="-contributing"></span></div>
+<ol>
+<li>Fork the repo</li>
+<li>Create your branch: <code>git checkout -b feature/my-card</code></li>
+<li>Commit and push</li>
+<li>Open a Pull Request</li>
+</ol>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">📄 License</h2><span id="-license"></span></div>
+<p><a href="https://github.com/cerealkiller57540/neon-dual-gauge-card/tree/main/LICENSE">MIT License</a></p>
+</main>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/neon-dual-gauge-card">cerealkiller57540/neon-dual-gauge-card</a> · Updated 2026-10-21 · <a href="../index.html">All projects</a></footer>
+</div></body></html>

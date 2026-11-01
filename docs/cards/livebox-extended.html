@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Livebox Extended — Home Assistant integration</title>
+<meta name="description" content="Home Assistant integration for the Orange Livebox and its Wi-Fi 6 / Wi-Fi 7 repeaters (auto-discovered), local API">
+<link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/livebox-extended.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Livebox Extended — Home Assistant integration">
+<meta property="og:description" content="Home Assistant integration for the Orange Livebox and its Wi-Fi 6 / Wi-Fi 7 repeaters (auto-discovered), local API">
+<meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/livebox-extended.html">
+<meta property="og:site_name" content="Neon Cards for Home Assistant">
+<meta name="twitter:card" content="summary">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Livebox Extended", "description": "Home Assistant integration for the Orange Livebox and its Wi-Fi 6 / Wi-Fi 7 repeaters (auto-discovered), local API", "codeRepository": "https://github.com/cerealkiller57540/livebox-extended", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/livebox-extended.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-10-03", "keywords": "hacs, hacs-integration, home-assistant, homeassistant-integration, livebox, orange, wifi-repeater"}</script>
+<link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
+<nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Integrations</nav>
+<header class="page-head"><h1>Livebox Extended</h1>
+<p class="lead">Home Assistant integration for the Orange Livebox and its Wi-Fi 6 / Wi-Fi 7 repeaters (auto-discovered), local API</p>
+<div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/livebox-extended">View on GitHub</a><a class="btn alt" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=cerealkiller57540&amp;repository=livebox-extended&amp;category=integration">Open in HACS</a></div></header>
+<main class="markdown-body">
+<div class="markdown-heading"><h2 class="heading-element">Livebox Extended</h2><span id="livebox-extended"></span></div>
+<p>Home Assistant integration for the <strong>Orange Livebox</strong> router and the <strong>Orange Wi-Fi 6 / Wi-Fi 7
+repeaters</strong>, talking to them locally (sysbus API on the box and the Wi-Fi 6 repeater, prplOS REST
+API on the Wi-Fi 7 repeater).</p>
+<p>It started as a fork of <a href="https://github.com/cyr-ius/hass-livebox-component">cyr-ius/hass-livebox-component</a>
+and adds the parts that integration does not cover: repeater telemetry, Wi-Fi security control and
+throughput figures that match what is really on the air. The repeater tables and conventions
+follow <a href="https://p-dor.github.io/LiveboxMonitor/" rel="nofollow">LiveboxMonitor</a> by Pierre Dor. See <a href="#credits">Credits</a>.</p>
+<p>Tested on a <strong>Livebox 6</strong> with an Orange <strong>Répéteur Wi-Fi 6</strong> and an Orange <strong>Répéteur Wi-Fi 7</strong>.</p>
+<blockquote>
+<p>Not affiliated with, endorsed by or supported by Orange. "Livebox" and the Orange logo are
+trademarks of Orange.</p>
+</blockquote>
+<div class="markdown-heading"><h2 class="heading-element">Features</h2><span id="features"></span></div>
+<p><strong>Box</strong></p>
+<ul>
+<li>WAN status (public IPv4/IPv6 as attributes), uptime, fibre (GPON) optical levels, down/up rates.</li>
+<li>Per-interface rates (Ethernet ports, Wi-Fi bands) and lifetime totals.</li>
+<li>Real per-band Wi-Fi throughput, summed from the per-station counters (the box's own Wi-Fi
+interface counters miss hardware-forwarded traffic such as IPTV).</li>
+<li>Wi-Fi and guest Wi-Fi switches, <strong>WPS</strong> switch, <strong>Wi-Fi security mode</strong> select per band
+(WPA2 / WPA2-WPA3 / WPA3), remote access switch.
+<blockquote>
+<p><g-emoji class="g-emoji" alias="warning">⚠️</g-emoji> Older or IoT devices may fail to connect in WPA2-WPA3 or WPA3, even some that claim WPA3
+support. Moving a home network to WPA2-WPA3 broke enough devices here to be reverted. Change
+it when you can check your devices afterwards.</p>
+</blockquote>
+</li>
+<li>Buttons: restart the box, ring the phone, clear missed calls.</li>
+<li>Missed calls sensor and call log calendar.</li>
+<li>DHCP leases, UPnP port forwards.</li>
+</ul>
+<p><strong>Connected devices</strong></p>
+<ul>
+<li>A <code>device_tracker</code> per device (Wi-Fi and/or LAN, configurable).</li>
+<li>A <code>switch</code> per device to block or allow its Internet access.</li>
+<li>Diagnostic sensors per device: IP address, MAC address, Livebox name, access point
+("Livebox Wifi 5GHz", "Répéteur WiFi 7 2.4GHz", "Livebox ETH2", ...), Wi-Fi signal and band.</li>
+</ul>
+<p><strong>Repeaters</strong> (each one gets its own Home Assistant device, linked to the box)</p>
+<ul>
+<li><strong>Detected automatically</strong> from the box device list, no IP to type in.</li>
+<li>Per-interface rates and totals (LAN, Ethernet, Wi-Fi bands, backhaul), connected stations per
+band with their signal.</li>
+<li>Wi-Fi 6 repeater: read over sysbus. Wi-Fi 7 repeater: read over its prplOS REST API.</li>
+<li>Best-effort: a repeater that does not answer never blocks the box update, its sensors simply
+are not created or become unavailable.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">Installation</h2><span id="installation"></span></div>
+<div class="markdown-heading"><h3 class="heading-element">HACS</h3><span id="hacs"></span></div>
+<ol>
+<li>
+<p>Add this repository as a custom repository in HACS (category: Integration):</p>
+
+</li>
+<li>
+<p>Install <strong>Livebox Extended</strong> and restart Home Assistant.</p>
+</li>
+<li>
+<p>Add the integration:</p>
+
+</li>
+</ol>
+<div class="markdown-heading"><h3 class="heading-element">Manual</h3><span id="manual"></span></div>
+<p>Copy <code>custom_components/livebox_pro</code> into the <code>custom_components</code> folder of your Home Assistant
+configuration, then restart.</p>
+<p>The integration domain is <code>livebox_pro</code>, so it can run alongside the
+<a href="https://github.com/cyr-ius/hass-livebox-component">cyr-ius integration</a> (<code>livebox</code>) while you
+compare them. Running both polls the box twice as often.</p>
+<div class="markdown-heading"><h2 class="heading-element">Configuration</h2><span id="configuration"></span></div>
+<p>Setup asks for the box address (default <code>192.168.1.1</code>), the admin username (<code>admin</code>) and the
+admin password, the one printed on the box label unless you changed it. The repeaters use the same
+admin password as the box.</p>
+<p>Options (<strong>Settings &gt; Devices &amp; services &gt; Livebox Extended &gt; Configure</strong>):</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wi-Fi tracking</td>
+<td>on</td>
+<td>Create a <code>device_tracker</code> for Wi-Fi devices</td>
+</tr>
+<tr>
+<td>LAN tracking</td>
+<td>off</td>
+<td>Create a <code>device_tracker</code> for wired devices</td>
+</tr>
+<tr>
+<td>Tracking timeout</td>
+<td>300 s</td>
+<td>How long a device stays <code>home</code> after it was last seen</td>
+</tr>
+<tr>
+<td>Device tracker mode</td>
+<td>Active only</td>
+<td><code>All</code> also creates trackers for devices currently offline</td>
+</tr>
+<tr>
+<td>Repeater IPs</td>
+<td>empty</td>
+<td>Leave empty for auto-detection. Otherwise comma-separated IPs; the type of each one (Wi-Fi 6 or 7) is probed once</td>
+</tr>
+</tbody>
+</table>
+<div class="markdown-heading"><h2 class="heading-element">How it works</h2><span id="how-it-works"></span></div>
+<ul>
+<li>Fast data (rates, WAN status) is refreshed every 30 s; heavy data (devices, DHCP, forwards,
+calls, Wi-Fi settings, repeater discovery) every 2 minutes. A new device therefore shows up within
+about 2 minutes.</li>
+<li>Repeaters are found by asking the box for devices whose type matches <code>repeteur*</code>
+(<code>repeteurwifi6</code>, <code>repeteurwifi7</code>). Their IP address is used even when the box marks them
+<code>Active=False</code>: the box often keeps a repeater listed as the Wi-Fi client it was during pairing.</li>
+<li>Rates are in <strong>bytes per second</strong> (shown as kB/s or MB/s), as in LiveboxMonitor. Repeater Rx/Tx
+are oriented from the user's point of view: Rx is what goes down to the clients.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">Limitations</h2><span id="limitations"></span></div>
+<ul>
+<li><strong>One repeater per type</strong> (one Wi-Fi 6, one Wi-Fi 7). A second repeater of the same type is
+ignored.</li>
+<li>On the Wi-Fi 7 repeater, the 5 GHz rate comes from its bridge port: that radio's per-station
+counters miss the data traffic. The 2.4 GHz radio works the other way round and keeps the
+per-station sum.</li>
+<li>Only tested on a Livebox 6. Other models speaking sysbus (Livebox 4, 5, 7) are expected to work
+for the box part but are untested.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">Credits</h2><span id="credits"></span></div>
+<ul>
+<li><a href="https://github.com/cyr-ius/hass-livebox-component">cyr-ius/hass-livebox-component</a> by Cyr-ius
+(Antoine Colmard), MIT: the base of this integration and the
+<a href="https://github.com/cyr-ius/aiosysbus">aiosysbus</a> library it uses.</li>
+<li><a href="https://p-dor.github.io/LiveboxMonitor/" rel="nofollow">LiveboxMonitor</a> by Pierre Dor, MIT: repeater
+interface tables, Rx/Tx conventions and the many sysbus details it documents.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">License</h2><span id="license"></span></div>
+<p>MIT, see <a href="https://github.com/cerealkiller57540/livebox-extended/tree/main/LICENSE">LICENSE</a>.</p>
+</main>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/livebox-extended">cerealkiller57540/livebox-extended</a> · Updated 2026-10-03 · <a href="../index.html">All projects</a></footer>
+</div></body></html>

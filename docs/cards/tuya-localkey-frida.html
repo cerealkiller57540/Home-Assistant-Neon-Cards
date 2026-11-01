@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tuya local_key with Frida — Extract a Tuya local_key from a vendor (white-label) app wit</title>
+<meta name="description" content="Extract a Tuya local_key from a vendor (white-label) app with Frida, for devices you can&#x27;t pair in Tuya Smart. Walkthrough + scripts.">
+<link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/tuya-localkey-frida.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Tuya local_key with Frida — Extract a Tuya local_key from a vendor (white-label) app wit">
+<meta property="og:description" content="Extract a Tuya local_key from a vendor (white-label) app with Frida, for devices you can&#x27;t pair in Tuya Smart. Walkthrough + scripts.">
+<meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/tuya-localkey-frida.html">
+<meta property="og:site_name" content="Neon Cards for Home Assistant">
+<meta name="twitter:card" content="summary">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Tuya local_key with Frida", "description": "Extract a Tuya local_key from a vendor (white-label) app with Frida, for devices you can't pair in Tuya Smart. Walkthrough + scripts.", "codeRepository": "https://github.com/cerealkiller57540/tuya-localkey-frida", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/tuya-localkey-frida.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-11-01", "keywords": "android, frida, home-assistant, local-key, reverse-engineering, tuya"}</script>
+<link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
+<nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Other projects</nav>
+<header class="page-head"><h1>Tuya local_key with Frida</h1>
+<p class="lead">Extract a Tuya local_key from a vendor (white-label) app with Frida, for devices you can&#x27;t pair in Tuya Smart. Walkthrough + scripts.</p>
+<div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/tuya-localkey-frida">View on GitHub</a></div></header>
+<main class="markdown-body">
+<div class="markdown-heading"><h2 class="heading-element">Extracting a Tuya <code>local_key</code> from a vendor app with Frida</h2><span id="extracting-a-tuya-local_key-from-a-vendor-app-with-frida"></span></div>
+<p><em>A walkthrough for the awkward case: a Tuya-based device you <strong>cannot pair in Tuya
+Smart / Smart Life</strong>, so none of the usual ways to get its local key apply.</em></p>
+<p>Some smart devices run on Tuya's platform but ship inside a <strong>vendor's own app</strong> (a
+rebranded white-label build) instead of the generic Tuya Smart app. A climate /
+air-conditioner controller is a typical example: the vendor app pairs it with an
+extra setup step that the stock Tuya Smart app doesn't perform, so the device never
+shows up in a Tuya Smart account at all.</p>
+<p>That blocks every common route to the <code>local_key</code> you need for local control:</p>
+<ul>
+<li><strong>Tuya IoT cloud (developer account)</strong> — works only for devices linked to a Tuya
+Smart / Smart Life account you can attach to a cloud project. This device isn't in
+one.</li>
+<li><strong><code>tinytuya wizard</code></strong> — same dependency on the Tuya cloud link.</li>
+<li><strong><code>tuya-convert</code> / flashing</strong> — firmware-dependent, increasingly patched, and
+overkill when you only want to read a key.</li>
+</ul>
+<p>But the key has to exist <em>somewhere the app can reach it</em>, because the app talks to
+the device over your LAN. On Tuya's Android SDK it lives in a model object
+(<code>DeviceBean</code>) <strong>in cleartext in the app's memory</strong> once you're logged in. So we read
+it out of RAM with <a href="https://frida.re/" rel="nofollow">Frida</a> — no decryption, no touching the device
+hardware, no cloud.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element"><g-emoji class="g-emoji" alias="warning">⚠️</g-emoji> Scope and ethics</h2><span id="️-scope-and-ethics"></span></div>
+<p>This is for <strong>devices you own</strong>, so that <strong>you</strong> can run them locally instead of
+depending on someone's cloud. That's a legitimate interoperability use.</p>
+<ul>
+<li>Only do this on hardware you own and an app account that is yours.</li>
+<li>You are reading <em>your own</em> key out of <em>your own</em> session on <em>your own</em> emulator.</li>
+<li>Don't use this to attack other people's devices, bypass someone else's license, or
+redistribute keys/credentials.</li>
+<li><strong>Never commit the extracted key, device id, or app credentials</strong> to a repo. Every
+example below uses placeholders; keep it that way.</li>
+</ul>
+<blockquote>
+<p>Not comfortable doing all this by hand? Feed your AI assistant in VS Code these files
+and let the magic happen.</p>
+</blockquote>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">How it works (one paragraph)</h2><span id="how-it-works-one-paragraph"></span></div>
+<p>The Tuya Android SDK keeps each device's metadata — id, name, product id, and the
+<code>local_key</code> — in an object whose class name ends in <code>DeviceBean</code>. Frida attaches to
+the running app, enumerates loaded classes to find those beans, walks the live
+instances on the Java heap (<code>Java.choose</code>), and calls the getters. <code>getLocalKey()</code>
+returns the key as a plain string. That's the whole trick.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">Prerequisites</h2><span id="prerequisites"></span></div>
+<ul>
+<li><strong>Python 3</strong> (3.8+) on your PC — the scripts here are Python, and <code>frida</code> / <code>tinytuya</code>
+install with <code>pip</code>. On Windows, grab it from <a href="https://www.python.org/downloads/" rel="nofollow">python.org</a>
+and tick <strong>"Add python.exe to PATH"</strong> in the installer, or run <code>winget install Python.Python.3.12</code>; check with <code>python --version</code>.</li>
+<li>An <strong>Android emulator</strong> (AVD), image <strong>Android 14, x86_64, google_apis</strong>. An
+emulator is <code>su</code>-able out of the box, which is what frida-server needs — you don't
+have to root a physical phone. ARM-only apps still run via the emulator's ARM
+translation layer.</li>
+<li><strong>frida-server</strong> on the device (match the server version to your host's major, but
+see the pin below), pushed to <code>/data/local/tmp</code> and started as root.</li>
+<li><strong><code>frida</code> 16.x on the host</strong> — this is the one that bites people. See the next
+section.</li>
+<li><code>adb</code>, and <code>pip install "frida==16.*" tinytuya</code>.</li>
+</ul>
+<div class="markdown-heading"><h3 class="heading-element">🔴 Pin host Frida to 16.x — 17 silently finds nothing</h3><span id="-pin-host-frida-to-16x--17-silently-finds-nothing"></span></div>
+<p>Frida <strong>17</strong> removed the <strong>bundled Java bridge</strong> from the core. On 17, <code>Java.perform</code>
+/ <code>Java.choose</code> are not available in the default runtime, so the hook loads, runs, and
+reports <strong>zero devices</strong> with no obvious error — you'll think the app doesn't hold the
+key when in fact your tooling can't see Java at all.</p>
+<p>Use <strong><code>frida</code> 16.x</strong> on the host (<code>pip install "frida==16.*"</code>) with a matching
+<strong>frida-server 16.x</strong> on the device, and the Java bridge is there. (If you must stay on
+17, you now have to add the external <code>frida-java-bridge</code> yourself; pinning 16 is far
+less trouble for a one-off extraction.)</p>
+<p>A subtler trap, if you installed 16 into a <strong>virtualenv</strong>: running plain <code>python</code>
+(or <code>python3</code>) can still pick up a system-wide frida 17 instead of your venv's 16, and
+then the dump fails with a cryptic <code>frida.ProtocolError: unable to communicate with remote frida-server … major versions match</code>. That error <em>is</em> the version mismatch.
+Confirm which frida you're actually running before you dump:</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="python -c &quot;import frida; print(frida.__version__)&quot;   # must print 16.x"><pre>python -c <span class="pl-s"><span class="pl-pds">"</span>import frida; print(frida.__version__)<span class="pl-pds">"</span></span>   <span class="pl-c"><span class="pl-c">#</span> must print 16.x</span></pre></div>
+<p>If it prints 17, activate your venv (or call its python by full path). <code>dump_localkey.py</code>
+also checks this itself and exits early with a clear message rather than that traceback.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">For Windows users (no Linux background needed)</h2><span id="for-windows-users-no-linux-background-needed"></span></div>
+<p>This whole thing runs fine on Windows — nothing here needs a Linux box. A few terms
+that the steps take for granted:</p>
+<ul>
+<li><strong>AVD / emulator</strong> — the <strong>Android Virtual Device</strong>, a phone that runs as a window on
+your PC. You get it either from <strong>Android Studio</strong> (free, big GUI) or from the SDK
+command-line tools alone (smaller, scripted). Whichever route, use the system image
+<strong>Android 14, x86_64, "Google APIs"</strong> — the plain <em>Google APIs</em> image, <strong>not</strong> "Google
+Play", because the Play image locks out <code>su</code>, which you need. Starting from nothing?
+Follow <strong>"From zero on Windows (PowerShell)"</strong> just below — it installs everything and
+creates the AVD for you.</li>
+<li><strong><code>adb</code></strong> — <em>Android Debug Bridge</em>, the command-line cable between your PC and the
+phone/emulator. <code>adb push</code> copies a file onto the device, <code>adb shell</code> runs a command
+on it, <code>adb install</code> sideloads an APK.</li>
+<li><strong><code>su</code> / "rooted"</strong> — administrator (<code>root</code>) on the Android side. frida-server has to
+run as root to read another app's memory. The emulator's <em>Google APIs</em> image gives
+you <code>su</code> for free, which is exactly why we use an emulator instead of trying to root a
+real phone.</li>
+<li><strong>frida-server</strong> — a small Linux binary <strong>for Android</strong> (the ARM/x86 build) that you
+copy onto the emulator and run there. It's the counterpart to the <code>frida</code> Python
+package on your PC. Download the one matching your host <code>frida</code> version (16.x) and the
+emulator's architecture (<code>x86_64</code>) from Frida's GitHub releases, and un-<code>.xz</code> it first
+(7-Zip opens <code>.xz</code>).</li>
+</ul>
+<div class="markdown-heading"><h3 class="heading-element">From zero on Windows (PowerShell): install the SDK and make an AVD</h3><span id="from-zero-on-windows-powershell-install-the-sdk-and-make-an-avd"></span></div>
+<p>No Android Studio, nothing installed? This gets you from a bare Windows box to a running
+emulator, entirely in <strong>PowerShell</strong> (the blue terminal — press <code>Win</code>, type <em>PowerShell</em>,
+Enter). Copy each block as-is. It installs into <code>C:\Android</code> to keep paths simple.</p>
+<p><strong>1. Java.</strong> The SDK tools need a JDK. If <code>java -version</code> prints nothing, install one
+(<code>winget install Microsoft.OpenJDK.17</code>) and reopen PowerShell.</p>
+<p><strong>2. Download the command-line tools</strong> and lay them out the way <code>sdkmanager</code> insists on
+(it must live in <code>cmdline-tools\latest\</code>):</p>
+<div class="highlight highlight-source-powershell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="$SDK = &quot;C:\Android&quot;
+New-Item -ItemType Directory -Force &quot;$SDK\cmdline-tools&quot; | Out-Null
+# Grab &quot;Command line tools only&quot; for Windows from https://developer.android.com/studio#command-line-tools-only
+# (the .zip near the bottom of that page), then point $zip at your download:
+$zip = &quot;$HOME\Downloads\commandlinetools-win-latest.zip&quot;
+Expand-Archive $zip &quot;$SDK\cmdline-tools&quot; -Force
+# the zip unpacks to a folder called &quot;cmdline-tools&quot; — rename it to &quot;latest&quot;:
+Rename-Item &quot;$SDK\cmdline-tools\cmdline-tools&quot; &quot;latest&quot;"><pre><span class="pl-smi">$SDK</span> <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">"</span>C:\Android<span class="pl-pds">"</span></span>
+<span class="pl-c1">New-Item</span> <span class="pl-k">-</span>ItemType Directory <span class="pl-k">-</span>Force <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$SDK</span>\cmdline-tools<span class="pl-pds">"</span></span> <span class="pl-k">|</span> <span class="pl-c1">Out-Null</span>
+<span class="pl-c"><span class="pl-c">#</span> Grab "Command line tools only" for Windows from https://developer.android.com/studio#command-line-tools-only</span>
+<span class="pl-c"><span class="pl-c">#</span> (the .zip near the bottom of that page), then point $zip at your download:</span>
+<span class="pl-smi">$zip</span> <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-c1">$HOME</span>\Downloads\commandlinetools-win-latest.zip<span class="pl-pds">"</span></span>
+<span class="pl-c1">Expand-Archive</span> <span class="pl-smi">$zip</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$SDK</span>\cmdline-tools<span class="pl-pds">"</span></span> <span class="pl-k">-</span>Force
+<span class="pl-c"><span class="pl-c">#</span> the zip unpacks to a folder called "cmdline-tools" — rename it to "latest":</span>
+<span class="pl-c1">Rename-Item</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$SDK</span>\cmdline-tools\cmdline-tools<span class="pl-pds">"</span></span> <span class="pl-s"><span class="pl-pds">"</span>latest<span class="pl-pds">"</span></span></pre></div>
+<p>You should now have <code>C:\Android\cmdline-tools\latest\bin\sdkmanager.bat</code>.</p>
+<p><strong>3. Install the pieces</strong> — platform tools (<code>adb</code>), the emulator, and the exact image
+this guide needs (<strong>Android 14 = API 34, <code>google_apis</code>, <code>x86_64</code></strong> — the <code>google_apis</code>
+image, <em>not</em> <code>google_apis_playstore</code>, because Play Store images block <code>su</code>):</p>
+<div class="highlight highlight-source-powershell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="$mgr = &quot;$SDK\cmdline-tools\latest\bin\sdkmanager.bat&quot;
+&amp; $mgr --sdk_root=$SDK &quot;platform-tools&quot; &quot;emulator&quot; &quot;platform-tools&quot; `
+       &quot;system-images;android-34;google_apis;x86_64&quot;
+&amp; $mgr --sdk_root=$SDK --licenses     # press y at each prompt"><pre><span class="pl-smi">$mgr</span> <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$SDK</span>\cmdline-tools\latest\bin\sdkmanager.bat<span class="pl-pds">"</span></span>
+<span class="pl-k">&amp;</span> <span class="pl-smi">$mgr</span> <span class="pl-k">--</span>sdk_root<span class="pl-k">=</span><span class="pl-smi">$SDK</span> <span class="pl-s"><span class="pl-pds">"</span>platform-tools<span class="pl-pds">"</span></span> <span class="pl-s"><span class="pl-pds">"</span>emulator<span class="pl-pds">"</span></span> <span class="pl-s"><span class="pl-pds">"</span>platform-tools<span class="pl-pds">"</span></span> <span class="pl-k">`</span>
+       <span class="pl-s"><span class="pl-pds">"</span>system-images;android-34;google_apis;x86_64<span class="pl-pds">"</span></span>
+<span class="pl-k">&amp;</span> <span class="pl-smi">$mgr</span> <span class="pl-k">--</span>sdk_root<span class="pl-k">=</span><span class="pl-smi">$SDK</span> <span class="pl-k">--</span>licenses     <span class="pl-c"><span class="pl-c">#</span> press y at each prompt</span></pre></div>
+<p><strong>4. Put <code>adb</code> and <code>emulator</code> on your PATH</strong> so the commands in the steps below just work,
+in this window and in every new one:</p>
+<div class="highlight highlight-source-powershell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="# this window, right now:
+$env:Path = &quot;$SDK\platform-tools;$SDK\emulator;$env:Path&quot;
+# and permanently, for future windows (then reopen PowerShell once):
+setx Path &quot;$SDK\platform-tools;$SDK\emulator;$([Environment]::GetEnvironmentVariable(&#x27;Path&#x27;,&#x27;User&#x27;))&quot;"><pre><span class="pl-c"><span class="pl-c">#</span> this window, right now:</span>
+<span class="pl-smi">$<span class="pl-c1">env:</span>Path</span> <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$SDK</span>\platform-tools;<span class="pl-smi">$SDK</span>\emulator;<span class="pl-smi">$<span class="pl-c1">env:</span>Path</span><span class="pl-pds">"</span></span>
+<span class="pl-c"><span class="pl-c">#</span> and permanently, for future windows (then reopen PowerShell once):</span>
+setx Path <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$SDK</span>\platform-tools;<span class="pl-smi">$SDK</span>\emulator;<span class="pl-k"><span class="pl-pse">$</span></span><span class="pl-pse">(</span>[<span class="pl-k">Environment</span>]::GetEnvironmentVariable(<span class="pl-s"><span class="pl-pds">'</span>Path<span class="pl-pds">'</span></span><span class="pl-k">,</span><span class="pl-s"><span class="pl-pds">'</span>User<span class="pl-pds">'</span></span>)<span class="pl-pse">)</span><span class="pl-pds">"</span></span></pre></div>
+<p>Check both resolve: <code>adb --version</code> and <code>emulator -version</code> should each print something.</p>
+<p><strong>5. Create the AVD</strong> — a virtual phone using that image. Name it <code>tuya_avd</code> (the steps
+below use that name):</p>
+<div class="highlight highlight-source-powershell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="$avd = &quot;$SDK\cmdline-tools\latest\bin\avdmanager.bat&quot;
+&amp; $avd create avd -n tuya_avd -k &quot;system-images;android-34;google_apis;x86_64&quot; -d pixel_6
+# &quot;Do you wish to create a custom hardware profile?&quot; -&gt; just press Enter (no)
+emulator -list-avds        # should print: tuya_avd"><pre><span class="pl-smi">$avd</span> <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">"</span><span class="pl-smi">$SDK</span>\cmdline-tools\latest\bin\avdmanager.bat<span class="pl-pds">"</span></span>
+<span class="pl-k">&amp;</span> <span class="pl-smi">$avd</span> create avd <span class="pl-k">-</span>n tuya_avd <span class="pl-k">-</span>k <span class="pl-s"><span class="pl-pds">"</span>system-images;android-34;google_apis;x86_64<span class="pl-pds">"</span></span> <span class="pl-k">-</span>d pixel_6
+<span class="pl-c"><span class="pl-c">#</span> "Do you wish to create a custom hardware profile?" -&gt; just press Enter (no)</span>
+emulator <span class="pl-k">-</span>list<span class="pl-k">-</span>avds        <span class="pl-c"><span class="pl-c">#</span> should print: tuya_avd</span></pre></div>
+<p>That's the one-time setup. From here, <strong>Step 1</strong> starts that AVD and everything follows.</p>
+<blockquote>
+<p>Already have Android Studio? Then the SDK is at <code>%LOCALAPPDATA%\Android\Sdk</code> instead of
+<code>C:\Android</code> — add <em>its</em> <code>platform-tools</code> and <code>emulator</code> folders to your PATH (step 4),
+make the AVD from <em>Device Manager → Create device</em> (same image: Android 14, x86_64,
+<strong>Google APIs</strong>), and skip the rest of this section.</p>
+</blockquote>
+<div class="markdown-heading"><h3 class="heading-element">Which terminal — and the <code>MSYS_NO_PATHCONV</code> thing</h3><span id="which-terminal--and-the-msys_no_pathconv-thing"></span></div>
+<p>The commands are written for a <strong>Bash-style</strong> shell. On Windows you have two easy ways
+to get one:</p>
+<ul>
+<li><strong>Git Bash</strong> (installed with <em>Git for Windows</em>) — closest to what's written here.</li>
+<li><strong>WSL</strong> (<em>Windows Subsystem for Linux</em>) — also fine; <code>adb</code>/<code>emulator</code> on your PATH are
+still callable from inside it.</li>
+</ul>
+<p>You can run it all from <strong>PowerShell</strong> too, but mind two differences:</p>
+<ul>
+<li><code>export TUYA_KEY=...</code> (Bash) becomes <code>$env:TUYA_KEY = '...'</code> in PowerShell.</li>
+<li>Backgrounding with a trailing <code>&amp;</code> is a Bash thing; in PowerShell start frida-server
+with <code>Start-Process</code> or just leave its <code>adb shell</code> running in its own window.</li>
+</ul>
+<p><strong>The <code>MSYS_NO_PATHCONV=1</code> prefix is only for Git Bash.</strong> Git Bash helpfully "fixes"
+any argument that looks like a Unix path — so <code>/data/local/tmp/frida-server</code> silently
+becomes <code>C:/Program Files/Git/data/local/tmp/...</code> and the push lands in the wrong place
+with no error. <code>MSYS_NO_PATHCONV=1</code> in front of the command turns that rewriting off.
+In <strong>PowerShell or WSL this problem doesn't exist</strong>, so drop the prefix there.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">Step by step</h2><span id="step-by-step"></span></div>
+<div class="markdown-heading"><h3 class="heading-element">1. Start the emulator and frida-server</h3><span id="1-start-the-emulator-and-frida-server"></span></div>
+<p>Pick <strong>one</strong> shell and use its block — don't mix lines from both. If you followed the
+PowerShell setup above, use the PowerShell block. First, the file you need on hand:
+<strong>frida-server for Android</strong>, the <strong>16.x</strong> build matching your host <code>frida</code> and the <code>x86_64</code>
+architecture (from <a href="https://github.com/frida/frida/releases">Frida's releases</a> — the
+<code>frida-server-16.*-android-x86_64.xz</code>; un-<code>.xz</code> it with 7-Zip so you have a plain
+<code>frida-server</code> file). Run these from the folder that file is in.</p>
+<p><strong>PowerShell</strong> (keep frida-server in its own window so it stays alive):</p>
+<div class="highlight highlight-source-powershell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="# Start the AVD (modest resources — don&#x27;t starve your workstation). This window stays
+# busy running the emulator; open a NEW PowerShell window for the adb lines below.
+emulator -avd tuya_avd -gpu swiftshader_indirect -cores 4 -memory 4096
+
+# --- in a second PowerShell window: ---
+adb wait-for-device                                    # wait until the phone is up
+adb push frida-server /data/local/tmp/frida-server
+adb shell &quot;su 0 chmod 755 /data/local/tmp/frida-server&quot;
+Start-Process adb -ArgumentList &#x27;shell&#x27;,&#x27;su 0 /data/local/tmp/frida-server&#x27;  # its own window
+adb forward tcp:27042 tcp:27042                        # frida port -&gt; 127.0.0.1:27042"><pre><span class="pl-c"><span class="pl-c">#</span> Start the AVD (modest resources — don't starve your workstation). This window stays</span>
+<span class="pl-c"><span class="pl-c">#</span> busy running the emulator; open a NEW PowerShell window for the adb lines below.</span>
+emulator <span class="pl-k">-</span>avd tuya_avd <span class="pl-k">-</span>gpu swiftshader_indirect <span class="pl-k">-</span>cores <span class="pl-c1">4</span> <span class="pl-k">-</span>memory <span class="pl-c1">4096</span>
+
+<span class="pl-c"><span class="pl-c">#</span> --- in a second PowerShell window: ---</span>
+adb <span class="pl-c1">wait-for</span><span class="pl-k">-</span>device                                    <span class="pl-c"><span class="pl-c">#</span> wait until the phone is up</span>
+adb push frida<span class="pl-k">-</span>server <span class="pl-k">/</span><span class="pl-k">data</span><span class="pl-k">/</span>local<span class="pl-k">/</span>tmp<span class="pl-k">/</span>frida<span class="pl-k">-</span>server
+adb shell <span class="pl-s"><span class="pl-pds">"</span>su 0 chmod 755 /data/local/tmp/frida-server<span class="pl-pds">"</span></span>
+<span class="pl-c1">Start-Process</span> adb <span class="pl-k">-</span>ArgumentList <span class="pl-s"><span class="pl-pds">'</span>shell<span class="pl-pds">'</span></span><span class="pl-k">,</span><span class="pl-s"><span class="pl-pds">'</span>su 0 /data/local/tmp/frida-server<span class="pl-pds">'</span></span>  <span class="pl-c"><span class="pl-c">#</span> its own window</span>
+adb forward tcp:<span class="pl-c1">27042</span> tcp:<span class="pl-c1">27042</span>                        <span class="pl-c"><span class="pl-c">#</span> frida port -&gt; 127.0.0.1:27042</span></pre></div>
+<details><summary><b>Git Bash / WSL</b> (same thing, Bash syntax) — click to expand</summary>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="# MSYS_NO_PATHCONV=1 is a Git Bash workaround (see &quot;For Windows users&quot; above); drop it
+# in WSL (and it&#x27;s harmless there anyway).
+emulator -avd tuya_avd -gpu swiftshader_indirect -cores 4 -memory 4096
+
+# --- in a second terminal: ---
+adb wait-for-device
+MSYS_NO_PATHCONV=1 adb push frida-server /data/local/tmp/frida-server
+MSYS_NO_PATHCONV=1 adb shell &quot;su 0 chmod 755 /data/local/tmp/frida-server&quot;
+MSYS_NO_PATHCONV=1 adb shell &quot;su 0 /data/local/tmp/frida-server &amp;&quot;
+adb forward tcp:27042 tcp:27042"><pre><span class="pl-c"><span class="pl-c">#</span> MSYS_NO_PATHCONV=1 is a Git Bash workaround (see "For Windows users" above); drop it</span>
+<span class="pl-c"><span class="pl-c">#</span> in WSL (and it's harmless there anyway).</span>
+emulator -avd tuya_avd -gpu swiftshader_indirect -cores 4 -memory 4096
+
+<span class="pl-c"><span class="pl-c">#</span> --- in a second terminal: ---</span>
+adb wait-for-device
+MSYS_NO_PATHCONV=1 adb push frida-server /data/local/tmp/frida-server
+MSYS_NO_PATHCONV=1 adb shell <span class="pl-s"><span class="pl-pds">"</span>su 0 chmod 755 /data/local/tmp/frida-server<span class="pl-pds">"</span></span>
+MSYS_NO_PATHCONV=1 adb shell <span class="pl-s"><span class="pl-pds">"</span>su 0 /data/local/tmp/frida-server &amp;<span class="pl-pds">"</span></span>
+adb forward tcp:27042 tcp:27042</pre></div>
+</details>
+<p>Quick sanity check that the PC can see the device's Frida: <code>frida-ps -U</code> should list the
+emulator's running apps. Empty list or an error → frida-server isn't running as root, or
+you're on frida 17 (see the pin above).</p>
+<div class="markdown-heading"><h3 class="heading-element">2. Install the vendor app and log in</h3><span id="2-install-the-vendor-app-and-log-in"></span></div>
+<p>Install the vendor APK in the emulator (drag-and-drop, or <code>adb install</code>). Open it,
+sign in with your own account, and pair / let it discover the device so it appears in
+the app's device list. <strong>The key is only in memory once the app has loaded the device</strong>,
+so get to the screen where you can see it before dumping.</p>
+<blockquote>
+<p>If the app is split (XAPK / <code>config.*.apk</code>), install the base + the matching ABI
+split together (<code>adb install-multiple base.apk config.arm64_v8a.apk</code>).</p>
+</blockquote>
+<div class="markdown-heading"><h3 class="heading-element">3. Dump the key</h3><span id="3-dump-the-key"></span></div>
+<p>With the app in the <strong>foreground</strong>, run <a href="https://github.com/cerealkiller57540/tuya-localkey-frida/blob/main/dump_localkey.py"><code>dump_localkey.py</code></a> and pass
+the app's visible name or its package id:</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="python dump_localkey.py &quot;&lt;App display name&gt;&quot;
+python dump_localkey.py com.vendor.app      # same thing, by package id"><pre>python dump_localkey.py <span class="pl-s"><span class="pl-pds">"</span>&lt;App display name&gt;<span class="pl-pds">"</span></span>
+python dump_localkey.py com.vendor.app      <span class="pl-c"><span class="pl-c">#</span> same thing, by package id</span></pre></div>
+<p>It attaches to the app's <strong>main</strong> process (the one that holds the devices), not to a
+side process with the same name, and waits for the result instead of a fixed delay.</p>
+<p>The script re-posts the <code>adb forward</code> for the frida port itself (removing any stale
+one first), so you can re-run it as often as you like without the <code>Address already in use</code> you'd get from setting the forward twice by hand. If you'd rather manage the
+forward yourself, add <code>--no-adb</code>.</p>
+<p>You'll get the list of <code>*DeviceBean</code> classes it found, then a row per live device:</p>
+<div class="highlight highlight-source-json notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="{
+  &quot;devices&quot;: [
+    {
+      &quot;cls&quot;: &quot;com.&lt;vendor&gt;.&lt;...&gt;.DeviceBean&quot;,
+      &quot;getDevId&quot;: &quot;&lt;DEVICE_ID&gt;&quot;,
+      &quot;getName&quot;: &quot;&lt;Device name&gt;&quot;,
+      &quot;getLocalKey&quot;: &quot;&lt;THIS IS THE LOCAL KEY&gt;&quot;,
+      &quot;getProductId&quot;: &quot;&lt;product id&gt;&quot;,
+      &quot;getIp&quot;: &quot;&lt;device LAN IP&gt;&quot;,
+      &quot;instances&quot;: 3
+    }
+  ]
+}"><pre>{
+  <span class="pl-ent">"devices"</span>: [
+    {
+      <span class="pl-ent">"cls"</span>: <span class="pl-s"><span class="pl-pds">"</span>com.&lt;vendor&gt;.&lt;...&gt;.DeviceBean<span class="pl-pds">"</span></span>,
+      <span class="pl-ent">"getDevId"</span>: <span class="pl-s"><span class="pl-pds">"</span>&lt;DEVICE_ID&gt;<span class="pl-pds">"</span></span>,
+      <span class="pl-ent">"getName"</span>: <span class="pl-s"><span class="pl-pds">"</span>&lt;Device name&gt;<span class="pl-pds">"</span></span>,
+      <span class="pl-ent">"getLocalKey"</span>: <span class="pl-s"><span class="pl-pds">"</span>&lt;THIS IS THE LOCAL KEY&gt;<span class="pl-pds">"</span></span>,
+      <span class="pl-ent">"getProductId"</span>: <span class="pl-s"><span class="pl-pds">"</span>&lt;product id&gt;<span class="pl-pds">"</span></span>,
+      <span class="pl-ent">"getIp"</span>: <span class="pl-s"><span class="pl-pds">"</span>&lt;device LAN IP&gt;<span class="pl-pds">"</span></span>,
+      <span class="pl-ent">"instances"</span>: <span class="pl-c1">3</span>
+    }
+  ]
+}</pre></div>
+<p>The app usually keeps several copies of the same device in memory; the script merges
+them into one row per <code>getDevId</code> and <code>instances</code> says how many it saw. If two copies
+disagree on the key (rare: a key that rotated during the session), the other one is
+listed in <code>otherLocalKeys</code> — test both in step 4.</p>
+<p><code>getLocalKey</code> is what you came for. <code>getDevId</code> and <code>getIp</code> let you match each key to
+the right device when you have several.</p>
+<blockquote>
+<p><strong>The output contains a live secret.</strong> Don't paste it into a terminal you log, a
+screenshot, or a commit. Pipe it into a secret store, or copy the one field you need
+by hand.</p>
+</blockquote>
+<div class="markdown-heading"><h3 class="heading-element">4. Verify it works, locally</h3><span id="4-verify-it-works-locally"></span></div>
+<p>Confirm the key against the device on the LAN with no cloud in the loop, using
+<a href="https://github.com/cerealkiller57540/tuya-localkey-frida/blob/main/verify_lan.py"><code>verify_lan.py</code></a>. It needs three things from the dump — the <strong>device
+id</strong>, the device's <strong>LAN IP</strong>, and the <strong>local key</strong> — and just asks for whatever you
+haven't supplied, so the simplest way is to run it and answer the prompts:</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="python verify_lan.py
+#   Device id (getDevId from the dump): bfxxxxxxxxxxxxxxxx
+#   Device LAN IP (192.168.x.x, NOT the dump&#x27;s getIp): 192.168.1.42
+#   Local key (getLocalKey): ****"><pre>python verify_lan.py
+<span class="pl-c"><span class="pl-c">#</span>   Device id (getDevId from the dump): bfxxxxxxxxxxxxxxxx</span>
+<span class="pl-c"><span class="pl-c">#</span>   Device LAN IP (192.168.x.x, NOT the dump's getIp): 192.168.1.42</span>
+<span class="pl-c"><span class="pl-c">#</span>   Local key (getLocalKey): ****</span></pre></div>
+<p>🔴 <strong>The IP is the trap.</strong> <code>getIp</code> in the dump is often your <strong>public</strong> IP, not the
+device's address on your network — connecting to it gives <code>Err 901, Unable to Connect</code>.
+Use the <code>192.168.x.x</code> the device has on your LAN (your router's client list, or your
+smart-home hub, shows it next to its MAC).</p>
+<p>Prefer not to be prompted? Each value also reads from an arg or an env var — handy to
+keep the key out of your shell history. <code>export</code> is Bash; PowerShell uses <code>$env:</code>, and
+single quotes matter because a <code>local_key</code> is full of <code>{ } # ( &gt;</code> (PowerShell leaves a
+single-quoted string alone; double quotes would expand <code>$</code> and <code>`</code>):</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="# Bash / macOS / Linux / Git Bash
+export TUYA_KEY=&#x27;&lt;the local key&gt;&#x27;
+python verify_lan.py &lt;DEV_ID&gt; &lt;DEV_IP&gt;"><pre><span class="pl-c"><span class="pl-c">#</span> Bash / macOS / Linux / Git Bash</span>
+<span class="pl-k">export</span> TUYA_KEY=<span class="pl-s"><span class="pl-pds">'</span>&lt;the local key&gt;<span class="pl-pds">'</span></span>
+python verify_lan.py <span class="pl-k">&lt;</span>DEV_ID<span class="pl-k">&gt;</span> <span class="pl-k">&lt;</span>DEV_IP<span class="pl-k">&gt;</span></pre></div>
+<div class="highlight highlight-source-powershell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="# PowerShell (Windows default)
+$env:TUYA_KEY = &#x27;&lt;the local key&gt;&#x27;
+python verify_lan.py &lt;DEV_ID&gt; &lt;DEV_IP&gt;"><pre><span class="pl-c"><span class="pl-c">#</span> PowerShell (Windows default)</span>
+<span class="pl-smi">$<span class="pl-c1">env:</span>TUYA_KEY</span> <span class="pl-k">=</span> <span class="pl-s"><span class="pl-pds">'</span>&lt;the local key&gt;<span class="pl-pds">'</span></span>
+python verify_lan.py <span class="pl-k">&lt;</span>DEV_ID<span class="pl-k">&gt;</span> <span class="pl-k">&lt;</span>DEV_IP<span class="pl-k">&gt;</span></pre></div>
+<p><code>OK, the key works. dps = {...}</code> means success (exit code 0). Otherwise the script names
+tinytuya's error code and what it usually means here (exit code 1):</p>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Usually</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Err 914</code></td>
+<td>Wrong key or wrong protocol version: re-check the key, then <code>--version 3.4</code> / <code>3.5</code> (default <code>3.3</code>, or set <code>TUYA_VERSION</code>).</td>
+</tr>
+<tr>
+<td><code>Err 904</code></td>
+<td>Reply couldn't be decoded: usually the wrong <code>--version</code>.</td>
+</tr>
+<tr>
+<td><code>Err 901</code></td>
+<td>Can't connect: wrong IP (see above), device off, or the app / an integration already holds its one local connection.</td>
+</tr>
+<tr>
+<td><code>Err 905</code></td>
+<td>Nothing reachable at that address: wrong IP, or a VLAN your PC can't reach.</td>
+</tr>
+<tr>
+<td><code>Err 902</code></td>
+<td>Connected, no answer: retry, then try another <code>--version</code>.</td>
+</tr>
+</tbody>
+</table>
+<div class="markdown-heading"><h3 class="heading-element">5. (Method, not solution) Map the DPS — by watching, not writing</h3><span id="5-method-not-solution-map-the-dps--by-watching-not-writing"></span></div>
+<p>Tuya reports device state as numbered <strong>DPS</strong> (data points) with no vendor
+documentation: <code>{'1': True, '2': 24, '4': 'hot', ...}</code>. You <em>could</em> write guessed
+values from the PC, but that means guessing each one's type and range and can push the
+device into a bad state. The safer method is <strong>observation</strong>: most Tuya devices push a
+dps update whenever a setting changes — <em>including, on many of them, when the change
+comes from the app or a companion controller</em> — so you operate it the normal way and
+watch which number moved. <a href="https://github.com/cerealkiller57540/tuya-localkey-frida/blob/main/learn_dps.py"><code>learn_dps.py</code></a> listens and does exactly that.
+It reads <code>TUYA_KEY</code> from the environment just like step 4, so set it again if you opened
+a new terminal (<code>export TUYA_KEY='...'</code> in Bash, <code>$env:TUYA_KEY = '...'</code> in PowerShell):</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="# interactive: label an action, perform it, see what moved — builds the table for you
+python learn_dps.py
+#   label&gt; temp +1
+#     do &#x27;temp +1&#x27; now, then press Enter...
+#     -&gt; moved: {&#x27;2&#x27;: (24, 25)}        # dps 2 is the setpoint
+
+# or just stream every change with a timestamp (Ctrl-C to stop)
+python learn_dps.py --watch
+
+# device never pushes? poll status() instead (every 1 s, or give a number)
+python learn_dps.py --watch --poll 2
+
+# same --version flag as verify_lan.py
+python learn_dps.py --version 3.4"><pre><span class="pl-c"><span class="pl-c">#</span> interactive: label an action, perform it, see what moved — builds the table for you</span>
+python learn_dps.py
+<span class="pl-c"><span class="pl-c">#</span>   label&gt; temp +1</span>
+<span class="pl-c"><span class="pl-c">#</span>     do 'temp +1' now, then press Enter...</span>
+<span class="pl-c"><span class="pl-c">#</span>     -&gt; moved: {'2': (24, 25)}        # dps 2 is the setpoint</span>
+
+<span class="pl-c"><span class="pl-c">#</span> or just stream every change with a timestamp (Ctrl-C to stop)</span>
+python learn_dps.py --watch
+
+<span class="pl-c"><span class="pl-c">#</span> device never pushes? poll status() instead (every 1 s, or give a number)</span>
+python learn_dps.py --watch --poll 2
+
+<span class="pl-c"><span class="pl-c">#</span> same --version flag as verify_lan.py</span>
+python learn_dps.py --version 3.4</pre></div>
+<p><strong>How it connects (and why the remote matters).</strong> <code>learn_dps.py</code> talks to the device
+exactly like <code>verify_lan.py</code> in step 4 — straight to it on the LAN with <code>tinytuya</code>,
+using the same three things from the dump (<code>DEV_ID</code>, <code>DEV_IP</code>, and <code>TUYA_KEY</code> from the
+environment). No cloud is involved. It opens a TCP connection to the device on Tuya's
+local port (6668); the <code>local_key</code> encrypts that conversation (protocol 3.3 by default, <code>--version</code> to change it).</p>
+<p>The one line that makes it a <em>listener</em> rather than a one-shot read is
+<code>set_socketPersistent(True)</code>: <code>verify_lan.py</code> opens the socket, reads the state once,
+and closes it, whereas <code>learn_dps.py</code> holds the connection open. While it stays open,
+the device <strong>pushes</strong> a <code>dps</code> message of its own accord every time a setting changes —
+and the script reads those with <code>d.receive()</code> and diffs them against the last state it
+saw.</p>
+<p>Here's the catch that makes this work: a Tuya device accepts <strong>only one local
+connection at a time</strong>, so this script can't be listening while the vendor app — or an
+integration like Home Assistant's <code>tuya_local</code> — already holds a local connection to the
+same device. Close the app and stop (or disable) any integration bound to that device
+first, or the script connects, reads one frozen baseline, and then never sees another
+update. Drive the change from a source that <em>does</em> reach the Tuya module: the app on
+another connection is out (it'd take the socket), so the clean options are a wall panel,
+the device's own buttons, or writing to a dps from the PC (next paragraph).</p>
+<blockquote>
+<p><strong>Nothing moves when you change a setting?</strong> Two common reasons, both expected:</p>
+<ul>
+<li><strong>The device doesn't push.</strong> Some firmwares (several AC/climate modules especially)
+never send a spontaneous update — <code>--watch</code> just sits on a frozen baseline no matter
+what you do. These you <strong>poll</strong> instead: add <code>--poll</code> (works with <code>--watch</code> and in
+interactive mode) and the script reads <code>status()</code> every second and diffs.</li>
+<li><strong>An IR/RF remote is "blind."</strong> A remote that talks to the <em>appliance</em> over infrared
+(not to the Tuya Wi-Fi module) can change what the unit does without the Tuya module
+ever learning about it — so neither <code>--watch</code> nor polling sees a thing. Change the
+setting through the Tuya module itself (app on its own connection, or a PC write).</li>
+</ul>
+</blockquote>
+<p>If observation gives you nothing on your device, <strong>writing one value from the PC</strong> is the
+fallback: <code>tinytuya.Device(id, ip, key, version=3.3).set_value(2, 25)</code> sets dps 2 to 25
+and you watch whether the unit reacts. Nudge one dps at a time, by one step, and set it
+straight back — this <em>does</em> write to the device, so it carries a small risk of leaving it
+in an odd state, which pure observation doesn't.</p>
+<p>All of this assumes the device is reachable directly on your LAN (same subnet, not walled
+off on a guest VLAN) — the normal case for a home Tuya device, and already proven the
+moment <code>verify_lan.py</code> got a reply in step 4. The label table you end up with is specific
+to <em>your</em> product; the reusable part is the method (observe first, poll or write only if
+you must), not the numbers.</p>
+<div class="markdown-heading"><h3 class="heading-element">6. Turn the table into a device config</h3><span id="6-turn-the-table-into-a-device-config"></span></div>
+<p>So you've watched the device and you have a table: dps 1 is on/off, dps 2 is the
+setpoint, dps 4 is the mode, and so on. <strong>Now what?</strong> That table <em>is</em> the device
+config — you just write it down in the shape your integration expects. For Home
+Assistant's <a href="https://github.com/make-all/tuya-local"><code>tuya_local</code></a> that's a small YAML
+file, one entry per dps, each saying what the number <em>is</em> (a boolean? a temperature? a
+mode name?) and, where the raw value isn't obvious, how it maps to a human value.</p>
+<p>Here's a <strong>generic</strong> heat/cool unit. The values are placeholders that show the shape —
+replace them with the numbers from <em>your own</em> <code>learn_dps</code> table:</p>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="name: Generic AC
+products:
+  - id: xxxxxxxxxxxxxxxx          # the productId from the Frida dump (optional, see below)
+    manufacturer: Example
+    model: Generic AC
+entities:
+  - entity: climate
+    dps:
+      - id: 1                     # learn_dps said: power on/off
+        type: boolean
+        name: hvac_mode
+        mapping:
+          - dps_val: false
+            value: &quot;off&quot;
+          - dps_val: true
+            constraint: mode       # pair on/off with dps 4 to pick heat vs cool…
+            conditions:
+              - dps_val: cold
+                value: cool
+              - dps_val: hot
+                value: heat
+      - id: 2                     # learn_dps said: temp +1 moved this 24 -&gt; 25
+        type: integer
+        name: temperature
+        range:
+          min: 16
+          max: 30
+      - id: 3                     # learn_dps said: reads room temp, moves on its own
+        type: integer
+        name: current_temperature
+        mapping:
+          - scale: 10             # device sends 235 -&gt; means 23.5 °C
+      - id: 4                     # learn_dps said: mode button cycled cold/hot/wind
+        type: string
+        name: mode
+        hidden: true              # drives the mapping above; no entity of its own"><pre><span class="pl-ent">name</span>: <span class="pl-s">Generic AC</span>
+<span class="pl-ent">products</span>:
+  - <span class="pl-ent">id</span>: <span class="pl-s">xxxxxxxxxxxxxxxx          </span><span class="pl-c"><span class="pl-c">#</span> the productId from the Frida dump (optional, see below)</span>
+    <span class="pl-ent">manufacturer</span>: <span class="pl-s">Example</span>
+    <span class="pl-ent">model</span>: <span class="pl-s">Generic AC</span>
+<span class="pl-ent">entities</span>:
+  - <span class="pl-ent">entity</span>: <span class="pl-s">climate</span>
+    <span class="pl-ent">dps</span>:
+      - <span class="pl-ent">id</span>: <span class="pl-c1">1</span>                     <span class="pl-c"><span class="pl-c">#</span> learn_dps said: power on/off</span>
+        <span class="pl-ent">type</span>: <span class="pl-s">boolean</span>
+        <span class="pl-ent">name</span>: <span class="pl-s">hvac_mode</span>
+        <span class="pl-ent">mapping</span>:
+          - <span class="pl-ent">dps_val</span>: <span class="pl-c1">false</span>
+            <span class="pl-ent">value</span>: <span class="pl-s"><span class="pl-pds">"</span>off<span class="pl-pds">"</span></span>
+          - <span class="pl-ent">dps_val</span>: <span class="pl-c1">true</span>
+            <span class="pl-ent">constraint</span>: <span class="pl-s">mode       </span><span class="pl-c"><span class="pl-c">#</span> pair on/off with dps 4 to pick heat vs cool…</span>
+            <span class="pl-ent">conditions</span>:
+              - <span class="pl-ent">dps_val</span>: <span class="pl-s">cold</span>
+                <span class="pl-ent">value</span>: <span class="pl-s">cool</span>
+              - <span class="pl-ent">dps_val</span>: <span class="pl-s">hot</span>
+                <span class="pl-ent">value</span>: <span class="pl-s">heat</span>
+      - <span class="pl-ent">id</span>: <span class="pl-c1">2</span>                     <span class="pl-c"><span class="pl-c">#</span> learn_dps said: temp +1 moved this 24 -&gt; 25</span>
+        <span class="pl-ent">type</span>: <span class="pl-s">integer</span>
+        <span class="pl-ent">name</span>: <span class="pl-s">temperature</span>
+        <span class="pl-ent">range</span>:
+          <span class="pl-ent">min</span>: <span class="pl-c1">16</span>
+          <span class="pl-ent">max</span>: <span class="pl-c1">30</span>
+      - <span class="pl-ent">id</span>: <span class="pl-c1">3</span>                     <span class="pl-c"><span class="pl-c">#</span> learn_dps said: reads room temp, moves on its own</span>
+        <span class="pl-ent">type</span>: <span class="pl-s">integer</span>
+        <span class="pl-ent">name</span>: <span class="pl-s">current_temperature</span>
+        <span class="pl-ent">mapping</span>:
+          - <span class="pl-ent">scale</span>: <span class="pl-c1">10</span>             <span class="pl-c"><span class="pl-c">#</span> device sends 235 -&gt; means 23.5 °C</span>
+      - <span class="pl-ent">id</span>: <span class="pl-c1">4</span>                     <span class="pl-c"><span class="pl-c">#</span> learn_dps said: mode button cycled cold/hot/wind</span>
+        <span class="pl-ent">type</span>: <span class="pl-s">string</span>
+        <span class="pl-ent">name</span>: <span class="pl-s">mode</span>
+        <span class="pl-ent">hidden</span>: <span class="pl-s">true              </span><span class="pl-c"><span class="pl-c">#</span> drives the mapping above; no entity of its own</span></pre></div>
+<p>The three dps types you'll use most: <strong>boolean</strong> (on/off, a switch), <strong>integer</strong> (a
+temperature, a timer, a percentage — often with a <code>range:</code> and a <code>scale:</code> when the device
+multiplies by 10 or 100), and <strong>string</strong> (a named mode like <code>cold</code>/<code>hot</code>/<code>auto</code>, which you
+remap to the words the integration wants). A <code>mapping:</code> is just a lookup table from the
+raw dps value to a friendly one; <code>constraint:</code> links two dps together when the real
+setting needs both (on/off <em>and</em> mode = "cool" vs "heat").</p>
+<p>Drop the file in <code>custom_components/tuya_local/devices/</code> and restart Home Assistant, then
+add the integration (configure it manually by IP, since you're not using the cloud). You
+won't type the product id anywhere: the integration <strong>matches the file by its dps
+signature</strong> — it offers you a device-type list, and your config appears because the dps
+ids and <em>types</em> you declared are the ones the device actually reports. The <code>products:</code>
+block is just a bonus hint. So the catch is there: get a <code>type:</code> wrong and your file
+silently drops off the list. If it's missing, or a control does nothing once added, that
+dps is mislabeled — go back to <code>learn_dps.py</code>, move that one setting, and fix the number
+or the type.</p>
+<blockquote>
+<p>That same table works for <strong>LocalTuya</strong> too (it asks you, per dps, "is this a switch, a
+number, a select?" in its config flow) and for a plain <code>tinytuya</code> script
+(<code>d.set_value(2, 25)</code> to set dps 2 to 25). The device config is the portable part.</p>
+<p><g-emoji class="g-emoji" alias="warning">⚠️</g-emoji> A file under <code>custom_components/</code> is <strong>overwritten when the integration updates</strong>.
+Keep a copy somewhere safe and drop it back after an update — or, better, open a PR to
+<a href="https://github.com/make-all/tuya-local">make-all/tuya-local</a> so your device ships with
+the integration and everyone with that model gets it for free.</p>
+</blockquote>
+<div class="markdown-heading"><h3 class="heading-element">7. Use it locally, then clean up</h3><span id="7-use-it-locally-then-clean-up"></span></div>
+<p>You're off the cloud now. Last thing — don't leave the key lying around:</p>
+<ul>
+<li><strong>Delete any file that held the key in cleartext</strong> (dump output, scratch JSON).</li>
+<li>Store the key in a password/secret manager, not in a dotfile next to your configs.</li>
+<li><strong>Shut the emulator down</strong> and stop frida-server when you're done.</li>
+</ul>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">Files in this repo</h2><span id="files-in-this-repo"></span></div>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://github.com/cerealkiller57540/tuya-localkey-frida/blob/main/dump_localkey.py"><code>dump_localkey.py</code></a></td>
+<td>The Frida script: hooks <code>*DeviceBean</code>, prints id / name / <code>local_key</code> / productId / ip.</td>
+</tr>
+<tr>
+<td><a href="https://github.com/cerealkiller57540/tuya-localkey-frida/blob/main/verify_lan.py"><code>verify_lan.py</code></a></td>
+<td>Confirms the key by reading device state over the LAN with <code>tinytuya</code>.</td>
+</tr>
+<tr>
+<td><a href="https://github.com/cerealkiller57540/tuya-localkey-frida/blob/main/learn_dps.py"><code>learn_dps.py</code></a></td>
+<td>Watches dps changes (pushes, or <code>--poll</code>) while you operate the device, to learn what each DPS means. Imports helpers from <code>verify_lan.py</code>, so keep both in the same folder.</td>
+</tr>
+<tr>
+<td><a href="https://github.com/cerealkiller57540/tuya-localkey-frida/tree/main/tests/"><code>tests/</code></a></td>
+<td>Unit tests for the helper logic (dedup, <code>diff</code>, env resolution, error/incomplete replies). No device needed: <code>python -m unittest discover -s tests -v</code>. The dedup test runs the dump's JS under Node and is skipped without it.</td>
+</tr>
+</tbody>
+</table>
+<div class="markdown-heading"><h2 class="heading-element">A note on stability</h2><span id="a-note-on-stability"></span></div>
+<p>The <code>local_key</code> <strong>rotates</strong> if you re-pair the device or reset it. If local control
+suddenly stops, the key changed — dump it again. And a Tuya device accepts only <strong>one
+local connection at a time</strong>: the vendor app and your local integration will fight over
+it if both poll at once.</p>
+<div class="markdown-heading"><h2 class="heading-element">Credits</h2><span id="credits"></span></div>
+<p>Built on the shoulders of <a href="https://frida.re/" rel="nofollow">Frida</a> and
+<a href="https://github.com/jasonacox/tinytuya"><code>tinytuya</code></a>.</p>
+</main>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/tuya-localkey-frida">cerealkiller57540/tuya-localkey-frida</a> · Updated 2026-11-01 · <a href="../index.html">All projects</a></footer>
+</div></body></html>

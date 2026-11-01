@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Weather Neon Card — custom card for Home Assistant</title>
+<meta name="description" content="Neon weather card for Home Assistant with a live WebGL sky: rain on the glass, fog, frost, snow, lightning and a real moon. HACS-ready.">
+<link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/weather-neon-card.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Weather Neon Card — custom card for Home Assistant">
+<meta property="og:description" content="Neon weather card for Home Assistant with a live WebGL sky: rain on the glass, fog, frost, snow, lightning and a real moon. HACS-ready.">
+<meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/weather-neon-card.html">
+<meta property="og:site_name" content="Neon Cards for Home Assistant">
+<meta property="og:image" content="https://raw.githubusercontent.com/cerealkiller57540/weather-neon-card/main/images/scenes.jpg?v=3.3.1">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/cerealkiller57540/weather-neon-card/main/images/scenes.jpg?v=3.3.1">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Weather Neon Card", "description": "Neon weather card for Home Assistant with a live WebGL sky: rain on the glass, fog, frost, snow, lightning and a real moon. HACS-ready.", "codeRepository": "https://github.com/cerealkiller57540/weather-neon-card", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/weather-neon-card.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-10-22", "keywords": "custom-card, cyberpunk, dashboard, hacs, home-assistant, lovelace, neon, weather, webgl", "image": "https://raw.githubusercontent.com/cerealkiller57540/weather-neon-card/main/images/scenes.jpg?v=3.3.1"}</script>
+<link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
+<nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Dashboard cards</nav>
+<header class="page-head"><h1>Weather Neon Card</h1>
+<p class="lead">Neon weather card for Home Assistant with a live WebGL sky: rain on the glass, fog, frost, snow, lightning and a real moon. HACS-ready.</p>
+<div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/weather-neon-card">View on GitHub</a><a class="btn alt" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=cerealkiller57540&amp;repository=weather-neon-card&amp;category=plugin">Open in HACS</a></div></header>
+<main class="markdown-body">
+<div align="center">
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/weather-neon-card/main/images/logo.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/weather-neon-card/main/images/logo.png" alt="Weather Neon Card" width="480" style="max-width: 100%;" loading="lazy"></a>
+<p><strong>A neon weather card for Home Assistant with a live WebGL sky: rain on the glass, drifting fog, frost, falling snow, lightning, and a real moon.</strong></p>
+
+
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/weather-neon-card/main/images/scenes.jpg?v=3.3.1"><img src="https://raw.githubusercontent.com/cerealkiller57540/weather-neon-card/main/images/scenes.jpg?v=3.3.1" alt="Weather Neon Card in eight conditions: frost on a sunny freezing day, cloudy, light rain, heavy rain, snow with frost, fog, thunderstorm at night with the moon, and a clear night with an aurora" width="900" style="max-width: 100%;" loading="lazy"></a>
+</div>
+<p>The card reads your <code>weather.*</code> entity and turns the condition into a scene. Rain runs down the glass and blurs what is behind it, fog drifts in layers in front of the text, frost grows from the edges when it freezes, snow falls behind the glass, and lightning branches across the sky. At night the sky goes dark and the moon shows its real phase for today. Below the scene: five forecast tiles with a min/max temperature bar, wind, and optional air-quality and pollen badges.</p>
+<div class="markdown-heading"><h2 class="heading-element">🥚 Easter eggs</h2><span id="-easter-eggs"></span></div>
+<p><a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/weather-neon-card/main/images/et.gif"><img src="https://raw.githubusercontent.com/cerealkiller57540/weather-neon-card/main/images/et.gif" alt="A bicycle silhouette crossing the full moon at night, slowed down three times" width="520" data-animated-image="" style="max-width: 100%;" loading="lazy"></a></p>
+<ul>
+<li><strong>Full moon, clear night</strong>: a familiar bicycle crosses the moon once when the card appears, and again every time you tap the moon. <em>(Slowed down ×3 above.)</em></li>
+<li><strong>New moon, clear night</strong>: an aurora lights up the sky. Only on the five or so darkest nights of the month, never otherwise.</li>
+</ul>
+<p>Both follow the real moon phase. To see them without waiting, set <code>fx_et_toujours: true</code> or <code>fx_aurore_toujours: true</code> (demo modes, not meant to stay on).</p>
+<p>Three more come back on fixed dates, at night only (a night counts as the date of its evening, so after midnight still counts):</p>
+<ul>
+<li><strong>October 31 and every Friday the 13th</strong>: a blood-red moon with a skull imprinted on the lunar seas.</li>
+<li><strong>May 4</strong>: the moon is replaced by a battle station that is definitely not a moon.</li>
+<li><strong>Every night of December</strong>: Santa's sleigh and his reindeer (Rudolph leading, red nose on) fly across the moon, once when the card appears and again on every tap on the moon. It takes E.T.'s place for the month.</li>
+</ul>
+<p>To see them on any day: <code>fx_lune_rouge_toujours: true</code>, <code>fx_lune_etoile_toujours: true</code> (wins over the red moon if both are on) or <code>fx_noel_toujours: true</code> (demo modes, not meant to stay on). <code>fx_lune_dates: false</code> turns the date triggers off.</p>
+<ul>
+<li><strong>Fireworks on your holiday nights</strong>: on each date of <code>fx_feu_dates</code> (default <code>07-14</code>, comma-separated, e.g. <code>07-04,11-05</code>) the night sky gets a fireworks show in <code>fx_feu_couleurs</code>. On December 31 it is gold, after Santa's sleigh has passed; tap the moon for another salvo. Demo: <code>fx_feu_toujours: true</code>.</li>
+<li><strong>April 1st</strong>: the card shows an absurd forecast for three seconds, then owns up with "April fool! 🐟". Demo: <code>fx_avril_toujours: true</code>.</li>
+</ul>
+<p><a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/weather-neon-card/main/images/death-star.jpg"><img src="https://raw.githubusercontent.com/cerealkiller57540/weather-neon-card/main/images/death-star.jpg" alt="The moon replaced by the Death Star above a clear night sky" width="520" style="max-width: 100%;" loading="lazy"></a></p>
+<div class="markdown-heading"><h2 class="heading-element">✨ Features</h2><span id="-features"></span></div>
+<ul>
+<li><strong>A live WebGL sky and glass effects</strong>, with a canvas fallback when WebGL is not available.</li>
+<li><strong>Animated neon SVG icons</strong>, and an accent colour that follows the condition.</li>
+<li><strong>Forecast tiles</strong>, daily or hourly, through <code>weather.get_forecasts</code>, with a min/max bar coloured by temperature.</li>
+<li><strong>Day and night from the sun</strong>, not from the provider's fixed time slots, optionally refined by a light sensor (<code>lux_entity</code>).</li>
+<li><strong>Weather warnings</strong> (<code>alert_entity</code>, e.g. a Météo-France vigilance sensor) and <strong>Atmo France</strong> air-quality and pollen badges.</li>
+<li><strong>Glitch the cat</strong> pops out of the forecast divider from time to time, and reacts to the weather: sunglasses in the sun, umbrella in the rain, squinting in fog, a scarf in strong wind, curled up asleep on clear nights, shivering in frost, eyes shut at every lightning flash. He comes out more often when the weather is busy.</li>
+<li><strong>Visual editor</strong> with grouped sections; every effect has its own slider and a "force visible" switch to tune it in any weather.</li>
+<li><strong>One WebGL context</strong> shared by every layer and every instance, kept alive when you change views: it stays well under the 8-context limit of Android WebViews. Pauses when off-screen, falls back to canvas rendering without WebGL, and scales the whole block down on narrow columns instead of squeezing it.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">📦 Installation</h2><span id="-installation"></span></div>
+<div class="markdown-heading"><h3 class="heading-element">HACS (recommended)</h3><span id="hacs-recommended"></span></div>
+<ol>
+<li>Click the <strong>Open in HACS</strong> button above, or add this repository as a custom repository in HACS (category <strong>Dashboard</strong>): <code>https://github.com/cerealkiller57540/weather-neon-card</code>.</li>
+<li>Download <strong>Weather Neon Card</strong>.</li>
+<li>Reload your browser.</li>
+</ol>
+<p>HACS registers one resource, <code>weather-neon-card.js</code>. The card type is <code>custom:weather-neon-card-webgl</code>.</p>
+<p>The former <code>custom:weather-neon-card</code> type still works: it is now an alias of the same card.</p>
+<div class="markdown-heading"><h3 class="heading-element">Manual</h3><span id="manual"></span></div>
+<ol>
+<li>Copy <a href="https://github.com/cerealkiller57540/weather-neon-card/blob/main/dist/weather-neon-card.js"><code>dist/weather-neon-card.js</code></a> to <code>config/www/weather-neon-card/</code>.</li>
+<li>Add a dashboard resource: URL <code>/local/weather-neon-card/weather-neon-card.js</code>, type <strong>JavaScript module</strong>.</li>
+</ol>
+<div class="markdown-heading"><h2 class="heading-element">🚀 Usage</h2><span id="-usage"></span></div>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="type: custom:weather-neon-card-webgl
+entity: weather.home
+forecast_type: daily
+forecast_count: 5"><pre><span class="pl-ent">type</span>: <span class="pl-s">custom:weather-neon-card-webgl</span>
+<span class="pl-ent">entity</span>: <span class="pl-s">weather.home</span>
+<span class="pl-ent">forecast_type</span>: <span class="pl-s">daily</span>
+<span class="pl-ent">forecast_count</span>: <span class="pl-c1">5</span></pre></div>
+<p>With every optional sensor:</p>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="type: custom:weather-neon-card-webgl
+entity: weather.home
+name: Home
+alert_entity: sensor.&lt;dept&gt;_weather_alert
+lux_entity: sensor.outdoor_illuminance
+air_entity: sensor.atmo_france_qualite_globale_&lt;zone&gt;
+pollen_entity: sensor.atmo_france_qualite_globale_pollen_&lt;zone&gt;"><pre><span class="pl-ent">type</span>: <span class="pl-s">custom:weather-neon-card-webgl</span>
+<span class="pl-ent">entity</span>: <span class="pl-s">weather.home</span>
+<span class="pl-ent">name</span>: <span class="pl-s">Home</span>
+<span class="pl-ent">alert_entity</span>: <span class="pl-s">sensor.&lt;dept&gt;_weather_alert</span>
+<span class="pl-ent">lux_entity</span>: <span class="pl-s">sensor.outdoor_illuminance</span>
+<span class="pl-ent">air_entity</span>: <span class="pl-s">sensor.atmo_france_qualite_globale_&lt;zone&gt;</span>
+<span class="pl-ent">pollen_entity</span>: <span class="pl-s">sensor.atmo_france_qualite_globale_pollen_&lt;zone&gt;</span></pre></div>
+<div class="markdown-heading"><h2 class="heading-element">⚙️ Options</h2><span id="️-options"></span></div>
+<p><strong>Card</strong></p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>entity</code></td>
+<td><strong>required</strong></td>
+<td>A <code>weather.*</code> entity</td>
+</tr>
+<tr>
+<td><code>name</code> / <code>show_name</code></td>
+<td>cleaned <code>friendly_name</code> / <code>true</code></td>
+<td>Place label under the temperature</td>
+</tr>
+<tr>
+<td><code>forecast_type</code></td>
+<td><code>daily</code></td>
+<td><code>daily</code>, <code>hourly</code> or <code>twice_daily</code> (if your integration supports it)</td>
+</tr>
+<tr>
+<td><code>forecast_count</code></td>
+<td><code>5</code></td>
+<td>Number of forecast tiles</td>
+</tr>
+<tr>
+<td><code>alert_entity</code></td>
+<td>—</td>
+<td>Weather warning sensor (Météo-France vigilance)</td>
+</tr>
+<tr>
+<td><code>sun_entity</code></td>
+<td><code>sun.sun</code></td>
+<td>Sunrise and sunset, and the day/night fallback</td>
+</tr>
+<tr>
+<td><code>night_from_sun</code></td>
+<td><code>true</code></td>
+<td>Decide day/night from the sun; <code>false</code> keeps the raw condition</td>
+</tr>
+<tr>
+<td><code>lux_entity</code></td>
+<td>—</td>
+<td>Light sensor, checked first for day/night</td>
+</tr>
+<tr>
+<td><code>wind_entity</code>, <code>rain_chance_entity</code>, <code>snow_chance_entity</code></td>
+<td>auto</td>
+<td>Detected from the weather entity name when left empty</td>
+</tr>
+<tr>
+<td><code>show_humidity</code> / <code>show_wind</code> / <code>show_pressure</code></td>
+<td><code>true</code></td>
+<td>Detail badges</td>
+</tr>
+<tr>
+<td><code>show_aside</code></td>
+<td><code>true</code></td>
+<td>Right column: sunrise, sunset, gusts</td>
+</tr>
+<tr>
+<td><code>show_atmo</code></td>
+<td><code>true</code></td>
+<td>Atmo France badges</td>
+</tr>
+<tr>
+<td><code>air_entity</code> (+ <code>air_entity_next</code>), <code>pollen_entity</code> (+ <code>pollen_entity_next</code>)</td>
+<td>—</td>
+<td>Air quality and pollen, today and tomorrow</td>
+</tr>
+<tr>
+<td><code>reactive_bg</code></td>
+<td><code>false</code></td>
+<td>Gradient background from the weather instead of the theme</td>
+</tr>
+<tr>
+<td><code>mood_accent</code></td>
+<td><code>true</code></td>
+<td>Accent colour follows the condition</td>
+</tr>
+<tr>
+<td><code>glitch</code></td>
+<td><code>true</code></td>
+<td>Glitch the cat</td>
+</tr>
+<tr>
+<td><code>particles</code></td>
+<td><code>true</code></td>
+<td>All atmospheric effects</td>
+</tr>
+<tr>
+<td><code>neon_fx</code></td>
+<td><code>true</code></td>
+<td>Scanlines and glitched temperature</td>
+</tr>
+<tr>
+<td><code>frost</code> / <code>frost_below</code></td>
+<td><code>true</code> / <code>3</code></td>
+<td>Frost below this temperature (°C)</td>
+</tr>
+<tr>
+<td><code>orbitron</code></td>
+<td><code>false</code></td>
+<td>Orbitron font for temperature and days</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sky</code> / <code>fx_gl</code></td>
+<td><code>true</code></td>
+<td>The sky layer / the glass post-process</td>
+</tr>
+<tr>
+<td><code>sky_opacite</code></td>
+<td><code>0.55</code></td>
+<td>Master volume of clouds, haze and glow</td>
+</tr>
+<tr>
+<td><code>fx_pluie</code>, <code>fx_brouillard</code>, <code>fx_givre</code>, <code>fx_neige</code>, <code>fx_chaleur</code></td>
+<td><code>0.70</code>, <code>0.80</code>, <code>1.00</code>, <code>0.75</code>, <code>0.95</code></td>
+<td>Rain, fog, frost, snow and heat-haze strength</td>
+</tr>
+<tr>
+<td><code>fx_pluie_toujours</code>, <code>fx_brouillard_toujours</code>, <code>fx_givre_toujours</code>, <code>fx_neige_toujours</code>, <code>fx_vent_toujours</code>, <code>fx_chaleur_toujours</code></td>
+<td><code>false</code></td>
+<td>Force one effect on, whatever the weather (for tuning)</td>
+</tr>
+<tr>
+<td><code>fx_lune</code> / <code>fx_lune_taille</code></td>
+<td><code>true</code> / <code>96</code></td>
+<td>Photographic moon with its real phase, size in px</td>
+</tr>
+<tr>
+<td><code>fx_aurore</code> / <code>fx_aurore_toujours</code></td>
+<td><code>true</code> / <code>false</code></td>
+<td>Aurora easter egg / demo mode</td>
+</tr>
+<tr>
+<td><code>fx_et</code> / <code>fx_et_toujours</code></td>
+<td><code>true</code> / <code>false</code></td>
+<td>Full-moon easter egg / demo mode</td>
+</tr>
+<tr>
+<td><code>fx_lune_dates</code></td>
+<td><code>true</code></td>
+<td>Fixed-date moon easter eggs (Oct 31 and Friday the 13th: red moon; May 4: battle station)</td>
+</tr>
+<tr>
+<td><code>fx_lune_rouge_toujours</code> / <code>fx_lune_etoile_toujours</code></td>
+<td><code>false</code> / <code>false</code></td>
+<td>Blood-red moon with skull / battle-station moon, demo switches (tune them in the editor's moon easter egg group)</td>
+</tr>
+<tr>
+<td><code>fx_noel</code> / <code>fx_noel_toujours</code></td>
+<td><code>true</code> / <code>false</code></td>
+<td>December sleigh easter egg / demo mode (size, reindeer count, path, gallop and Rudolph's nose in the editor)</td>
+</tr>
+<tr>
+<td><code>fx_feu</code> / <code>fx_feu_toujours</code></td>
+<td><code>true</code> / <code>false</code></td>
+<td>Fireworks easter egg / demo mode</td>
+</tr>
+<tr>
+<td><code>fx_feu_dates</code> / <code>fx_feu_couleurs</code></td>
+<td><code>07-14</code> / <code>#2f6bff,#f4f7ff,#ff2a3a</code></td>
+<td>Holiday dates (MM-DD, comma-separated) / fireworks palette; Dec 31 is always on, in gold</td>
+</tr>
+<tr>
+<td><code>fx_avril</code> / <code>fx_avril_toujours</code></td>
+<td><code>true</code> / <code>false</code></td>
+<td>April fool easter egg / demo mode</td>
+</tr>
+<tr>
+<td><code>fx_glitch_*</code></td>
+<td></td>
+<td>Glitch's weather reactions: squint, wind threshold for the scarf (<code>fx_glitch_vent_seuil</code>, 35 km/h), sleep, shiver, lightning blink, how often he comes out (all in the editor's Glitch group)</td>
+</tr>
+<tr>
+<td><code>largeur_ref</code></td>
+<td><code>380</code></td>
+<td>Width the card is drawn at; narrower columns scale the whole block</td>
+</tr>
+<tr>
+<td><code>show_clock</code></td>
+<td><code>false</code></td>
+<td>Time banner at the top of the card (the card grows by about 18 px)</td>
+</tr>
+<tr>
+<td><code>clock_align</code> / <code>clock_size</code></td>
+<td><code>center</code> / <code>18</code></td>
+<td><code>center</code> or <code>left</code>; time size in px</td>
+</tr>
+<tr>
+<td><code>clock_format</code></td>
+<td><code>auto</code></td>
+<td><code>auto</code> (your Home Assistant setting), <code>12h</code> or <code>24h</code></td>
+</tr>
+<tr>
+<td><code>clock_date</code> / <code>clock_seconds</code></td>
+<td><code>true</code> / <code>false</code></td>
+<td>Short date next to the time / show seconds</td>
+</tr>
+</tbody>
+</table>
+<p>More than a hundred other <code>sky_*</code>, <code>fx_*</code> and <code>fogx_*</code> settings (cloud scale, drop size, frost branches, snow depth, moon relief…) are easiest to tune from the visual editor, where each is a slider with its range.</p>
+<div class="markdown-heading"><h2 class="heading-element">❓ FAQ</h2><span id="-faq"></span></div>
+<p><strong>Which weather integrations work?</strong> Any <code>weather.*</code> entity. The card was built with Météo-France, whose extra sensors (rain chance, warnings) it picks up automatically. Other integrations simply show fewer badges.</p>
+<p><strong>Why is it night on the card when my provider says "sunny"?</strong> Some providers switch to night on fixed time slots. The card follows the sun (and your light sensor, if set). Set <code>night_from_sun: false</code> to keep the provider's condition.</p>
+<p><strong>Some cards go blank on my Android phone.</strong> Android WebViews keep at most 8 WebGL contexts per page and drop the oldest one. This card uses a single context for all its layers and all its instances, and keeps it across view changes.</p>
+<p><strong>Which languages are supported?</strong> English and French (conditions, days, alerts and the editor). Names that come from your sensors are shown as they are. The editor and the card texts follow your Home Assistant language: French if it is French, English otherwise. Reload the page after changing the language. Every option can also be set in YAML.</p>
+<p><strong>Which theme is in the screenshots?</strong> Neo Tokyo, the author's own dark theme (not published). The card works with any theme. The weather data in the screenshots is made up.</p>
+<div class="markdown-heading"><h2 class="heading-element">🌃 More neon cards</h2><span id="-more-neon-cards"></span></div>
+<p>This card is part of a family. See the full collection at <a href="https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards"><strong>Home-Assistant-Neon-Cards</strong></a>.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🐾 Support this project</h2><span id="-support-this-project"></span></div>
+<p>If you enjoy these cards, please consider donating to <strong>Quatre Pattes</strong>, an animal rescue organization.</p>
+
+<blockquote>
+<p>💛 No need to support me — just help the animals. Thank you!</p>
+</blockquote>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🤝 Contributing</h2><span id="-contributing"></span></div>
+<ol>
+<li>Fork the repo</li>
+<li>Create your branch: <code>git checkout -b feature/my-card</code></li>
+<li>Commit and push</li>
+<li>Open a Pull Request</li>
+</ol>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">📄 License</h2><span id="-license"></span></div>
+<p><a href="https://github.com/cerealkiller57540/weather-neon-card/tree/main/LICENSE">MIT License</a></p>
+</main>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/weather-neon-card">cerealkiller57540/weather-neon-card</a> · Updated 2026-10-22 · <a href="../index.html">All projects</a></footer>
+</div></body></html>

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Neon Dual Thermo Card — custom card for Home Assistant</title>
+<meta name="description" content="Dual thermometer card for Home Assistant: two neon thermometers with refracting glass, liquid, plasma core and bubbles (WebGL), 24 h history graph. HACS.">
+<link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-dual-thermo-card.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Neon Dual Thermo Card — custom card for Home Assistant">
+<meta property="og:description" content="Dual thermometer card for Home Assistant: two neon thermometers with refracting glass, liquid, plasma core and bubbles (WebGL), 24 h history graph. HACS.">
+<meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-dual-thermo-card.html">
+<meta property="og:site_name" content="Neon Cards for Home Assistant">
+<meta property="og:image" content="https://raw.githubusercontent.com/cerealkiller57540/neon-dual-thermo-card/main/images/main.webp">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/cerealkiller57540/neon-dual-thermo-card/main/images/main.webp">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Neon Dual Thermo Card", "description": "Dual thermometer card for Home Assistant: two neon thermometers with refracting glass, liquid, plasma core and bubbles (WebGL), 24 h history graph. HACS.", "codeRepository": "https://github.com/cerealkiller57540/neon-dual-thermo-card", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-dual-thermo-card.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-10-21", "keywords": "custom-card, cyberpunk, dashboard, hacs, home-assistant, lovelace, neon, temperature, thermometer, weather, webgl", "image": "https://raw.githubusercontent.com/cerealkiller57540/neon-dual-thermo-card/main/images/main.webp"}</script>
+<link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
+<nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Dashboard cards</nav>
+<header class="page-head"><h1>Neon Dual Thermo Card</h1>
+<p class="lead">Dual thermometer card for Home Assistant: two neon thermometers with refracting glass, liquid, plasma core and bubbles (WebGL), 24 h history graph. HACS.</p>
+<div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/neon-dual-thermo-card">View on GitHub</a><a class="btn alt" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=cerealkiller57540&amp;repository=neon-dual-thermo-card&amp;category=plugin">Open in HACS</a></div></header>
+<main class="markdown-body">
+<div align="center">
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-dual-thermo-card/main/images/logo.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-dual-thermo-card/main/images/logo.png" alt="Neon Dual Thermometer Card" width="480" style="max-width: 100%;" loading="lazy"></a>
+<p><strong>Two neon thermometers side by side for Home Assistant, with real glass, liquid and a plasma core rendered in WebGL.</strong></p>
+
+
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-dual-thermo-card/main/images/main.webp"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-dual-thermo-card/main/images/main.webp" alt="Neon Dual Thermometer Card: outdoor and living-room thermometers with a plasma core, rising bubbles and a 24 h history graph" width="448" style="max-width: 100%;" loading="lazy"></a>
+</div>
+<p>Outdoor on one side, indoors on the other, one card. Each thermometer is a glass tube that refracts what sits behind the card, filled with a liquid whose colour follows five temperature zones. The bulb holds a small plasma reactor whose arcs get more nervous as the temperature rises, and air bubbles climb faster when it is hot. Underneath, a 24 h history graph draws both curves, with an optional pressure trace in the background.</p>
+<div class="markdown-heading"><h2 class="heading-element">✨ Features</h2><span id="-features"></span></div>
+<ul>
+<li><code>neon-dual-thermo-card-webgl</code>: refracting glass, liquid, plasma and bubbles rendered by a WebGL shader.</li>
+<li><strong>Five colour zones</strong> per thermometer, with your own thresholds, shared or per side.</li>
+<li><strong>Secondary readouts</strong> under each thermometer: humidity, plus any sensor you like (pressure, illuminance, CO₂…) with its own label and unit.</li>
+<li><strong>History graph</strong> of both temperatures over the last N hours, with an optional background pressure curve.</li>
+<li><strong>Optional centre column</strong> for wind speed.</li>
+<li><strong>Tap and hold actions</strong> per side (<code>more-info</code> by default).</li>
+<li><strong>Full visual editor</strong>: every glass, liquid and plasma setting is a slider, no YAML needed.</li>
+<li>Pauses its animation when off-screen, releases its WebGL context when removed (Android WebViews cap a page at 8 contexts), and falls back to SVG if WebGL is not available.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">📦 Installation</h2><span id="-installation"></span></div>
+<div class="markdown-heading"><h3 class="heading-element">HACS (recommended)</h3><span id="hacs-recommended"></span></div>
+<ol>
+<li>Click the <strong>Open in HACS</strong> button above, or add this repository as a custom repository in HACS (category <strong>Dashboard</strong>): <code>https://github.com/cerealkiller57540/neon-dual-thermo-card</code>.</li>
+<li>Download <strong>Neon Dual Thermometer Card</strong>.</li>
+<li>Reload your browser.</li>
+</ol>
+<p>HACS registers one resource, <code>neon-dual-thermo-card.js</code>. The card type is <code>custom:neon-dual-thermo-card-webgl</code>.</p>
+<p>If you used the former CSS card (<code>custom:neon-dual-thermo-card</code>), change its type to <code>custom:neon-dual-thermo-card-webgl</code>: the CSS version is no longer shipped.</p>
+<div class="markdown-heading"><h3 class="heading-element">Manual</h3><span id="manual"></span></div>
+<ol>
+<li>Copy <a href="https://github.com/cerealkiller57540/neon-dual-thermo-card/blob/main/dist/neon-dual-thermo-card.js"><code>dist/neon-dual-thermo-card.js</code></a> to <code>config/www/neon-dual-thermo-card/</code>.</li>
+<li>Add a dashboard resource: URL <code>/local/neon-dual-thermo-card/neon-dual-thermo-card.js</code>, type <strong>JavaScript module</strong>.</li>
+</ol>
+<div class="markdown-heading"><h2 class="heading-element">🚀 Usage</h2><span id="-usage"></span></div>
+<p>Add a card from the dashboard editor and search for <strong>Neon Dual Thermo</strong>, or use YAML:</p>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="type: custom:neon-dual-thermo-card-webgl
+entity_left: sensor.outdoor_temperature
+name_left: Outdoor
+humidity_entity_left: sensor.outdoor_humidity
+entity_right: sensor.living_room_temperature
+name_right: Living room
+humidity_entity_right: sensor.living_room_humidity
+secondary_entity_right: sensor.living_room_pressure
+secondary_label_right: PRESSURE
+secondary_unit_right: hPa
+entity_bg_pressure: sensor.outdoor_pressure    # optional, drawn behind the graph"><pre><span class="pl-ent">type</span>: <span class="pl-s">custom:neon-dual-thermo-card-webgl</span>
+<span class="pl-ent">entity_left</span>: <span class="pl-s">sensor.outdoor_temperature</span>
+<span class="pl-ent">name_left</span>: <span class="pl-s">Outdoor</span>
+<span class="pl-ent">humidity_entity_left</span>: <span class="pl-s">sensor.outdoor_humidity</span>
+<span class="pl-ent">entity_right</span>: <span class="pl-s">sensor.living_room_temperature</span>
+<span class="pl-ent">name_right</span>: <span class="pl-s">Living room</span>
+<span class="pl-ent">humidity_entity_right</span>: <span class="pl-s">sensor.living_room_humidity</span>
+<span class="pl-ent">secondary_entity_right</span>: <span class="pl-s">sensor.living_room_pressure</span>
+<span class="pl-ent">secondary_label_right</span>: <span class="pl-s">PRESSURE</span>
+<span class="pl-ent">secondary_unit_right</span>: <span class="pl-s">hPa</span>
+<span class="pl-ent">entity_bg_pressure</span>: <span class="pl-s">sensor.outdoor_pressure    </span><span class="pl-c"><span class="pl-c">#</span> optional, drawn behind the graph</span></pre></div>
+<div class="markdown-heading"><h2 class="heading-element">⚙️ Options</h2><span id="️-options"></span></div>
+<p>Every per-side option exists as <code>…_left</code> and <code>…_right</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>entity_left</code> / <code>entity_right</code></td>
+<td>string</td>
+<td><strong>required</strong></td>
+<td>Temperature sensors</td>
+</tr>
+<tr>
+<td><code>name_left</code> / <code>name_right</code></td>
+<td>string</td>
+<td><code>friendly_name</code></td>
+<td>Label above each thermometer</td>
+</tr>
+<tr>
+<td><code>humidity_entity_left</code> / <code>_right</code></td>
+<td>string</td>
+<td>—</td>
+<td>Humidity readout</td>
+</tr>
+<tr>
+<td><code>secondary_entity_left</code> / <code>_right</code></td>
+<td>string</td>
+<td>—</td>
+<td>Any extra sensor, shown under the humidity</td>
+</tr>
+<tr>
+<td><code>secondary_label_left</code> / <code>_right</code></td>
+<td>string</td>
+<td>—</td>
+<td>Its label</td>
+</tr>
+<tr>
+<td><code>secondary_unit_left</code> / <code>_right</code></td>
+<td>string</td>
+<td>—</td>
+<td>Its unit</td>
+</tr>
+<tr>
+<td><code>temp_min</code> / <code>temp_max</code></td>
+<td>number</td>
+<td><code>-20</code> / <code>40</code></td>
+<td>Scale of both tubes (also <code>temp_min_left</code>, <code>temp_max_right</code>…)</td>
+</tr>
+<tr>
+<td><code>unit</code></td>
+<td>string</td>
+<td><code>°C</code></td>
+<td>Unit shown after the value</td>
+</tr>
+<tr>
+<td><code>decimal_places</code></td>
+<td>number</td>
+<td><code>1</code></td>
+<td>Decimals</td>
+</tr>
+<tr>
+<td><code>zone_thresholds</code></td>
+<td>list</td>
+<td><code>[5, 15, 22, 28]</code></td>
+<td>Four limits between the five colour zones (also <code>zone_thresholds_left</code> / <code>_right</code>)</td>
+</tr>
+<tr>
+<td><code>color_zone1</code> … <code>color_zone5</code></td>
+<td>colour</td>
+<td>theme</td>
+<td>Zone colours, coldest to hottest (also per side)</td>
+</tr>
+<tr>
+<td><code>color_primary</code> / <code>color_secondary</code></td>
+<td>colour</td>
+<td>theme</td>
+<td>Lines and text, left / right</td>
+</tr>
+<tr>
+<td><code>color_background</code></td>
+<td>colour</td>
+<td>theme</td>
+<td>Tube interior</td>
+</tr>
+<tr>
+<td><code>show_history</code></td>
+<td>bool</td>
+<td><code>true</code></td>
+<td>History graph</td>
+</tr>
+<tr>
+<td><code>history_hours</code></td>
+<td>number</td>
+<td><code>24</code></td>
+<td>Its time span</td>
+</tr>
+<tr>
+<td><code>entity_bg_pressure</code></td>
+<td>string</td>
+<td>—</td>
+<td>Pressure sensor drawn behind the graph</td>
+</tr>
+<tr>
+<td><code>entity_wind</code> / <code>name_wind</code> / <code>wind_unit</code></td>
+<td>string</td>
+<td>— / <code>VENT</code> / <code>km/h</code></td>
+<td>Optional centre column</td>
+</tr>
+<tr>
+<td><code>show_plasma</code></td>
+<td>bool</td>
+<td><code>true</code></td>
+<td>Plasma reactor in the bulbs</td>
+</tr>
+<tr>
+<td><code>color_plasma_ring1</code> / <code>color_plasma_ring2</code></td>
+<td>colour</td>
+<td>auto</td>
+<td>Plasma ring colours (also per side)</td>
+</tr>
+<tr>
+<td><code>plasma_saturation</code></td>
+<td>number</td>
+<td><code>1.8</code></td>
+<td>Plasma colour saturation</td>
+</tr>
+<tr>
+<td><code>animation_speed</code></td>
+<td>number</td>
+<td><code>1</code></td>
+<td>Global animation speed</td>
+</tr>
+<tr>
+<td><code>tap_action_left</code> / <code>_right</code></td>
+<td>action</td>
+<td><code>more-info</code></td>
+<td>Standard Home Assistant action</td>
+</tr>
+<tr>
+<td><code>hold_action_left</code> / <code>_right</code></td>
+<td>action</td>
+<td><code>none</code></td>
+<td>Standard Home Assistant action</td>
+</tr>
+<tr>
+<td><code>name_font_family</code>, <code>value_font_family</code>, <code>sensor_font_family</code> (and <code>…_font_size</code>)</td>
+<td>string</td>
+<td>theme</td>
+<td>Fonts</td>
+</tr>
+<tr>
+<td><code>glitch_cat</code></td>
+<td>bool</td>
+<td><code>false</code></td>
+<td>A glitching cat walks along the coldest curve now and then (see FAQ)</td>
+</tr>
+<tr>
+<td><code>glitch_cat_image</code> / <code>glitch_cat_size</code> / <code>glitch_cat_chance</code></td>
+<td>string / number / number</td>
+<td>— / <code>26</code> / <code>0.12</code></td>
+<td>Its image, height in px and chance per tick (~6 s)</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>wgl_enabled</code></td>
+<td><code>true</code></td>
+<td><code>false</code> = draw the SVG thermometers instead</td>
+</tr>
+<tr>
+<td><code>wgl_liquid</code></td>
+<td><code>profond</code></td>
+<td>Liquid style: <code>profond</code> (deep, coloured body) or <code>lumineux</code> (glowing, lets the background through)</td>
+</tr>
+<tr>
+<td><code>wgl_refract</code></td>
+<td><code>10.5</code></td>
+<td>Glass lens strength, in px of background displacement</td>
+</tr>
+<tr>
+<td><code>wgl_clarity</code></td>
+<td><code>1.00</code></td>
+<td><code>0</code> = opaque tube like the SVG card, <code>1</code> = clear glass</td>
+</tr>
+<tr>
+<td><code>wgl_plasma</code></td>
+<td><code>2.40</code></td>
+<td>Plasma arcs in the bulb</td>
+</tr>
+<tr>
+<td><code>wgl_bubbles</code></td>
+<td><code>0.55</code></td>
+<td>Air bubble visibility</td>
+</tr>
+<tr>
+<td><code>wgl_bloom</code></td>
+<td><code>1.75</code></td>
+<td>Glow around the liquid and bulb</td>
+</tr>
+</tbody>
+</table>
+<p>The other <code>wgl_*</code> settings (<code>chroma</code>, <code>fresnel</code>, <code>menisc</code>, <code>ripple</code>, <code>liq_body</code>, <code>liq_glow</code>, <code>sss</code>, <code>liq_transmit</code>, <code>liq_core</code>, <code>plasma_drive</code>, <code>orbits</code>, <code>bubble_count</code>, <code>bubble_size</code>, <code>bubble_speed</code>, <code>bubble_heat</code>, <code>bdeform</code>, <code>outline</code>) are easiest to tune from the visual editor, where each one is a slider with its range.</p>
+<div class="markdown-heading"><h2 class="heading-element">❓ FAQ</h2><span id="-faq"></span></div>
+<p><strong>Which languages are supported?</strong> English and French. The editor and the card texts follow your Home Assistant language: French if it is French, English otherwise. Reload the page after changing the language.</p>
+<p><strong>The glass looks flat.</strong> The WebGL card refracts the background <em>behind</em> the card. On a plain dark theme there is little to bend; on a theme with a background image the effect is much stronger.</p>
+<p><strong>Where is the cat?</strong> <code>glitch_cat</code> is off by default and no image ships with the card. Point <code>glitch_cat_image</code> at your own transparent GIF or PNG (for example <code>/local/my-cat.gif</code> in <code>config/www/</code>).</p>
+<p><strong>Some cards go blank on my Android phone.</strong> Android WebViews keep at most 8 WebGL contexts per page and drop the oldest one. This card uses a single context for both thermometers. If you run many WebGL cards on one view, use <code>wgl_enabled: false</code> on some of them.</p>
+<p><strong>Which theme is in the screenshots?</strong> Neo Tokyo, the author's own dark theme (not published). The card works with any theme.</p>
+<div class="markdown-heading"><h2 class="heading-element">🌃 More neon cards</h2><span id="-more-neon-cards"></span></div>
+<p>This card is part of a family. See the full collection at <a href="https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards"><strong>Home-Assistant-Neon-Cards</strong></a>.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🐾 Support this project</h2><span id="-support-this-project"></span></div>
+<p>If you enjoy these cards, please consider donating to <strong>Quatre Pattes</strong>, an animal rescue organization.</p>
+
+<blockquote>
+<p>💛 No need to support me — just help the animals. Thank you!</p>
+</blockquote>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🤝 Contributing</h2><span id="-contributing"></span></div>
+<ol>
+<li>Fork the repo</li>
+<li>Create your branch: <code>git checkout -b feature/my-card</code></li>
+<li>Commit and push</li>
+<li>Open a Pull Request</li>
+</ol>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">📄 License</h2><span id="-license"></span></div>
+<p><a href="https://github.com/cerealkiller57540/neon-dual-thermo-card/tree/main/LICENSE">MIT License</a></p>
+</main>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/neon-dual-thermo-card">cerealkiller57540/neon-dual-thermo-card</a> · Updated 2026-10-21 · <a href="../index.html">All projects</a></footer>
+</div></body></html>

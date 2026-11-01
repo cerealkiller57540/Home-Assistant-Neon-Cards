@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BTicino EasyKit Reclaim — Reclaiming a BTicino/Legrand EasyKit door station on the LAN</title>
+<meta name="description" content="Reclaiming a BTicino/Legrand EasyKit door station on the LAN, no cloud: recover the TLS client identity, beat the static-ECDH cipher wall (mbedTLS 3.6.x), register over SIP-TLS locally, get the ring and an on-ring photo into Home Assistant, and open the gate/lock/light with a local SIP MESSAGE. Proven in production.">
+<link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/bticino-easykit-reclaim.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="BTicino EasyKit Reclaim — Reclaiming a BTicino/Legrand EasyKit door station on the LAN">
+<meta property="og:description" content="Reclaiming a BTicino/Legrand EasyKit door station on the LAN, no cloud: recover the TLS client identity, beat the static-ECDH cipher wall (mbedTLS 3.6.x), register over SIP-TLS locally, get the ring and an on-ring photo into Home Assistant, and open the gate/lock/light with a local SIP MESSAGE. Proven in production.">
+<meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/bticino-easykit-reclaim.html">
+<meta property="og:site_name" content="Neon Cards for Home Assistant">
+<meta property="og:image" content="https://raw.githubusercontent.com/cerealkiller57540/bticino-easykit-reclaim/main/docs/ha-device.png">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/cerealkiller57540/bticino-easykit-reclaim/main/docs/ha-device.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "BTicino EasyKit Reclaim", "description": "Reclaiming a BTicino/Legrand EasyKit door station on the LAN, no cloud: recover the TLS client identity, beat the static-ECDH cipher wall (mbedTLS 3.6.x), register over SIP-TLS locally, get the ring and an on-ring photo into Home Assistant, and open the gate/lock/light with a local SIP MESSAGE. Proven in production.", "codeRepository": "https://github.com/cerealkiller57540/bticino-easykit-reclaim", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/bticino-easykit-reclaim.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-10-31", "keywords": "android, bticino, door-entry, doorbell, easykit, frida, home-assistant, home-automation, intercom, legrand, local-control, mbedtls, mutual-tls, pjsip, planned-obsolescence, reverse-engineering, right-to-repair, sip, tls, video-doorbell", "image": "https://raw.githubusercontent.com/cerealkiller57540/bticino-easykit-reclaim/main/docs/ha-device.png"}</script>
+<link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
+<nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Other projects</nav>
+<header class="page-head"><h1>BTicino EasyKit Reclaim</h1>
+<p class="lead">Reclaiming a BTicino/Legrand EasyKit door station on the LAN, no cloud: recover the TLS client identity, beat the static-ECDH cipher wall (mbedTLS 3.6.x), register over SIP-TLS locally, get the ring and an on-ring photo into Home Assistant, and open the gate/lock/light with a local SIP MESSAGE. Proven in production.</p>
+<div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/bticino-easykit-reclaim">View on GitHub</a></div></header>
+<main class="markdown-body">
+<div class="markdown-heading"><h2 class="heading-element">Reclaiming a BTicino / Legrand EasyKit door station on the local network</h2><span id="reclaiming-a-bticino--legrand-easykit-door-station-on-the-local-network"></span></div>
+<blockquote>
+<p><strong>Status: the hard parts are proven in production.</strong> The reverse-engineering chain below works
+end to end: the TLS client identity is recovered from the vendor app, the mutual-TLS handshake to
+the door station succeeds, and a SIP <code>REGISTER</code> is accepted (<code>200 OK</code>) — all on the LAN, with no
+cloud. On top of that, a background client <strong>catches the incoming call and grabs a photo of the
+visitor on ring</strong> (<a href="#9-catching-the-ring-and-grabbing-a-photo">§9</a>), and the gate/lock is
+<strong>opened locally</strong> over the same SIP channel (<a href="#8-opening-the-door-locally">§8</a>) — both running
+and proven, both cloud-free. What is left is polish (full live media, richer event history,
+night-time tuning); those parts are in <a href="#10-work-in-progress--where-this-is-going">§10</a>.</p>
+<p><strong>What this does.</strong> This project <em>reads</em> the door station — it knows when someone rings and grabs
+a photo of the visitor on ring — and it <em>drives</em> it: the gate/lock-release command travels over
+the <strong>same local SIP channel</strong>, as a small SIP <code>MESSAGE</code>, with <strong>no cloud</strong> (see
+<a href="#8-opening-the-door-locally">§8</a>). Earlier write-ups (this one included, in an earlier revision)
+claimed opening had to go through the vendor cloud over HTTPS. Reading the decompiled app
+(<a href="#2-decompiling-the-app--the-backbone">§2</a>) showed that is false: it is local, and it is proven.</p>
+<p><strong>What this repo is — read this before you judge reproducibility.</strong> This is a <strong>method with
+proofs</strong>, not a drop-in product. What ships here reproduces the hard, transferable parts: the
+toolchain build, the decompile, the Frida identity capture, the TLS handshake and the SIP
+<code>REGISTER</code> (<a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/tree/main/scripts/"><code>scripts/</code></a>). The always-on client that ties it together — catch the ring,
+write the AVI, pull the frame, publish over MQTT, emit the open <code>MESSAGE</code> (<a href="#8-opening-the-door-locally">§8</a>/<a href="#9-catching-the-ring-and-grabbing-a-photo">§9</a>) — runs in the author's
+house and is what "proven in production" refers to, but it is <strong>not published</strong>: it is welded to
+device-specific identifiers that must not leave the owner's vault (<a href="#7-handling-the-identity-safely">§7</a>).
+So: the handshake and register are reproducible from this repo today; the ring/photo/open service
+you must assemble yourself from the documented shape in §8–§9. Publishing a cleanly anonymised
+version of that service is the main open task.</p>
+<p><strong>One load-bearing caveat, up front:</strong> the whole approach rides on <strong>mbedTLS 3.6.x</strong>, whose LTS
+support ends around <strong>March 2027</strong>, because the door only speaks static-ECDH cipher suites that
+mbedTLS 4.x and modern OpenSSL have removed. After that you are on an out-of-support TLS library
+or your own fork. This is structural, not a detail — see <a href="#4-the-tls-wall-static-ecdh-and-why-openssl-wont-do">§4</a>.</p>
+</blockquote>
+<div class="markdown-heading"><h2 class="heading-element">Why bother — planned obsolescence</h2><span id="why-bother--planned-obsolescence"></span></div>
+<p>The hardware is a competent little SIP/TLS intercom. It speaks a standard protocol (SIP over
+TLS), it has a camera, it can register internal handsets. But the vendor gates almost everything
+behind their app and their cloud, ships firmware that stops gaining features, and gives the owner
+no local, documented way in. The device is capable of far more than the editor lets you do with
+it, and the editor has no intention of changing that.</p>
+<p>This is a small push back against that: the box is <em>yours</em>, it sits on <em>your</em> network, and the
+protocol it speaks is open. The only thing in the way is that the vendor encrypted the keys to
+their own device and handed you an app instead of a manual. This write-up is how you get the keys
+back and talk to your own hardware directly.</p>
+<p><strong>Nothing here is a vendor secret in the cryptographic sense.</strong> The method recovers <em>your own
+device's</em> identity, which already lives on <em>your own</em> phone — the app just keeps it encrypted at
+rest. Everything is done on hardware you own, on your own LAN.</p>
+<div class="markdown-heading"><h2 class="heading-element"><g-emoji class="g-emoji" alias="warning">⚠️</g-emoji> Read this before anything else — scope, legality, redaction</h2><span id="️-read-this-before-anything-else--scope-legality-redaction"></span></div>
+<ul>
+<li><strong>Do this only on a device you own, on your own network.</strong> Pulling a TLS client identity out of
+an app and using it to authenticate is fine when the identity is <em>yours</em> and the device is
+<em>yours</em>. It is not fine on someone else's building.</li>
+<li><strong>No real identifiers are published here.</strong> Everything device-specific is a placeholder:
+<code>&lt;doorstation-ip&gt;</code>, <code>&lt;sip-user&gt;</code>, <code>&lt;sip-domain&gt;</code>, <code>&lt;client-cn&gt;</code>, <code>sip:&lt;ext&gt;</code>. The actual TLS
+private key, client certificate and SIP password are <strong>not</strong> in this repo and never will be —
+they live in a password manager and are read on demand. See <a href="#7-handling-the-identity-safely">§7</a>.</li>
+<li><strong>The whole chain is device-specific.</strong> Your cipher-suite list, your SIP domain, your account
+format will differ. The <em>method</em> transfers; the values do not.</li>
+<li><strong>"Against the app's terms" is not the same as "against the law".</strong> Extracting your own identity
+from the vendor app very likely breaches the app's terms of service. That is a contract question,
+not a criminal one, and in many places interoperability and the right to repair <em>your own</em> hardware
+are explicitly protected — but terms-of-service and the law are different things, your jurisdiction
+is yours to check, and nothing here is legal advice. This is written for the owner acting on their
+own device; don't read it as a licence to ignore local law.</li>
+</ul>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">0. Prerequisites — before you start</h2><span id="0-prerequisites--before-you-start"></span></div>
+<p>This is a serious afternoon (or two). It is "hard but doable", and the thing that makes it feel
+scarier than it is, is that it touches four worlds at once: Android reverse-engineering, a C build
+toolchain, TLS internals, and SIP. You do <strong>not</strong> need to be an expert in all four — but you need
+each tool present and working before you begin, or you will blame step 5 for a step-0 problem.</p>
+<div class="markdown-heading"><h3 class="heading-element">The reference environment: WSL2 (Ubuntu)</h3><span id="the-reference-environment-wsl2-ubuntu"></span></div>
+<p>The write-up assumes a <strong>Windows 11 host with WSL2 running Ubuntu 22.04/24.04</strong>. That is the path
+this project actually used, and it is the most reproducible one for a Windows developer:</p>
+<ul>
+<li>The <strong>Linux side (WSL)</strong> builds and runs everything C/Java: jadx, mbedTLS, PJSIP, <code>pjsua</code>, the
+background service. Building mbedTLS/PJSIP on Windows natively (MSYS2/mingw) is possible but a
+minefield — don't, for a first run.</li>
+<li>The <strong>Windows side</strong> runs the Android emulator and talks to it: the Android SDK, <code>adb</code> and Frida
+all run fine on Windows, and the emulator is far happier on the Windows host than inside WSL. So:
+<strong>emulator + <code>adb</code> + Frida on Windows, build/run everything else on WSL.</strong> The one file you carry
+across (<code>\\wsl$\…</code> or a shared folder) is the recovered identity.</li>
+</ul>
+<blockquote>
+<p>If you already run a native Linux box or VM, use it — build there and run the emulator there too;
+skip the WSL notes. The only reason to split across Windows and WSL is that the emulator and USB
+stack behave better on the Windows host.</p>
+</blockquote>
+<div class="markdown-heading"><h3 class="heading-element">What you need installed</h3><span id="what-you-need-installed"></span></div>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Version (tested)</th>
+<th>Where</th>
+<th>Install</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>jadx</strong></td>
+<td><strong>1.5.6</strong></td>
+<td>WSL</td>
+<td>download the release zip, unzip, needs a JDK</td>
+</tr>
+<tr>
+<td><strong>JDK</strong></td>
+<td><strong>17</strong> (for jadx)</td>
+<td>WSL</td>
+<td><code>sudo apt install openjdk-17-jdk</code></td>
+</tr>
+<tr>
+<td><strong>build toolchain</strong></td>
+<td>gcc/make/cmake/git/python3</td>
+<td>WSL</td>
+<td><code>sudo apt install build-essential cmake git python3 pkg-config</code></td>
+</tr>
+<tr>
+<td><strong>mbedTLS</strong></td>
+<td><strong>3.6.x</strong> (tested 3.6.7) — <strong>not 4.x</strong></td>
+<td>WSL, from source</td>
+<td>see §4/§5; the script does it</td>
+</tr>
+<tr>
+<td><strong>PJSIP (pjproject)</strong></td>
+<td><strong>2.17</strong>, against mbedTLS 3.6.x</td>
+<td>WSL, from source</td>
+<td>see §6; the script does it</td>
+</tr>
+<tr>
+<td><strong>ffmpeg + ffprobe</strong></td>
+<td>any recent</td>
+<td>WSL</td>
+<td><code>sudo apt install ffmpeg</code></td>
+</tr>
+<tr>
+<td><strong>Android SDK + emulator</strong></td>
+<td>cmdline-tools + a Google-APIs AVD</td>
+<td><strong>Windows</strong> (or host)</td>
+<td>Android Studio, or <code>sdkmanager</code>/<code>avdmanager</code></td>
+</tr>
+<tr>
+<td><strong>Android Platform-Tools</strong></td>
+<td>any recent (<code>adb</code>)</td>
+<td><strong>Windows</strong></td>
+<td>bundled with the SDK, or Google's standalone zip</td>
+</tr>
+<tr>
+<td><strong>Frida</strong></td>
+<td>16.x (<code>frida-tools</code>)</td>
+<td><strong>Windows</strong></td>
+<td><code>pip install frida-tools</code></td>
+</tr>
+<tr>
+<td><strong>An MQTT broker</strong></td>
+<td>e.g. Mosquitto</td>
+<td>where your home-automation lives</td>
+<td>for §8/§9 wiring</td>
+</tr>
+</tbody>
+</table>
+<div class="markdown-heading"><h3 class="heading-element">The Android side — use an emulator, not a rooted phone</h3><span id="the-android-side--use-an-emulator-not-a-rooted-phone"></span></div>
+<p>The identity extraction (§3) needs an Android where Frida can spawn and instrument the app. A
+<strong>rooted physical phone works but is rare and risky nowadays</strong> — so the recommended path is a
+throwaway <strong>Android Studio / SDK emulator (AVD)</strong>, which gives you a clean, disposable, root-capable
+Android for free:</p>
+<ul>
+<li>Create an AVD with a <strong>"Google APIs" system image (not "Google Play")</strong> — the Google-APIs images
+let you run <code>adb root</code> and drop a <code>frida-server</code>, which the locked Play images don't.</li>
+<li>Install the companion app's <strong>APK</strong> into the AVD (<code>adb install app.apk</code>). Pull the APK from a
+phone that has it (<code>adb shell pm path &lt;pkg&gt;</code> → <code>adb pull</code>), or get it from the vendor's store
+listing.</li>
+<li><strong>Networking caveat</strong>: the pairing/provisioning flow may want to reach the real door station on
+your LAN. The emulator sits behind a NAT, so make sure it can route to <code>&lt;doorstation-ip&gt;</code> (on
+Windows the default emulator network usually can; if not, bridge it or run the AVD on the host
+network). This is the one place the emulator path needs a glance, not the rooted-phone drama.</li>
+</ul>
+<p>Everything <strong>after</strong> the extraction is pure Linux — no phone or emulator involved.</p>
+<p>Also needed: <strong>network reach</strong> to the door station on the LAN (its IP and the SIP-TLS port).</p>
+<div class="markdown-heading"><h3 class="heading-element">The skills it assumes</h3><span id="the-skills-it-assumes"></span></div>
+<p>Honest about the level: you should be comfortable <em>running</em> commands in a Linux shell, building a
+C project from source (and reading a build error), and poking at an Android app with <code>adb</code>. You do
+<strong>not</strong> need to read obfuscated Java fluently, write TLS code, or know SIP — the hard findings are
+already distilled into this document; you are reproducing them, not rediscovering them.</p>
+<div class="markdown-heading"><h3 class="heading-element">Scripts to take the pain out</h3><span id="scripts-to-take-the-pain-out"></span></div>
+<p>The toolchain build (mbedTLS + PJSIP) is the part that looks scariest and is actually the most
+mechanical — so it is scripted end to end. The repo's <a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/tree/main/scripts/"><code>scripts/</code></a> directory has, run in
+order:</p>
+<table>
+<thead>
+<tr>
+<th>Script</th>
+<th>What it does</th>
+<th>Automatable?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>00-setup-toolchain.sh</code></td>
+<td>apt deps, build <strong>mbedTLS 3.6.7</strong>, build <strong>PJSIP 2.17</strong> against it</td>
+<td><strong>Fully</strong> — this is the wall, and it's a one-shot</td>
+</tr>
+<tr>
+<td><code>10-decompile.sh &lt;apk&gt;</code></td>
+<td>run jadx with the right flags into <code>out/</code></td>
+<td>Fully (you supply the APK)</td>
+</tr>
+<tr>
+<td><code>20-dump-identity.js</code> + <code>20-extract.sh &lt;pkg&gt;</code></td>
+<td>Frida hook to capture the identity</td>
+<td><strong>Interactive</strong> — you clear the app and walk the pairing flow by hand (§3)</td>
+</tr>
+<tr>
+<td><code>30-prove-handshake.sh</code></td>
+<td><code>ssl_client2</code> against the door, reads identity from your vault</td>
+<td>Fully (once you hold the identity)</td>
+</tr>
+<tr>
+<td><code>40-register.sh</code></td>
+<td><code>pjsua</code> REGISTER, confirms the <code>200 OK</code></td>
+<td>Fully</td>
+</tr>
+</tbody>
+</table>
+<p>There is deliberately <strong>no single "do everything" button</strong>: the identity extraction (§3) is
+inherently interactive (a running emulator, a pairing flow you click through), so anyone promising a
+one-click AIO for <em>that</em> step is hand-waving. Everything on either side of it is scripted.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">The short version</h2><span id="the-short-version"></span></div>
+<p>A BTicino/Legrand EasyKit door station is, under the vendor skin, a SIP endpoint protected by
+<strong>mutual TLS</strong>. To talk to it locally you need to present a client certificate it trusts — and that
+certificate, its private key, and the SIP account parameters are all sitting inside the companion
+Android app, encrypted at rest.</p>
+<p>The chain is:</p>
+<ol>
+<li><strong>Decompile the app and read how it actually talks to the door</strong> — this is the backbone of
+the whole effort. A static read of the APK tells you the SIP address format, the media
+directions, the encryption it expects, and — later — how ringing and door-opening really work.
+Everything else is guided by what you find here — <a href="#2-decompiling-the-app--the-backbone">§2</a>.</li>
+<li><strong>Pull the TLS identity out of the app.</strong> The key + cert are encrypted at rest; a small
+runtime hook on the decrypt primitive captures the plaintext the app itself produces — one
+targeted brick, not the whole job — <a href="#3-pulling-the-tls-identity-out-of-the-app">§3</a>.</li>
+<li><strong>Discover the door's TLS constraints</strong> — it only accepts a handful of <em>static-ECDH</em> cipher
+suites, which modern OpenSSL has removed — so you must build the client on <strong>mbedTLS 3.6.x</strong>
+— <a href="#4-the-tls-wall-static-ecdh-and-why-openssl-wont-do">§4</a>.</li>
+<li><strong>Prove the handshake</strong> with a raw TLS client — <a href="#5-proving-the-handshake">§5</a>.</li>
+<li><strong>Register over SIP-TLS</strong> with PJSIP, working around a certificate-name mismatch — <a href="#6-registering-over-sip-tls">§6</a>.</li>
+</ol>
+<p>After that you have a registered local endpoint. From there, the static read in §2 is what turns
+registration into real features: catching the ring and grabbing a photo on ring
+(<a href="#9-catching-the-ring-and-grabbing-a-photo">§9</a>), and even driving the door locally
+(<a href="#8-opening-the-door-locally">§8</a>) — both proven, both cloud-free.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">1. What you're up against</h2><span id="1-what-youre-up-against"></span></div>
+<p>The door station (<code>&lt;doorstation-ip&gt;</code> on your LAN) listens for SIP over TLS. Two things make a
+naive connection fail:</p>
+<ul>
+<li><strong>Mutual TLS.</strong> The server doesn't just present a cert, it <em>demands</em> a client cert signed by a
+CA it trusts. No client cert → the handshake dies. The only place that client identity exists,
+outside the device, is the vendor app.</li>
+<li><strong>A deliberately narrow TLS profile.</strong> The server negotiates only a few old cipher suites built
+on <em>static</em> ECDH (fixed-key, <code>prime256v1</code>). That matters enormously for tooling — see §4.</li>
+</ul>
+<p>So before any SIP packet is sent, you have to (a) extract the identity and (b) have a TLS stack
+that can even complete the handshake.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">2. Decompiling the app — the backbone</h2><span id="2-decompiling-the-app--the-backbone"></span></div>
+<p>Almost nothing in this project was guessed. Every decision — which SIP address to dial, whether to
+offer video, which encryption the door demands, how the doorbell actually reaches you, how the app
+opens the gate — came out of <strong>reading the decompiled app</strong>. If you do one thing before touching
+the network, do this.</p>
+<p>The companion app is an Android APK wrapping the <strong>Linphone</strong> SIP stack. Decompile it to readable
+Java with <strong>jadx</strong>:</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="# jadx 1.5.x, with a JDK 17 on PATH
+jadx --no-res --show-bad-code -j2 -d out/     com.&lt;vendor&gt;.&lt;app&gt;.apk   # Java call path
+jadx --no-src                     -d out-res/ com.&lt;vendor&gt;.&lt;app&gt;.apk   # resources (res/raw/*.rc)"><pre><span class="pl-c"><span class="pl-c">#</span> jadx 1.5.x, with a JDK 17 on PATH</span>
+jadx --no-res --show-bad-code -j2 -d out/     com.<span class="pl-k">&lt;</span>vendor<span class="pl-k">&gt;</span>.<span class="pl-k">&lt;</span>app<span class="pl-k">&gt;</span>.apk   <span class="pl-c"><span class="pl-c">#</span> Java call path</span>
+jadx --no-src                     -d out-res/ com.<span class="pl-k">&lt;</span>vendor<span class="pl-k">&gt;</span>.<span class="pl-k">&lt;</span>app<span class="pl-k">&gt;</span>.apk   <span class="pl-c"><span class="pl-c">#</span> resources (res/raw/*.rc)</span></pre></div>
+<blockquote>
+<p><code>--no-res</code> keeps the first pass fast and small, but it also skips the one resource you need —
+<code>res/raw/linphonerc</code> (below). The second pass (<code>--no-src</code>) pulls the resources on their own, into
+<code>out-res/resources/res/raw/</code>. <a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/blob/main/scripts/10-decompile.sh"><code>scripts/10-decompile.sh</code></a> runs both.</p>
+</blockquote>
+<p>You get a few thousand <code>.java</code> files. The class names are obfuscated (<code>a.java</code>, <code>b.java</code>,
+<code>C0616f.java</code>…), but the Linphone SDK calls are not — and those calls are the map. What reading it
+tells you, and why each point matters downstream:</p>
+<ul>
+<li><strong>The real SIP address is assembled at runtime.</strong> The only literal in the DEX is the user part
+(here, <code>diy</code>); the domain is appended from the <em>default proxy config</em> — i.e. the door's own
+cloud FQDN — <strong>not</strong> the LAN IP. Every early attempt that dialled the device by IP was dialling
+the wrong address. You only learn the right form by reading the call-building code.</li>
+<li><strong>The call that shows the hallway asks for video <code>RecvOnly</code>, audio inactive</strong>, and carries the
+target's device address as a <em>custom SDP attribute</em> — not a SIP header. That single fact decides
+whether a command-line client can reproduce the outgoing "see the hall" call at all (it can't —
+it can't inject an arbitrary SDP attribute), and it is also what tells you the <strong>incoming</strong> ring
+carries video you <em>can</em> grab without any such attribute (see <a href="#9-catching-the-ring-and-grabbing-a-photo">§9</a>).</li>
+<li><strong>Door-opening is a local SIP <code>MESSAGE</code>, not a cloud call.</strong> The "slide to open" action builds a
+small JSON-RPC body and sends it over the <em>same</em> local SIP channel. This is the single most
+important correction to the folklore around these devices — see <a href="#8-opening-the-door-locally">§8</a>.</li>
+<li><strong>The factory config ships in <code>res/raw</code>.</strong> The embedded <code>linphonerc</code> reveals the SIP transport,
+whether the server certificate's name is verified, and the media-encryption policy. Read it
+before you fight the handshake — it saves you from blaming the wrong layer.</li>
+</ul>
+<p>Keep the decompiled tree around. Throughout the rest of this write-up, the answer to "but how do
+you <em>know</em> that?" is almost always "it's in the decompiled call path."</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">3. Pulling the TLS identity out of the app</h2><span id="3-pulling-the-tls-identity-out-of-the-app"></span></div>
+<p>With the call path understood, you still need the client identity the door's mutual-TLS demands:
+an <strong>EC P-256 private key</strong>, the matching <strong>X.509 client certificate</strong>, the <strong>CA chain</strong>, and the
+<strong>SIP account parameters</strong> (username, domain/realm, password, registrar). The cert and key are
+stored <strong>encrypted at rest</strong> — the app wraps them with a key held in the Android Keystore — while
+the public cert and CA chain sit in the clear.</p>
+<p>You do not need to reverse the key-derivation or the storage format. The app decrypts its own
+identity in memory when it connects, so the clean capture is a small runtime hook on the decrypt
+primitive — one targeted brick on top of the static read, not a second reverse-engineering effort.</p>
+<p>On Android this funnels through <code>javax.crypto.Cipher</code>. Hook <code>doFinal</code> <strong>and only act when the
+cipher is in DECRYPT mode</strong> — otherwise you also dump everything the app <em>encrypts</em>, which is noise:</p>
+<div class="highlight highlight-source-js notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="// frida -U -f com.&lt;vendor&gt;.&lt;app&gt; -l dump_identity.js   (spawn, not attach — see below)
+Java.perform(function () {
+  const Cipher = Java.use(&#x27;javax.crypto.Cipher&#x27;);
+  const DECRYPT_MODE = 2;
+
+  // Remember the mode each Cipher instance was initialised with.
+  Cipher.init.overload(&#x27;int&#x27;, &#x27;java.security.Key&#x27;).implementation = function (mode, key) {
+    this._mode = mode;
+    return this.init(mode, key);
+  };
+  // (hook the other init overloads the same way — several exist)
+
+  function dump(tag, out) {
+    if (this._mode !== DECRYPT_MODE || out === null) return;
+    const b = Java.array(&#x27;byte&#x27;, out);
+    console.log(&#x27;\n--- doFinal DECRYPT (&#x27; + tag + &#x27;, &#x27; + b.length + &#x27; bytes) ---&#x27;);
+    // Print as hex AND as text; identity blobs are often PEM/ASN.1 or JSON.
+    console.log(hexdump(b, { length: Math.min(b.length, 4096), ansi: false }));
+  }
+
+  Cipher.doFinal.overload(&#x27;[B&#x27;).implementation = function (input) {
+    const out = this.doFinal(input);
+    dump.call(this, &#x27;doFinal([B)&#x27;, out);
+    return out;
+  };
+  Cipher.doFinal.overload().implementation = function () {
+    const out = this.doFinal();
+    dump.call(this, &#x27;doFinal()&#x27;, out);
+    return out;
+  };
+});"><pre><span class="pl-c">// frida -U -f com.&lt;vendor&gt;.&lt;app&gt; -l dump_identity.js   (spawn, not attach — see below)</span>
+<span class="pl-v">Java</span><span class="pl-kos">.</span><span class="pl-en">perform</span><span class="pl-kos">(</span><span class="pl-k">function</span> <span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+  <span class="pl-k">const</span> <span class="pl-v">Cipher</span> <span class="pl-c1">=</span> <span class="pl-v">Java</span><span class="pl-kos">.</span><span class="pl-en">use</span><span class="pl-kos">(</span><span class="pl-s">'javax.crypto.Cipher'</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+  <span class="pl-k">const</span> <span class="pl-c1">DECRYPT_MODE</span> <span class="pl-c1">=</span> <span class="pl-c1">2</span><span class="pl-kos">;</span>
+
+  <span class="pl-c">// Remember the mode each Cipher instance was initialised with.</span>
+  <span class="pl-v">Cipher</span><span class="pl-kos">.</span><span class="pl-c1">init</span><span class="pl-kos">.</span><span class="pl-en">overload</span><span class="pl-kos">(</span><span class="pl-s">'int'</span><span class="pl-kos">,</span> <span class="pl-s">'java.security.Key'</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">implementation</span> <span class="pl-c1">=</span> <span class="pl-k">function</span> <span class="pl-kos">(</span><span class="pl-s1">mode</span><span class="pl-kos">,</span> <span class="pl-s1">key</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+    <span class="pl-smi">this</span><span class="pl-kos">.</span><span class="pl-c1">_mode</span> <span class="pl-c1">=</span> <span class="pl-s1">mode</span><span class="pl-kos">;</span>
+    <span class="pl-k">return</span> <span class="pl-smi">this</span><span class="pl-kos">.</span><span class="pl-en">init</span><span class="pl-kos">(</span><span class="pl-s1">mode</span><span class="pl-kos">,</span> <span class="pl-s1">key</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+  <span class="pl-kos">}</span><span class="pl-kos">;</span>
+  <span class="pl-c">// (hook the other init overloads the same way — several exist)</span>
+
+  <span class="pl-k">function</span> <span class="pl-en">dump</span><span class="pl-kos">(</span><span class="pl-s1">tag</span><span class="pl-kos">,</span> <span class="pl-s1">out</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+    <span class="pl-k">if</span> <span class="pl-kos">(</span><span class="pl-smi">this</span><span class="pl-kos">.</span><span class="pl-c1">_mode</span> <span class="pl-c1">!==</span> <span class="pl-c1">DECRYPT_MODE</span> <span class="pl-c1">||</span> <span class="pl-s1">out</span> <span class="pl-c1">===</span> <span class="pl-c1">null</span><span class="pl-kos">)</span> <span class="pl-k">return</span><span class="pl-kos">;</span>
+    <span class="pl-k">const</span> <span class="pl-s1">b</span> <span class="pl-c1">=</span> <span class="pl-v">Java</span><span class="pl-kos">.</span><span class="pl-en">array</span><span class="pl-kos">(</span><span class="pl-s">'byte'</span><span class="pl-kos">,</span> <span class="pl-s1">out</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+    <span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-s">'\n--- doFinal DECRYPT ('</span> <span class="pl-c1">+</span> <span class="pl-s1">tag</span> <span class="pl-c1">+</span> <span class="pl-s">', '</span> <span class="pl-c1">+</span> <span class="pl-s1">b</span><span class="pl-kos">.</span><span class="pl-c1">length</span> <span class="pl-c1">+</span> <span class="pl-s">' bytes) ---'</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+    <span class="pl-c">// Print as hex AND as text; identity blobs are often PEM/ASN.1 or JSON.</span>
+    <span class="pl-smi">console</span><span class="pl-kos">.</span><span class="pl-en">log</span><span class="pl-kos">(</span><span class="pl-en">hexdump</span><span class="pl-kos">(</span><span class="pl-s1">b</span><span class="pl-kos">,</span> <span class="pl-kos">{</span> <span class="pl-c1">length</span>: <span class="pl-v">Math</span><span class="pl-kos">.</span><span class="pl-en">min</span><span class="pl-kos">(</span><span class="pl-s1">b</span><span class="pl-kos">.</span><span class="pl-c1">length</span><span class="pl-kos">,</span> <span class="pl-c1">4096</span><span class="pl-kos">)</span><span class="pl-kos">,</span> <span class="pl-c1">ansi</span>: <span class="pl-c1">false</span> <span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+  <span class="pl-kos">}</span>
+
+  <span class="pl-v">Cipher</span><span class="pl-kos">.</span><span class="pl-c1">doFinal</span><span class="pl-kos">.</span><span class="pl-en">overload</span><span class="pl-kos">(</span><span class="pl-s">'[B'</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">implementation</span> <span class="pl-c1">=</span> <span class="pl-k">function</span> <span class="pl-kos">(</span><span class="pl-s1">input</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+    <span class="pl-k">const</span> <span class="pl-s1">out</span> <span class="pl-c1">=</span> <span class="pl-smi">this</span><span class="pl-kos">.</span><span class="pl-en">doFinal</span><span class="pl-kos">(</span><span class="pl-s1">input</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+    <span class="pl-s1">dump</span><span class="pl-kos">.</span><span class="pl-en">call</span><span class="pl-kos">(</span><span class="pl-smi">this</span><span class="pl-kos">,</span> <span class="pl-s">'doFinal([B)'</span><span class="pl-kos">,</span> <span class="pl-s1">out</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+    <span class="pl-k">return</span> <span class="pl-s1">out</span><span class="pl-kos">;</span>
+  <span class="pl-kos">}</span><span class="pl-kos">;</span>
+  <span class="pl-v">Cipher</span><span class="pl-kos">.</span><span class="pl-c1">doFinal</span><span class="pl-kos">.</span><span class="pl-en">overload</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">.</span><span class="pl-en">implementation</span> <span class="pl-c1">=</span> <span class="pl-k">function</span> <span class="pl-kos">(</span><span class="pl-kos">)</span> <span class="pl-kos">{</span>
+    <span class="pl-k">const</span> <span class="pl-s1">out</span> <span class="pl-c1">=</span> <span class="pl-smi">this</span><span class="pl-kos">.</span><span class="pl-en">doFinal</span><span class="pl-kos">(</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+    <span class="pl-s1">dump</span><span class="pl-kos">.</span><span class="pl-en">call</span><span class="pl-kos">(</span><span class="pl-smi">this</span><span class="pl-kos">,</span> <span class="pl-s">'doFinal()'</span><span class="pl-kos">,</span> <span class="pl-s1">out</span><span class="pl-kos">)</span><span class="pl-kos">;</span>
+    <span class="pl-k">return</span> <span class="pl-s1">out</span><span class="pl-kos">;</span>
+  <span class="pl-kos">}</span><span class="pl-kos">;</span>
+<span class="pl-kos">}</span><span class="pl-kos">)</span><span class="pl-kos">;</span></pre></div>
+<blockquote>
+<p><strong>Why hook the decrypt and not read the file?</strong> The blob on disk is ciphertext; the key to
+decrypt it lives in the Keystore and is applied at runtime. Hooking the decrypt output skips all
+of that — you get the finished plaintext the app was about to use, regardless of how it was
+stored or keyed.</p>
+</blockquote>
+<p><strong>The catch — force a fresh decrypt.</strong> The app only decrypts the identity when it has a reason to:
+typically during <strong>provisioning/pairing</strong>, or the first connection after a fresh install. An app
+that already has everything cached and idle may never fire <code>doFinal</code> with the material you want —
+and an identity written under an <em>old</em> Keystore key can even throw <code>BadPaddingException</code>. The
+reliable way is to make the app <strong>provision again</strong>: clear its data (or reinstall), spawn it
+<em>under</em> the hook (<code>frida -f …</code>, spawn-gating — hooked <strong>before</strong> the first crypto call, not
+attached after), then walk the pairing/login flow. The identity is decrypted as part of coming
+online, written fresh under the current Keystore key, right in front of your hook.</p>
+<blockquote>
+<p><strong>This step is the single point of failure for the whole chain.</strong> Everything downstream — the
+handshake, the REGISTER, the ring, the open — depends on one assumption: that the app decrypts
+its identity through <code>javax.crypto.Cipher.doFinal</code> in a Java process a Frida hook can reach. That
+holds today. It stops holding the moment the app moves the crypto out of reach: a native (NDK)
+TLS/keystore implementation, hardware-backed <code>StrongBox</code> keys that never leave the secure
+element, Play Integrity / attestation that refuses to run on a rooted or emulated device, or
+plain obfuscation/anti-Frida. Any app update can introduce any of these, and then this capture
+breaks and the rest is moot. The TLS and SIP work below is stable — it's standards. <strong>The
+identity extraction is the fragile hinge</strong>, and it's worth knowing that before you build on it.</p>
+</blockquote>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">4. The TLS wall: static-ECDH, and why OpenSSL won't do</h2><span id="4-the-tls-wall-static-ecdh-and-why-openssl-wont-do"></span></div>
+<p>With the identity in hand, the next wall is the handshake itself. The door station accepts only a
+small set of cipher suites, and they are all built on <strong>static ECDH</strong> over <code>prime256v1</code> — the
+fixed-key elliptic-curve key exchange, e.g. the <code>ECDH-ECDSA-*</code> / <code>ECDH-RSA-*</code> families (note:
+<code>ECDH-*</code>, <em>not</em> the ephemeral <code>ECDHE-*</code>).</p>
+<p>That single fact decides your whole toolchain:</p>
+<ul>
+<li><strong>OpenSSL 3.x cannot do it.</strong> Static-ECDH suites were removed from OpenSSL years ago. Any client
+built on a current OpenSSL — which is almost everything, including stock <code>openssl s_client</code>,
+current cURL, most language TLS bindings — will offer only ephemeral suites, the server will
+find no common suite, and the handshake fails at "no shared cipher". This is the single biggest
+time-sink; it looks like an auth problem but it's a <em>cipher</em> problem.</li>
+<li><strong>You need mbedTLS, and specifically the 3.6.x LTS line.</strong> mbedTLS still implements static-ECDH
+suites. <strong>Use 3.6.x, not 4.x</strong> — the 4.x line dropped them too. Build mbedTLS 3.6.x yourself.</li>
+</ul>
+<p>So the client side of this project is built on <strong>mbedTLS 3.6.x</strong>. Everything downstream (the SIP
+stack) has to be built against <em>that</em> mbedTLS, not the system OpenSSL.</p>
+<blockquote>
+<p><strong>Longevity — plan for this dependency being legacy.</strong> This isn't a passing version quirk, it's a
+dead end that the whole ecosystem is walking away from. Static ECDH is deprecated by
+<a href="https://www.rfc-editor.org/rfc/rfc9325" rel="nofollow">RFC 9325</a>, OpenSSL dropped it in 2016, and <strong>mbedTLS
+4.0.0 (released 2025-10-15) removed the static-ECDH / <code>ECDH-ECDSA</code> / <code>ECDH-RSA</code> key exchanges for
+TLS 1.2</strong> — keeping only ephemeral ECDHE. The 3.6 <strong>LTS</strong> line keeps them, but its support window
+runs only to <strong>about March 2027</strong>. After that, staying on the door means staying on an
+out-of-support mbedTLS, or maintaining your own fork that re-enables the suites. And the next LTS
+is no escape hatch: <strong>mbedTLS 4.1 LTS (released March 2026, supported to March 2029)</strong> carries the
+4.x removal forward — it still does <em>not</em> offer static ECDH. So "just wait for the next LTS" does
+not get you a supported library that talks to this door; the gap only widens. The real fix isn't
+on our side — it's the door's firmware offering a modern key exchange, which the vendor has no
+incentive to ship. Know this going in: the cryptography that lets you reclaim the device is itself
+on borrowed time.</p>
+</blockquote>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">5. Proving the handshake</h2><span id="5-proving-the-handshake"></span></div>
+<p>Before dragging a whole SIP stack into it, prove the TLS layer alone with mbedTLS's own sample
+client, <code>ssl_client2</code>, built from the 3.6.x tree.</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="# Build mbedTLS 3.6.x with the sample programs, then:
+./programs/ssl/ssl_client2 \
+    server_addr=&lt;doorstation-ip&gt; server_port=&lt;sip-tls-port&gt; \
+    key_file=client.key crt_file=client.crt \
+    debug_level=2"><pre><span class="pl-c"><span class="pl-c">#</span> Build mbedTLS 3.6.x with the sample programs, then:</span>
+./programs/ssl/ssl_client2 \
+    server_addr=<span class="pl-k">&lt;</span>doorstation-ip<span class="pl-k">&gt;</span> server_port=<span class="pl-k">&lt;</span>sip-tls-port<span class="pl-k">&gt;</span> \
+    key_file=client.key crt_file=client.crt \
+    debug_level=2</pre></div>
+<p>Reading the debug output:</p>
+<ul>
+<li>You want to reach <strong>"Protocol is TLSvX.X / Ciphersuite is TLS-ECDH-…"</strong> — that line is the proof
+that the static-ECDH negotiation succeeded and your client cert was accepted.</li>
+<li>If instead it stops at a handshake failure early on, you're almost certainly still on an
+OpenSSL-based build (see §4) or the cert/key pair isn't the one the server expects.</li>
+</ul>
+<p>Once <code>ssl_client2</code> completes the handshake, the hard cryptographic part is done: you have proven a
+mutually-authenticated TLS session to the door station, locally.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">6. Registering over SIP-TLS</h2><span id="6-registering-over-sip-tls"></span></div>
+<p>Now put SIP on top. PJSIP (pjproject) is the natural choice, <strong>built against the mbedTLS 3.6.x
+from §4</strong> (configure pjproject to use mbedTLS, not OpenSSL — otherwise you're back behind the
+cipher wall).</p>
+<p>A minimal <code>pjsua</code> account, with placeholders:</p>
+<div class="highlight highlight-source-ini notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="--id             sip:&lt;sip-user&gt;@&lt;sip-domain&gt;
+--registrar      sip:&lt;doorstation-ip&gt;:&lt;sip-tls-port&gt;;transport=tls
+--realm          *
+--username       &lt;sip-user&gt;
+--password       &lt;sip-password-from-identity&gt;     # read from your vault, never hard-code
+--tls-cert-file  client.crt
+--tls-privkey-file client.key"><pre>--id             sip:&lt;sip-user&gt;@&lt;sip-domain&gt;
+--registrar      sip:&lt;doorstation-ip&gt;:&lt;sip-tls-port&gt;<span class="pl-c"><span class="pl-c">;</span>transport=tls</span>
+--realm          *
+--username       &lt;sip-user&gt;
+--password       &lt;sip-password-from-identity&gt;     <span class="pl-c"><span class="pl-c">#</span> read from your vault, never hard-code</span>
+--tls-cert-file  client.crt
+--tls-privkey-file client.key</pre></div>
+<div class="markdown-heading"><h3 class="heading-element">The certificate-name mismatch, and the workaround</h3><span id="the-certificate-name-mismatch-and-the-workaround"></span></div>
+<p>The server's certificate doesn't present a name that matches <code>&lt;doorstation-ip&gt;</code> — the CN is a
+device-specific identifier (<code>&lt;client-cn&gt;</code>), not the IP you're connecting to. A strict TLS client
+<em>verifies</em> the server name and aborts on the mismatch.</p>
+<p>The pragmatic workaround on a trusted LAN is <strong>not to pass a CA file for server verification</strong>
+(<code>--tls-ca-file</code> omitted). Without a CA to verify against, PJSIP completes the handshake instead of
+rejecting the name mismatch. On your own network, against your own device, that's an acceptable
+trade; it is <em>not</em> something to carry over to anything facing the internet.</p>
+<p><strong>Be honest about what this costs you.</strong> With no CA and no server verification, you authenticate
+<em>to</em> the door but you don't authenticate the door <em>to you</em> — a device on the same LAN that can
+intercept the connection could impersonate it. "It's only the LAN" does not erase that; it narrows
+who could do it. If you want the real thing, the fix is <strong>not</strong> to trust the vendor's public CA by
+name (the CN won't match any name you can route to), it's to <strong>pin the door's own server
+certificate</strong>: capture the leaf cert the door presents (e.g. save it from the <code>ssl_client2</code> run in
+§5), trust <em>exactly that file</em>, and reject anything else. That gives you mutual authentication
+without needing a CN/SAN that matches your LAN address — pinning compares the whole certificate, so
+"does the name match?" stops being the question. Note the practical catch: PJSIP's built-in
+<code>--tls-verify-server</code> still does <em>name</em> checking, so pinning isn't a flag you flip — you verify the
+presented cert against your saved copy yourself (a TLS verification callback, or an out-of-band
+fingerprint check at connect time). Pinning is the honest endpoint here; the CA-less handshake is
+the quick start.</p>
+<p>With that in place, the registrar accepts the account:</p>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="registration success, status=200 (OK)"><pre lang="text" class="notranslate"><code>registration success, status=200 (OK)
+</code></pre></div>
+<p>That <code>200 OK</code> is the milestone: a <strong>local, cloud-free, mutually-authenticated SIP registration</strong> to
+a door station the vendor intended to be reachable only through their app.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">7. Handling the identity safely</h2><span id="7-handling-the-identity-safely"></span></div>
+<p>The recovered material — EC private key, client certificate, SIP password — is the keys to your
+door station's local interface. Treat it like any other private key:</p>
+<ul>
+<li><strong>It is not in this repo</strong> and the <code>.gitignore</code> here actively blocks <code>*.key</code>, <code>*.pem</code>, <code>*.cfg</code>,
+captures and dumps from being committed.</li>
+<li>Keep it in a password manager / secrets store, and have the client read it at run time rather
+than writing it into a config file in the clear.</li>
+<li>Never paste the private key or the SIP password into an issue, a log, or a chat. If you need to
+share <em>how</em>, share this method — not your values.</li>
+</ul>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">8. Opening the door locally</h2><span id="8-opening-the-door-locally"></span></div>
+<p>The folklore around these devices — and an earlier revision of this very document — says the
+gate/lock command has to go through the vendor cloud. Reading the decompiled "slide to open" code
+path (§2) shows that is wrong. <strong>The open command is a SIP <code>MESSAGE</code> on the same local channel you
+already registered on.</strong> No HTTPS, no cloud relay.</p>
+<div class="markdown-heading"><h3 class="heading-element">How it actually works</h3><span id="how-it-actually-works"></span></div>
+<p>The app's unlock action builds a tiny <strong>JSON-RPC</strong> body and sends it in a SIP <code>MESSAGE</code> (the
+SIP "instant message" / chat method) toward the door's own SIP address — the same
+<code>sip:&lt;sip-user&gt;@&lt;sip-domain&gt;</code> you register against, <em>not</em> the LAN IP. The body names a method and
+the target actuator:</p>
+<div class="highlight highlight-source-json-comments notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="// SIP MESSAGE body — method + which actuator, nothing more
+{ &quot;jsonrpc&quot;: &quot;2.0&quot;, &quot;id&quot;: &lt;n&gt;,
+  &quot;method&quot;: &quot;&lt;lock-set-status&gt;&quot;,            // from the decompiled call path
+  &quot;params&quot;: { &quot;receiver&quot;: &quot;&lt;actuator-addr&gt;&quot;, // which relay: gate, lock, light…
+              &quot;status&quot;: &quot;&lt;on|open&gt;&quot; } }"><pre><span class="pl-c"><span class="pl-c">//</span> SIP MESSAGE body — method + which actuator, nothing more</span>
+{ <span class="pl-ent">"jsonrpc"</span>: <span class="pl-s"><span class="pl-pds">"</span>2.0<span class="pl-pds">"</span></span>, <span class="pl-ent">"id"</span>: <span class="pl-ii">&lt;n&gt;</span>,
+  <span class="pl-ent">"method"</span>: <span class="pl-s"><span class="pl-pds">"</span>&lt;lock-set-status&gt;<span class="pl-pds">"</span></span>,            <span class="pl-c"><span class="pl-c">//</span> from the decompiled call path</span>
+  <span class="pl-ent">"params"</span>: { <span class="pl-ent">"receiver"</span>: <span class="pl-s"><span class="pl-pds">"</span>&lt;actuator-addr&gt;<span class="pl-pds">"</span></span>, <span class="pl-c"><span class="pl-c">//</span> which relay: gate, lock, light…</span>
+              <span class="pl-ent">"status"</span>: <span class="pl-s"><span class="pl-pds">"</span>&lt;on|open&gt;<span class="pl-pds">"</span></span> } }</pre></div>
+<ul>
+<li><strong>Only the actuator address distinguishes targets.</strong> The gate, the pedestrian lock and the
+courtesy light are the <em>same</em> command with a different <code>receiver</code> address. Those addresses come
+out of the device topology (read-only), not out of guessing.</li>
+<li><strong>It is an impulse / toggle</strong>, not a stateful "locked/unlocked" — you are pulsing a relay, the
+same way the physical button does.</li>
+</ul>
+<div class="markdown-heading"><h3 class="heading-element">The one real trap: a single registration per account (single-AOR)</h3><span id="the-one-real-trap-a-single-registration-per-account-single-aor"></span></div>
+<p>The door accepts <strong>only one active registration per SIP account</strong>. If a background service is
+already registered to catch rings (§9), a second client that registers to send the open command
+will <strong>evict the first</strong> — and now nothing is listening for the doorbell. A second <code>REGISTER</code>
+from a new contact is simply dropped.</p>
+<p>The way through is to <strong>not</strong> open a second registration at all: send the <code>MESSAGE</code> <em>through the
+client that is already registered</em>. In this project the ring-catcher (§9) exposes a tiny local
+command channel (an MQTT topic), and the open request is handed to it; it emits the SIP <code>MESSAGE</code>
+from its already-registered endpoint (out of dialog — a <code>REGISTER</code> creates no dialog, and the open
+request isn't tied to a call). One registration, two jobs.</p>
+<blockquote>
+<p>No real actuator address, method name, CN or SIP identity is published here — those are
+device-specific and live only in the owner's vault (§7). What transfers is the shape: <em>decompile
+the unlock path → it's a local SIP <code>MESSAGE</code> with a JSON-RPC body → send it from your one
+registered client.</em></p>
+</blockquote>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">9. Catching the ring and grabbing a photo</h2><span id="9-catching-the-ring-and-grabbing-a-photo"></span></div>
+<p>A registration is only useful if something <em>listens</em>. Keep a <code>pjsua</code>-based client registered as a
+background service (one systemd unit, auto-restart) so it is always ready for the next call. When
+someone presses the button, the door sends an incoming SIP <code>INVITE</code> to the registered account —
+that INVITE <em>is</em> the "someone rang" event. Surface it however your home-automation system likes (a
+binary sensor flipping to <em>ringing</em>, an MQTT message, a notification).</p>
+<p>The interesting part is grabbing the visitor's face <strong>without ever answering</strong>, and the two
+gotchas that cost the most time — both learned by <em>measuring</em>, not guessing.</p>
+<div class="markdown-heading"><h3 class="heading-element">Gotcha 1 — the media is early-media (183), never a confirmed call</h3><span id="gotcha-1--the-media-is-early-media-183-never-a-confirmed-call"></span></div>
+<p>The door offers video the moment it rings: it sends <code>183 Session Progress</code> with media, and starts
+streaming <strong>before</strong> (and whether or not) you answer. So you do <strong>not</strong> send <code>200 OK</code> — you let the
+early-media flow and record it. Point pjsua's AVI recorder at the incoming stream and you get a
+short clip per ring, no call ever confirmed, the physical handset still free to ring.</p>
+<p>Record <strong>one AVI per call</strong> (rotate a fresh file on each INVITE), so a ring never overwrites the
+previous visitor's clip while you are still turning it into a photo.</p>
+<div class="markdown-heading"><h3 class="heading-element">Gotcha 2 — the AVI's declared frame rate is a lie; seek by frame index, not seconds</h3><span id="gotcha-2--the-avis-declared-frame-rate-is-a-lie-seek-by-frame-index-not-seconds"></span></div>
+<p>This is the one that will waste your afternoon. The AVI pjsua writes <strong>declares 15 fps in its
+header but actually encodes ~9 fps</strong> (measured: ~268 frames over ~29.7 s). So any
+<code>ffmpeg -ss &lt;seconds&gt;</code> seek lands on the wrong frame — ask for "2.5 s in" and you get a frame from
+<em>much</em> later, i.e. the visitor already walking out of shot.</p>
+<p><strong>Extract by frame <em>index</em>, not by time:</strong></p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="# WRONG: -ss trusts the lying 15 fps header and overshoots
+# ffmpeg -ss 2.5 -i ring.avi -frames:v 1 out.jpg
+
+# RIGHT: pick an absolute frame number; n starts at 0
+ffmpeg -i ring.avi -vf &quot;select=&#x27;eq(n,10)&#x27;&quot; -frames:v 1 -q:v 2 out.jpg"><pre><span class="pl-c"><span class="pl-c">#</span> WRONG: -ss trusts the lying 15 fps header and overshoots</span>
+<span class="pl-c"><span class="pl-c">#</span> ffmpeg -ss 2.5 -i ring.avi -frames:v 1 out.jpg</span>
+
+<span class="pl-c"><span class="pl-c">#</span> RIGHT: pick an absolute frame number; n starts at 0</span>
+ffmpeg -i ring.avi -vf <span class="pl-s"><span class="pl-pds">"</span>select='eq(n,10)'<span class="pl-pds">"</span></span> -frames:v 1 -q:v 2 out.jpg</pre></div>
+<p><strong><code>10</code> here is an example, not a magic number</strong> — it's the frame <em>I</em> measured as clean (~4 s after
+the <code>183</code>, once the stream has stabilised and the visitor is centred), in daylight. The right index
+depends on your own ring timing and lighting (the IR illuminator at night changes it — see §10), so
+measure yours rather than copying <code>10</code>. The method — index, not seconds — is what transfers. Verify
+the real rate yourself before trusting any timing:</p>
+<div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="ffprobe -v error -select_streams v:0 \
+  -show_entries stream=nb_frames,avg_frame_rate,r_frame_rate,duration \
+  -of default=nw=1 ring.avi"><pre>ffprobe -v error -select_streams v:0 \
+  -show_entries stream=nb_frames,avg_frame_rate,r_frame_rate,duration \
+  -of default=nw=1 ring.avi</pre></div>
+<p>If <code>avg_frame_rate</code> and the header <code>r_frame_rate</code> disagree, believe <code>nb_frames</code> and index from
+there. A short fallback — <code>-sseof -0.5</code> for the last frame — covers rings so brief the stream is
+cut before frame 10 exists.</p>
+<div class="markdown-heading"><h3 class="heading-element">Wiring it into Home Assistant over MQTT</h3><span id="wiring-it-into-home-assistant-over-mqtt"></span></div>
+<p>Decode the chosen frame to JPEG in a worker thread (a small bounded queue is enough — rings are
+rare and short), then hand everything to Home Assistant <strong>over MQTT</strong> — no custom integration, no
+polling, no cloud. The glue is <strong>MQTT Discovery</strong>: the background client publishes one <em>retained</em>
+config message per entity, and HA auto-creates the devices. You publish three things, all under one
+MQTT device so they group neatly in HA:</p>
+<ol>
+<li><strong>A binary sensor</strong> — "someone is ringing" — flipped from the incoming <code>INVITE</code>.</li>
+<li><strong>A camera</strong> — the visitor photo, published as a raw JPEG on an image topic.</li>
+<li><strong>The open buttons</strong> (§8) — gate / lock / light — each a <code>button</code> whose command topic the client
+subscribes to, so a press in HA becomes the local SIP <code>MESSAGE</code>.</li>
+</ol>
+<p>Discovery config for the camera and one button (placeholders only — pick your own topic prefix and
+IDs):</p>
+<div class="highlight highlight-source-json-comments notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="// retain=true, topic: homeassistant/camera/&lt;node&gt;/photo/config
+{ &quot;name&quot;: &quot;Doorbell snapshot&quot;,
+  &quot;unique_id&quot;: &quot;&lt;node&gt;_photo&quot;,
+  &quot;topic&quot;: &quot;&lt;prefix&gt;/&lt;node&gt;/photo&quot;,          // raw JPEG bytes published here on each ring
+  &quot;device&quot;: { &quot;identifiers&quot;: [&quot;&lt;node&gt;&quot;], &quot;name&quot;: &quot;Door station&quot;,
+              &quot;manufacturer&quot;: &quot;BTicino/Legrand&quot;, &quot;model&quot;: &quot;EasyKit&quot; } }
+
+// retain=true, topic: homeassistant/button/&lt;node&gt;/gate/config
+{ &quot;name&quot;: &quot;Open gate&quot;,
+  &quot;unique_id&quot;: &quot;&lt;node&gt;_gate&quot;,
+  &quot;command_topic&quot;: &quot;&lt;prefix&gt;/&lt;node&gt;/open&quot;,   // client subscribes; a press -&gt; SIP MESSAGE (§8)
+  &quot;payload_press&quot;: &quot;gate&quot;,
+  &quot;device&quot;: { &quot;identifiers&quot;: [&quot;&lt;node&gt;&quot;] } }"><pre><span class="pl-c"><span class="pl-c">//</span> retain=true, topic: homeassistant/camera/&lt;node&gt;/photo/config</span>
+{ <span class="pl-ent">"name"</span>: <span class="pl-s"><span class="pl-pds">"</span>Doorbell snapshot<span class="pl-pds">"</span></span>,
+  <span class="pl-ent">"unique_id"</span>: <span class="pl-s"><span class="pl-pds">"</span>&lt;node&gt;_photo<span class="pl-pds">"</span></span>,
+  <span class="pl-ent">"topic"</span>: <span class="pl-s"><span class="pl-pds">"</span>&lt;prefix&gt;/&lt;node&gt;/photo<span class="pl-pds">"</span></span>,          <span class="pl-c"><span class="pl-c">//</span> raw JPEG bytes published here on each ring</span>
+  <span class="pl-ent">"device"</span>: { <span class="pl-ent">"identifiers"</span>: [<span class="pl-s"><span class="pl-pds">"</span>&lt;node&gt;<span class="pl-pds">"</span></span>], <span class="pl-ent">"name"</span>: <span class="pl-s"><span class="pl-pds">"</span>Door station<span class="pl-pds">"</span></span>,
+              <span class="pl-ent">"manufacturer"</span>: <span class="pl-s"><span class="pl-pds">"</span>BTicino/Legrand<span class="pl-pds">"</span></span>, <span class="pl-ent">"model"</span>: <span class="pl-s"><span class="pl-pds">"</span>EasyKit<span class="pl-pds">"</span></span> } }
+
+<span class="pl-c"><span class="pl-c">//</span> retain=true, topic: homeassistant/button/&lt;node&gt;/gate/config</span>
+{ <span class="pl-ent">"name"</span>: <span class="pl-s"><span class="pl-pds">"</span>Open gate<span class="pl-pds">"</span></span>,
+  <span class="pl-ent">"unique_id"</span>: <span class="pl-s"><span class="pl-pds">"</span>&lt;node&gt;_gate<span class="pl-pds">"</span></span>,
+  <span class="pl-ent">"command_topic"</span>: <span class="pl-s"><span class="pl-pds">"</span>&lt;prefix&gt;/&lt;node&gt;/open<span class="pl-pds">"</span></span>,   <span class="pl-c"><span class="pl-c">//</span> client subscribes; a press -&gt; SIP MESSAGE (§8)</span>
+  <span class="pl-ent">"payload_press"</span>: <span class="pl-s"><span class="pl-pds">"</span>gate<span class="pl-pds">"</span></span>,
+  <span class="pl-ent">"device"</span>: { <span class="pl-ent">"identifiers"</span>: [<span class="pl-s"><span class="pl-pds">"</span>&lt;node&gt;<span class="pl-pds">"</span></span>] } }</pre></div>
+<p>Then at runtime the client just:</p>
+<ul>
+<li>publishes JPEG bytes to <code>&lt;prefix&gt;/&lt;node&gt;/photo</code> (the camera updates instantly), and</li>
+<li>on a message arriving at <code>&lt;prefix&gt;/&lt;node&gt;/open</code>, emits the matching SIP <code>MESSAGE</code> from its one
+registered endpoint (§8) — so an HA button, an automation, or a dashboard tap opens the door
+locally.</li>
+</ul>
+<blockquote>
+<p><strong>Treat the open topic as what it is: a physical actuator.</strong> Two non-negotiables. The command
+message must be <strong><code>retain=false</code></strong> — a retained "open" would be replayed to the client every time
+it reconnects, opening your gate on its own after a broker or client restart. (The <em>Discovery
+config</em> above is <code>retain=true</code> on purpose, so entities survive a restart; the <em>command</em> never is.)
+And the broker must enforce an <strong>ACL</strong> so only HA and this client can publish/subscribe to
+<code>&lt;prefix&gt;/&lt;node&gt;/open</code> — an unauthenticated open topic is an unlocked gate on your LAN.</p>
+</blockquote>
+<p>The whole path — ring → early-media AVI → frame by index → JPEG → MQTT camera in HA, and HA button
+→ MQTT → local SIP <code>MESSAGE</code> → relay — runs on your LAN, with the cloud never in the loop, and is
+<strong>proven in production</strong>.</p>
+<p><a target="_blank" rel="noopener noreferrer" href="https://raw.githubusercontent.com/cerealkiller57540/bticino-easykit-reclaim/main/docs/ha-device.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/bticino-easykit-reclaim/main/docs/ha-device.png" alt="The reclaimed door station in Home Assistant: an MQTT device exposing the gate / stairwell-light / gate-impulse buttons, the ring binary sensor, the on-ring camera snapshot, and an activity log of real commands — all local." style="max-width: 100%;" loading="lazy"></a></p>
+<p><em>The door station as a native MQTT device in Home Assistant — opening buttons, ring sensor, on-ring
+snapshot (blurred here), and a log of real commands. No cloud. (The camera thumbnail is deliberately
+blurred; everything else is the actual device page.)</em></p>
+<blockquote>
+<p>Why MQTT Discovery rather than a REST/template sensor: the client <em>pushes</em> on an event (a ring is
+rare and instantaneous), retained config survives an HA restart, and the camera takes raw JPEG on
+a topic with no extra plumbing. It is the lightest honest way to get a <em>pushed</em> image and a
+<em>command</em> path into HA.</p>
+</blockquote>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">10. Work in progress — where this is going</h2><span id="10-work-in-progress--where-this-is-going"></span></div>
+<p>The hard parts are done and proven: identity extraction, the static-ECDH TLS wall, local
+registration, <strong>photo on ring (§9)</strong>, and <strong>local door opening (§8)</strong>. What remains is polish, not
+cryptography:</p>
+<ul>
+<li><strong>Full live media</strong>, not just a snapshot — negotiate the INVITE's SDP for a continuous view.</li>
+<li><strong>Richer event history</strong> — log every INVITE and its outcome for a who-rang-when record.</li>
+<li><strong>Night-time robustness</strong> — confirm the on-ring photo timing holds with the IR illuminator at
+night (the frame-index tuning in §9 was measured in daylight).</li>
+</ul>
+<p>These land as separate, documented commits.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">11. Related work</h2><span id="11-related-work"></span></div>
+<p><a href="https://github.com/deddroid/bticino-easykit"><code>deddroid/bticino-easykit</code></a> is the other serious
+open-source EasyKit client, and it is worth knowing about — it takes the <strong>opposite</strong> route. It
+reaches the kit <strong>through the Netatmo/BTicino cloud</strong>: you sign in with a Netatmo "Home + Security"
+account, it reuses the official app's OAuth/Firebase client IDs, and the call's video offer arrives
+as a <strong>Firebase push</strong>. The media is <strong>WebRTC</strong> (H.264 + Opus), not SIP. It verifies live view, panel
+audio, ring notifications with a snapshot, and door/gate release — all via that cloud path.</p>
+<p>This project is the <strong>local alternative</strong>: no Netatmo account, no Firebase, no cloud in the loop. It
+registers directly to the door over <strong>SIP-TLS</strong> on the LAN using a client identity recovered from the
+app, and opens the door with a local out-of-dialog SIP <code>MESSAGE</code> from that registered endpoint. Where
+<code>deddroid/bticino-easykit</code> depends
+on the internet staying up and the cloud service staying online, this one keeps working if the WAN is
+cut.</p>
+<p>One caveat worth flagging: "EasyKit" covers more than one generation of hardware. The cloud/Firebase
+path above looks like the Wi-Fi, Netatmo-rebadged kit; the work here targets the SIP-TLS model with
+its own SIP domain. If your kit behaves differently from what either README describes, you may simply
+have the other generation.</p>
+</main>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim">cerealkiller57540/bticino-easykit-reclaim</a> · Updated 2026-10-31 · <a href="../index.html">All projects</a></footer>
+</div></body></html>
