@@ -2,24 +2,24 @@
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Nixie Clock Card — custom card for Home Assistant</title>
-<meta name="description" content="Nixie tube clock card for Home Assistant: six IN-14 tubes with glowing gas, cyan underlights and acrylic base (WebGL), plus a CSS variant. HACS.">
+<meta name="description" content="Nixie tube clock card for Home Assistant: six IN-14 tubes with glowing gas, cyan underlights and acrylic base, rendered in WebGL. HACS.">
 <link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/nixie-clock-card.html">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Nixie Clock Card — custom card for Home Assistant">
-<meta property="og:description" content="Nixie tube clock card for Home Assistant: six IN-14 tubes with glowing gas, cyan underlights and acrylic base (WebGL), plus a CSS variant. HACS.">
+<meta property="og:description" content="Nixie tube clock card for Home Assistant: six IN-14 tubes with glowing gas, cyan underlights and acrylic base, rendered in WebGL. HACS.">
 <meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/nixie-clock-card.html">
 <meta property="og:site_name" content="Neon Cards for Home Assistant">
 <meta property="og:image" content="https://raw.githubusercontent.com/cerealkiller57540/nixie-clock-card/main/images/main.png">
 <meta name="twitter:image" content="https://raw.githubusercontent.com/cerealkiller57540/nixie-clock-card/main/images/main.png">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Nixie Clock Card", "description": "Nixie tube clock card for Home Assistant: six IN-14 tubes with glowing gas, cyan underlights and acrylic base (WebGL), plus a CSS variant. HACS.", "codeRepository": "https://github.com/cerealkiller57540/nixie-clock-card", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/nixie-clock-card.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-11-01", "keywords": "clock, custom-card, cyberpunk, dashboard, hacs, home-assistant, lovelace, neon, nixie, retro, webgl", "image": "https://raw.githubusercontent.com/cerealkiller57540/nixie-clock-card/main/images/main.png", "softwareVersion": "1.7.2"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Nixie Clock Card", "description": "Nixie tube clock card for Home Assistant: six IN-14 tubes with glowing gas, cyan underlights and acrylic base, rendered in WebGL. HACS.", "codeRepository": "https://github.com/cerealkiller57540/nixie-clock-card", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/nixie-clock-card.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-11-01", "keywords": "clock, custom-card, cyberpunk, dashboard, hacs, home-assistant, lovelace, neon, nixie, retro, webgl", "image": "https://raw.githubusercontent.com/cerealkiller57540/nixie-clock-card/main/images/main.png", "softwareVersion": "1.7.2"}</script>
 <link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
 <nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Dashboard cards</nav>
 <header class="page-head"><h1 class="banner"><img src="https://raw.githubusercontent.com/cerealkiller57540/nixie-clock-card/main/images/logo.png" alt="Nixie Clock Card"></h1>
-<p class="lead">Nixie tube clock card for Home Assistant: six IN-14 tubes with glowing gas, cyan underlights and acrylic base (WebGL), plus a CSS variant. HACS.</p>
+<p class="lead">Nixie tube clock card for Home Assistant: six IN-14 tubes with glowing gas, cyan underlights and acrylic base, rendered in WebGL. HACS.</p>
 <p class="facts"><a href="https://github.com/cerealkiller57540/nixie-clock-card/releases/latest">v1.7.2</a> · Home Assistant 2024.1+</p>
 <div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/nixie-clock-card">View on GitHub</a><a class="my-badge" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=cerealkiller57540&amp;repository=nixie-clock-card&amp;category=plugin"><img src="https://my.home-assistant.io/badges/hacs_repository.svg" alt="Open Marketplace repository on My Home Assistant"></a></div></header>
-<p class="intro">A desk nixie clock for your dashboard, drawn after a real six-tube IN-14 clock. It needs no entity: it reads the device clock. Pick it for a wall panel or a bedside tablet; a lighter CSS variant is included for devices without WebGL.</p>
+<p class="intro">A desk nixie clock for your dashboard, drawn after a real six-tube IN-14 clock. It needs no entity: it reads the device clock. Pick it for a wall panel or a bedside tablet. It needs WebGL: without it, the clock stays blank.</p>
 <main class="markdown-body">
 <div align="center">
 
@@ -181,6 +181,8 @@ under_color: &quot;#ff2d6b&quot;   # LEDs and separators"><pre><span class="pl-e
 <div class="markdown-heading"><h2 class="heading-element">🎨 Credits</h2><span id="-credits"></span></div>
 <p>The nixie tube digit images embedded in both cards are <strong>© 2007-08 Cestmir Hybl</strong> (<a href="http://cestmir.freeside.sk/projects/dhtml-nixie-display" rel="nofollow">DHTML Nixie Display</a>), <em>free for non-commercial use, copyright must be preserved</em>. They are <strong>not</strong> covered by the MIT licence of this repository's code (see <a href="https://github.com/cerealkiller57540/nixie-clock-card/blob/main/NOTICE.md">NOTICE</a>). The Glitch cat silhouette comes from <a href="https://openclipart.org" rel="nofollow">openclipart</a> (public domain).</p>
 <div class="markdown-heading"><h2 class="heading-element">🌃 More neon cards</h2><span id="-more-neon-cards"></span></div>
+<div class="markdown-heading"><h2 class="heading-element">🧱 How this repository is built</h2><span id="-how-this-repository-is-built"></span></div>
+<p><code>dist/nixie-clock-card.js</code> is the file HACS installs. It is built from the version running on the author's own Home Assistant: personal defaults are replaced with neutral ones, the version number is stamped, and the build stops if a local IP address or a token is found. That working copy is not published; bugs and suggestions are welcome as issues.</p>
 <p>This card is part of a family. See the full collection at <a href="https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards"><strong>Home-Assistant-Neon-Cards</strong></a>.</p>
 <hr>
 <div class="markdown-heading"><h2 class="heading-element">🐾 Support this project</h2><span id="-support-this-project"></span></div>
@@ -201,5 +203,5 @@ under_color: &quot;#ff2d6b&quot;   # LEDs and separators"><pre><span class="pl-e
 <div class="markdown-heading"><h2 class="heading-element">📄 License</h2><span id="-license"></span></div>
 <p><a href="https://github.com/cerealkiller57540/nixie-clock-card/tree/main/LICENSE">MIT License</a></p>
 </main>
-<footer>Source and issues: <a href="https://github.com/cerealkiller57540/nixie-clock-card">cerealkiller57540/nixie-clock-card</a> · Updated 2026-11-01 · <a href="../index.html">All projects</a></footer>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/nixie-clock-card">cerealkiller57540/nixie-clock-card</a> · Updated 2026-11-01 · <a href="../index.html">All projects</a> · <a href="../compatibility.html">Compatibility</a></footer>
 </div></body></html>

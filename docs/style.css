@@ -17,6 +17,11 @@ a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
 .site-head h1.cyber::after{content:"";position:absolute;left:15%;right:15%;bottom:0;height:2px;background:linear-gradient(90deg,transparent,var(--pink),transparent);box-shadow:0 0 18px 2px rgba(255,45,107,.55)}
 #jinjer{position:absolute;right:18%;bottom:2px;width:72px;height:57px;image-rendering:pixelated;opacity:.85;filter:drop-shadow(0 0 6px rgba(255,123,66,.55));pointer-events:none}
 @media (max-width:600px){#jinjer{width:48px;height:38px;right:8%}.site-head h1.cyber{padding-bottom:3rem}}
+.table-scroll{overflow-x:auto;margin:1.2rem 0;border:1px solid var(--line);border-radius:10px;background:rgba(16,16,30,.85)}
+.compat{border-collapse:collapse;width:100%;min-width:760px;font-size:.92rem}
+.compat th,.compat td{padding:.6rem .75rem;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+.compat thead th{color:var(--amber);font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.compat tbody th a{color:var(--teal);white-space:nowrap}
 .site-head .lead,.site-head .actions{margin-left:auto;margin-right:auto;text-align:center;justify-content:center}
 body::before{content:"";position:fixed;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(10,10,20,.55),rgba(10,10,20,.88) 55%,rgba(10,10,20,.95)),url(bg.jpg) center top/cover no-repeat}
 .wrap{max-width:960px;margin:0 auto;padding:2rem 16px 3rem}
