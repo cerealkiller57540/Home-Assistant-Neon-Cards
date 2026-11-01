@@ -10,6 +10,7 @@ a{color:var(--teal);text-decoration:none}a:hover{text-decoration:underline}
  background:linear-gradient(90deg,var(--teal),var(--violet),var(--pink));-webkit-background-clip:text;background-clip:text;color:transparent;
  text-shadow:0 0 30px rgba(0,232,255,.25)}
 .lead{color:var(--dim);font-size:1.08rem;max-width:70ch;margin:.7rem 0 0}
+.intro{max-width:70ch;margin:1.6rem 0 0;padding:.9rem 1.1rem;border-left:3px solid var(--violet);background:rgba(180,0,255,.06);border-radius:0 8px 8px 0}
 .actions{display:flex;gap:.6rem;flex-wrap:wrap;margin:1.2rem 0 0}
 .btn{display:inline-block;padding:.5rem 1rem;border-radius:8px;border:1px solid var(--teal);color:var(--teal);font-weight:600;font-size:.92rem;background:rgba(0,232,255,.08)}
 .btn.alt{border-color:var(--pink);color:var(--pink);background:rgba(255,45,107,.08)}
