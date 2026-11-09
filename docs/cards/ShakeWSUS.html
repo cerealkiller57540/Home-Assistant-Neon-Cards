@@ -10,7 +10,7 @@
 <meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/ShakeWSUS.html">
 <meta property="og:site_name" content="Neon Cards for Home Assistant">
 <meta name="twitter:card" content="summary">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "ShakeWSUS", "description": "PowerShell script to reset the WSUS / Windows Update / SCCM client stack on remote computers", "codeRepository": "https://github.com/cerealkiller57540/ShakeWSUS", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/ShakeWSUS.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-10-05", "keywords": "endpoint, mecm, powershell, sccm, server, windows-update, wsus"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "ShakeWSUS", "description": "PowerShell script to reset the WSUS / Windows Update / SCCM client stack on remote computers", "codeRepository": "https://github.com/cerealkiller57540/ShakeWSUS", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/ShakeWSUS.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-11-09", "keywords": "endpoint, mecm, powershell, sccm, server, windows-update, wsus"}</script>
 <link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
 <nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Other projects</nav>
 <header class="page-head"><h1>ShakeWSUS</h1>
@@ -27,6 +27,22 @@ deletes the BITS download queue, can change the Windows Update policy and the Wi
 triggers update scans. Use a maintenance window and test on a non-production machine first.
 Provided as-is, without warranty (see <a href="https://github.com/cerealkiller57540/ShakeWSUS/tree/main/LICENSE">LICENSE</a>).</p>
 </blockquote>
+<div class="markdown-heading"><h2 class="heading-element">Issues it fixes</h2><span id="issues-it-fixes"></span></div>
+<p>Typical symptoms that mean a client's WSUS / Windows Update / SCCM stack is stuck and worth
+resetting with this script:</p>
+<ul>
+<li>Windows Update stuck checking for updates, or scan never completes.</li>
+<li>SCCM / MECM compliance state stuck at <strong>Unknown</strong> or not refreshing after a deployment.</li>
+<li>Software Center shows no available updates while WSUS/SUP has them published.</li>
+<li><code>wuauserv</code> or <code>ccmexec</code> won't stop, hangs on restart, or the service is unresponsive.</li>
+<li>BITS job stuck at 0% or queued forever (<code>bitsadmin</code> shows a stalled transfer).</li>
+<li>Windows Update errors such as <code>0x80244022</code>, <code>0x8024401c</code>, <code>0x80072ee2</code>, or
+<code>0x87d00215</code> / <code>0x87d00669</code> on the SCCM client side.</li>
+<li><code>Registry.pol</code> corrupted or with an invalid header after a GPO change.</li>
+<li>Stale WinHTTP proxy left over from a decommissioned proxy server blocking WSUS/SUP access.</li>
+</ul>
+<p>If re-registering the BITS/WU DLLs, clearing <code>SoftwareDistribution</code>, or a manual <code>wuauclt /resetauthorization /detectnow</code> already hasn't helped, this script automates the fuller reset
+(services, BITS queue, policy, proxy, GPO, SCCM schedules) across one or many remote computers.</p>
 <div class="markdown-heading"><h2 class="heading-element">What it does</h2><span id="what-it-does"></span></div>
 <p>On each target, through PowerShell remoting:</p>
 <ol>
@@ -99,5 +115,5 @@ happens at the timeout (<code>UpdateScanTimeout</code>, 300 s by default).</p>
 <div class="markdown-heading"><h2 class="heading-element">License</h2><span id="license"></span></div>
 <p><a href="https://github.com/cerealkiller57540/ShakeWSUS/tree/main/LICENSE">MIT</a></p>
 </main>
-<footer>Source and issues: <a href="https://github.com/cerealkiller57540/ShakeWSUS">cerealkiller57540/ShakeWSUS</a> · Updated 2026-10-05 · <a href="../index.html">All projects</a> · <a href="../compatibility.html">Compatibility</a></footer>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/ShakeWSUS">cerealkiller57540/ShakeWSUS</a> · Updated 2026-11-09 · <a href="../index.html">All projects</a> · <a href="../compatibility.html">Compatibility</a></footer>
 </div></body></html>
