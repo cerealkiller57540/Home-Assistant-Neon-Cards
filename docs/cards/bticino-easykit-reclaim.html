@@ -12,7 +12,7 @@
 <meta property="og:image" content="https://raw.githubusercontent.com/cerealkiller57540/bticino-easykit-reclaim/main/docs/ha-device.png">
 <meta name="twitter:image" content="https://raw.githubusercontent.com/cerealkiller57540/bticino-easykit-reclaim/main/docs/ha-device.png">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "BTicino EasyKit Reclaim", "description": "Reclaiming a BTicino/Legrand EasyKit door station on the LAN, no cloud: recover the TLS client identity, beat the static-ECDH cipher wall (mbedTLS 3.6.x), register over SIP-TLS locally, get the ring and an on-ring photo into Home Assistant, and open the gate/lock/light with a local SIP MESSAGE. Proven in production.", "codeRepository": "https://github.com/cerealkiller57540/bticino-easykit-reclaim", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/bticino-easykit-reclaim.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-10-31", "keywords": "android, bticino, door-entry, doorbell, easykit, frida, home-assistant, home-automation, intercom, legrand, local-control, mbedtls, mutual-tls, pjsip, planned-obsolescence, reverse-engineering, right-to-repair, sip, tls, video-doorbell", "image": "https://raw.githubusercontent.com/cerealkiller57540/bticino-easykit-reclaim/main/docs/ha-device.png"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "BTicino EasyKit Reclaim", "description": "Reclaiming a BTicino/Legrand EasyKit door station on the LAN, no cloud: recover the TLS client identity, beat the static-ECDH cipher wall (mbedTLS 3.6.x), register over SIP-TLS locally, get the ring and an on-ring photo into Home Assistant, and open the gate/lock/light with a local SIP MESSAGE. Proven in production.", "codeRepository": "https://github.com/cerealkiller57540/bticino-easykit-reclaim", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/bticino-easykit-reclaim.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-11-11", "keywords": "android, bticino, door-entry, doorbell, easykit, frida, home-assistant, home-automation, intercom, legrand, local-control, mbedtls, mutual-tls, pjsip, planned-obsolescence, reverse-engineering, right-to-repair, sip, tls, video-doorbell", "image": "https://raw.githubusercontent.com/cerealkiller57540/bticino-easykit-reclaim/main/docs/ha-device.png"}</script>
 <link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
 <nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Interoperability & reverse engineering</nav>
 <header class="page-head"><h1>BTicino EasyKit Reclaim</h1>
@@ -26,10 +26,13 @@
 end to end: the TLS client identity is recovered from the vendor app, the mutual-TLS handshake to
 the door station succeeds, and a SIP <code>REGISTER</code> is accepted (<code>200 OK</code>) — all on the LAN, with no
 cloud. On top of that, a background client <strong>catches the incoming call and grabs a photo of the
-visitor on ring</strong> (<a href="#9-catching-the-ring-and-grabbing-a-photo">§9</a>), and the gate/lock is
-<strong>opened locally</strong> over the same SIP channel (<a href="#8-opening-the-door-locally">§8</a>) — both running
-and proven, both cloud-free. What is left is polish (full live media, richer event history,
-night-time tuning); those parts are in <a href="#10-work-in-progress--where-this-is-going">§10</a>.</p>
+visitor on ring</strong> (<a href="#9-catching-the-ring-and-grabbing-a-photo">§9</a>), the gate/lock is
+<strong>opened locally</strong> over the same SIP channel (<a href="#8-opening-the-door-locally">§8</a>), the client can
+<strong>answer and record a message</strong> from the visitor instead of only photographing them, and a <strong>live
+view of the entrance can be pulled on demand</strong> by placing an outgoing call to the door station
+itself (<a href="#10-seeing-the-entrance-on-demand--a-live-view">§10</a>) — all four running and proven end
+to end, all cloud-free. What is left after that is polish on all of these; see
+<a href="#11-work-in-progress--where-this-is-going">§11</a>.</p>
 <p><strong>What this does.</strong> This project <em>reads</em> the door station — it knows when someone rings and grabs
 a photo of the visitor on ring — and it <em>drives</em> it: the gate/lock-release command travels over
 the <strong>same local SIP channel</strong>, as a small SIP <code>MESSAGE</code>, with <strong>no cloud</strong> (see
@@ -37,15 +40,16 @@ the <strong>same local SIP channel</strong>, as a small SIP <code>MESSAGE</code>
 claimed opening had to go through the vendor cloud over HTTPS. Reading the decompiled app
 (<a href="#2-decompiling-the-app--the-backbone">§2</a>) showed that is false: it is local, and it is proven.</p>
 <p><strong>What this repo is — read this before you judge reproducibility.</strong> This is a <strong>method with
-proofs</strong>, not a drop-in product. What ships here reproduces the hard, transferable parts: the
-toolchain build, the decompile, the Frida identity capture, the TLS handshake and the SIP
-<code>REGISTER</code> (<a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/tree/main/scripts/"><code>scripts/</code></a>). The always-on client that ties it together — catch the ring,
-write the AVI, pull the frame, publish over MQTT, emit the open <code>MESSAGE</code> (<a href="#8-opening-the-door-locally">§8</a>/<a href="#9-catching-the-ring-and-grabbing-a-photo">§9</a>) — runs in the author's
-house and is what "proven in production" refers to, but it is <strong>not published</strong>: it is welded to
-device-specific identifiers that must not leave the owner's vault (<a href="#7-handling-the-identity-safely">§7</a>).
-So: the handshake and register are reproducible from this repo today; the ring/photo/open service
-you must assemble yourself from the documented shape in §8–§9. Publishing a cleanly anonymised
-version of that service is the main open task.</p>
+proofs</strong>, not a drop-in product. <a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/tree/main/scripts/"><code>scripts/</code></a> reproduces the hard, transferable parts:
+the toolchain build, the decompile, the Frida identity capture, the TLS handshake and the SIP
+<code>REGISTER</code>. The always-on client that ties it together — catch the ring, write the AVI, pull the
+frame, publish over MQTT, emit the open <code>MESSAGE</code>, answer and record, pull the live view
+(<a href="#8-opening-the-door-locally">§8</a>–<a href="#11-work-in-progress--where-this-is-going">§11</a>) — is
+published in <a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/tree/main/service/"><code>service/</code></a>, byte for byte the files running in the author's house, with
+every device-specific identifier moved out to a config file that never leaves the owner's machine
+(<a href="#7-handling-the-identity-safely">§7</a>). It needs the small pjsua patch in
+<a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/tree/main/pjsua-patch/"><code>pjsua-patch/</code></a>. It is a reference implementation for one house, not a package:
+expect to adapt it.</p>
 <p><strong>One load-bearing caveat, up front:</strong> the whole approach rides on <strong>mbedTLS 3.6.x</strong>, whose LTS
 support ends around <strong>March 2027</strong>, because the door only speaks static-ECDH cipher suites that
 mbedTLS 4.x and modern OpenSSL have removed. After that you are on an out-of-support TLS library
@@ -244,6 +248,10 @@ order:</p>
 <p>There is deliberately <strong>no single "do everything" button</strong>: the identity extraction (§3) is
 inherently interactive (a running emulator, a pairing flow you click through), so anyone promising a
 one-click AIO for <em>that</em> step is hand-waving. Everything on either side of it is scripted.</p>
+<p>Past the <code>REGISTER</code>, the always-on client lives in <a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/tree/main/service/"><code>service/</code></a> and needs the video build
+of pjsua with the patch in <a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/tree/main/pjsua-patch/"><code>pjsua-patch/</code></a>. That build uses a newer pjproject
+revision than the <code>2.17</code> tag <code>00-setup-toolchain.sh</code> checks out. The base commit and the extra
+build settings are in <a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/blob/main/pjsua-patch/README.md"><code>pjsua-patch/README.md</code></a>.</p>
 <hr>
 <div class="markdown-heading"><h2 class="heading-element">The short version</h2><span id="the-short-version"></span></div>
 <p>A BTicino/Legrand EasyKit door station is, under the vendor skin, a SIP endpoint protected by
@@ -570,10 +578,11 @@ command channel (an MQTT topic), and the open request is handed to it; it emits 
 from its already-registered endpoint (out of dialog — a <code>REGISTER</code> creates no dialog, and the open
 request isn't tied to a call). One registration, two jobs.</p>
 <blockquote>
-<p>No real actuator address, method name, CN or SIP identity is published here — those are
-device-specific and live only in the owner's vault (§7). What transfers is the shape: <em>decompile
-the unlock path → it's a local SIP <code>MESSAGE</code> with a JSON-RPC body → send it from your one
-registered client.</em></p>
+<p>No real actuator address, CN or SIP identity is published here — those are device-specific and
+live only in the owner's vault (§7). The method names and the body layout are the vendor's, the
+same on every kit, and they are in the published client (<a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/tree/main/service/"><code>service/</code></a>). What transfers
+is the shape: <em>decompile the unlock path → it's a local SIP <code>MESSAGE</code> with a JSON-RPC body → send
+it from your one registered client.</em></p>
 </blockquote>
 <hr>
 <div class="markdown-heading"><h2 class="heading-element">9. Catching the ring and grabbing a photo</h2><span id="9-catching-the-ring-and-grabbing-a-photo"></span></div>
@@ -607,10 +616,11 @@ ffmpeg -i ring.avi -vf &quot;select=&#x27;eq(n,10)&#x27;&quot; -frames:v 1 -q:v 
 <span class="pl-c"><span class="pl-c">#</span> RIGHT: pick an absolute frame number; n starts at 0</span>
 ffmpeg -i ring.avi -vf <span class="pl-s"><span class="pl-pds">"</span>select='eq(n,10)'<span class="pl-pds">"</span></span> -frames:v 1 -q:v 2 out.jpg</pre></div>
 <p><strong><code>10</code> here is an example, not a magic number</strong> — it's the frame <em>I</em> measured as clean (~4 s after
-the <code>183</code>, once the stream has stabilised and the visitor is centred), in daylight. The right index
-depends on your own ring timing and lighting (the IR illuminator at night changes it — see §10), so
-measure yours rather than copying <code>10</code>. The method — index, not seconds — is what transfers. Verify
-the real rate yourself before trusting any timing:</p>
+the <code>183</code>, once the stream has stabilised and the visitor is centred), in daylight, and confirmed to
+hold at night too on this unit (the IR illuminator changes the picture, not the timing, for this
+camera). The right index still depends on your own ring timing and lighting, so measure yours rather
+than copying <code>10</code>. The method — index, not seconds — is what transfers. Verify the real rate
+yourself before trusting any timing:</p>
 <div class="highlight highlight-source-shell notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="ffprobe -v error -select_streams v:0 \
   -show_entries stream=nb_frames,avg_frame_rate,r_frame_rate,duration \
   -of default=nw=1 ring.avi"><pre>ffprobe -v error -select_streams v:0 \
@@ -675,11 +685,11 @@ And the broker must enforce an <strong>ACL</strong> so only HA and this client c
 </blockquote>
 <p>The whole path — ring → early-media AVI → frame by index → JPEG → MQTT camera in HA, and HA button
 → MQTT → local SIP <code>MESSAGE</code> → relay — runs on your LAN, with the cloud never in the loop, and is
-<strong>proven in production</strong>.</p>
-<p><a target="_blank" rel="noopener noreferrer" href="https://raw.githubusercontent.com/cerealkiller57540/bticino-easykit-reclaim/main/docs/ha-device.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/bticino-easykit-reclaim/main/docs/ha-device.png" alt="The reclaimed door station in Home Assistant: an MQTT device exposing the gate / stairwell-light / gate-impulse buttons, the ring binary sensor, the on-ring camera snapshot, and an activity log of real commands — all local." style="max-width: 100%;" loading="lazy"></a></p>
-<p><em>The door station as a native MQTT device in Home Assistant — opening buttons, ring sensor, on-ring
-snapshot (blurred here), and a log of real commands. No cloud. (The camera thumbnail is deliberately
-blurred; everything else is the actual device page.)</em></p>
+<strong>proven in production</strong>. The client that does it is in <a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/tree/main/service/"><code>service/</code></a>; its real topics
+differ from the placeholders above and are listed in <a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/blob/main/service/README.md"><code>service/README.md</code></a>.</p>
+<p><a target="_blank" rel="noopener noreferrer" href="https://raw.githubusercontent.com/cerealkiller57540/bticino-easykit-reclaim/main/docs/ha-device.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/bticino-easykit-reclaim/main/docs/ha-device.png" alt="The reclaimed door station in Home Assistant: an MQTT device exposing the gate / stairwell-light / gate-impulse buttons, the live-view and answering-machine controls, the ring/photo/last-call sensors, and an activity log of real commands — all local." style="max-width: 100%;" loading="lazy"></a></p>
+<p><em>The door station as a native MQTT device in Home Assistant — opening buttons, the live-view switch,
+the answering-machine toggle, ring/photo/last-call sensors, and a log of real commands. No cloud.</em></p>
 <blockquote>
 <p>Why MQTT Discovery rather than a REST/template sensor: the client <em>pushes</em> on an event (a ring is
 rare and instantaneous), retained config survives an HA restart, and the camera takes raw JPEG on
@@ -687,19 +697,140 @@ a topic with no extra plumbing. It is the lightest honest way to get a <em>pushe
 <em>command</em> path into HA.</p>
 </blockquote>
 <hr>
-<div class="markdown-heading"><h2 class="heading-element">10. Work in progress — where this is going</h2><span id="10-work-in-progress--where-this-is-going"></span></div>
-<p>The hard parts are done and proven: identity extraction, the static-ECDH TLS wall, local
-registration, <strong>photo on ring (§9)</strong>, and <strong>local door opening (§8)</strong>. What remains is polish, not
-cryptography:</p>
+<div class="markdown-heading"><h2 class="heading-element">10. Seeing the entrance on demand — a live view</h2><span id="10-seeing-the-entrance-on-demand--a-live-view"></span></div>
+<p>Everything above is the door calling <em>you</em>. This section is the other direction: your own
+registered endpoint places an <strong>outgoing</strong> call to the door station, to pull a live view of the
+entrance on demand — e.g. from an HA switch, without waiting for a ring.</p>
+<p>The SDP mechanics are the same offer/answer machinery as §9 — the door answers an INVITE's media
+offer the same way whether it's calling you or being called — but getting the video to actually
+<em>arrive and decode</em> turned up a subtlety worth documenting on its own, because the obvious
+diagnosis is wrong.</p>
+<div class="markdown-heading"><h3 class="heading-element">The naive theory, and why it's wrong</h3><span id="the-naive-theory-and-why-its-wrong"></span></div>
+<p>The first hypothesis was: "the door only sends video if you offer <code>sendrecv</code>; offer <code>recvonly</code> and
+it stays quiet." That's <strong>false</strong>, and <code>tcpdump</code> on the call itself is what disproves it: with a
+<code>recvonly</code> offer, the door answers and <strong>does send video — hundreds of RTP packets</strong>, captured on
+the wire. So the door isn't the problem. The video that never showed up was being lost <strong>after</strong>
+capture, entirely on the local side, for two independent reasons:</p>
+<ol>
+<li><strong>A stateful firewall never opened a return path.</strong> The local box runs a default-drop stateful
+firewall (nftables/iptables-style). Offering <code>recvonly</code> means the local endpoint never
+<em>transmits</em> from its video port — so no outbound packet ever creates a connection-tracking
+entry for that flow. The door's inbound RTP arrives at the right port but matches no tracked
+connection, and the stateful ruleset drops it <strong>silently, with no ICMP, no log</strong>. <code>tcpdump</code>
+still shows the packets, because it captures before netfilter — which is exactly what makes
+this easy to misdiagnose as "the device isn't sending anything" when the opposite is true.</li>
+<li><strong>A software hold guard, independent of the firewall.</strong> Even with the drop fixed, the
+SIP/media stack used here (pjsua) derives its <em>call media state</em> purely from the <strong>negotiated
+direction</strong>: a <code>recvonly</code> offer is treated as placing the far end on hold, so the call state
+never reaches <code>ACTIVE</code> — and a guard in the app layer refuses to connect the video recorder to
+any stream that isn't <code>ACTIVE</code>. Packets could be flowing perfectly and the recorder would still
+write an empty file, because the state machine, not the network, is gating it.</li>
+</ol>
+<div class="markdown-heading"><h3 class="heading-element">The fix: offer <code>sendrecv</code>, not <code>recvonly</code></h3><span id="the-fix-offer-sendrecv-not-recvonly"></span></div>
+<p>Offering <strong><code>sendrecv</code></strong> instead resolves both problems in one move, for reasons that are really
+about the local stack rather than the door: transmitting even a minimal video stream from the
+local endpoint is enough to open a connection-tracking entry for the return traffic, and a
+negotiated <code>sendrecv</code> reliably drove the call state to <code>ACTIVE</code>, unblocking the recorder guard.
+Measured on the bench with the real device: with <code>recvonly</code>, the output file stayed at a few
+hundred bytes; with <code>sendrecv</code>, the same call produced a multi-megabyte, correctly decoded clip
+within seconds.</p>
+<p>Two fixes were possible once the firewall drop was identified — add a permanent accept rule for
+the video flow, or simply stop triggering the drop by offering <code>sendrecv</code>. The permanent firewall
+rule was rejected: it would apply to <em>every</em> call, including the already-proven incoming-ring path
+(§9), for a risk that isn't worth taking on a path that already works. Offering <code>sendrecv</code> only on
+the outgoing "see the entrance" call keeps the fix scoped to the new feature and touches neither
+the firewall policy nor the ring path.</p>
+<div class="markdown-heading"><h3 class="heading-element">How it's wired up</h3><span id="how-its-wired-up"></span></div>
+<p>An outgoing call is placed from the same registered endpoint used throughout this project (§6),
+targeting the door station's own SIP URI, with a <code>sendrecv</code> video offer in the INVITE. Home
+Assistant exposes this as a simple switch over MQTT (same Discovery pattern as §9): turning it on
+places the call and starts recording; turning it off tears the call down. The <code>sendrecv</code> offer and
+the device-address attribute are added by the pjsua patch in <a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/tree/main/pjsua-patch/"><code>pjsua-patch/</code></a>, and
+the companion service below is <a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/blob/main/service/bticino_live.py"><code>service/bticino_live.py</code></a>. No real SIP
+URI or device address is published here — see §7 for why.</p>
+<div class="markdown-heading"><h3 class="heading-element">Getting the call into Home Assistant as a camera</h3><span id="getting-the-call-into-home-assistant-as-a-camera"></span></div>
+<p>The recorder writes one AVI per call, and that file <strong>grows while the call is up</strong>. A small
+companion service tails it, pipes it into <code>ffmpeg</code>, and republishes it as RTSP to a local relay
+(go2rtc, with an empty stream that only exists while something publishes). HA sees a plain
+<code>generic</code> camera pointed at that relay. Nothing else is needed on the HA side.</p>
 <ul>
-<li><strong>Full live media</strong>, not just a snapshot — negotiate the INVITE's SDP for a continuous view.</li>
+<li><strong>Sound.</strong> The recorder can write the call's audio track (16 kHz mono PCM) into the same AVI;
+<code>ffmpeg</code> encodes it to AAC next to the video. You hear the entrance, not just see it.</li>
+<li><strong>The door hangs up after about a minute.</strong> An outgoing call to the door station is cut by the
+device itself after ~63 s (measured, repeatable). That's the device's limit, not a bug to fix;
+the HA switch simply follows the real end of the call.</li>
+<li><strong>A dashboard card that only exists during the call.</strong> Outside a call the stream does not
+exist, so any card that keeps polling it fills the HA log with 404 / timeout / EOF errors. A
+card with a <code>visibility</code> condition on the live switch is <em>removed from the page</em> while hidden,
+so it makes no requests at all. That's cleaner than filtering the log, which would also hide a
+real failure.</li>
+</ul>
+<div class="markdown-heading"><h3 class="heading-element">Gotcha — mixed timestamps make HA drop the video</h3><span id="gotcha--mixed-timestamps-make-ha-drop-the-video"></span></div>
+<p>The input is a pipe fed in bursts, so the video is stamped with <code>-use_wallclock_as_timestamps 1</code>.
+The first audio attempt used <code>aresample=async=1:first_pts=0</code>, which restarts the <strong>audio</strong> clock
+at zero while the video sits at wall-clock time. That leaves the two tracks hours apart. Players
+cope, but HA's <code>stream</code> worker remuxes to MP4, and the remux silently <strong>drops the video</strong>. The
+symptom in the HA log is <code>Error muxing first keyframe (Invalid argument)</code>.</p>
+<p>The fix is to keep both tracks on the same wall-clock base and let the resampler absorb the burst
+jitter:</p>
+<div class="snippet-clipboard-content notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="-map 0:v:0 -map 0:a:0? -af aresample=async=1:min_hard_comp=0.5 -c:a aac -ar 16000 -ac 1"><pre lang="text" class="notranslate"><code>-map 0:v:0 -map 0:a:0? -af aresample=async=1:min_hard_comp=0.5 -c:a aac -ar 16000 -ac 1
+</code></pre></div>
+<p>On the bench, this was the only variant that gave aligned tracks, no audio gaps, and an MP4 remux
+that kept both tracks. <code>async=1</code> alone left ~0.1 s gaps. The trailing <code>?</code> means a silent AVI
+doesn't fail the pipeline. What you lose is the backlog read in one go at startup, which is the
+right trade-off for a live view.</p>
+<div class="markdown-heading"><h3 class="heading-element">Status</h3><span id="status"></span></div>
+<p><strong>Proven end to end</strong> on the real device: switch press → outgoing call → growing AVI → RTSP relay
+→ camera in HA, with the entrance audible (wind and street noise, the same as on the indoor
+monitor).</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">11. Work in progress — where this is going</h2><span id="11-work-in-progress--where-this-is-going"></span></div>
+<p>The hard parts are done and proven: identity extraction, the static-ECDH TLS wall, local
+registration, <strong>photo on ring (§9)</strong>, <strong>local door opening (§8)</strong>, and <strong>on-demand live view
+(§10)</strong>. What's below is actually in flight — proven in the parts that matter most, still rough
+around the edges — plus the smaller items that are just polish.</p>
+<div class="markdown-heading"><h3 class="heading-element">Answering machine — proven, not yet hardened</h3><span id="answering-machine--proven-not-yet-hardened"></span></div>
+<p>Instead of only grabbing a photo on ring (§9), the same registered endpoint can <strong>answer</strong> the
+call: accept the <code>INVITE</code> instead of just recording the early-media, play back a short announcement,
+record whatever the visitor says, then hang up and ship the recording out (e.g. as a voice message).
+The call-control side of this — answer, play an announcement, record a separate file per call,
+hang up — is the same <code>pjsua</code> client used throughout this project, just driven a step further than
+the record-only path in §9.</p>
+<p>This is <strong>proven</strong>: a real test at the door, visitor speaking, audio both ways confirmed clean
+(no packet loss on either leg), announcement played correctly, the recorded message captured and
+delivered — all on one call, end to end. What's still rough:</p>
+<ul>
+<li><strong>No transcription</strong> — the message ships as audio, by design, not because speech-to-text would
+be hard to bolt on. Doing that well is future work.</li>
+<li><strong>Audio levels and filtering</strong> are still being tuned call to call; the announcement and the
+recording both needed hand-tuned gain/EQ to sound right, and that tuning isn't finished.</li>
+<li><strong>Gating on presence</strong> (only answer when nobody is home) is currently automation glue outside
+this client, not something the client itself decides. One trap: phone geolocation produces
+short <code>not_home</code> blips of a few seconds while you're at home. If the automation reacts to every
+return to <code>home</code>, it keeps switching the answering machine off behind your back. Only act when
+the previous <code>not_home</code> state lasted long enough to be real (a few minutes).</li>
+</ul>
+<div class="markdown-heading"><h3 class="heading-element">Hardening the client</h3><span id="hardening-the-client"></span></div>
+<p>The client is one long-running process juggling the SIP stack, MQTT, the live view and the
+answering machine, so a review focused on what could wedge it:</p>
+<ul>
+<li><strong>One lock order everywhere.</strong> Two code paths took the same two locks in opposite order, a
+rare deadlock that would leave the service frozen with no restart. Every path now takes them
+in the same order.</li>
+<li><strong>A systemd watchdog.</strong> <code>WatchdogSec=</code> is set and the client pings it only after acquiring its
+state lock, so a frozen client really is restarted.</li>
+<li><strong>MQTT broker absent at boot isn't fatal.</strong> The client connects asynchronously and retries,
+instead of crashing when the broker comes up after it.</li>
+<li><strong>No ghost calls.</strong> Call records are timestamped, and stale ones are purged before a new live
+view starts.</li>
+</ul>
+<div class="markdown-heading"><h3 class="heading-element">Smaller remaining items</h3><span id="smaller-remaining-items"></span></div>
+<ul>
 <li><strong>Richer event history</strong> — log every INVITE and its outcome for a who-rang-when record.</li>
-<li><strong>Night-time robustness</strong> — confirm the on-ring photo timing holds with the IR illuminator at
-night (the frame-index tuning in §9 was measured in daylight).</li>
 </ul>
 <p>These land as separate, documented commits.</p>
 <hr>
-<div class="markdown-heading"><h2 class="heading-element">11. Related work</h2><span id="11-related-work"></span></div>
+<div class="markdown-heading"><h2 class="heading-element">12. Related work</h2><span id="12-related-work"></span></div>
 <p><a href="https://github.com/deddroid/bticino-easykit"><code>deddroid/bticino-easykit</code></a> is the other serious
 open-source EasyKit client, and it is worth knowing about — it takes the <strong>opposite</strong> route. It
 reaches the kit <strong>through the Netatmo/BTicino cloud</strong>: you sign in with a Netatmo "Home + Security"
@@ -716,6 +847,10 @@ cut.</p>
 path above looks like the Wi-Fi, Netatmo-rebadged kit; the work here targets the SIP-TLS model with
 its own SIP domain. If your kit behaves differently from what either README describes, you may simply
 have the other generation.</p>
+<div class="markdown-heading"><h2 class="heading-element">License</h2><span id="license"></span></div>
+<p>The text of this write-up, the scripts and the client in <a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/tree/main/service/"><code>service/</code></a> are released under
+the <a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/tree/main/LICENSE">MIT License</a>. The patch in <a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim/tree/main/pjsua-patch/"><code>pjsua-patch/</code></a> is a derivative of
+pjproject and is released under pjproject's license, GPL-2.0-or-later.</p>
 </main>
-<footer>Source and issues: <a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim">cerealkiller57540/bticino-easykit-reclaim</a> · Updated 2026-10-31 · <a href="../index.html">All projects</a> · <a href="../compatibility.html">Compatibility</a></footer>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/bticino-easykit-reclaim">cerealkiller57540/bticino-easykit-reclaim</a> · Updated 2026-11-11 · <a href="../index.html">All projects</a> · <a href="../compatibility.html">Compatibility</a></footer>
 </div></body></html>

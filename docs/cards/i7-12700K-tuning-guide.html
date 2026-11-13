@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>i7-12700K Tuning Guide — Tuning an i7-12700K on an ASUS TUF Z790 D4</title>
+<meta name="description" content="Tuning an i7-12700K on an ASUS TUF Z790 D4: a measured, step-by-step account with its mistakes and evidence gaps">
+<link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/i7-12700K-tuning-guide.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="i7-12700K Tuning Guide — Tuning an i7-12700K on an ASUS TUF Z790 D4">
+<meta property="og:description" content="Tuning an i7-12700K on an ASUS TUF Z790 D4: a measured, step-by-step account with its mistakes and evidence gaps">
+<meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/i7-12700K-tuning-guide.html">
+<meta property="og:site_name" content="Neon Cards for Home Assistant">
+<meta name="twitter:card" content="summary">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "i7-12700K Tuning Guide", "description": "Tuning an i7-12700K on an ASUS TUF Z790 D4: a measured, step-by-step account with its mistakes and evidence gaps", "codeRepository": "https://github.com/cerealkiller57540/i7-12700K-tuning-guide", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/i7-12700K-tuning-guide.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-11-13", "keywords": ""}</script>
+<link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
+<nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Other projects</nav>
+<header class="page-head"><h1>i7-12700K Tuning Guide</h1>
+<p class="lead">Tuning an i7-12700K on an ASUS TUF Z790 D4: a measured, step-by-step account with its mistakes and evidence gaps</p>
+<div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/i7-12700K-tuning-guide">View on GitHub</a></div></header>
+<main class="markdown-body">
+<div class="markdown-heading"><h2 class="heading-element">Tuning an i7-12700K on an ASUS TUF Z790 D4</h2><span id="tuning-an-i7-12700k-on-an-asus-tuf-z790-d4"></span></div>
+<p>From an ASUS auto-overclocked BIOS ("Remove All Limits") to a cooler, more stable and lower-latency build for <strong>gaming and real-time audio</strong>. A measured, step-by-step account, mistakes included.</p>
+<p><strong>I am not an overclocking professional.</strong> I did this with an AI assistant (Claude) as a co-pilot, and part of the point of this repo is to show what that is worth: one change at a time, the right sensor to read, a measurement after every step, cautious values (power cap instead of "no limits"), and an audit of this write-up against the original conversation that caught overstated claims. Several weeks later the PC runs well and feels very responsive (subjective; the measurements and their limits are below). The assistant and I both made mistakes: they are listed in the guide.</p>
+<blockquote>
+<p><strong>Status: work in progress.</strong> The undervolt (AC load line 0.20) has <strong>not</strong> passed long-term validation yet (CoreCycler, Geekbench/3DMark loops). Items marked <strong>TODO</strong> below are not measured yet. Every CPU is different: use this as a <em>method</em> and as starting points, never as settings to copy.</p>
+</blockquote>
+<p><strong>Hardware</strong>: i7-12700K · ASUS TUF GAMING Z790-PLUS WIFI D4 (BIOS 1805) · 4 × 8 GB DDR4-3600 CL18 (Micron Rev. E) · RTX 5080 · Windows 11 build 26200.</p>
+<p><strong>Read the full method</strong>: <a href="https://github.com/cerealkiller57540/i7-12700K-tuning-guide/blob/main/GUIDE.md">GUIDE.md</a></p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">Results at a glance</h2><span id="results-at-a-glance"></span></div>
+<p>PC feels snappier in everyday use (subjective). What the measurements say:</p>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Before</th>
+<th>After</th>
+<th>Confidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Load voltage, OCCT CPU + RAM</td>
+<td>~1.231 V (1 h average)</td>
+<td>1.181 V (instantaneous), about −50 mV</td>
+<td>Good: same test and settings, but average vs instantaneous reading (<a href="https://github.com/cerealkiller57540/i7-12700K-tuning-guide/blob/main/evidence/README.md">evidence</a>)</td>
+</tr>
+<tr>
+<td>Load voltage, Cinebench R23</td>
+<td>1.252 V</td>
+<td>1.172 V, about −80 mV</td>
+<td>Good: same test; ring also raised 36 → 39 in between. Final side re-measured over 9 min on 2026-11-13: 1.173 V (<a href="https://github.com/cerealkiller57540/i7-12700K-tuning-guide/blob/main/measurements/README.md">measurements</a>)</td>
+</tr>
+<tr>
+<td>Package power, OCCT CPU + RAM</td>
+<td>~129 W (average)</td>
+<td>~117 W (instantaneous)</td>
+<td>Indicative: methods not matched. Under Cinebench it did not change (161 W → 163 W)</td>
+</tr>
+<tr>
+<td>CPU temperature, OCCT CPU + RAM</td>
+<td>~55 °C (average)</td>
+<td>~49 °C (instantaneous)</td>
+<td>Indicative: methods not matched. Under Cinebench: 68 °C → 70 °C max</td>
+</tr>
+<tr>
+<td>Memory controller (SA) voltage</td>
+<td>1.38 to 1.39 V</td>
+<td><strong>1.25 V</strong></td>
+<td>Solid</td>
+</tr>
+<tr>
+<td>Memory bandwidth (AIDA64)</td>
+<td>53.3 GB/s</td>
+<td><strong>54.6 GB/s (+2.3 %)</strong></td>
+<td>Solid (single-run noise applies)</td>
+</tr>
+<tr>
+<td>Time lost to RAM refresh</td>
+<td>≈ 4.5 %</td>
+<td><strong>≈ 1.1 %</strong></td>
+<td>Calculated from tRFC ÷ tREFI</td>
+</tr>
+<tr>
+<td>Power limits</td>
+<td>None (4095 W)</td>
+<td><strong>190 W</strong></td>
+<td>Setting</td>
+</tr>
+<tr>
+<td>Avg latency, interrupt → DPC (LatencyMon)</td>
+<td>12.4 µs</td>
+<td>4.4 µs</td>
+<td><strong>Indicative only</strong>: runs of 50 s vs 3 h, several changes at once; the baseline already had C3 and ASPM-off</td>
+</tr>
+<tr>
+<td>Avg latency, interrupt → process (LatencyMon)</td>
+<td>30.2 µs</td>
+<td>19.2 µs</td>
+<td><strong>Indicative only</strong>: same caveat</td>
+</tr>
+<tr>
+<td>Multi-core score (Cinebench R23)</td>
+<td><strong>TODO (Auto baseline)</strong></td>
+<td>22 753, then 22 721 on the final timings</td>
+<td>The 190 W cap should cost about 5 % <em>(estimate)</em></td>
+</tr>
+<tr>
+<td>Idle power / temperature</td>
+<td><strong>TODO</strong></td>
+<td>17 W / 28 °C (5 min average)</td>
+<td>No Auto counterpart yet; expect a cost from C3, ASPM off, EPP 0</td>
+</tr>
+</tbody>
+</table>
+<div class="markdown-heading"><h3 class="heading-element">Things to know before you copy anything</h3><span id="things-to-know-before-you-copy-anything"></span></div>
+<ul>
+<li>The <strong>peak</strong> LatencyMon values got slightly <em>worse</em> (1.6 → 2.7 ms) over the much longer run; only the averages improved.</li>
+<li>The snappier feel is subjective, and <strong>which setting causes it is not established</strong>. C3 and ASPM-off were already active in the baseline LatencyMon run, so their effect was never measured on its own; the interrupt affinity, EPP 0 and the tighter memory timings were added in steps that were not isolated either.</li>
+<li>The power-limit, SA-voltage and undervolt changes mainly serve temperature and longevity. The watt and degree savings of the undervolt show up in my OCCT numbers (with the method caveats above) but <strong>not</strong> under Cinebench R23.</li>
+<li><strong>tREFI 49151 / tRFC 530</strong> was validated with 48 minutes of TM5, not a full hour. DIMMs were logged at 42 °C only on the earlier tREFI 32767 / tRFC 560 step, and never in a gaming session. Re-test in a hot room before trusting it in summer.</li>
+<li>The <strong>AC load line 0.20</strong> undervolt is provisional: Cinebench and short OCCT runs only. CoreCycler, Geekbench and 3DMark were never run. What I do have is an Event Viewer check on 2026-11-13: about three weeks of daily use with <strong>no crash</strong> (no Kernel-Power 41, no unexpected shutdown, no blue screen) and <strong>no WHEA machine-check error</strong>; the only WHEA entries are 7 informational boot-time records from 22 and 24/10, while I was changing BIOS settings, and none since. That is reassuring but not proof: a failing undervolt can corrupt silently, without Windows logging anything.</li>
+<li>MSI mode is <strong>enabled</strong> on the GPU, USB controller and sound card, and the interrupt affinity (CPU 4, 8 and 6) matches the guide; both were checked in the registry on 2026-11-13. I always enable MSI by hand on the GPU and sound card (so I can't say what the drivers do by default), and the toolbox script set the affinity. MSI was not measured separately, so the guide doesn't count it as a gain of this tuning.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">What's in this repo</h2><span id="whats-in-this-repo"></span></div>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="https://github.com/cerealkiller57540/i7-12700K-tuning-guide/blob/main/GUIDE.md">GUIDE.md</a></td>
+<td>The full step-by-step method, final BIOS and Windows settings, measurements, mistakes, to-do list</td>
+</tr>
+<tr>
+<td><a href="https://github.com/cerealkiller57540/i7-12700K-tuning-guide/tree/main/evidence/">evidence/</a></td>
+<td>22 screenshots and BIOS photos from the tuning process (Auto BIOS, OCCT, HWiNFO, AIDA64, memory timings, interrupt affinity). They are <strong>step captures, not final-configuration proof</strong>, and the folder README lists what was never captured (Cinebench R23, LatencyMon summary, TM5)</td>
+</tr>
+<tr>
+<td><a href="https://github.com/cerealkiller57540/i7-12700K-tuning-guide/blob/main/measurements/README.md">measurements/</a></td>
+<td>Scripted runs on the final configuration (idle + Cinebench R23, per-second sensor logs, HWiNFO log, summaries)</td>
+</tr>
+<tr>
+<td><a href="https://github.com/cerealkiller57540/i7-12700K-tuning-guide/blob/main/tools/measure.ps1">tools/</a></td>
+<td><code>measure.ps1</code>, the PowerShell script that produced them (LibreHardwareMonitorLib, run as administrator)</td>
+</tr>
+<tr>
+<td><a href="https://github.com/cerealkiller57540/i7-12700K-tuning-guide/blob/main/LICENSE.md">LICENSE.md</a></td>
+<td>CC BY 4.0</td>
+</tr>
+</tbody>
+</table>
+<p><em>Spotted a mistake, or have numbers from a similar setup? Please open an issue.</em></p>
+</main>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/i7-12700K-tuning-guide">cerealkiller57540/i7-12700K-tuning-guide</a> · Updated 2026-11-13 · <a href="../index.html">All projects</a> · <a href="../compatibility.html">Compatibility</a></footer>
+</div></body></html>

@@ -16,3 +16,4 @@ https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/liveboxtv_ng
 https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/bticino-easykit-reclaim.html
 https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/tuya-localkey-frida.html
 https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/ShakeWSUS.html
+https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/i7-12700K-tuning-guide.html

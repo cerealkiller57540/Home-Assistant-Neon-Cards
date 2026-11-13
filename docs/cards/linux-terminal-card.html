@@ -12,12 +12,12 @@
 <meta property="og:image" content="https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/main.png">
 <meta name="twitter:image" content="https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/main.png">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Linux Terminal Card", "description": "Sci-fi CRT terminal card for Home Assistant: CPU, GPU, RAM, temperature, battery, network and updates of a Linux PC, rendered by a WebGL shader (CSS fallback), with a ghost cat.", "codeRepository": "https://github.com/cerealkiller57540/linux-terminal-card", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/linux-terminal-card.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-11-01", "keywords": "crt, custom-card, cyberpunk, dashboard, hacs, home-assistant, linux, lovelace, neon, terminal, webgl", "image": "https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/main.png", "softwareVersion": "1.14.1"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Linux Terminal Card", "description": "Sci-fi CRT terminal card for Home Assistant: CPU, GPU, RAM, temperature, battery, network and updates of a Linux PC, rendered by a WebGL shader (CSS fallback), with a ghost cat.", "codeRepository": "https://github.com/cerealkiller57540/linux-terminal-card", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/linux-terminal-card.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-11-05", "keywords": "crt, custom-card, cyberpunk, dashboard, hacs, home-assistant, linux, lovelace, neon, terminal, webgl", "image": "https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/main.png", "softwareVersion": "1.14.3"}</script>
 <link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
 <nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Dashboard cards</nav>
 <header class="page-head"><h1 class="banner"><img src="https://raw.githubusercontent.com/cerealkiller57540/linux-terminal-card/main/images/logo.png" alt="Linux Terminal Card"></h1>
 <p class="lead">Sci-fi CRT terminal card for Home Assistant: CPU, GPU, RAM, temperature, battery, network and updates of a Linux PC, rendered by a WebGL shader (CSS fallback), with a ghost cat.</p>
-<p class="facts"><a href="https://github.com/cerealkiller57540/linux-terminal-card/releases/latest">v1.14.1</a> · Home Assistant 2024.1+</p>
+<p class="facts"><a href="https://github.com/cerealkiller57540/linux-terminal-card/releases/latest">v1.14.3</a> · Home Assistant 2024.1+</p>
 <div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/linux-terminal-card">View on GitHub</a><a class="my-badge" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=cerealkiller57540&amp;repository=linux-terminal-card&amp;category=plugin"><img src="https://my.home-assistant.io/badges/hacs_repository.svg" alt="Open Marketplace repository on My Home Assistant"></a></div></header>
 <p class="intro">A system monitor for a Linux PC, shown as a shell session on an old CRT tube. CPU, RAM, temperature, battery, network and pending updates each get a bar, and warnings escalate from amber to a red banner. Pick it to keep an eye on a server, a laptop or a home lab machine from Home Assistant, with alerts you will actually notice.</p>
 <main class="markdown-body">
@@ -372,7 +372,7 @@ disk_hot: 95"><pre><span class="pl-ent">disk_entity</span>: <span class="pl-s">s
 <p><strong>Some cards go blank on my Android phone.</strong> Android WebViews keep at most 8 WebGL contexts per page and drop the oldest one. This card uses one.</p>
 <p><strong>Where do the OS, kernel and update lines come from?</strong> From any sensors you point the options at. The author feeds them from a small script that publishes over MQTT; Glances covers the rest. Without them the lines are hidden.</p>
 <p><strong>Which languages are supported?</strong> English and French. The editor and the card texts follow your Home Assistant language: French if it is French, English otherwise. Reload the page after changing the language.</p>
-<p><strong>Does it load anything from the internet?</strong> Only the JetBrains Mono and Orbitron fonts, from Google Fonts. No data leaves your Home Assistant.</p>
+<p><strong>Does it load anything from the internet?</strong> No. JetBrains Mono and Orbitron are embedded in the card. The only exception is opt-in: if you set <code>header.font</code> to another font name, that one font is requested from Google Fonts. No data leaves your Home Assistant.</p>
 <p><strong>Which theme is in the screenshots?</strong> Neo Tokyo, the author's own dark theme (not published). The card works with any theme: the glow follows <code>--rgb-primary-color</code> when the theme sets it, otherwise it is cyan.</p>
 <div class="markdown-heading"><h2 class="heading-element">🙏 Credits</h2><span id="-credits"></span></div>
 <ul>
@@ -380,6 +380,8 @@ disk_hot: 95"><pre><span class="pl-ent">disk_entity</span>: <span class="pl-s">s
 <li>The hologram glitch of the cat is inspired by the Johnny Silverhand apparitions in <em>Cyberpunk 2077</em>. The pixel-art cat is the author's own mascot.</li>
 </ul>
 <div class="markdown-heading"><h2 class="heading-element">🌃 More neon cards</h2><span id="-more-neon-cards"></span></div>
+<div class="markdown-heading"><h2 class="heading-element">🔤 Fonts and privacy</h2><span id="-fonts-and-privacy"></span></div>
+<p>JetBrains Mono and Orbitron are embedded in <code>dist/linux-terminal-card.js</code> (Latin subset, WOFF2, unmodified from Google Fonts), so by default the card makes <strong>no request to Google Fonts</strong> or any other third-party server. If you choose another font with <code>header.font</code>, that single font is loaded from Google Fonts. Both embedded fonts are licensed under the SIL Open Font License 1.1, see <a href="https://github.com/cerealkiller57540/linux-terminal-card/blob/main/NOTICE.md">NOTICE.md</a>.</p>
 <div class="markdown-heading"><h2 class="heading-element">🧱 How this repository is built</h2><span id="-how-this-repository-is-built"></span></div>
 <p><code>dist/linux-terminal-card.js</code> is the file HACS installs. It is built from the version running on the author's own Home Assistant: personal defaults are replaced with neutral ones, the version number is stamped, and the build stops if a local IP address or a token is found. That working copy is not published; bugs and suggestions are welcome as issues.</p>
 <p>This card is part of a family. See the full collection at <a href="https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards"><strong>Home-Assistant-Neon-Cards</strong></a>.</p>
@@ -402,5 +404,5 @@ disk_hot: 95"><pre><span class="pl-ent">disk_entity</span>: <span class="pl-s">s
 <div class="markdown-heading"><h2 class="heading-element">📄 License</h2><span id="-license"></span></div>
 <p><a href="https://github.com/cerealkiller57540/linux-terminal-card/tree/main/LICENSE">MIT License</a></p>
 </main>
-<footer>Source and issues: <a href="https://github.com/cerealkiller57540/linux-terminal-card">cerealkiller57540/linux-terminal-card</a> · Updated 2026-11-01 · <a href="../index.html">All projects</a> · <a href="../compatibility.html">Compatibility</a></footer>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/linux-terminal-card">cerealkiller57540/linux-terminal-card</a> · Updated 2026-11-05 · <a href="../index.html">All projects</a> · <a href="../compatibility.html">Compatibility</a></footer>
 </div></body></html>

@@ -12,12 +12,12 @@
 <meta property="og:image" content="https://raw.githubusercontent.com/cerealkiller57540/neon-climate-card/main/images/heat.gif">
 <meta name="twitter:image" content="https://raw.githubusercontent.com/cerealkiller57540/neon-climate-card/main/images/heat.gif">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Neon Climate Card", "description": "Cyberpunk climate card for Home Assistant — airflow rendered by a real WebGL fluid solver", "codeRepository": "https://github.com/cerealkiller57540/neon-climate-card", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-climate-card.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-11-01", "keywords": "climate, cyberpunk, hacs, home-assistant, home-assistant-card, hvac, lovelace, lovelace-custom-card, neon, webgl", "image": "https://raw.githubusercontent.com/cerealkiller57540/neon-climate-card/main/images/heat.gif", "softwareVersion": "1.9.3"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Neon Climate Card", "description": "Cyberpunk climate card for Home Assistant — airflow rendered by a real WebGL fluid solver", "codeRepository": "https://github.com/cerealkiller57540/neon-climate-card", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-climate-card.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-11-10", "keywords": "climate, cyberpunk, hacs, home-assistant, home-assistant-card, hvac, lovelace, lovelace-custom-card, neon, webgl", "image": "https://raw.githubusercontent.com/cerealkiller57540/neon-climate-card/main/images/heat.gif", "softwareVersion": "1.11.2"}</script>
 <link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
 <nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Dashboard cards</nav>
 <header class="page-head"><h1 class="banner"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-climate-card/main/images/logo.png" alt="Neon Climate Card"></h1>
 <p class="lead">Cyberpunk climate card for Home Assistant — airflow rendered by a real WebGL fluid solver</p>
-<p class="facts"><a href="https://github.com/cerealkiller57540/neon-climate-card/releases/latest">v1.9.3</a> · Home Assistant 2024.1+</p>
+<p class="facts"><a href="https://github.com/cerealkiller57540/neon-climate-card/releases/latest">v1.11.2</a> · Home Assistant 2024.1+</p>
 <div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/neon-climate-card">View on GitHub</a><a class="my-badge" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=cerealkiller57540&amp;repository=neon-climate-card&amp;category=plugin"><img src="https://my.home-assistant.io/badges/hacs_repository.svg" alt="Open Marketplace repository on My Home Assistant"></a></div></header>
 <p class="intro">A thermostat card for air conditioners and heat pumps where the airflow is simulated, not looped: a small fluid solver runs on the GPU, so the jets react to the fan speed and swing you set. Pick it for split units and climate entities with fan and swing modes; it reads the ranges and modes your entity exposes, so nothing has to be configured by hand.</p>
 <main class="markdown-body">
@@ -66,13 +66,19 @@ name: Living Room
 humidity_entity: sensor.living_room_humidity   # optional
 header:
   title: Climate
-  icon: mdi:heat-pump"><pre><span class="pl-ent">type</span>: <span class="pl-s">custom:neon-climate-card-webgl</span>
+  icon: mdi:heat-pump
+extra_climates:                                 # optional — more units in the same card
+  - entity: climate.office
+    name: Office"><pre><span class="pl-ent">type</span>: <span class="pl-s">custom:neon-climate-card-webgl</span>
 <span class="pl-ent">entity</span>: <span class="pl-s">climate.living_room</span>
 <span class="pl-ent">name</span>: <span class="pl-s">Living Room</span>
 <span class="pl-ent">humidity_entity</span>: <span class="pl-s">sensor.living_room_humidity   </span><span class="pl-c"><span class="pl-c">#</span> optional</span>
 <span class="pl-ent">header</span>:
   <span class="pl-ent">title</span>: <span class="pl-s">Climate</span>
-  <span class="pl-ent">icon</span>: <span class="pl-s">mdi:heat-pump</span></pre></div>
+  <span class="pl-ent">icon</span>: <span class="pl-s">mdi:heat-pump</span>
+<span class="pl-ent">extra_climates</span>:                                 <span class="pl-c"><span class="pl-c">#</span> optional — more units in the same card</span>
+  - <span class="pl-ent">entity</span>: <span class="pl-s">climate.office</span>
+    <span class="pl-ent">name</span>: <span class="pl-s">Office</span></pre></div>
 <div class="markdown-heading"><h2 class="heading-element">⚙️ Options</h2><span id="️-options"></span></div>
 <table>
 <thead>
@@ -100,7 +106,19 @@ header:
 <td><code>humidity_entity</code></td>
 <td>string</td>
 <td>—</td>
-<td>Sensor used for the humidity readout (otherwise <code>current_humidity</code>)</td>
+<td>Sensor used for the humidity readout (otherwise <code>current_humidity</code>). With neither, the HUMID column is hidden</td>
+</tr>
+<tr>
+<td><code>icon</code></td>
+<td>string</td>
+<td>guessed from the name</td>
+<td>Header button icon when the card holds several units (bedroom, office, living room… otherwise <code>mdi:air-conditioner</code>)</td>
+</tr>
+<tr>
+<td><code>extra_climates</code></td>
+<td>list</td>
+<td>—</td>
+<td>More units in the same card, each with <code>entity</code>, <code>name</code>, <code>icon</code>, <code>humidity_entity</code>, <code>power_entity</code>, <code>power_threshold</code>. Each gets an icon button in the header; the button glows in the mode colour while that unit is blowing</td>
 </tr>
 <tr>
 <td><code>show_wind</code></td>
@@ -206,6 +224,8 @@ header:
 <p><strong>Some cards go blank on my Android phone.</strong> Android WebViews keep at most 8 WebGL contexts per page and drop the oldest one. This card uses a single context and only while the airflow is visible. If you run many WebGL cards on one view, use <code>flow_quality: off</code> on some of them.</p>
 <p><strong>Which theme is in the screenshots?</strong> Neo Tokyo, the author's own dark theme (not published). The card works with any theme.</p>
 <div class="markdown-heading"><h2 class="heading-element">🌃 More neon cards</h2><span id="-more-neon-cards"></span></div>
+<div class="markdown-heading"><h2 class="heading-element">🔤 Fonts and privacy</h2><span id="-fonts-and-privacy"></span></div>
+<p>The Orbitron font is embedded in <code>dist/neon-climate-card.js</code> (Latin subset, WOFF2, unmodified from Google Fonts). The card makes <strong>no request to Google Fonts</strong> or any other third-party server. Orbitron is licensed under the SIL Open Font License 1.1, see <a href="https://github.com/cerealkiller57540/neon-climate-card/blob/main/NOTICE.md">NOTICE.md</a>.</p>
 <div class="markdown-heading"><h2 class="heading-element">🧱 How this repository is built</h2><span id="-how-this-repository-is-built"></span></div>
 <p><code>dist/neon-climate-card.js</code> is the file HACS installs. It is built from the version running on the author's own Home Assistant: personal defaults are replaced with neutral ones, the version number is stamped, and the build stops if a local IP address or a token is found. That working copy is not published; bugs and suggestions are welcome as issues.</p>
 <p>This card is part of a family. See the full collection at <a href="https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards"><strong>Home-Assistant-Neon-Cards</strong></a>.</p>
@@ -228,5 +248,5 @@ header:
 <div class="markdown-heading"><h2 class="heading-element">📄 License</h2><span id="-license"></span></div>
 <p><a href="https://github.com/cerealkiller57540/neon-climate-card/tree/main/LICENSE">MIT License</a></p>
 </main>
-<footer>Source and issues: <a href="https://github.com/cerealkiller57540/neon-climate-card">cerealkiller57540/neon-climate-card</a> · Updated 2026-11-01 · <a href="../index.html">All projects</a> · <a href="../compatibility.html">Compatibility</a></footer>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/neon-climate-card">cerealkiller57540/neon-climate-card</a> · Updated 2026-11-10 · <a href="../index.html">All projects</a> · <a href="../compatibility.html">Compatibility</a></footer>
 </div></body></html>
