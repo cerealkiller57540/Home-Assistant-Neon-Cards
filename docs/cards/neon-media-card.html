@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Neon Media Card — custom card for Home Assistant</title>
+<meta name="description" content="Neon music player card for Home Assistant: your local music library, DLNA and Spotify behind a car-stereo faceplate, with a 10-band equalizer, live spectrum and shared playlists. HACS.">
+<link rel="canonical" href="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-media-card.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Neon Media Card — custom card for Home Assistant">
+<meta property="og:description" content="Neon music player card for Home Assistant: your local music library, DLNA and Spotify behind a car-stereo faceplate, with a 10-band equalizer, live spectrum and shared playlists. HACS.">
+<meta property="og:url" content="https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-media-card.html">
+<meta property="og:site_name" content="Neon Cards for Home Assistant">
+<meta property="og:image" content="https://raw.githubusercontent.com/cerealkiller57540/neon-media-card/main/images/home.png">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/cerealkiller57540/neon-media-card/main/images/home.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "Neon Media Card", "description": "Neon music player card for Home Assistant: your local music library, DLNA and Spotify behind a car-stereo faceplate, with a 10-band equalizer, live spectrum and shared playlists. HACS.", "codeRepository": "https://github.com/cerealkiller57540/neon-media-card", "url": "https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-media-card.html", "author": {"@type": "Person", "name": "cerealkiller57540", "url": "https://github.com/cerealkiller57540"}, "dateModified": "2026-11-18", "keywords": "audio-player, custom-card, dashboard, dlna, equalizer, hacs, home-assistant, lovelace, media-player, music, music-player, neon, sonos, spotify, webgl", "image": "https://raw.githubusercontent.com/cerealkiller57540/neon-media-card/main/images/home.png", "softwareVersion": "0.17.0"}</script>
+<link rel="stylesheet" href="../style.css"></head><body><div class="wrap">
+<nav class="crumbs"><a href="../index.html">Neon Cards for Home Assistant</a> › Dashboard cards</nav>
+<header class="page-head"><h1>Neon Media Card</h1>
+<p class="lead">Neon music player card for Home Assistant: your local music library, DLNA and Spotify behind a car-stereo faceplate, with a 10-band equalizer, live spectrum and shared playlists. HACS.</p>
+<p class="facts"><a href="https://github.com/cerealkiller57540/neon-media-card/releases/latest">v0.17.0</a> · Home Assistant 2024.1+</p>
+<div class="actions"><a class="btn" href="https://github.com/cerealkiller57540/neon-media-card">View on GitHub</a><a class="my-badge" href="https://my.home-assistant.io/redirect/hacs_repository/?owner=cerealkiller57540&amp;repository=neon-media-card&amp;category=plugin"><img src="https://my.home-assistant.io/badges/hacs_repository.svg" alt="Open Marketplace repository on My Home Assistant"></a></div></header>
+<p class="intro">A music player for your Home Assistant dashboard, built like a double-DIN car stereo. It plays your local music library from the /media folder, a DLNA server and Spotify from one card, right in the browser, so the 10-band equalizer, the live spectrum and the crossfade work on the real sound. Search tens of thousands of tracks, keep playlists shared by every device, and hand playback to Sonos or any media_player when you want it on a speaker. Pick it for a wall tablet or a kitchen screen that should play music without opening another app.</p>
+<main class="markdown-body">
+<div align="center">
+<div class="markdown-heading"><h2 class="heading-element">Neon Media Card</h2><span id="neon-media-card"></span></div>
+<p><strong>A neon music player card for Home Assistant, built like a double-DIN car stereo: your local music library, DLNA and Spotify behind one faceplate, with a WebGL spectrum and a 10-band equalizer.</strong></p>
+
+
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-media-card/main/images/home.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-media-card/main/images/home.png" alt="Neon Media Card home screen: now playing on the left, source and settings tiles on the right" width="720" style="max-width: 100%;" loading="lazy"></a>
+</div>
+<p>The card plays your files <strong>in the browser itself</strong>, through Web Audio: the equalizer, the spectrum and the crossfade work on the real signal, not on a picture of it. When you would rather hear it on a speaker, the Outputs page hands playback to any <code>media_player</code>.</p>
+<p>
+  <a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-media-card/main/images/now-playing.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-media-card/main/images/now-playing.png" alt="Now playing, full width" width="400" style="max-width: 100%;" loading="lazy"></a>
+  <a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-media-card/main/images/equalizer.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-media-card/main/images/equalizer.png" alt="10-band equalizer with live spectrum" width="400" style="max-width: 100%;" loading="lazy"></a>
+</p>
+<p>
+  <a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-media-card/main/images/spotify.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-media-card/main/images/spotify.png" alt="Spotify library with the album of the day" width="400" style="max-width: 100%;" loading="lazy"></a>
+  <a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/cerealkiller57540/neon-media-card/main/images/settings.png"><img src="https://raw.githubusercontent.com/cerealkiller57540/neon-media-card/main/images/settings.png" alt="Per-device settings: faceplate, palette, hues" width="400" style="max-width: 100%;" loading="lazy"></a>
+</p>
+<p><em>The screenshots show the French interface. The card follows your Home Assistant language: French or English.</em></p>
+<div class="markdown-heading"><h2 class="heading-element">✨ Features</h2><span id="-features"></span></div>
+<ul>
+<li><strong>Three sources</strong>: a media folder (<code>media-source</code>, e.g. <code>/media</code>), a DLNA server, and Spotify.</li>
+<li><strong>Large libraries</strong>: with the optional index script, the whole library loads in one request (tested with about 30,000 tracks). Without it, the card browses folder by folder.</li>
+<li><strong>Cover art</strong> from the file tags (ID3 and FLAC), then the folder image, then, optionally, Discogs.</li>
+<li><strong>10-band equalizer</strong> on the actual audio: 8 built-in presets, a draggable curve, a live spectrum behind it, and foobar2000 <code>.feq</code> presets if you drop some in a folder.</li>
+<li><strong>Crossfade</strong> between tracks (0 to 12 s).</li>
+<li><strong>Playlists</strong> saved in Home Assistant, so every device sees the same lists, plus a sortable play queue and search.</li>
+<li><strong>Spotify</strong>: browse your library (playlists, artists, albums, liked songs, podcasts, recently played, top artists and tracks), pick the Spotify Connect device, and play an "album of the day" from any sensor holding a <code>spotify:</code> link.</li>
+<li><strong>Outputs</strong>: this browser (with the audio output device on Chrome and Edge), or any <code>media_player</code>. Players with their own queue (Sonos) get the next tracks in advance and keep playing with the card closed; the others are fed track by track.</li>
+<li><strong>Four faceplates</strong> (graphite, anthracite, silver, black), ten colour palettes or your Home Assistant theme colours, two blended hues, glow, glass and text size.</li>
+<li><strong>Per-device settings</strong>: the Settings page stores its choices in the browser, so the wall tablet and the phone can each have their own look over the same card.</li>
+<li><strong>Hardware media keys</strong> and the lock-screen controls (Media Session).</li>
+<li><strong>Visual editor</strong>, with no YAML needed. English and French.</li>
+<li>Respects <code>prefers-reduced-motion</code>.</li>
+</ul>
+<div class="markdown-heading"><h2 class="heading-element">📦 Installation</h2><span id="-installation"></span></div>
+<div class="markdown-heading"><h3 class="heading-element">HACS (recommended)</h3><span id="hacs-recommended"></span></div>
+<ol>
+<li>Click the <strong>Open in HACS</strong> button above, or add this repository as a custom repository in HACS (category <strong>Dashboard</strong>): <code>https://github.com/cerealkiller57540/neon-media-card</code>.</li>
+<li>Download <strong>Neon Media Card</strong>.</li>
+<li>Reload your browser.</li>
+</ol>
+<p>HACS registers one resource, <code>neon-media-card.js</code>. The faceplates, fonts and helper modules next to it are loaded by the card itself. The card type is <code>custom:neon-media-card</code>. Until version 0.16 the card was called <em>Autoradio Card</em> (<code>custom:autoradio-card</code>): that type still works, so existing dashboards need no change.</p>
+<div class="markdown-heading"><h3 class="heading-element">Manual</h3><span id="manual"></span></div>
+<ol>
+<li>Copy every file of <a href="https://github.com/cerealkiller57540/neon-media-card/tree/main/dist/"><code>dist/</code></a> to <code>config/www/neon-media-card/</code>.</li>
+<li>Add a dashboard resource: URL <code>/local/neon-media-card/neon-media-card.js</code>, type <strong>JavaScript module</strong>.</li>
+</ol>
+<div class="markdown-heading"><h2 class="heading-element">🚀 Usage</h2><span id="-usage"></span></div>
+<p>Add a card from the dashboard editor and search for <strong>Neon Media</strong>, or use YAML:</p>
+<div class="highlight highlight-source-yaml notranslate position-relative overflow-auto" data-snippet-clipboard-copy-content="type: custom:neon-media-card
+entity: media_player.spotify_me              # optional: the Spotify integration&#x27;s player
+media_folder: media-source://media_source/local
+outputs:                                     # optional: players offered on the Outputs page
+  - media_player.living_room
+  - media_player.kitchen"><pre><span class="pl-ent">type</span>: <span class="pl-s">custom:neon-media-card</span>
+<span class="pl-ent">entity</span>: <span class="pl-s">media_player.spotify_me              </span><span class="pl-c"><span class="pl-c">#</span> optional: the Spotify integration's player</span>
+<span class="pl-ent">media_folder</span>: <span class="pl-s">media-source://media_source/local</span>
+<span class="pl-ent">outputs</span>:                                     <span class="pl-c"><span class="pl-c">#</span> optional: players offered on the Outputs page</span>
+  - <span class="pl-s">media_player.living_room</span>
+  - <span class="pl-s">media_player.kitchen</span></pre></div>
+<p>The card is wide by design (a car stereo is about 2:1). It fits best in a full-width section or a panel view.</p>
+<div class="markdown-heading"><h2 class="heading-element">⚙️ Options</h2><span id="️-options"></span></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>entity</code></td>
+<td>string</td>
+<td>—</td>
+<td>Spotify <code>media_player</code> from the Spotify integration. Without it, the Spotify tile stays empty</td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td>string</td>
+<td>first device</td>
+<td>Spotify Connect device to wake up when Spotify is idle</td>
+</tr>
+<tr>
+<td><code>album_entity</code></td>
+<td>string</td>
+<td>—</td>
+<td>Sensor whose state is a <code>spotify:</code> link (album, playlist, artist or track), shown as the album of the day</td>
+</tr>
+<tr>
+<td><code>outputs</code></td>
+<td>list</td>
+<td>—</td>
+<td><code>media_player</code> entities offered on the Outputs page</td>
+</tr>
+<tr>
+<td><code>media_folder</code></td>
+<td>string</td>
+<td><code>media-source://media_source/local</code></td>
+<td>Root of the MP3 source</td>
+</tr>
+<tr>
+<td><code>dlna_folder</code></td>
+<td>string</td>
+<td><code>media-source://dlna_dms</code></td>
+<td>Root of the DLNA source</td>
+</tr>
+<tr>
+<td><code>index_url</code></td>
+<td>string</td>
+<td><code>/local/neon-media-card/index.json</code></td>
+<td>Library index written by the index script. The default matches where the script writes it, with HACS or a manual install</td>
+</tr>
+<tr>
+<td><code>eq_folder</code></td>
+<td>string</td>
+<td><code>/local/neon-media-card/eq/</code></td>
+<td>Folder of <code>.feq</code> presets, listed by an <code>index.json</code> written by the index script</td>
+</tr>
+<tr>
+<td><code>theme</code></td>
+<td>string</td>
+<td><code>graphite</code></td>
+<td>Faceplate: <code>graphite</code>, <code>anthracite</code>, <code>silver</code>, <code>black</code></td>
+</tr>
+<tr>
+<td><code>font</code></td>
+<td>string</td>
+<td><code>system</code></td>
+<td>Screen font: <code>system</code>, <code>orbitron</code>, <code>exo2</code>, <code>saira</code>, <code>oxanium</code>, <code>jura</code>, <code>sharetechmono</code></td>
+</tr>
+<tr>
+<td><code>palette_ha</code></td>
+<td>bool</td>
+<td><code>false</code></td>
+<td>Use the Home Assistant theme colours instead of the hues</td>
+</tr>
+<tr>
+<td><code>hue</code> / <code>hue2</code></td>
+<td>number</td>
+<td><code>217</code> / <code>hue + 55</code></td>
+<td>The two hues blended across the screen (0–360)</td>
+</tr>
+<tr>
+<td><code>vivid</code></td>
+<td>number</td>
+<td><code>0</code></td>
+<td><code>0</code> = original pastel, <code>1</code> = pure colour</td>
+</tr>
+<tr>
+<td><code>glow</code></td>
+<td>number</td>
+<td><code>0.8</code></td>
+<td>Glow (0–1.5)</td>
+</tr>
+<tr>
+<td><code>glass</code> / <code>blur</code></td>
+<td>number</td>
+<td><code>0.12</code> / <code>18</code></td>
+<td>Glass opacity (0–0.4) and blur in px (0–40)</td>
+</tr>
+<tr>
+<td><code>aurora</code></td>
+<td>number</td>
+<td><code>0.6</code></td>
+<td>Background aurora (0–1.5)</td>
+</tr>
+<tr>
+<td><code>text</code></td>
+<td>number</td>
+<td><code>1.0</code></td>
+<td>Text size (0.7–1.4)</td>
+</tr>
+<tr>
+<td><code>tiles_hide</code></td>
+<td>number</td>
+<td><code>15</code></td>
+<td>Fold the tiles after this many seconds without a gesture (<code>0</code> = never)</td>
+</tr>
+<tr>
+<td><code>crossfade</code></td>
+<td>number</td>
+<td><code>4</code></td>
+<td>Crossfade between tracks, in seconds (<code>0</code> = cut)</td>
+</tr>
+<tr>
+<td><code>eq_curve_glow</code>, <code>eq_fill</code>, <code>eq_spec</code>, <code>eq_thumb</code>, <code>eq_q</code></td>
+<td>number</td>
+<td><code>1.0</code>, <code>0.18</code>, <code>0.55</code>, <code>1.0</code>, <code>1.4</code></td>
+<td>Equalizer look: curve glow, fill under the curve, spectrum behind the curve, handle size, band width (Q)</td>
+</tr>
+</tbody>
+</table>
+<p>Everything on the <strong>Settings</strong> page of the card (faceplate, font, palette, hues, glow, glass, text size, tile folding, crossfade) can also be changed there, on each device. Those choices win over the card configuration on that device; each one has a reset button.</p>
+<div class="markdown-heading"><h2 class="heading-element">🧩 Optional server-side helpers (pyscript)</h2><span id="-optional-server-side-helpers-pyscript"></span></div>
+<p>The card works on its own. Three <a href="https://github.com/custom-components/pyscript">pyscript</a> services, in the <a href="https://github.com/cerealkiller57540/neon-media-card/tree/main/pyscript/"><code>pyscript/</code></a> folder, add what a browser cannot do alone. Copy the ones you want to <code>config/pyscript/</code>; the card detects each service and simply skips it when it is missing.</p>
+<table>
+<thead>
+<tr>
+<th>Script</th>
+<th>Service</th>
+<th>What it adds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>neon_media_index.py</code></td>
+<td><code>pyscript.neon_media_index</code></td>
+<td>Walks <code>/media</code> on the server every night (and at start-up) and writes <code>www/neon-media-card/index.json</code>, gzipped. Without it, the browser can only list one folder at a time, which caps the MP3 source at about 80 folders and 1,000 tracks. It also writes the list of <code>.feq</code> presets in <code>www/neon-media-card/eq/</code>.</td>
+</tr>
+<tr>
+<td><code>neon_media_playlists.py</code></td>
+<td><code>pyscript.neon_media_playlists</code></td>
+<td>Stores the playlists in <code>config/neon_media_playlists.json</code>, shared by every device. A device writing over a list changed elsewhere gets the newer version instead of overwriting it. Without it, there are no saved playlists, only the play queue.</td>
+</tr>
+<tr>
+<td><code>neon_media_cover.py</code></td>
+<td><code>pyscript.neon_media_cover</code></td>
+<td>Last-resort cover art from Discogs, for tracks with no embedded or folder image. It needs the <a href="https://www.home-assistant.io/integrations/discogs/" rel="nofollow">Discogs integration</a> and uses its token, server-side only; without it, the script does nothing and the card keeps its default cover. Results are cached in <code>config/neon_media_covers.json</code>.</td>
+</tr>
+</tbody>
+</table>
+<div class="markdown-heading"><h2 class="heading-element">❓ FAQ</h2><span id="-faq"></span></div>
+<p><strong>Which languages are supported?</strong> English and French. The editor and the card texts follow your Home Assistant language: French if it is French, English otherwise. Reload the page after changing the language.</p>
+<p><strong>Which audio formats play?</strong> Whatever the browser decodes: MP3, FLAC, Ogg/Opus, M4A/AAC, WAV and WebM in Chrome, Edge and Firefox. Safari does not play Ogg in every version.</p>
+<p><strong>The music stops when I leave the view.</strong> The audio lives in the browser tab. Switching views keeps it playing (the card picks up the running track when it comes back); closing the tab or the Home Assistant app stops it. For playback that survives, send it to a speaker from the Outputs page.</p>
+<p><strong>The MP3 source only shows part of my library.</strong> Install <code>neon_media_index.py</code> (see above); the card finds its index without any setting.</p>
+<p><strong>Can I choose the audio output device?</strong> On Chrome and Edge, yes, from the Outputs page. Safari and Firefox do not let a page pick the output of Web Audio.</p>
+<p><strong>Where do the <code>.feq</code> presets come from?</strong> From foobar2000's equalizer (18 bands, brought back to 10). None is shipped: drop your own in the <code>eq_folder</code> and let the index script list them.</p>
+<div class="markdown-heading"><h2 class="heading-element">🔤 Fonts and privacy</h2><span id="-fonts-and-privacy"></span></div>
+<p>The six optional screen fonts (Orbitron, Exo 2, Saira, Oxanium, Jura, Share Tech Mono) are shipped next to the card as <code>font-*.woff2</code> files (Latin subset, unmodified from Google Fonts), and a font is only downloaded from your own Home Assistant when you pick it. The card makes <strong>no request to Google Fonts</strong> or any other third-party server. Discogs is only contacted by the optional cover script, from your server. The fonts are licensed under the SIL Open Font License 1.1, see <a href="https://github.com/cerealkiller57540/neon-media-card/blob/main/NOTICE.md">NOTICE.md</a>.</p>
+<div class="markdown-heading"><h2 class="heading-element">🌃 More neon cards</h2><span id="-more-neon-cards"></span></div>
+<div class="markdown-heading"><h2 class="heading-element">🧱 How this repository is built</h2><span id="-how-this-repository-is-built"></span></div>
+<p><code>dist/neon-media-card.js</code> is the file HACS installs. It is built from the version running on the author's own Home Assistant: personal defaults are replaced with neutral ones, the version number is stamped, and the build stops if a local IP address or a token is found. That working copy is not published; bugs and suggestions are welcome as issues.</p>
+<p>This card is part of a family. See the full collection at <a href="https://github.com/cerealkiller57540/Home-Assistant-Neon-Cards"><strong>Home-Assistant-Neon-Cards</strong></a>.</p>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🐾 Support this project</h2><span id="-support-this-project"></span></div>
+<p>If you enjoy these cards, please consider donating to <strong>Quatre Pattes</strong>, an animal rescue organization.</p>
+
+<blockquote>
+<p>💛 No need to support me — just <a href="https://www.four-paws.org/">help the animals</a>. Thank you!</p>
+</blockquote>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">🤝 Contributing</h2><span id="-contributing"></span></div>
+<ol>
+<li>Fork the repo</li>
+<li>Create your branch: <code>git checkout -b feature/my-card</code></li>
+<li>Commit and push</li>
+<li>Open a Pull Request</li>
+</ol>
+<hr>
+<div class="markdown-heading"><h2 class="heading-element">📄 License</h2><span id="-license"></span></div>
+<p><a href="https://github.com/cerealkiller57540/neon-media-card/tree/main/LICENSE">MIT License</a></p>
+</main>
+<footer>Source and issues: <a href="https://github.com/cerealkiller57540/neon-media-card">cerealkiller57540/neon-media-card</a> · Updated 2026-11-18 · <a href="../index.html">All projects</a> · <a href="../compatibility.html">Compatibility</a></footer>
+</div></body></html>

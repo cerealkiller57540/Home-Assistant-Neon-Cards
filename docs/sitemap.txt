@@ -8,6 +8,7 @@ https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-dual-ga
 https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/nixie-clock-card.html
 https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/linux-terminal-card.html
 https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-markdown-card.html
+https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-media-card.html
 https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-entities-card.html
 https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-header-card-v2.html
 https://cerealkiller57540.github.io/Home-Assistant-Neon-Cards/cards/neon-theme-snippets.html
